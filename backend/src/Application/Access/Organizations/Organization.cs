@@ -29,8 +29,4 @@ public sealed record Organization(
 {
     /// <summary>The longest display name an organization is recorded under.</summary>
     public const int MaximumDisplayNameLength = 128;
-
-    /// <summary>The most organizations one listing reads.</summary>
-    /// <remarks>A bound rather than a page, and only sound because recording enforces it: an organization past it is refused rather than written, so every organization a deployment holds is one this listing shows and can therefore be renamed or removed. A deployment hosting more companies than this is past what one instance is meant to serve.</remarks>
-    public const int MaximumListed = 1000;
 }

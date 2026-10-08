@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Access;
+using MailFathom.Application.Paging;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Api;
 using MailFathom.Host.Configuration.UserSettings;
@@ -39,11 +40,15 @@ public sealed class UserRecordEndpointsTests
 
         // Act
         var result = await UserRecordEndpoints.ReadRosterAsync(
+            pageSize: null,
+            cursor: null,
             deployment.Roster,
             TestContext.Current.CancellationToken);
 
         // Assert
-        var entry = Assert.Single(result.Value!.Users);
+        var roster = Assert.IsType<Ok<UserRosterResponse>>(result.Result).Value!;
+        Assert.Null(roster.NextCursor);
+        var entry = Assert.Single(roster.Users);
 
         Assert.Equal(SyntheticUser.Deployment.Value, entry.Id);
         Assert.Equal("alex", entry.DisplayName);
@@ -558,7 +563,108 @@ public sealed class UserRecordEndpointsTests
 
         // Act & Assert
         await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
-            () => UserRecordEndpoints.ReadRosterAsync(deployment.Roster, TestContext.Current.CancellationToken));
+            () => UserRecordEndpoints.ReadRosterAsync(
+                pageSize: null,
+                cursor: null,
+                deployment.Roster,
+                TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>A page is bounded at both ends, so a size outside them is refused naming the range rather than read.</summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(AdministrativeListingQuery.MaximumPageSize + 1)]
+    public async Task ReadRosterAsync_APageSizeOutsideTheRange_IsRefusedNamingIt(int pageSize)
+    {
+        // Arrange
+        var deployment = new UserRecordDeployment([MailFathomPermission.AdminRead]);
+
+        // Act
+        var result = await UserRecordEndpoints.ReadRosterAsync(
+            pageSize,
+            cursor: null,
+            deployment.Roster,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var detail = AssertRefusal(result.Result, StatusCodes.Status400BadRequest);
+        Assert.Contains($"{AdministrativeListingQuery.MaximumPageSize}", detail, StringComparison.Ordinal);
+    }
+
+    /// <summary>A page with more following answers the cursor naming its last user, which is what the next page is asked with.</summary>
+    [Fact]
+    public async Task ReadRosterAsync_APageWithMoreFollowing_AnswersTheCursorTheNextPageIsAskedWith()
+    {
+        // Arrange
+        var deployment = new UserRecordDeployment([MailFathomPermission.AdminRead]);
+        deployment.Directory.ReadUserPageAsync(
+                Arg.Is<AdministrativeListingQuery>(query => query!.After == null),
+                Arg.Any<CancellationToken>())
+            .Returns(new AdministrativeListingPage<UserRecord>(
+                [new UserRecord(SyntheticUser.Deployment, "alex")],
+                ContinuesAfter: SyntheticUser.Deployment.Value));
+
+        // Act
+        var result = await UserRecordEndpoints.ReadRosterAsync(
+            pageSize: 1,
+            cursor: null,
+            deployment.Roster,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var roster = Assert.IsType<Ok<UserRosterResponse>>(result.Result).Value!;
+        Assert.True(AdministrativeListingCursor.TryDecode(roster.NextCursor, AdministrativeListing.Users, out var after));
+        Assert.Equal(SyntheticUser.Deployment.Value, after);
+    }
+
+    /// <summary>The cursor a page answered with reaches the directory as where the following page continues, and the last page answers none.</summary>
+    [Fact]
+    public async Task ReadRosterAsync_TheCursorOfThePreviousPage_ReadsTheLastPageAfterIt()
+    {
+        // Arrange
+        var deployment = new UserRecordDeployment([MailFathomPermission.AdminRead]);
+        deployment.Directory.ReadUserPageAsync(
+                Arg.Is<AdministrativeListingQuery>(query => query!.After == SyntheticUser.Deployment.Value),
+                Arg.Any<CancellationToken>())
+            .Returns(new AdministrativeListingPage<UserRecord>(
+                [new UserRecord(SyntheticUser.Another, "blake")],
+                ContinuesAfter: null));
+
+        // Act
+        var result = await UserRecordEndpoints.ReadRosterAsync(
+            pageSize: 1,
+            AdministrativeListingCursor.Encode(AdministrativeListing.Users, SyntheticUser.Deployment.Value),
+            deployment.Roster,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var roster = Assert.IsType<Ok<UserRosterResponse>>(result.Result).Value!;
+        Assert.Equal(SyntheticUser.Another.Value, Assert.Single(roster.Users).Id);
+        Assert.Null(roster.NextCursor);
+    }
+
+    /// <summary>A cursor the roster did not issue names no position in it, so it is refused before the directory is read.</summary>
+    [Theory]
+    [InlineData("not-a-cursor")]
+    [InlineData("organizations")]
+    public async Task ReadRosterAsync_ACursorTheRosterDidNotIssue_IsRefusedWithoutReadingTheDirectory(string presented)
+    {
+        // Arrange
+        var deployment = new UserRecordDeployment([MailFathomPermission.AdminRead]);
+        var cursor = presented == "organizations"
+            ? AdministrativeListingCursor.Encode(AdministrativeListing.Organizations, SyntheticUser.Deployment.Value)
+            : presented;
+
+        // Act
+        var result = await UserRecordEndpoints.ReadRosterAsync(
+            pageSize: null,
+            cursor,
+            deployment.Roster,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        AssertRefusal(result.Result, StatusCodes.Status400BadRequest);
+        await deployment.Directory.DidNotReceiveWithAnyArgs().ReadUserPageAsync(default!, TestContext.Current.CancellationToken);
     }
 
     private static string AssertRefusal(IResult result, int expectedStatus)

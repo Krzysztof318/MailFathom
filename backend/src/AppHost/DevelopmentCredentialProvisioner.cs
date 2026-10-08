@@ -171,6 +171,8 @@ internal sealed class DevelopmentCredentialProvisioner(HttpClient client, TimePr
         string emailAddress,
         CancellationToken cancellationToken)
     {
+        // ponytail: reads the listing's first page alone, which holds every account of a local development deployment;
+        // follow its nextCursor if one is ever seeded with more accounts than a page holds.
         using var response = await client.GetAsync(
             new Uri(adminEndpoint, "api/admin/mail-accounts"),
             HttpCompletionOption.ResponseHeadersRead,

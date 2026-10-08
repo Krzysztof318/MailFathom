@@ -57,13 +57,13 @@ internal static class HeldBackRecordEndpoints
         ArgumentNullException.ThrowIfNull(organizations);
 
         var refused = heldBack.Current;
-        var listing = await organizations.ReadAsync(cancellationToken);
+        var unreadable = await organizations.ReadUnreadableAsync(cancellationToken);
 
         return TypedResults.Ok(new HeldBackRecordListResponse(
             [.. OfKind(refused, HeldBackRecordKind.User)],
             [.. OfKind(refused, HeldBackRecordKind.MailAccount)],
             [
-                .. listing.Unreadable.Select(organization => new HeldBackRecordResponse(
+                .. unreadable.Select(organization => new HeldBackRecordResponse(
                     organization.Id,
                     organization.DisplayName,
                     RejectedVersion: null,

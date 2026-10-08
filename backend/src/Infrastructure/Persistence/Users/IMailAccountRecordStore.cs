@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Paging;
 using MailFathom.Domain.Access;
 
 namespace MailFathom.Infrastructure.Persistence.Users;
@@ -15,12 +16,14 @@ namespace MailFathom.Infrastructure.Persistence.Users;
 /// </remarks>
 public interface IMailAccountRecordStore
 {
-    /// <summary>Reads every account the deployment holds, with the users each is assigned to.</summary>
-    /// <param name="limit">The greatest number of accounts to read.</param>
+    /// <summary>Reads one page of the accounts the deployment holds, with the users each is assigned to.</summary>
+    /// <param name="query">The page asked for.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The accounts without their settings, in the order they were created in.</returns>
-    /// <remarks>The settings are left behind because a declaration may be as large as a user's whole record, and a listing reads a thousand accounts to name them.</remarks>
-    Task<IReadOnlyList<MailAccountSummary>> ReadAllAsync(int limit, CancellationToken cancellationToken);
+    /// <returns>The page's accounts without their settings, in identifier order, and where the following page continues.</returns>
+    /// <remarks>The settings are left behind because a declaration may be as large as a user's whole record, and a page names up to a thousand accounts.</remarks>
+    Task<AdministrativeListingPage<MailAccountSummary>> ReadPageAsync(
+        AdministrativeListingQuery query,
+        CancellationToken cancellationToken);
 
     /// <summary>Reads one account and the users it is assigned to.</summary>
     /// <param name="accountId">The account asked about.</param>

@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text.Json;
+using MailFathom.Application.Paging;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.UserSettings.Administration;
 using MailFathom.Host.Security.Endpoints;
@@ -50,7 +51,7 @@ internal static class MailAccountEndpoints
     {
         ArgumentNullException.ThrowIfNull(api);
 
-        api.MapGet(MailAccountsRoute, ReadAllAsync)
+        api.MapGet(MailAccountsRoute, ReadPageAsync)
             .RequirePermission(MailFathomPermission.AdminRead);
 
         api.MapPost(MailAccountsRoute, CreateAsync)
@@ -76,21 +77,35 @@ internal static class MailAccountEndpoints
             .RequirePermission(MailFathomPermission.AdminErase);
     }
 
-    /// <summary>Lists the accounts this deployment holds.</summary>
+    /// <summary>Lists one page of the accounts this deployment holds.</summary>
+    /// <param name="pageSize">How many accounts the page may hold, or <see langword="null" /> for the default.</param>
+    /// <param name="cursor">The cursor the previous page returned, or <see langword="null" /> for the first page.</param>
     /// <param name="administration">The account administration.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
-    /// <returns><c>200</c> with each account's identifier, version, users, address, and display name.</returns>
-    internal static async Task<Ok<MailAccountListResponse>> ReadAllAsync(
+    /// <returns><c>200</c> with each account's identifier, version, users, address, and display name, and the cursor the following page is asked with; or <c>400</c> naming what was wrong with the request.</returns>
+    internal static async Task<Results<Ok<MailAccountListResponse>, ProblemHttpResult>> ReadPageAsync(
+        [FromQuery] int? pageSize,
+        [FromQuery] string? cursor,
         [FromServices] MailAccountAdministration administration,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(administration);
 
-        var listing = await administration.ReadAllAsync(cancellationToken);
+        if (!AdminListingRequest.TryResolve(
+                AdministrativeListing.MailAccounts,
+                pageSize,
+                cursor,
+                out var query,
+                out var refusal))
+        {
+            return refusal;
+        }
+
+        var page = await administration.ReadPageAsync(query, cancellationToken);
 
         return TypedResults.Ok(new MailAccountListResponse(
-            [.. listing.Accounts.Select(MailAccountSummaryResponse.For)],
-            listing.Truncated));
+            [.. page.Entries.Select(MailAccountSummaryResponse.For)],
+            AdminListingRequest.NextCursor(AdministrativeListing.MailAccounts, page.ContinuesAfter)));
     }
 
     /// <summary>Creates an account and assigns it to one user.</summary>

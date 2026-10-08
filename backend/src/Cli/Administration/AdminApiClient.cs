@@ -1566,19 +1566,23 @@ internal sealed class AdminApiClient
     private const string NoSuchMailAccount =
         "This deployment holds no mail account under that identifier. Run 'mfctl account list' and name one it holds.";
 
-    /// <summary>Reads the users a deployment holds records for.</summary>
+    /// <summary>Reads every user a deployment holds records for, following the listing's cursor to its end.</summary>
     /// <param name="token">The bearer credential to present.</param>
-    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <param name="cancellationToken">Cancels the requests.</param>
     /// <returns>The users, each with the label and the two states the deployment reports beside the identifier.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
-    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not a roster.</exception>
-    internal Task<UserList> ReadUsersAsync(string token, CancellationToken cancellationToken) =>
-        this.RequestAsync(
-            HttpMethod.Get,
+    /// <exception cref="CliFailure">Thrown when the deployment refused a request or the credential, could not be reached, or answered with something that is not a roster.</exception>
+    internal async Task<UserList> ReadUsersAsync(string token, CancellationToken cancellationToken)
+    {
+        var pages = await this.ReadEveryPageAsync(
             AdminEndpointRoutes.UsersPath,
             token,
             CliJsonContext.Default.UserList,
+            page => page.NextCursor,
             cancellationToken);
+
+        return new UserList([.. pages.SelectMany(page => page.Users ?? [])], NextCursor: null);
+    }
 
     /// <summary>Records a user the deployment did not hold.</summary>
     /// <param name="token">The bearer credential to present.</param>
@@ -1715,19 +1719,23 @@ internal sealed class AdminApiClient
             NoSuchUser);
     }
 
-    /// <summary>Reads the mail accounts a deployment holds.</summary>
+    /// <summary>Reads every mail account a deployment holds, following the listing's cursor to its end.</summary>
     /// <param name="token">The bearer credential to present.</param>
-    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <param name="cancellationToken">Cancels the requests.</param>
     /// <returns>The accounts, redacted.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
-    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not a listing.</exception>
-    internal Task<MailAccountList> ReadMailAccountsAsync(string token, CancellationToken cancellationToken) =>
-        this.RequestAsync(
-            HttpMethod.Get,
+    /// <exception cref="CliFailure">Thrown when the deployment refused a request or the credential, could not be reached, or answered with something that is not a listing.</exception>
+    internal async Task<MailAccountList> ReadMailAccountsAsync(string token, CancellationToken cancellationToken)
+    {
+        var pages = await this.ReadEveryPageAsync(
             AdminEndpointRoutes.MailAccountsPath,
             token,
             CliJsonContext.Default.MailAccountList,
+            page => page.NextCursor,
             cancellationToken);
+
+        return new MailAccountList([.. pages.SelectMany(page => page.Accounts ?? [])], NextCursor: null);
+    }
 
     /// <summary>Reads one mail account, as the redacted declaration an editing session opens.</summary>
     /// <param name="token">The bearer credential to present.</param>
@@ -1984,19 +1992,26 @@ internal sealed class AdminApiClient
     private const string NoSuchOrganization =
         "This deployment holds no organization under that identifier. Run 'mfctl organization list' and name one it holds.";
 
-    /// <summary>Reads the organizations a deployment holds.</summary>
+    /// <summary>Reads every organization a deployment holds, following the listing's cursor to its end.</summary>
     /// <param name="token">The bearer credential to present.</param>
-    /// <param name="cancellationToken">Cancels the request.</param>
-    /// <returns>The organizations, ordered by short name.</returns>
+    /// <param name="cancellationToken">Cancels the requests.</param>
+    /// <returns>The organizations, and the rows the deployment will not read as one.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
-    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not a listing.</exception>
-    internal Task<OrganizationList> ReadOrganizationsAsync(string token, CancellationToken cancellationToken) =>
-        this.RequestAsync(
-            HttpMethod.Get,
+    /// <exception cref="CliFailure">Thrown when the deployment refused a request or the credential, could not be reached, or answered with something that is not a listing.</exception>
+    internal async Task<OrganizationList> ReadOrganizationsAsync(string token, CancellationToken cancellationToken)
+    {
+        var pages = await this.ReadEveryPageAsync(
             AdminEndpointRoutes.OrganizationsPath,
             token,
             CliJsonContext.Default.OrganizationList,
+            page => page.NextCursor,
             cancellationToken);
+
+        return new OrganizationList(
+            [.. pages.SelectMany(page => page.Organizations ?? [])],
+            [.. pages.SelectMany(page => page.Unreadable ?? [])],
+            NextCursor: null);
+    }
 
     /// <summary>Records an organization the deployment did not hold.</summary>
     /// <param name="token">The bearer credential to present.</param>
@@ -2137,6 +2152,47 @@ internal sealed class AdminApiClient
             cancellationToken,
             JsonContent.Create(request, CliJsonContext.Default.MailAccountOrganizationRequest),
             NoSuchMailAccount);
+    }
+
+    /// <summary>Reads every page of one administrative listing, following the cursor each page returns until one returns none.</summary>
+    /// <remarks>Every page is held until the last arrives, because each listing command prints the whole listing at once.</remarks>
+    private async Task<IReadOnlyList<TPage>> ReadEveryPageAsync<TPage>(
+        string path,
+        string token,
+        JsonTypeInfo<TPage> pageContract,
+        Func<TPage, string?> nextCursor,
+        CancellationToken cancellationToken)
+        where TPage : class
+    {
+        List<TPage> pages = [];
+        string? cursor = null;
+
+        do
+        {
+            var page = await this.RequestAsync(
+                HttpMethod.Get,
+                $"{path}{new AdminQueryString().Add("cursor", cursor)}",
+                token,
+                pageContract,
+                cancellationToken);
+
+            pages.Add(page);
+
+            var following = nextCursor(page);
+
+            // A keyset cursor always moves forward, so one that names the page it was answered for is a deployment
+            // that would be asked the same question forever.
+            if (following is not null && string.Equals(following, cursor, StringComparison.Ordinal))
+            {
+                throw new CliFailure(
+                    "The deployment answered a page with the cursor that asked for it, so following the listing would never end.");
+            }
+
+            cursor = following;
+        }
+        while (cursor is not null);
+
+        return pages;
     }
 
     /// <summary>Sends one credentialed request and reads the answer, or turns the refusal into a sentence.</summary>

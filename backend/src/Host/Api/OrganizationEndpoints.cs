@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Access.Organizations;
+using MailFathom.Application.Paging;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Security.Endpoints;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -82,28 +83,43 @@ internal static class OrganizationEndpoints
             .RequirePermission(MailFathomPermission.AdminConfigurationWrite);
     }
 
-    /// <summary>Lists the organizations this deployment holds.</summary>
+    /// <summary>Lists one page of the organizations this deployment holds.</summary>
+    /// <param name="pageSize">How many organizations the page may hold, or <see langword="null" /> for the default.</param>
+    /// <param name="cursor">The cursor the previous page returned, or <see langword="null" /> for the first page.</param>
     /// <param name="organizations">The organization administration.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
-    /// <returns><c>200</c> with the organizations, ordered by short name, and the rows this build will not read as one.</returns>
-    internal static async Task<Ok<OrganizationListResponse>> ListAsync(
+    /// <returns><c>200</c> with the page's organizations in identifier order, the rows on it this build will not read as one, and the cursor the following page is asked with; or <c>400</c> naming what was wrong with the request.</returns>
+    internal static async Task<Results<Ok<OrganizationListResponse>, ProblemHttpResult>> ListAsync(
+        [FromQuery] int? pageSize,
+        [FromQuery] string? cursor,
         [FromServices] OrganizationAdministration organizations,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(organizations);
 
-        var held = await organizations.ReadAsync(cancellationToken);
+        if (!AdminListingRequest.TryResolve(
+                AdministrativeListing.Organizations,
+                pageSize,
+                cursor,
+                out var query,
+                out var refusal))
+        {
+            return refusal;
+        }
+
+        var held = await organizations.ReadAsync(query, cancellationToken);
 
         return TypedResults.Ok(new OrganizationListResponse(
             [.. held.Organizations.Select(OrganizationResponse.For)],
-            [.. held.Unreadable.Select(UnreadableOrganizationResponse.For)]));
+            [.. held.Unreadable.Select(UnreadableOrganizationResponse.For)],
+            AdminListingRequest.NextCursor(AdministrativeListing.Organizations, held.ContinuesAfter)));
     }
 
     /// <summary>Records an organization.</summary>
     /// <param name="request">The display name and the short name.</param>
     /// <param name="organizations">The organization administration.</param>
     /// <param name="cancellationToken">Cancels the write when the client disconnects.</param>
-    /// <returns><c>200</c> with the minted identifier, <c>409</c> when the short name is taken or the deployment already holds as many organizations as one may, or <c>400</c> naming what was wrong with the request.</returns>
+    /// <returns><c>200</c> with the minted identifier, <c>409</c> when the short name is taken, or <c>400</c> naming what was wrong with the request.</returns>
     internal static async Task<Results<Ok<OrganizationProvisionedResponse>, ProblemHttpResult>> CreateAsync(
         [FromBody] OrganizationProvisioningRequest? request,
         [FromServices] OrganizationAdministration organizations,
@@ -126,10 +142,6 @@ internal static class OrganizationEndpoints
         return result.Outcome switch
         {
             OrganizationWriteOutcome.Written => TypedResults.Ok(new OrganizationProvisionedResponse(result.OrganizationId)),
-            OrganizationWriteOutcome.OrganizationCeilingReached => TypedResults.Problem(
-                $"This deployment already holds the {Organization.MaximumListed} organizations one deployment may, so "
-                + "no other is recorded. Remove one nobody belongs to first.",
-                statusCode: StatusCodes.Status409Conflict),
             _ => ShortNameTaken(shortName),
         };
     }

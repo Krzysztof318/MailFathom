@@ -6220,13 +6220,16 @@
             },
             "type": "array"
           },
-          "truncated": {
-            "type": "boolean"
+          "nextCursor": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         },
         "required": [
           "accounts",
-          "truncated"
+          "nextCursor"
         ],
         "type": "object"
       },
@@ -8497,6 +8500,12 @@
       },
       "OrganizationListResponse": {
         "properties": {
+          "nextCursor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "organizations": {
             "items": {
               "$ref": "#/components/schemas/OrganizationResponse"
@@ -8512,7 +8521,8 @@
         },
         "required": [
           "organizations",
-          "unreadable"
+          "unreadable",
+          "nextCursor"
         ],
         "type": "object"
       },
@@ -10814,6 +10824,12 @@
       },
       "UserRosterResponse": {
         "properties": {
+          "nextCursor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "users": {
             "items": {
               "$ref": "#/components/schemas/UserRosterEntryResponse"
@@ -10822,7 +10838,8 @@
           }
         },
         "required": [
-          "users"
+          "users",
+          "nextCursor"
         ],
         "type": "object"
       }
@@ -12311,6 +12328,27 @@
     },
     "/api/admin/mail-accounts": {
       "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "format": "int32",
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -12950,6 +12988,27 @@
     },
     "/api/admin/organizations": {
       "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "format": "int32",
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -13748,6 +13807,27 @@
     },
     "/api/admin/users": {
       "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "format": "int32",
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {

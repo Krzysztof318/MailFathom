@@ -17,6 +17,9 @@ namespace MailFathom.Cli.UnitTests;
 /// </remarks>
 internal static class FakeOrganizationDeployment
 {
+    /// <summary>The cursor the first page of a listing spread over two pages names the second by.</summary>
+    private const string SecondPageCursor = "second-page";
+
     /// <summary>Gets the identifier this deployment reports for an organization it has just recorded.</summary>
     internal static Guid ProvisionedOrganizationId { get; } = new("66666666-6666-6666-6666-666666666666");
 
@@ -36,7 +39,21 @@ internal static class FakeOrganizationDeployment
         IReadOnlyList<Guid> users,
         IReadOnlyList<string> organizations,
         IReadOnlyList<string> unreadable) =>
-        new((request, _) => Task.FromResult(Answer(request, users, organizations, unreadable)));
+        new((request, _) => Task.FromResult(Answer(request, users, ListingPage(organizations, unreadable, nextCursor: null))));
+
+    /// <summary>Builds a deployment whose listing answers on two pages, the first naming the cursor of the second.</summary>
+    /// <param name="firstPage">The organizations and the unreadable rows the first page carries.</param>
+    /// <param name="secondPage">The organizations and the unreadable rows the second page carries.</param>
+    /// <returns>The deployment.</returns>
+    internal static FakeHttpMessageHandler HoldingOnTwoPages(
+        (IReadOnlyList<string> Organizations, IReadOnlyList<string> Unreadable) firstPage,
+        (IReadOnlyList<string> Organizations, IReadOnlyList<string> Unreadable) secondPage) =>
+        new((request, _) => Task.FromResult(Answer(
+            request,
+            [],
+            request.RequestUri?.Query == $"?cursor={SecondPageCursor}"
+                ? ListingPage(secondPage.Organizations, secondPage.Unreadable, nextCursor: null)
+                : ListingPage(firstPage.Organizations, firstPage.Unreadable, SecondPageCursor))));
 
     /// <summary>Writes one row the deployment will not read as an organization, as the listing reports it.</summary>
     /// <param name="id">The identifier the row is named by, the stored short name never being echoed.</param>
@@ -59,11 +76,18 @@ internal static class FakeOrganizationDeployment
             CultureInfo.InvariantCulture,
             $$"""{"id":"{{id:D}}","displayName":"{{displayName}}","shortName":"{{shortName}}","members":{{members}},"mailAccounts":{{mailAccounts}},"createdAt":"2026-08-20T09:00:00+00:00"}""");
 
+    private static string ListingPage(
+        IReadOnlyList<string> organizations,
+        IReadOnlyList<string> unreadable,
+        string? nextCursor) =>
+        $$"""
+          {"organizations":[{{string.Join(',', organizations)}}],"unreadable":[{{string.Join(',', unreadable)}}],"nextCursor":{{JsonSerializer.Serialize(nextCursor)}}}
+          """;
+
     private static HttpResponseMessage Answer(
         HttpRequestMessage request,
         IReadOnlyList<Guid> users,
-        IReadOnlyList<string> organizations,
-        IReadOnlyList<string> unreadable)
+        string listingPage)
     {
         var path = request.RequestUri?.AbsolutePath ?? string.Empty;
 
@@ -77,11 +101,7 @@ internal static class FakeOrganizationDeployment
         if (path == AdminEndpointRoutes.OrganizationsPath)
         {
             return request.Method == HttpMethod.Get
-                ? FakeAdminEndpoint.Json(
-                    HttpStatusCode.OK,
-                    $$"""
-                      {"organizations":[{{string.Join(',', organizations)}}],"unreadable":[{{string.Join(',', unreadable)}}]}
-                      """)
+                ? FakeAdminEndpoint.Json(HttpStatusCode.OK, listingPage)
                 : FakeAdminEndpoint.Json(HttpStatusCode.OK, $$"""{"organizationId":"{{ProvisionedOrganizationId:D}}"}""");
         }
 

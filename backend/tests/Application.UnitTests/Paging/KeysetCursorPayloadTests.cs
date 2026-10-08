@@ -11,7 +11,7 @@ namespace MailFathom.Application.UnitTests.Paging;
 
 /// <summary>Covers the encoding every keyset cursor shares: what survives it, and what it refuses to read.</summary>
 /// <remarks>
-/// This is the codec seven cursor families reach through, so a defect here is a page served twice or skipped on all of
+/// This is the codec every keyset cursor family reaches through, so a defect here is a page served twice or skipped on all of
 /// them at once. What is asserted is the round trip, the recorded text a client may be part-way through, and the
 /// refusals: text this version did not issue is refused rather than read as a boundary nobody meant.
 /// </remarks>

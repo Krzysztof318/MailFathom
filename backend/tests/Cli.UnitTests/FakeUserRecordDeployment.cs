@@ -24,6 +24,9 @@ internal static class FakeUserRecordDeployment
     /// <summary>The record a deployment answers with where a suite says nothing about one.</summary>
     private const string EmptyRecord = "{}";
 
+    /// <summary>The cursor the first page of a roster spread over two pages names the second by.</summary>
+    private const string SecondRosterPageCursor = "second-page";
+
     /// <summary>Builds a deployment holding the users stated, each with an empty record.</summary>
     /// <param name="users">The users the roster reports, in the order it serves them.</param>
     /// <returns>The deployment.</returns>
@@ -86,6 +89,16 @@ internal static class FakeUserRecordDeployment
     /// <returns>The deployment.</returns>
     internal static FakeHttpMessageHandler HoldingNobody() =>
         Answering([], WriteCommitted, records: [EmptyRecord]);
+
+    /// <summary>Builds a deployment whose roster answers one user per page, the first page naming the cursor of the second.</summary>
+    /// <param name="firstPage">The user the first page holds.</param>
+    /// <param name="secondPage">The user the second page holds.</param>
+    /// <returns>The deployment.</returns>
+    internal static FakeHttpMessageHandler HoldingOnTwoPages(Guid firstPage, Guid secondPage) =>
+        new((request, _) => Task.FromResult(
+            request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == AdminEndpointRoutes.UsersPath
+                ? FakeAdminEndpoint.Json(HttpStatusCode.OK, RosterPage(request, firstPage, secondPage))
+                : FakeAdminEndpoint.AnswerSession(request) ?? FakeAdminEndpoint.Json(HttpStatusCode.NotFound, string.Empty)));
 
     /// <summary>Reports the requests the command sent to one path under one method.</summary>
     /// <param name="deployment">The deployment the command was pointed at.</param>
@@ -185,6 +198,11 @@ internal static class FakeUserRecordDeployment
 
     /// <summary>The identifier a provisioning reports, which is the one thing a script cannot reconstruct from what it typed.</summary>
     private static Guid ProvisionedUser { get; } = new("55555555-5555-5555-5555-555555555555");
+
+    private static string RosterPage(HttpRequestMessage request, Guid firstPage, Guid secondPage) =>
+        request.RequestUri?.Query == $"?cursor={SecondRosterPageCursor}"
+            ? $$"""{"users":[{{Roster((secondPage, true, true))}}],"nextCursor":null}"""
+            : $$"""{"users":[{{Roster((firstPage, true, true))}}],"nextCursor":"{{SecondRosterPageCursor}}"}""";
 
     private static string Roster((Guid User, bool McpEndpoint, bool ClientEndpoint) entry) =>
         $$"""{"id":"{{entry.User:D}}","displayName":"user-{{entry.User:D}}","served":true,"mcpEndpoint":{{(entry.McpEndpoint ? "true" : "false")}},"clientEndpoint":{{(entry.ClientEndpoint ? "true" : "false")}}}""";

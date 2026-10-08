@@ -260,7 +260,7 @@ public sealed class DevelopmentCredentialProvisionerTests
     private static HttpResponseMessage AccountsResponse(params (Guid User, string EmailAddress)[] accounts) => JsonResponse(
         $$"""
         {"accounts":[{{string.Join(",", accounts.Select(static account =>
-            $$"""{"id":"{{Guid.NewGuid()}}","version":1,"users":["{{account.User}}"],"emailAddress":{{JsonSerializer.Serialize(account.EmailAddress)}},"displayName":"Local mailbox"}"""))}}],"truncated":false}
+            $$"""{"id":"{{Guid.NewGuid()}}","version":1,"users":["{{account.User}}"],"emailAddress":{{JsonSerializer.Serialize(account.EmailAddress)}},"displayName":"Local mailbox"}"""))}}],"nextCursor":null}
         """);
 
     private sealed class RecordingHandler(params HttpResponseMessage[] responses) : HttpMessageHandler

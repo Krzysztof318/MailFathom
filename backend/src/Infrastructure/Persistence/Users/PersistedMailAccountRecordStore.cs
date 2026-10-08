@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
+using MailFathom.Application.Paging;
 using MailFathom.Application.Persistence;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Access;
@@ -35,15 +36,23 @@ internal sealed class PersistedMailAccountRecordStore(
     : IMailAccountRecordStore
 {
     /// <inheritdoc />
-    public async Task<IReadOnlyList<MailAccountSummary>> ReadAllAsync(int limit, CancellationToken cancellationToken)
+    public async Task<AdministrativeListingPage<MailAccountSummary>> ReadPageAsync(
+        AdministrativeListingQuery query,
+        CancellationToken cancellationToken)
     {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
+        ArgumentNullException.ThrowIfNull(query);
 
-        var accounts = await dbContext.MailAccountRecords
-            .AsNoTracking()
-            .OrderBy(account => account.CreatedAt)
-            .ThenBy(account => account.Id)
-            .Take(limit)
+        var records = dbContext.MailAccountRecords.AsNoTracking();
+
+        // Compared by PostgreSQL as a `uuid`, which is the order the primary key's index holds.
+        if (query.After is { } after)
+        {
+            records = records.Where(account => account.Id > after);
+        }
+
+        var accounts = await records
+            .OrderBy(account => account.Id)
+            .Take(query.PageSize + 1)
             .Select(account => new { account.Id, account.EmailAddress, account.DisplayName, account.Version, account.OrganizationId })
             .ToListAsync(cancellationToken);
 
@@ -55,20 +64,21 @@ internal sealed class PersistedMailAccountRecordStore(
             .OrderBy(assignment => assignment.AssignedAt)
             .ToListAsync(cancellationToken);
 
-        return
-        [
-            .. accounts.Select(account => new MailAccountSummary(
-                account.Id,
-                account.EmailAddress,
-                account.DisplayName,
-                account.Version,
-                [
-                    .. assignments
-                        .Where(assignment => assignment.MailAccountId == account.Id)
-                        .Select(assignment => UserId.Create(assignment.UserId)),
-                ],
-                account.OrganizationId)),
-        ];
+        return query.PageOf(
+            [
+                .. accounts.Select(account => new MailAccountSummary(
+                    account.Id,
+                    account.EmailAddress,
+                    account.DisplayName,
+                    account.Version,
+                    [
+                        .. assignments
+                            .Where(assignment => assignment.MailAccountId == account.Id)
+                            .Select(assignment => UserId.Create(assignment.UserId)),
+                    ],
+                    account.OrganizationId)),
+            ],
+            summary => summary.Id);
     }
 
     /// <inheritdoc />

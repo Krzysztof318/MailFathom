@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Paging;
 using MailFathom.Domain.Access;
 
 namespace MailFathom.Application.Access.Organizations;
@@ -47,15 +48,30 @@ public sealed class OrganizationAdministration
         this.timeProvider = timeProvider;
     }
 
-    /// <summary>Reads the organizations this deployment holds.</summary>
+    /// <summary>Reads one page of the organizations this deployment holds.</summary>
+    /// <param name="query">The page asked for.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The organizations, ordered by short name, beside the rows this build will not read as one.</returns>
+    /// <returns>The page's organizations in identifier order, beside the rows on it this build will not read as one.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="query" /> is <see langword="null" />.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.AdminRead" />.</exception>
-    public Task<OrganizationListing> ReadAsync(CancellationToken cancellationToken)
+    public Task<OrganizationListing> ReadAsync(AdministrativeListingQuery query, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        this.authorization.RequirePermission(MailFathomPermission.AdminRead);
+
+        return this.organizations.ReadAsync(query, cancellationToken);
+    }
+
+    /// <summary>Reads every organization row this deployment holds and this build will not read as one.</summary>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The unreadable rows, each with the sentence naming what its short name must become.</returns>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.AdminRead" />.</exception>
+    public Task<IReadOnlyList<UnreadableOrganization>> ReadUnreadableAsync(CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.AdminRead);
 
-        return this.organizations.ReadAsync(cancellationToken);
+        return this.organizations.ReadUnreadableAsync(cancellationToken);
     }
 
     /// <summary>Records an organization under an identifier this deployment mints.</summary>

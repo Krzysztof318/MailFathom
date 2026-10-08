@@ -6,12 +6,12 @@ using System.Text.Json.Serialization;
 
 namespace MailFathom.Cli.Administration.Accounts;
 
-/// <summary>The mail accounts a deployment holds.</summary>
-/// <param name="Accounts">One entry per account, in the order they were created in.</param>
-/// <param name="Truncated">Whether the deployment holds more accounts than one listing carries.</param>
+/// <summary>The mail accounts a deployment holds, as one page of the listing answers with them or as every page read together.</summary>
+/// <param name="Accounts">One entry per account, in the deployment's identifier order.</param>
+/// <param name="NextCursor">The cursor the following page is asked with, or <see langword="null" /> at the end.</param>
 internal sealed record MailAccountList(
     [property: JsonPropertyName("accounts")] IReadOnlyList<MailAccountSummary>? Accounts,
-    [property: JsonPropertyName("truncated")] bool Truncated);
+    [property: JsonPropertyName("nextCursor")] string? NextCursor);
 
 /// <summary>One mail account as a listing names it.</summary>
 /// <param name="Id">The identifier the deployment generated for the account.</param>

@@ -18,13 +18,13 @@ namespace MailFathom.Application.Paging;
 /// </para>
 /// <para>
 /// The format version is shared as well, which is what writing the codec once costs: a later change to the layout
-/// retires the cursors of all seven families together rather than one family at a time. That is the intended trade — a
+/// retires the cursors of every family together rather than one family at a time. That is the intended trade — a
 /// cursor is opaque and short-lived, and a version that drifted per family is one nobody could reason about.
 /// </para>
 /// <para>
 /// <see cref="Contacts.ContactCursor" /> is deliberately outside this. It orders by a name's comparison form rather
 /// than by an instant, carries no fingerprint, and lets its last field hold the separator: a different format that
-/// happens to be base64url, not a seventh copy of this one.
+/// happens to be base64url, not another copy of this one.
 /// </para>
 /// <para>
 /// The payload carries no secret and needs no signature, because every value in it is one the caller already supplied
@@ -41,7 +41,7 @@ public readonly record struct KeysetCursorPayload
     /// </remarks>
     public const int MaximumEncodedLength = 512;
 
-    /// <summary>The field a row no instant orders is written with, for the one reading that has such rows.</summary>
+    /// <summary>The field a row no instant orders is written with, for a reading that has such rows and for <see cref="AdministrativeListingCursor" />, whose listings no instant orders at all.</summary>
     private const string AbsentPosition = "-";
 
     /// <summary>

@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Paging;
 using MailFathom.Infrastructure.Persistence.Users;
 using Xunit;
 
@@ -24,7 +25,7 @@ public sealed class PersistedOrganizationListingTests
         var rows = new[] { Row("ACME", "Acme"), Row("BETA", "Beta", key: 2) };
 
         // Act
-        var listing = PersistedOrganizations.ListingOf(rows);
+        var listing = PersistedOrganizations.ListingOf(LastPage(rows));
 
         // Assert
         Assert.Equal(["ACME", "BETA"], listing.Organizations.Select(organization => organization.ShortName.Value));
@@ -36,7 +37,7 @@ public sealed class PersistedOrganizationListingTests
     public void ListingOf_AnOrganizationHoldingMembersAndMailAccounts_CarriesEachCountToItsOwnField()
     {
         // Act
-        var listing = PersistedOrganizations.ListingOf([Row("ACME", "Acme", members: 3, mailAccounts: 5)]);
+        var listing = PersistedOrganizations.ListingOf(LastPage(Row("ACME", "Acme", members: 3, mailAccounts: 5)));
 
         // Assert
         var organization = Assert.Single(listing.Organizations);
@@ -61,7 +62,7 @@ public sealed class PersistedOrganizationListingTests
         var rows = new[] { broken, Row("BETA", "Beta", key: 2) };
 
         // Act
-        var listing = PersistedOrganizations.ListingOf(rows);
+        var listing = PersistedOrganizations.ListingOf(LastPage(rows));
 
         // Assert
         Assert.Equal("BETA", Assert.Single(listing.Organizations).ShortName.Value);
@@ -75,7 +76,7 @@ public sealed class PersistedOrganizationListingTests
     public void ListingOf_ARowThisBuildWillNotRead_SaysWhatAShortNameMayHold()
     {
         // Act
-        var listing = PersistedOrganizations.ListingOf([Row("has space", "Broken")]);
+        var listing = PersistedOrganizations.ListingOf(LastPage(Row("has space", "Broken")));
 
         // Assert
         Assert.Contains("'A' to 'Z'", Assert.Single(listing.Unreadable).Correction, StringComparison.Ordinal);
@@ -89,13 +90,17 @@ public sealed class PersistedOrganizationListingTests
         const string stored = "sentinel\nforged line";
 
         // Act
-        var listing = PersistedOrganizations.ListingOf([Row(stored, "Broken")]);
+        var listing = PersistedOrganizations.ListingOf(LastPage(Row(stored, "Broken")));
 
         // Assert
         var unreadable = Assert.Single(listing.Unreadable);
         Assert.DoesNotContain("sentinel", unreadable.Correction, StringComparison.Ordinal);
         Assert.DoesNotContain("sentinel", unreadable.DisplayName, StringComparison.Ordinal);
     }
+
+    /// <summary>A page holding every row of the listing, so nothing follows it.</summary>
+    private static AdministrativeListingPage<StoredOrganizationRow> LastPage(params StoredOrganizationRow[] rows) =>
+        new(rows, ContinuesAfter: null);
 
     /// <summary>A row keyed by a stated identifier, because a test telling two rows apart by a generated one would depend on the generator.</summary>
     private static StoredOrganizationRow Row(

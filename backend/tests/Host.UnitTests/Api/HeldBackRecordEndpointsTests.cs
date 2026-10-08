@@ -66,8 +66,8 @@ public sealed class HeldBackRecordEndpointsTests
                     ["Correct the account."]),
             ]);
 
-        harness.Organizations.ReadAsync(Arg.Any<CancellationToken>())
-            .Returns(new OrganizationListing([], [new UnreadableOrganization(OrganizationId, "Acme", "Correct it.")]));
+        harness.Organizations.ReadUnreadableAsync(Arg.Any<CancellationToken>())
+            .Returns(new[] { new UnreadableOrganization(OrganizationId, "Acme", "Correct it.") });
 
         // Act
         var answer = await HeldBackRecordEndpoints.ReadAsync(
@@ -89,8 +89,8 @@ public sealed class HeldBackRecordEndpointsTests
         // Arrange
         var harness = new EndpointHarness();
 
-        harness.Organizations.ReadAsync(Arg.Any<CancellationToken>())
-            .Returns(new OrganizationListing([], [new UnreadableOrganization(OrganizationId, "Acme", "Correct it.")]));
+        harness.Organizations.ReadUnreadableAsync(Arg.Any<CancellationToken>())
+            .Returns(new[] { new UnreadableOrganization(OrganizationId, "Acme", "Correct it.") });
 
         // Act
         var answer = await HeldBackRecordEndpoints.ReadAsync(
@@ -112,8 +112,8 @@ public sealed class HeldBackRecordEndpointsTests
             principals.Current.Returns(AuthorizedPrincipal.Caller("operations", [MailFathomPermission.AdminRead]));
 
             this.Organizations = Substitute.For<IOrganizationStore>();
-            this.Organizations.ReadAsync(Arg.Any<CancellationToken>())
-                .Returns(new OrganizationListing([], []));
+            this.Organizations.ReadUnreadableAsync(Arg.Any<CancellationToken>())
+                .Returns(Array.Empty<UnreadableOrganization>());
 
             this.Administration = new OrganizationAdministration(
                 new AccessAuthorization(principals),

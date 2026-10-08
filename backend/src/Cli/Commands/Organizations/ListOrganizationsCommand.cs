@@ -54,7 +54,8 @@ internal static class ListOrganizationsCommand
 
         if (listing.Organizations is { Count: > 0 } organizations)
         {
-            context.Console.Write(Draw(organizations));
+            // The deployment pages in identifier order; an operator looks a company up by its short name.
+            context.Console.Write(Draw([.. organizations.OrderBy(organization => organization.ShortName, StringComparer.Ordinal)]));
         }
         else if (listing.Unreadable is not { Count: > 0 })
         {

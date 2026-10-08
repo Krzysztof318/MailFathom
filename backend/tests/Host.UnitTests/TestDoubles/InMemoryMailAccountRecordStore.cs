@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Paging;
 using MailFathom.Domain.Access;
 using MailFathom.Infrastructure.Persistence.Users;
 
@@ -86,17 +87,24 @@ internal sealed class InMemoryMailAccountRecordStore : IMailAccountRecordStore
         [.. this.users.Select(held => new UserSettingsDocumentVersion(held.Key, held.Value.Version))];
 
     /// <inheritdoc />
-    public Task<IReadOnlyList<MailAccountSummary>> ReadAllAsync(int limit, CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyList<MailAccountSummary>>(
-        [
-            .. this.accounts.Take(limit).Select(account => new MailAccountSummary(
-                account.Id,
-                account.EmailAddress,
-                account.DisplayName,
-                account.Version,
-                [.. this.assignments[account.Id]],
-                this.OrganizationOf(account.Id))),
-        ]);
+    public Task<AdministrativeListingPage<MailAccountSummary>> ReadPageAsync(
+        AdministrativeListingQuery query,
+        CancellationToken cancellationToken) =>
+        Task.FromResult(query.PageOf(
+            [
+                .. this.accounts
+                    .Where(account => query.After is not { } after || account.Id.CompareTo(after) > 0)
+                    .OrderBy(account => account.Id)
+                    .Take(query.PageSize + 1)
+                    .Select(account => new MailAccountSummary(
+                        account.Id,
+                        account.EmailAddress,
+                        account.DisplayName,
+                        account.Version,
+                        [.. this.assignments[account.Id]],
+                        this.OrganizationOf(account.Id))),
+            ],
+            summary => summary.Id));
 
     /// <inheritdoc />
     public Task<MailAccountHolding?> ReadAsync(Guid accountId, CancellationToken cancellationToken) =>

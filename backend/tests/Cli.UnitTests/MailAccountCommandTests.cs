@@ -53,12 +53,12 @@ public sealed class MailAccountCommandTests : IDisposable
         Assert.Contains($"    organization: {FakeMailAccountDeployment.Organization:D}", this.harness.Console.Lines);
     }
 
-    /// <summary>A listing the deployment cut at its bound says so, so an operator does not take it for every account held.</summary>
+    /// <summary>A deployment answers its accounts a page at a time, so the listing follows the cursor until the last page and prints every account it was handed.</summary>
     [Fact]
-    public async Task List_ADeploymentHoldingMoreThanOneListingCarries_SaysOnlyTheFirstAreListed()
+    public async Task List_ADeploymentAnsweringOnTwoPages_FollowsTheCursorAndPrintsEveryAccount()
     {
         // Arrange
-        using var deployment = FakeMailAccountDeployment.HoldingMoreThanOneListing();
+        using var deployment = FakeMailAccountDeployment.HoldingAccountsOnTwoPages();
 
         // Act
         var exitCode = await this.RunAsync(deployment, "account", "list", "--endpoint", Endpoint);
@@ -66,8 +66,35 @@ public sealed class MailAccountCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Contains(
-            "This deployment holds more than 1 mail accounts; only the first 1 are listed.",
-            this.harness.Console.Lines);
+            this.harness.Console.Lines,
+            line => line.Contains($"{Account:D}  Work <alex@example.test>", StringComparison.Ordinal));
+        Assert.Contains(
+            this.harness.Console.Lines,
+            line => line.Contains(
+                $"{FakeMailAccountDeployment.SecondAccount:D}  Home <sam@example.test>",
+                StringComparison.Ordinal));
+        Assert.Equal(
+            2,
+            deployment.RecordedRequests.Count(request =>
+                request.Method == HttpMethod.Get
+                && request.RequestUri?.AbsolutePath == AdminEndpointRoutes.MailAccountsPath));
+    }
+
+    /// <summary>A deployment that answers a page with the cursor that asked for it would be asked forever, so the listing stops and says so.</summary>
+    [Fact]
+    public async Task List_ADeploymentRepeatingTheCursorItWasAskedWith_FailsInsteadOfAskingAgain()
+    {
+        // Arrange
+        using var deployment = FakeMailAccountDeployment.RepeatingTheListingCursor();
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "account", "list", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.NotEqual(CliExitCode.Success, exitCode);
+        Assert.Contains(
+            this.harness.Console.Errors,
+            line => line.Contains("following the listing would never end", StringComparison.Ordinal));
     }
 
     [Fact]

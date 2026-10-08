@@ -235,6 +235,23 @@ public sealed class UserCommandTests : IDisposable
         Assert.Contains("MCP endpoint: off; client endpoint: on", lines[second + 1], StringComparison.Ordinal);
     }
 
+    /// <summary>The roster arrives a page at a time, so the listing follows the cursor until the last page and prints every user it met.</summary>
+    [Fact]
+    public async Task List_ARosterAnsweredOnTwoPages_FollowsTheCursorAndPrintsEveryUser()
+    {
+        // Arrange
+        using var deployment = FakeUserRecordDeployment.HoldingOnTwoPages(User, AnotherUser);
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "user", "list", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Contains(this.harness.Console.Lines, line => line.StartsWith($"{User:D}", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.StartsWith($"{AnotherUser:D}", StringComparison.Ordinal));
+        Assert.Equal(2, deployment.UserRequestsTo(HttpMethod.Get, AdminEndpointRoutes.UsersPath).Count);
+    }
+
     /// <summary>A deployment serving one user needs no identifier typed, which is what makes the ordinary invocation short.</summary>
     [Fact]
     public async Task Show_ADeploymentHoldingOneUser_ResolvesThemWithoutAnIdentifierBeingTyped()

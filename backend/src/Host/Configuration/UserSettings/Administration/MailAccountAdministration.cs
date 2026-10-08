@@ -5,6 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using MailFathom.Application.Access;
+using MailFathom.Application.Paging;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Failures;
 using MailFathom.Host.Configuration.Administration;
@@ -56,9 +57,6 @@ internal sealed class MailAccountAdministration(
     ServedUsersConvergence convergence,
     ConfigurationChangeAnnouncements announcements)
 {
-    /// <summary>The greatest number of accounts one listing reads.</summary>
-    internal const int MaximumListed = 1024;
-
     /// <summary>What a save refused over a redaction marker it cannot place is sent to.</summary>
     private const string NarrowerChange = "state the setting afresh rather than leaving the redaction marker in its place.";
 
@@ -69,21 +67,22 @@ internal sealed class MailAccountAdministration(
     /// <remarks>Bounded rather than persistent, because losing three times in a row is contention nothing here resolves by trying a fourth: the act is reported as superseded and the person asks again.</remarks>
     private const int DeclarationWriteAttempts = 3;
 
-    /// <summary>Lists the accounts this deployment holds.</summary>
+    /// <summary>Lists one page of the accounts this deployment holds.</summary>
+    /// <param name="query">The page asked for.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The first <see cref="MaximumListed" /> accounts in the order they were created in, and whether more are held.</returns>
+    /// <returns>The page's accounts in identifier order, and where the following page continues.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="query" /> is <see langword="null" />.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminRead" />.</exception>
-    /// <remarks>
-    /// One more than the listing holds is read, so a deployment past the bound is told so rather than handed a listing that
-    /// reads as complete. The settings are not parsed, so one unreadable row never hides every other account.
-    /// </remarks>
-    internal async Task<MailAccountListing> ReadAllAsync(CancellationToken cancellationToken)
+    /// <remarks>The settings are not parsed, so one unreadable row never hides every other account.</remarks>
+    internal Task<AdministrativeListingPage<MailAccountSummary>> ReadPageAsync(
+        AdministrativeListingQuery query,
+        CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(query);
+
         authorization.RequirePermission(MailFathomPermission.AdminRead);
 
-        var held = await accounts.ReadAllAsync(MaximumListed + 1, cancellationToken);
-
-        return new MailAccountListing([.. held.Take(MaximumListed)], held.Count > MaximumListed);
+        return accounts.ReadPageAsync(query, cancellationToken);
     }
 
     /// <summary>Reads one account.</summary>

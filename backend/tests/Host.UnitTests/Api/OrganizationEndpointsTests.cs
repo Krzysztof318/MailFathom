@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Access;
 using MailFathom.Application.Access.Organizations;
+using MailFathom.Application.Paging;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Api;
 using MailFathom.TestSupport;
@@ -20,6 +21,14 @@ namespace MailFathom.Host.UnitTests.Api;
 public sealed class OrganizationEndpointsTests
 {
     private static readonly Guid OrganizationId = new("44444444-4444-4444-8444-444444444444");
+
+    private static readonly Organization Acme = new(
+        OrganizationId,
+        "Acme Corporation",
+        OrganizationShortName.Create("ACME"),
+        Members: 0,
+        MailAccounts: 0,
+        new DateTimeOffset(2026, 9, 13, 12, 0, 0, TimeSpan.Zero));
 
     /// <summary>A move into a scope already holding one of the user's usernames is refused naming it, so the administrator knows which credential to rename.</summary>
     [Fact]
@@ -251,32 +260,6 @@ public sealed class OrganizationEndpointsTests
         Assert.Contains("'ACME'", problem.ProblemDetails.Detail, StringComparison.Ordinal);
     }
 
-    /// <summary>An organization past the listing's bound would sign people in where no listing shows it, so the deployment refuses it and says why.</summary>
-    [Fact]
-    public async Task CreateAsync_ADeploymentAtTheOrganizationCeiling_IsAConflictNamingTheCeiling()
-    {
-        // Arrange
-        var harness = new EndpointHarness(MailFathomPermission.AdminConfigurationWrite);
-        harness.Organizations.CreateAsync(
-                Arg.Any<Guid>(),
-                Arg.Any<string>(),
-                Arg.Any<OrganizationShortName>(),
-                Arg.Any<DateTimeOffset>(),
-                Arg.Any<CancellationToken>())
-            .Returns(OrganizationWriteResult.Of(OrganizationWriteOutcome.OrganizationCeilingReached));
-
-        // Act
-        var result = await OrganizationEndpoints.CreateAsync(
-            new OrganizationProvisioningRequest("Acme Corporation", "ACME"),
-            harness.Administration,
-            TestContext.Current.CancellationToken);
-
-        // Assert
-        var problem = Assert.IsType<ProblemHttpResult>(result.Result);
-        Assert.Equal(StatusCodes.Status409Conflict, problem.StatusCode);
-        Assert.Contains($"{Organization.MaximumListed}", problem.ProblemDetails.Detail, StringComparison.Ordinal);
-    }
-
     [Fact]
     public async Task CreateAsync_AShortNameCarryingASlash_IsRefusedWithoutReachingTheStore()
     {
@@ -301,7 +284,7 @@ public sealed class OrganizationEndpointsTests
     {
         // Arrange
         var harness = new EndpointHarness(MailFathomPermission.AdminRead);
-        harness.Organizations.ReadAsync(Arg.Any<CancellationToken>())
+        harness.Organizations.ReadAsync(Arg.Any<AdministrativeListingQuery>(), Arg.Any<CancellationToken>())
             .Returns(new OrganizationListing(
                 [
                     new Organization(
@@ -312,15 +295,94 @@ public sealed class OrganizationEndpointsTests
                         MailAccounts: 5,
                         new DateTimeOffset(2026, 9, 13, 12, 0, 0, TimeSpan.Zero)),
                 ],
-                []));
+                [],
+                ContinuesAfter: null));
 
         // Act
-        var result = await OrganizationEndpoints.ListAsync(harness.Administration, TestContext.Current.CancellationToken);
+        var result = await OrganizationEndpoints.ListAsync(
+            pageSize: null,
+            cursor: null,
+            harness.Administration,
+            TestContext.Current.CancellationToken);
 
         // Assert
-        var organization = Assert.Single(result.Value!.Organizations);
+        var organization = Assert.Single(Assert.IsType<Ok<OrganizationListResponse>>(result.Result).Value!.Organizations);
         Assert.Equal(3, organization.Members);
         Assert.Equal(5, organization.MailAccounts);
+    }
+
+    /// <summary>A first page with more following answers the cursor the next one is asked with, naming the last organization it held.</summary>
+    [Fact]
+    public async Task ListAsync_AFirstPageWithMoreFollowing_AnswersTheCursorTheNextPageIsAskedWith()
+    {
+        // Arrange
+        var harness = new EndpointHarness(MailFathomPermission.AdminRead);
+        harness.Organizations.ReadAsync(
+                Arg.Is<AdministrativeListingQuery>(query => query!.After == null),
+                Arg.Any<CancellationToken>())
+            .Returns(new OrganizationListing([Acme], [], ContinuesAfter: OrganizationId));
+
+        // Act
+        var result = await OrganizationEndpoints.ListAsync(
+            pageSize: null,
+            cursor: null,
+            harness.Administration,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var page = Assert.IsType<Ok<OrganizationListResponse>>(result.Result).Value!;
+        Assert.Equal(OrganizationId, Assert.Single(page.Organizations).Id);
+        Assert.True(AdministrativeListingCursor.TryDecode(page.NextCursor, AdministrativeListing.Organizations, out var after));
+        Assert.Equal(OrganizationId, after);
+    }
+
+    /// <summary>The cursor a page answered with is where the following page continues, and the last page answers none.</summary>
+    [Fact]
+    public async Task ListAsync_TheCursorOfThePreviousPage_ReadsTheLastPageAfterIt()
+    {
+        // Arrange
+        var harness = new EndpointHarness(MailFathomPermission.AdminRead);
+        harness.Organizations.ReadAsync(
+                Arg.Is<AdministrativeListingQuery>(query => query!.After == OrganizationId),
+                Arg.Any<CancellationToken>())
+            .Returns(new OrganizationListing([Acme], [], ContinuesAfter: null));
+
+        // Act
+        var result = await OrganizationEndpoints.ListAsync(
+            pageSize: null,
+            AdministrativeListingCursor.Encode(AdministrativeListing.Organizations, OrganizationId),
+            harness.Administration,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var page = Assert.IsType<Ok<OrganizationListResponse>>(result.Result).Value!;
+        Assert.Single(page.Organizations);
+        Assert.Null(page.NextCursor);
+    }
+
+    /// <summary>A cursor this listing did not issue names no position in it, so it is refused before anything is read.</summary>
+    [Theory]
+    [InlineData("not-a-cursor")]
+    [InlineData("users")]
+    public async Task ListAsync_ACursorThisListingDidNotIssue_IsRefusedWithoutReachingTheStore(string presented)
+    {
+        // Arrange
+        var harness = new EndpointHarness(MailFathomPermission.AdminRead);
+        var cursor = presented == "users"
+            ? AdministrativeListingCursor.Encode(AdministrativeListing.Users, OrganizationId)
+            : presented;
+
+        // Act
+        var result = await OrganizationEndpoints.ListAsync(
+            pageSize: null,
+            cursor,
+            harness.Administration,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var problem = Assert.IsType<ProblemHttpResult>(result.Result);
+        Assert.Equal(StatusCodes.Status400BadRequest, problem.StatusCode);
+        await harness.Organizations.DidNotReceiveWithAnyArgs().ReadAsync(default!, TestContext.Current.CancellationToken);
     }
 
     private sealed class EndpointHarness

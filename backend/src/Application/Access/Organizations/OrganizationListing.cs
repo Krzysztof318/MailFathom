@@ -4,9 +4,10 @@
 
 namespace MailFathom.Application.Access.Organizations;
 
-/// <summary>The organizations a deployment holds, and the rows it could not read as one.</summary>
-/// <param name="Organizations">The organizations this deployment serves, ordered by short name.</param>
+/// <summary>One page of the organizations a deployment holds, and the rows on it this build could not read as one.</summary>
+/// <param name="Organizations">The organizations this deployment serves, in identifier order.</param>
 /// <param name="Unreadable">The rows whose stored short name is not one this build accepts, which are refused one at a time rather than refusing the listing.</param>
+/// <param name="ContinuesAfter">The identifier the following page continues after, or <see langword="null" /> when this page is the last.</param>
 /// <remarks>
 /// The two travel together because an operator who cannot see the broken row cannot repair it. A short name is written
 /// through a route that judges it, so a row failing here was written by an older build, edited in the database, or
@@ -15,7 +16,8 @@ namespace MailFathom.Application.Access.Organizations;
 /// </remarks>
 public sealed record OrganizationListing(
     IReadOnlyList<Organization> Organizations,
-    IReadOnlyList<UnreadableOrganization> Unreadable);
+    IReadOnlyList<UnreadableOrganization> Unreadable,
+    Guid? ContinuesAfter);
 
 /// <summary>One organization whose stored row this build will not read.</summary>
 /// <param name="Id">The identifier every act on the organization names it by, which is what an operator repairs it with.</param>

@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Access.Organizations;
+using MailFathom.Application.Paging;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Access;
 using Microsoft.EntityFrameworkCore;
@@ -37,12 +38,24 @@ internal sealed class PersistedOrganizations(MailFathomDbContext dbContext) : IO
     /// named apart instead, and its members lose exactly what the organization decides: the prefix their login begins
     /// with, and nothing of anybody else's.
     /// </remarks>
-    public async Task<OrganizationListing> ReadAsync(CancellationToken cancellationToken)
+    public async Task<OrganizationListing> ReadAsync(
+        AdministrativeListingQuery query,
+        CancellationToken cancellationToken)
     {
-        var stored = await dbContext.Organizations
-            .AsNoTracking()
-            .OrderBy(organization => organization.ShortName)
-            .Take(Organization.MaximumListed)
+        ArgumentNullException.ThrowIfNull(query);
+
+        var organizations = dbContext.Organizations.AsNoTracking();
+
+        // Compared by PostgreSQL as a `uuid`, which is the order the primary key's index holds and the order the page
+        // is taken in, so the boundary never has to agree with how the CLR compares two `Guid` values.
+        if (query.After is { } after)
+        {
+            organizations = organizations.Where(organization => organization.Id > after);
+        }
+
+        var stored = await organizations
+            .OrderBy(organization => organization.Id)
+            .Take(query.PageSize + 1)
             .Select(organization => new StoredOrganizationRow(
                 organization.Id,
                 organization.DisplayName,
@@ -52,19 +65,19 @@ internal sealed class PersistedOrganizations(MailFathomDbContext dbContext) : IO
                 organization.CreatedAt))
             .ToArrayAsync(cancellationToken);
 
-        return ListingOf(stored);
+        return ListingOf(query.PageOf(stored, row => row.Id));
     }
 
-    /// <summary>Splits the rows the listing statement read into the ones this build serves and the ones it will not.</summary>
-    /// <param name="stored">The rows as the statement selected them.</param>
+    /// <summary>Splits the rows of one page into the ones this build serves and the ones it will not.</summary>
+    /// <param name="page">The page of rows as the statement selected them.</param>
     /// <returns>The listing.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="stored" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="page" /> is <see langword="null" />.</exception>
     /// <remarks>Composed apart from the statement so that an unreadable row costing exactly itself is assertable without a server.</remarks>
-    internal static OrganizationListing ListingOf(IReadOnlyList<StoredOrganizationRow> stored)
+    internal static OrganizationListing ListingOf(AdministrativeListingPage<StoredOrganizationRow> page)
     {
-        ArgumentNullException.ThrowIfNull(stored);
+        ArgumentNullException.ThrowIfNull(page);
 
-        var read = stored
+        var read = page.Entries
             .Select(organization => (Row: organization, Readable: OrganizationShortName.TryCreate(
                 organization.ShortName,
                 out var shortName), ShortName: shortName))
@@ -89,7 +102,40 @@ internal sealed class PersistedOrganizations(MailFathomDbContext dbContext) : IO
                         entry.Row.Id,
                         entry.Row.DisplayName,
                         OrganizationShortName.DescribeAcceptedForm())),
-            ]);
+            ],
+            page.ContinuesAfter);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Each short name is judged by <see cref="OrganizationShortName" /> rather than by a predicate in SQL, so what this
+    /// reports is exactly what the listing and a sign-in refuse and the rule is written once. The rows are streamed and
+    /// judged one at a time, so what the read holds in memory is the unreadable rows rather than the table.
+    /// </remarks>
+    public async Task<IReadOnlyList<UnreadableOrganization>> ReadUnreadableAsync(CancellationToken cancellationToken)
+    {
+        // ponytail: still reads every organization's short name over the wire; a SQL predicate mirroring
+        // OrganizationShortName's accepted form is the upgrade if this scan is measured slow.
+        var stored = dbContext.Organizations
+            .AsNoTracking()
+            .OrderBy(organization => organization.Id)
+            .Select(organization => new { organization.Id, organization.DisplayName, organization.ShortName })
+            .AsAsyncEnumerable();
+
+        List<UnreadableOrganization> unreadable = [];
+
+        await foreach (var organization in stored.WithCancellation(cancellationToken))
+        {
+            if (!OrganizationShortName.TryCreate(organization.ShortName, out _))
+            {
+                unreadable.Add(new UnreadableOrganization(
+                    organization.Id,
+                    organization.DisplayName,
+                    OrganizationShortName.DescribeAcceptedForm()));
+            }
+        }
+
+        return unreadable;
     }
 
     /// <inheritdoc />
@@ -104,19 +150,6 @@ internal sealed class PersistedOrganizations(MailFathomDbContext dbContext) : IO
 
         var storedShortName = RequireShortName(shortName);
 
-        await using var creation = await dbContext.Database.BeginTransactionAsync(cancellationToken);
-
-        // Two creations at the ceiling would otherwise each read room for one more. The lock serializes writers and
-        // still admits every read, and recording an organization is rare enough that serializing it costs nothing.
-        await dbContext.Database.ExecuteSqlRawAsync(
-            "LOCK TABLE organizations IN SHARE ROW EXCLUSIVE MODE",
-            cancellationToken);
-
-        if (await dbContext.Organizations.CountAsync(cancellationToken) >= Organization.MaximumListed)
-        {
-            return OrganizationWriteResult.Of(OrganizationWriteOutcome.OrganizationCeilingReached);
-        }
-
         // The identifier is freshly minted, so the short name's index is the one constraint a loser can meet.
         var written = await dbContext.Database.ExecuteSqlAsync(
             $"""
@@ -125,8 +158,6 @@ internal sealed class PersistedOrganizations(MailFathomDbContext dbContext) : IO
              ON CONFLICT DO NOTHING
              """,
             cancellationToken);
-
-        await creation.CommitAsync(cancellationToken);
 
         return OrganizationWriteResult.Of(
             written == 1 ? OrganizationWriteOutcome.Written : OrganizationWriteOutcome.ShortNameTaken);

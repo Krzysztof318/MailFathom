@@ -4,6 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Access;
+using MailFathom.Application.Paging;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Host.Hosting.Workers;
@@ -69,28 +70,31 @@ internal sealed partial class UserRosterAdministration(
     /// <summary>The version a freshly provisioned row stands at, which the record's first commit is composed over.</summary>
     private const long ProvisionedVersion = 1;
 
-    /// <summary>Reads the users this deployment holds.</summary>
+    /// <summary>Reads one page of the users this deployment holds.</summary>
+    /// <param name="query">The page asked for.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The users, in the order they were recorded in, each annotated with what this process is doing about them.</returns>
+    /// <returns>The page's users in identifier order, each annotated with what this process is doing about them, and where the following page continues.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="query" /> is <see langword="null" />.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminRead" />.</exception>
-    /// <remarks>
-    /// One more than a deployment may declare is read, so a roster past the bound is observable rather than silently
-    /// truncated into a listing an administrator would then act on as though it were complete.
-    /// </remarks>
-    internal async Task<IReadOnlyList<UserRosterEntry>> ReadRosterAsync(CancellationToken cancellationToken)
+    internal async Task<AdministrativeListingPage<UserRosterEntry>> ReadRosterAsync(
+        AdministrativeListingQuery query,
+        CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(query);
+
         authorization.RequirePermission(MailFathomPermission.AdminRead);
 
-        var held = await directory.ReadUsersAsync(ServedUsers.MaximumUsers + 1, cancellationToken);
+        var page = await directory.ReadUserPageAsync(query, cancellationToken);
 
-        return
-        [
-            .. held.Select(record => new UserRosterEntry(
-                record.User,
-                record.DisplayName,
-                Served: servedUsers.Users.Any(served => served.User == record.User),
-                record.EndpointAccess)),
-        ];
+        return new AdministrativeListingPage<UserRosterEntry>(
+            [
+                .. page.Entries.Select(record => new UserRosterEntry(
+                    record.User,
+                    record.DisplayName,
+                    Served: servedUsers.Users.Any(served => served.User == record.User),
+                    record.EndpointAccess)),
+            ],
+            page.ContinuesAfter);
     }
 
     /// <summary>Records a user this deployment did not hold, under an identifier it mints.</summary>

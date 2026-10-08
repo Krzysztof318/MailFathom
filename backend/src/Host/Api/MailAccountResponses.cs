@@ -7,10 +7,10 @@ using MailFathom.Infrastructure.Persistence.Users;
 
 namespace MailFathom.Host.Api;
 
-/// <summary>The mail accounts this deployment holds.</summary>
-/// <param name="Accounts">One entry per account, in the order they were created in.</param>
-/// <param name="Truncated">Whether the deployment holds more accounts than one listing carries, so the entries are only the first of them.</param>
-internal sealed record MailAccountListResponse(IReadOnlyList<MailAccountSummaryResponse> Accounts, bool Truncated);
+/// <summary>One page of the mail accounts this deployment holds.</summary>
+/// <param name="Accounts">One entry per account, in identifier order.</param>
+/// <param name="NextCursor">The cursor the following page is asked with, or <see langword="null" /> at the end.</param>
+internal sealed record MailAccountListResponse(IReadOnlyList<MailAccountSummaryResponse> Accounts, string? NextCursor);
 
 /// <summary>One mail account as a listing names it: by the address and the display name an administrator tells accounts apart by.</summary>
 /// <param name="Id">The identifier the deployment generated for the account, which every other act names it by.</param>
