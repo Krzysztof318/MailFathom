@@ -109,27 +109,33 @@ internal sealed class PersistedOrganizations(MailFathomDbContext dbContext) : IO
     /// <inheritdoc />
     /// <remarks>
     /// Each short name is judged by <see cref="OrganizationShortName" /> rather than by a predicate in SQL, so what this
-    /// reports is exactly what the listing and a sign-in refuse and the rule is written once.
+    /// reports is exactly what the listing and a sign-in refuse and the rule is written once. The rows are streamed and
+    /// judged one at a time, so what the read holds in memory is the unreadable rows rather than the table.
     /// </remarks>
     public async Task<IReadOnlyList<UnreadableOrganization>> ReadUnreadableAsync(CancellationToken cancellationToken)
     {
-        // ponytail: reads every organization's identifier, display name, and short name to judge them in the process;
-        // a SQL predicate mirroring OrganizationShortName's accepted form is the upgrade if this scan is measured slow.
-        var stored = await dbContext.Organizations
+        // ponytail: still reads every organization's short name over the wire; a SQL predicate mirroring
+        // OrganizationShortName's accepted form is the upgrade if this scan is measured slow.
+        var stored = dbContext.Organizations
             .AsNoTracking()
             .OrderBy(organization => organization.Id)
             .Select(organization => new { organization.Id, organization.DisplayName, organization.ShortName })
-            .ToArrayAsync(cancellationToken);
+            .AsAsyncEnumerable();
 
-        return
-        [
-            .. stored
-                .Where(organization => !OrganizationShortName.TryCreate(organization.ShortName, out _))
-                .Select(organization => new UnreadableOrganization(
+        List<UnreadableOrganization> unreadable = [];
+
+        await foreach (var organization in stored.WithCancellation(cancellationToken))
+        {
+            if (!OrganizationShortName.TryCreate(organization.ShortName, out _))
+            {
+                unreadable.Add(new UnreadableOrganization(
                     organization.Id,
                     organization.DisplayName,
-                    OrganizationShortName.DescribeAcceptedForm())),
-        ];
+                    OrganizationShortName.DescribeAcceptedForm()));
+            }
+        }
+
+        return unreadable;
     }
 
     /// <inheritdoc />

@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Paging;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Api;
 using MailFathom.Host.UnitTests.TestDoubles;
@@ -158,6 +159,61 @@ public sealed class MailAccountEndpointsTests
         Assert.Null(page.NextCursor);
         var account = Assert.Single(page.Accounts);
         Assert.Equal((unreadable.Id, "broken@example.test", "broken"), (account.Id, account.EmailAddress, account.DisplayName));
+    }
+
+    /// <summary>A walk follows the cursor each page answers, reaching every account once and ending on a page that answers none.</summary>
+    [Fact]
+    public async Task ReadPageAsync_AWalkFollowingEachCursor_ReachesTheNextAccountAndEndsOnALastPage()
+    {
+        // Arrange
+        var first = new MailAccountRecord(new Guid("11111111-1111-4111-8111-111111111111"), "first@example.test", "first", "{}", Version: 1);
+        var second = new MailAccountRecord(new Guid("22222222-2222-4222-8222-222222222222"), "second@example.test", "second", "{}", Version: 1);
+        var deployment = new UserRecordDeployment([MailFathomPermission.AdminRead]);
+        deployment.Holding(SyntheticUser.Deployment, "{}", version: 1, first, second);
+
+        // Act
+        var firstPage = await MailAccountEndpoints.ReadPageAsync(
+            pageSize: 1,
+            cursor: null,
+            deployment.MailAccounts,
+            TestContext.Current.CancellationToken);
+        var nextCursor = Assert.IsType<Ok<MailAccountListResponse>>(firstPage.Result).Value!.NextCursor;
+        var lastPage = await MailAccountEndpoints.ReadPageAsync(
+            pageSize: 1,
+            nextCursor,
+            deployment.MailAccounts,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(AdministrativeListingCursor.TryDecode(nextCursor, AdministrativeListing.MailAccounts, out var after));
+        Assert.Equal(first.Id, after);
+
+        var last = Assert.IsType<Ok<MailAccountListResponse>>(lastPage.Result).Value!;
+        Assert.Equal(second.Id, Assert.Single(last.Accounts).Id);
+        Assert.Null(last.NextCursor);
+    }
+
+    /// <summary>A cursor this listing did not issue names no position in it, so it is refused rather than read as the first page.</summary>
+    [Theory]
+    [InlineData("not-a-cursor")]
+    [InlineData("users")]
+    public async Task ReadPageAsync_ACursorThisListingDidNotIssue_IsRefused(string presented)
+    {
+        // Arrange
+        var deployment = new UserRecordDeployment([MailFathomPermission.AdminRead]);
+        var cursor = presented == "users"
+            ? AdministrativeListingCursor.Encode(AdministrativeListing.Users, SyntheticUser.Deployment.Value)
+            : presented;
+
+        // Act
+        var result = await MailAccountEndpoints.ReadPageAsync(
+            pageSize: null,
+            cursor,
+            deployment.MailAccounts,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        AssertRefusal(result.Result);
     }
 
     [Theory]

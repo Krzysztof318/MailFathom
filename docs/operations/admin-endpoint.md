@@ -375,9 +375,11 @@ nothing about the request was wrong.
 
 ### Reading the users, mail accounts, and organizations a page at a time
 
-`GET /api/admin/users`, `GET /api/admin/mail-accounts`, and `GET /api/admin/organizations` each answer one page, and
-no count bounds what the deployment holds — a deployment serving a hundred thousand mailboxes lists every one of them,
-a page at a time. Each takes the same two parameters:
+`GET /api/admin/users`, `GET /api/admin/mail-accounts`, and `GET /api/admin/organizations` each answer one page.
+Paging is what lets a listing hold more rows than one answer carries, not a limit on how many there are: no total
+count bounds the mail accounts or the organizations a deployment holds, so every one of them is listed a page at a
+time, while users are still bounded by the roster limit `POST /api/admin/users` refuses past, and the per-user bounds
+on assigning and listing mail accounts stay. Each listing takes the same two parameters:
 
 | Parameter | Meaning |
 | --- | --- |

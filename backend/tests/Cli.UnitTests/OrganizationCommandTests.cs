@@ -84,6 +84,38 @@ public sealed class OrganizationCommandTests : IDisposable
     }
 
     /// <summary>
+    /// The deployment answers in identifier order a page at a time, so the listing gathers every page — the unreadable
+    /// rows of each included — and draws the organizations by the short name an operator reads them by.
+    /// </summary>
+    [Fact]
+    public async Task List_AListingAnsweredOnTwoPages_DrawsEveryOrganizationInShortNameOrderAndNamesEachUnreadableRow()
+    {
+        // Arrange
+        var laterOrganization = new Guid("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+        var secondUnreadable = new Guid("99999999-9999-9999-9999-999999999999");
+        using var deployment = FakeOrganizationDeployment.HoldingOnTwoPages(
+            (
+                [FakeOrganizationDeployment.Organization(Organization, "ZETA", "Zeta Industries", members: 1)],
+                [FakeOrganizationDeployment.UnreadableOrganization(Unreadable, "Legacy Holdings", Correction)]),
+            (
+                [FakeOrganizationDeployment.Organization(laterOrganization, "ACME", "Acme Corporation", members: 2)],
+                [FakeOrganizationDeployment.UnreadableOrganization(secondUnreadable, "Older Holdings", Correction)]));
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "organization", "list", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+
+        var listing = DrawnListing.ReadFrom(
+            this.harness.Console.Lines, "Organization", "Short name", "Display name", "Members", "Recorded");
+
+        Assert.Equal(["ACME", "ZETA"], listing.Rows.Select(row => listing.Cell(row, "Short name")));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains($"{Unreadable:D}", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains($"{secondUnreadable:D}", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// A display name is whatever an operator recorded and nothing refuses a control character in one, so an escape
     /// sequence in a row this listing prints would otherwise be acted on by the terminal of whoever ran the command.
     /// </summary>
