@@ -92,18 +92,19 @@ else
   printf 'The store holds no results yet, so there is no report to render.\n' >&2
 fi
 
-# A case keeps its cached answers whatever its verdict, so a run read from the cache replays the
-# sample an earlier run drew rather than measuring the model again. Saying how much of this run was
-# replayed is what keeps it from being compared with a run whose answers were asked afresh. The two
-# metrics are the ones `EvaluationRepetitions` files on every repetition.
+# A case keeps its cached answers whatever its verdict, so an answer an earlier run wrote replays the
+# sample that run drew rather than measuring the model again. Saying how much of this run was
+# replayed is what keeps it from being compared with a run whose answers were asked afresh. An answer
+# this run wrote and read back is still this run's measurement, so it is counted apart from the
+# replays. The three metrics are the ones `EvaluationRepetitions` files on every repetition.
 execution_results="$MAILFATHOM_AI_EVALUATIONS_STORE/results/$MAILFATHOM_AI_EVALUATIONS_EXECUTION"
 if [[ -d "$execution_results" ]]; then
-  read -r cached_answers asked_answers < <(
+  read -r replayed_answers reused_answers asked_answers < <(
     find "$execution_results" -name '*.json' -exec jq -r \
-      '[.evaluationResult.metrics["Answers read from the cache"].value // 0, .evaluationResult.metrics["Answers asked afresh"].value // 0] | @tsv' {} + |
-      awk '{ cached += $1; asked += $2 } END { print cached + 0, asked + 0 }')
-  printf '%d answers of the models under test were read from the cache and %d were asked afresh.\n' \
-    "$cached_answers" "$asked_answers"
+      '.evaluationResult.metrics as $metrics | [$metrics["Answers replayed from an earlier run"].value // 0, $metrics["Answers reused within the run"].value // 0, $metrics["Answers asked afresh"].value // 0] | @tsv' {} + |
+      awk '{ replayed += $1; reused += $2; asked += $3 } END { print replayed + 0, reused + 0, asked + 0 }')
+  printf '%d answers of the models under test were replayed from an earlier run, %d were reused from answers this run asked, and %d were asked afresh.\n' \
+    "$replayed_answers" "$reused_answers" "$asked_answers"
 fi
 
 # A model's answer varies between calls, so a few scenarios falling short is the measurement rather

@@ -118,7 +118,7 @@ internal static class EvaluationStore
             ResponseCacheAt(root, repetitions),
             executionName: executionName);
 
-    /// <summary>Gets how many answers the model under test gave under one scenario and iteration were read from the cache, and how many were asked afresh.</summary>
+    /// <summary>Gets how many answers the model under test gave under one scenario and iteration were replayed from an earlier run, reused from this one, and asked afresh.</summary>
     /// <param name="reporting">The store the scenario ran in, opened here.</param>
     /// <param name="scenarioName">The scenario the answers are filed under.</param>
     /// <param name="iterationName">The iteration the answers are filed under, which names the model and the repetition.</param>
@@ -180,12 +180,14 @@ internal static class EvaluationStore
         CancellationToken cancellationToken)
     {
         var provider = (TallyingResponseCacheProvider)reporting.ResponseCacheProvider!;
-        var cache = await provider.GetCacheAsync(
-            scenarioName,
-            IterationNameFor(plan.Endpoint.RoutedModelName, repetition),
-            cancellationToken);
+        var cacheIterationName = IterationNameFor(plan.Endpoint.RoutedModelName, repetition);
+        var cache = await provider.GetCacheAsync(scenarioName, cacheIterationName, cancellationToken);
 
-        return new ToolKeyedCachingChatClient(model, cache, provider.TallyFor(scenarioName, iterationName))
+        return new ToolKeyedCachingChatClient(
+            model,
+            cache,
+            provider.WrittenKeysFor(scenarioName, cacheIterationName),
+            provider.TallyFor(scenarioName, iterationName))
         {
             CacheKeyAdditionalValues = CacheIdentityOf(
                 plan,
