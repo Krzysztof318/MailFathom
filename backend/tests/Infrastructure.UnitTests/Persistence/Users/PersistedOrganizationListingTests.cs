@@ -91,5 +91,6 @@ public sealed class PersistedOrganizationListingTests
             displayName,
             shortName,
             Members: 0,
+            MailAccounts: 0,
             Recorded);
 }

@@ -27,4 +27,13 @@ public enum OrganizationWriteOutcome
 
     /// <summary>The deployment already holds <see cref="Organization.MaximumListed" /> organizations, so recording another was refused.</summary>
     OrganizationCeilingReached = 6,
+
+    /// <summary>The organization still holds mail accounts, so deleting it was refused.</summary>
+    StillHoldsMailAccounts = 7,
+
+    /// <summary>A move would have left an assignment between a mail account and a user of different organizations, so it was refused.</summary>
+    AssignmentsOutsideOrganization = 8,
+
+    /// <summary>No mail account carries the identifier the act named.</summary>
+    UnknownMailAccount = 9,
 }

@@ -10,17 +10,21 @@ namespace MailFathom.Application.Access.Organizations;
 /// <param name="Id">The identifier the deployment generated, which every act on the organization names.</param>
 /// <param name="DisplayName">The name an operator reads the organization by.</param>
 /// <param name="ShortName">The short name its members sign in under.</param>
-/// <param name="Members">How many users belong to it, which is what decides whether it may be deleted.</param>
+/// <param name="Members">How many users belong to it, which is one half of what decides whether it may be deleted.</param>
+/// <param name="MailAccounts">How many mail accounts belong to it, which is the other half.</param>
 /// <param name="CreatedAt">When it was recorded.</param>
 /// <remarks>
-/// An organization groups users and scopes a Basic username, and nothing else: no setting is declared on it and nothing
-/// narrows by it, so what it carries is what an operator needs to tell companies apart and nothing a request is served by.
+/// An organization groups users and mail accounts, scopes a Basic username, and keeps an assignment inside itself: an
+/// account in it is assigned only to its members, and an account in none only to users in none. No setting is declared
+/// on it and nothing a request is served by changes because of it, so what it carries is what an operator needs to tell
+/// companies apart.
 /// </remarks>
 public sealed record Organization(
     Guid Id,
     string DisplayName,
     OrganizationShortName ShortName,
     int Members,
+    int MailAccounts,
     DateTimeOffset CreatedAt)
 {
     /// <summary>The longest display name an organization is recorded under.</summary>

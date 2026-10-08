@@ -29,17 +29,25 @@ internal sealed record OrganizationShortNameRequest(string? ShortName);
 /// </remarks>
 internal sealed record UserOrganizationRequest(Guid? OrganizationId, bool? None);
 
+/// <summary>What moving a mail account between organizations carries.</summary>
+/// <param name="OrganizationId">The organization to move the account into.</param>
+/// <param name="None"><see langword="true" /> to take the account out of every organization.</param>
+/// <remarks>Leaving every organization is stated for the reason <see cref="UserOrganizationRequest" /> gives: an account in none is assigned only to users in none, so a body read as a move out would decide who may be assigned it.</remarks>
+internal sealed record MailAccountOrganizationRequest(Guid? OrganizationId, bool? None);
+
 /// <summary>One organization as a listing publishes it.</summary>
 /// <param name="Id">The identifier every act on it names.</param>
 /// <param name="DisplayName">The name an operator reads it by.</param>
 /// <param name="ShortName">The short name its members sign in under.</param>
 /// <param name="Members">How many users belong to it.</param>
+/// <param name="MailAccounts">How many mail accounts belong to it.</param>
 /// <param name="CreatedAt">When it was recorded.</param>
 internal sealed record OrganizationResponse(
     Guid Id,
     string DisplayName,
     string ShortName,
     int Members,
+    int MailAccounts,
     DateTimeOffset CreatedAt)
 {
     internal static OrganizationResponse For(Organization organization)
@@ -51,6 +59,7 @@ internal sealed record OrganizationResponse(
             organization.DisplayName,
             organization.ShortName.Value,
             organization.Members,
+            organization.MailAccounts,
             organization.CreatedAt);
     }
 }

@@ -32,6 +32,10 @@ internal sealed class MailAccountRecordEntity
 
     public required string DisplayName { get; set; }
 
+    /// <summary>The organization the account belongs to, or <see langword="null" /> for an account in none.</summary>
+    /// <remarks>It decides who the account may be assigned to — a user of that same organization, or of none — and nothing about what it serves.</remarks>
+    public Guid? OrganizationId { get; set; }
+
     public required string Document { get; set; }
 
     public long Version { get; set; }

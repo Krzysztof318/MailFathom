@@ -32,9 +32,9 @@ public sealed class MailAccountCommandTests : IDisposable
     private readonly string declarations =
         Path.Combine(Path.GetTempPath(), $"mailfathom-account-tests-{Guid.NewGuid():N}");
 
-    /// <summary>An operator tells accounts apart by display name and address, so the listing prints both beside who holds the account.</summary>
+    /// <summary>An operator tells accounts apart by display name and address, so the listing prints both beside who holds the account and the organization it belongs to.</summary>
     [Fact]
-    public async Task List_ADeploymentHoldingOneAccount_PrintsItsNameAddressAndUsers()
+    public async Task List_ADeploymentHoldingOneAccount_PrintsItsNameAddressUsersAndOrganization()
     {
         // Arrange
         using var deployment = FakeMailAccountDeployment.Holding();
@@ -50,6 +50,7 @@ public sealed class MailAccountCommandTests : IDisposable
         Assert.Contains(
             this.harness.Console.Lines,
             line => line.Contains($"assigned to: {User:D}", StringComparison.Ordinal));
+        Assert.Contains($"    organization: {FakeMailAccountDeployment.Organization:D}", this.harness.Console.Lines);
     }
 
     /// <summary>A listing the deployment cut at its bound says so, so an operator does not take it for every account held.</summary>
@@ -81,6 +82,7 @@ public sealed class MailAccountCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Contains(FakeMailAccountDeployment.Declaration, this.harness.Console.Lines);
+        Assert.Contains("    organization: none", this.harness.Console.Lines);
     }
 
     /// <summary>An operator who edits an account as YAML reads it as YAML too, so the two views of one declaration agree.</summary>

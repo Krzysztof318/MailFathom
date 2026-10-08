@@ -21,6 +21,8 @@ internal sealed class InMemoryMailAccountRecordStore : IMailAccountRecordStore
 
     private readonly Dictionary<Guid, List<UserId>> assignments = [];
 
+    private readonly Dictionary<Guid, Guid?> accountOrganizations = [];
+
     /// <summary>Gets every account the store holds, in the order they were created in.</summary>
     internal IReadOnlyList<MailAccountRecord> Accounts => this.accounts;
 
@@ -31,7 +33,7 @@ internal sealed class InMemoryMailAccountRecordStore : IMailAccountRecordStore
     /// <param name="assigned">The accounts assigned to the user, created when the store does not hold them yet.</param>
     internal void HoldUser(UserId user, string json, long version, params MailAccountRecord[] assigned)
     {
-        this.users[user] = new HeldUser(json, version);
+        this.users[user] = new HeldUser(json, version, OrganizationId: null);
 
         foreach (var account in assigned)
         {
@@ -55,6 +57,17 @@ internal sealed class InMemoryMailAccountRecordStore : IMailAccountRecordStore
         this.accounts.Add(account);
         this.assignments[account.Id] = [];
     }
+
+    /// <summary>Places a held user in an organization, or in none.</summary>
+    /// <param name="user">The user.</param>
+    /// <param name="organizationId">The organization, or <see langword="null" /> for none.</param>
+    internal void PlaceUser(UserId user, Guid? organizationId) =>
+        this.users[user] = this.users[user] with { OrganizationId = organizationId };
+
+    /// <summary>Places a held account in an organization, or in none.</summary>
+    /// <param name="accountId">The account.</param>
+    /// <param name="organizationId">The organization, or <see langword="null" /> for none.</param>
+    internal void PlaceAccount(Guid accountId, Guid? organizationId) => this.accountOrganizations[accountId] = organizationId;
 
     /// <summary>Composes the record a reader answers for one user, carrying the accounts assigned to them.</summary>
     /// <param name="user">The user.</param>
@@ -81,7 +94,8 @@ internal sealed class InMemoryMailAccountRecordStore : IMailAccountRecordStore
                 account.EmailAddress,
                 account.DisplayName,
                 account.Version,
-                [.. this.assignments[account.Id]])),
+                [.. this.assignments[account.Id]],
+                this.OrganizationOf(account.Id))),
         ]);
 
     /// <inheritdoc />
@@ -112,6 +126,7 @@ internal sealed class InMemoryMailAccountRecordStore : IMailAccountRecordStore
 
         this.accounts.Add(account with { Version = 1 });
         this.assignments[account.Id] = [user];
+        this.accountOrganizations[account.Id] = held.OrganizationId;
         this.MoveVersionOf(user);
 
         return Written(MailAccountWriteResult.Committed, 1);
@@ -153,6 +168,14 @@ internal sealed class InMemoryMailAccountRecordStore : IMailAccountRecordStore
         if (this.Find(accountId) is not { } account || !this.users.TryGetValue(user, out var held))
         {
             return Written(MailAccountWriteResult.NotFound, 0);
+        }
+
+        if (this.OrganizationOf(accountId) != held.OrganizationId)
+        {
+            return Task.FromResult(new MailAccountWrite(
+                MailAccountWriteResult.OrganizationsDiffer,
+                0,
+                new StraddledOrganizations(this.OrganizationOf(accountId), held.OrganizationId)));
         }
 
         if (this.assignments[accountId].Contains(user))
@@ -220,7 +243,10 @@ internal sealed class InMemoryMailAccountRecordStore : IMailAccountRecordStore
 
     private MailAccountRecord? Find(Guid accountId) => this.accounts.FirstOrDefault(account => account.Id == accountId);
 
-    private MailAccountHolding HoldingOf(MailAccountRecord account) => new(account, [.. this.assignments[account.Id]]);
+    private MailAccountHolding HoldingOf(MailAccountRecord account) =>
+        new(account, [.. this.assignments[account.Id]], this.OrganizationOf(account.Id));
+
+    private Guid? OrganizationOf(Guid accountId) => this.accountOrganizations.GetValueOrDefault(accountId);
 
     private bool HoldsAddress(string? emailAddress, Guid? exceptAccount) =>
         MailAccountRecord.NormalizedFormOf(emailAddress) is { } normalized
@@ -235,7 +261,8 @@ internal sealed class InMemoryMailAccountRecordStore : IMailAccountRecordStore
     {
         this.accounts.RemoveAll(account => account.Id == accountId);
         this.assignments.Remove(accountId);
+        this.accountOrganizations.Remove(accountId);
     }
 
-    private sealed record HeldUser(string Json, long Version);
+    private sealed record HeldUser(string Json, long Version, Guid? OrganizationId);
 }

@@ -236,6 +236,30 @@ public sealed class MailAccountAdministrationTests
         Assert.Equal(shared, Assert.Single(deployment.MailAccountRecords.Accounts));
     }
 
+    /// <summary>An account in an organization is assigned only to its members, and the refusal names both sides — "none" among them — so the administrator knows which one to move.</summary>
+    [Fact]
+    public async Task AssignAsync_AnAccountOfAnOrganizationTheUserIsNotIn_IsRefusedNamingBothAndAssignsNothing()
+    {
+        // Arrange
+        var organization = new Guid("0197c0de-0000-4000-8000-0000000000a1");
+        var mailbox = Mailbox("office@example.test", "office");
+        var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
+        deployment.Holding(Sam, EmptyRecord, version: 1, mailbox);
+        deployment.Holding(Alex, EmptyRecord, version: 5);
+        deployment.MailAccountRecords.PlaceUser(Sam, organization);
+        deployment.MailAccountRecords.PlaceAccount(mailbox.Id, organization);
+
+        // Act
+        var outcome = await deployment.MailAccounts.AssignAsync(mailbox.Id, Alex, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
+        var refusal = Assert.Single(outcome.Messages);
+        Assert.Contains($"organization '{organization:D}'", refusal, StringComparison.Ordinal);
+        Assert.Contains("the user to no organization", refusal, StringComparison.Ordinal);
+        Assert.Empty(deployment.MailAccountRecords.DocumentOf(Alex)!.MailAccounts);
+    }
+
     /// <summary>An account nobody is assigned any longer is erased with it, because mail nobody is served is mail nobody asked to keep.</summary>
     [Fact]
     public async Task UnassignAsync_TheLastUserAssigned_ErasesTheAccount()

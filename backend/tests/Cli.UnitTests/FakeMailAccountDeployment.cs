@@ -30,6 +30,9 @@ internal static class FakeMailAccountDeployment
     /// <summary>Gets the account the deployment holds.</summary>
     internal static Guid Account { get; } = new("66666666-6666-6666-6666-666666666666");
 
+    /// <summary>Gets the organization the account belongs to.</summary>
+    internal static Guid Organization { get; } = new("88888888-8888-4888-8888-888888888888");
+
     /// <summary>Gets the identifier a creation reports, which is the one thing a script cannot reconstruct from what it typed.</summary>
     internal static Guid CreatedAccount { get; } = new("77777777-7777-7777-7777-777777777777");
 
@@ -114,9 +117,9 @@ internal static class FakeMailAccountDeployment
 
     private static string Summary() => string.Create(
         CultureInfo.InvariantCulture,
-        $$"""{"id":"{{Account:D}}","version":{{AccountVersion}},"users":["{{User:D}}"],"emailAddress":"alex@example.test","displayName":"Work"}""");
+        $$"""{"id":"{{Account:D}}","version":{{AccountVersion}},"users":["{{User:D}}"],"emailAddress":"alex@example.test","displayName":"Work","organizationId":"{{Organization:D}}"}""");
 
     private static string Entry() => string.Create(
         CultureInfo.InvariantCulture,
-        $$"""{"id":"{{Account:D}}","version":{{AccountVersion}},"users":["{{User:D}}"],"declaration":{{JsonSerializer.Serialize(Declaration)}}}""");
+        $$"""{"id":"{{Account:D}}","version":{{AccountVersion}},"users":["{{User:D}}"],"declaration":{{JsonSerializer.Serialize(Declaration)}},"organizationId":null}""");
 }

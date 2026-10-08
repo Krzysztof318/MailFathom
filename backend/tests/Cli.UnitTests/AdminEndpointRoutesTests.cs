@@ -134,6 +134,9 @@ public sealed class AdminEndpointRoutesTests
         Assert.Equal(
             "/api/admin/mail-accounts/11111111-2222-3333-4444-555555555555/assignments/removal",
             AdminEndpointRoutes.MailAccountAssignmentRemovalPath(account));
+        Assert.Equal(
+            "/api/admin/mail-accounts/11111111-2222-3333-4444-555555555555/organization",
+            AdminEndpointRoutes.MailAccountOrganizationPath(account));
     }
 
     /// <summary>

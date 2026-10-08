@@ -671,6 +671,9 @@ internal static class PersistenceConstraintNames
     /// <summary>The index a count of one organization's members is answered from.</summary>
     internal const string UserAccountOrganizationIndexName = "ix_settings_accounts_organization";
 
+    /// <summary>The index a count of one organization's mail accounts is answered from.</summary>
+    internal const string MailAccountRecordOrganizationIndexName = "ix_settings_mail_accounts_organization";
+
     /// <summary>The index that keeps one short name to one organization across the deployment.</summary>
     /// <remarks>Stated because the store reads it: a write that violates it is a short name another organization signs in under, which an operator acts on rather than a provider failure.</remarks>
     internal const string OrganizationShortNameUniqueIndexName = "ix_organizations_short_name";

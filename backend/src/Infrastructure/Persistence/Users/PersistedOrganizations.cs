@@ -10,7 +10,7 @@ using Npgsql;
 
 namespace MailFathom.Infrastructure.Persistence.Users;
 
-/// <summary>Keeps the organizations a deployment groups its users into, and moves users between them.</summary>
+/// <summary>Keeps the organizations a deployment groups its users and mail accounts into, and moves either between them.</summary>
 /// <remarks>
 /// <para>
 /// Every write is a single statement or one short transaction executed against the database, for the reason
@@ -48,6 +48,7 @@ internal sealed class PersistedOrganizations(MailFathomDbContext dbContext) : IO
                 organization.DisplayName,
                 organization.ShortName,
                 dbContext.UserAccounts.Count(user => user.OrganizationId == organization.Id),
+                dbContext.MailAccountRecords.Count(account => account.OrganizationId == organization.Id),
                 organization.CreatedAt))
             .ToArrayAsync(cancellationToken);
 
@@ -78,6 +79,7 @@ internal sealed class PersistedOrganizations(MailFathomDbContext dbContext) : IO
                         entry.Row.DisplayName,
                         entry.ShortName,
                         entry.Row.Members,
+                        entry.Row.MailAccounts,
                         entry.Row.CreatedAt)),
             ],
             [
@@ -173,10 +175,11 @@ internal sealed class PersistedOrganizations(MailFathomDbContext dbContext) : IO
 
     /// <inheritdoc />
     /// <remarks>
-    /// The organization row is locked before its members are counted, and the count and the delete commit together. A
-    /// move into it checks the restricting foreign key, which waits on that lock, and a move out that committed first is
-    /// already seen by the count — so the number a refusal names is the number that refused it, and a delete that goes
-    /// ahead leaves a concurrent move to meet a missing organization rather than a dangling member.
+    /// The organization row is locked before its members and its mail accounts are counted, and the counts and the delete
+    /// commit together. A move of a user or an account into it checks the restricting foreign key, which waits on that
+    /// lock, and a move out that committed first is already seen by the count — so the numbers a refusal names are the
+    /// numbers that refused it, and a delete that goes ahead leaves a concurrent move to meet a missing organization
+    /// rather than a dangling member or account.
     /// </remarks>
     public async Task<OrganizationWriteResult> DeleteAsync(Guid organizationId, CancellationToken cancellationToken)
     {
@@ -194,12 +197,16 @@ internal sealed class PersistedOrganizations(MailFathomDbContext dbContext) : IO
         var members = await dbContext.UserAccounts
             .CountAsync(user => user.OrganizationId == organizationId, cancellationToken);
 
-        if (members > 0)
+        var mailAccounts = await dbContext.MailAccountRecords
+            .CountAsync(account => account.OrganizationId == organizationId, cancellationToken);
+
+        if (members > 0 || mailAccounts > 0)
         {
             return new OrganizationWriteResult(
-                OrganizationWriteOutcome.StillHasMembers,
+                members > 0 ? OrganizationWriteOutcome.StillHasMembers : OrganizationWriteOutcome.StillHoldsMailAccounts,
                 organizationId,
-                RemainingMembers: members);
+                RemainingMembers: members,
+                RemainingMailAccounts: mailAccounts);
         }
 
         await dbContext.Organizations
@@ -213,8 +220,10 @@ internal sealed class PersistedOrganizations(MailFathomDbContext dbContext) : IO
 
     /// <inheritdoc />
     /// <remarks>
-    /// The collision is read under the user's own lock and named before anything is written, so an administrator is told
-    /// which username stands in the way. A credential provisioned in the target scope for somebody else in the same instant
+    /// The accounts the user is assigned are counted under the user's own lock, which an assignment to them takes as
+    /// well, so an assignment either committed first and is counted or waits for this move and then reads the user's
+    /// new organization. The collision is read under the same lock and named before anything is written, so an
+    /// administrator is told which username stands in the way. A credential provisioned in the target scope for somebody else in the same instant
     /// is refused by the lookup index instead, and is answered as the same refusal without the name.
     /// </remarks>
     public async Task<OrganizationWriteResult> SetUserOrganizationAsync(
@@ -245,6 +254,15 @@ internal sealed class PersistedOrganizations(MailFathomDbContext dbContext) : IO
             && !await dbContext.Organizations.AnyAsync(organization => organization.Id == target, cancellationToken))
         {
             return OrganizationWriteResult.Of(OrganizationWriteOutcome.UnknownOrganization);
+        }
+
+        var straddling = await AccountsAssignedOutside(dbContext, userId, organizationId).CountAsync(cancellationToken);
+
+        if (straddling > 0)
+        {
+            return new OrganizationWriteResult(
+                OrganizationWriteOutcome.AssignmentsOutsideOrganization,
+                StandingAssignments: straddling);
         }
 
         if (await CollidingUsernames(dbContext, userId, organizationId).FirstOrDefaultAsync(cancellationToken) is { } colliding)
@@ -305,6 +323,96 @@ internal sealed class PersistedOrganizations(MailFathomDbContext dbContext) : IO
             .OrderBy(credential => credential.Lookup)
             .Select(credential => credential.Lookup);
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The account row is locked before its users are counted, against the shared lock an assignment of it takes, so
+    /// an assignment either committed first and is counted or waits for this move and then reads the account's new
+    /// organization. A move of one of its users concurrently with this one cannot let both through: each compares the
+    /// other's side as it stood, and while the two agree before either move, a move of one side alone always leaves them
+    /// differing. The organization's restricting foreign key waits on a deletion that locked it first, and is answered as
+    /// the organization being gone.
+    /// </remarks>
+    public async Task<OrganizationWriteResult> SetMailAccountOrganizationAsync(
+        Guid mailAccountId,
+        Guid? organizationId,
+        CancellationToken cancellationToken)
+    {
+        await using var move = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+        await dbContext.Database.ExecuteSqlAsync(
+            $"""SELECT 1 FROM settings_mail_accounts WHERE "Id" = {mailAccountId} FOR UPDATE""",
+            cancellationToken);
+
+        if (!await dbContext.MailAccountRecords.AnyAsync(account => account.Id == mailAccountId, cancellationToken))
+        {
+            return OrganizationWriteResult.Of(OrganizationWriteOutcome.UnknownMailAccount);
+        }
+
+        if (organizationId is { } target
+            && !await dbContext.Organizations.AnyAsync(organization => organization.Id == target, cancellationToken))
+        {
+            return OrganizationWriteResult.Of(OrganizationWriteOutcome.UnknownOrganization);
+        }
+
+        var straddling = await UsersAssignedOutside(dbContext, mailAccountId, organizationId).CountAsync(cancellationToken);
+
+        if (straddling > 0)
+        {
+            return new OrganizationWriteResult(
+                OrganizationWriteOutcome.AssignmentsOutsideOrganization,
+                StandingAssignments: straddling);
+        }
+
+        try
+        {
+            await dbContext.MailAccountRecords
+                .Where(account => account.Id == mailAccountId)
+                .ExecuteUpdateAsync(
+                    setters => setters.SetProperty(account => account.OrganizationId, organizationId),
+                    cancellationToken);
+
+            await move.CommitAsync(cancellationToken);
+        }
+        catch (PostgresException violation) when (violation.SqlState == PostgresErrorCodes.ForeignKeyViolation)
+        {
+            return OrganizationWriteResult.Of(OrganizationWriteOutcome.UnknownOrganization);
+        }
+
+        return new OrganizationWriteResult(OrganizationWriteOutcome.Written, organizationId ?? Guid.Empty);
+    }
+
+    /// <summary>Composes the accounts one user is assigned that a move into the target organization would leave outside it.</summary>
+    /// <param name="dbContext">The context the query is composed over.</param>
+    /// <param name="userId">The user being moved.</param>
+    /// <param name="organizationId">The organization they are moving into, or <see langword="null" /> for none.</param>
+    /// <returns>The identifiers of those accounts.</returns>
+    /// <remarks>Composed apart so its translation — above all that an account in no organization stands outside every organization, and only outside one — is assertable without a server.</remarks>
+    internal static IQueryable<Guid> AccountsAssignedOutside(
+        MailFathomDbContext dbContext,
+        Guid userId,
+        Guid? organizationId) =>
+        dbContext.MailAccountRecords
+            .Where(account => account.OrganizationId != organizationId
+                && dbContext.MailAccountAssignments.Any(assignment => assignment.MailAccountId == account.Id
+                    && assignment.UserId == userId))
+            .Select(account => account.Id);
+
+    /// <summary>Composes the users one account is assigned to that a move into the target organization would leave outside it.</summary>
+    /// <param name="dbContext">The context the query is composed over.</param>
+    /// <param name="mailAccountId">The account being moved.</param>
+    /// <param name="organizationId">The organization it is moving into, or <see langword="null" /> for none.</param>
+    /// <returns>The identifiers of those users.</returns>
+    /// <remarks>Composed apart for the reason <see cref="AccountsAssignedOutside" /> is.</remarks>
+    internal static IQueryable<Guid> UsersAssignedOutside(
+        MailFathomDbContext dbContext,
+        Guid mailAccountId,
+        Guid? organizationId) =>
+        dbContext.UserAccounts
+            .Where(user => user.OrganizationId != organizationId
+                && dbContext.MailAccountAssignments.Any(assignment => assignment.UserId == user.Id
+                    && assignment.MailAccountId == mailAccountId))
+            .Select(user => user.Id);
 
     private static OrganizationWriteResult WrittenOrUnknown(int written) => OrganizationWriteResult.Of(
         written == 1 ? OrganizationWriteOutcome.Written : OrganizationWriteOutcome.UnknownOrganization);

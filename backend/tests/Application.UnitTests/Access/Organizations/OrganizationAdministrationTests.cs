@@ -87,6 +87,45 @@ public sealed class OrganizationAdministrationTests
         Assert.Empty(harness.Organizations.ReceivedCalls());
     }
 
+    /// <summary>Moving an account decides who it may be assigned to and nothing about how anybody signs in, so it takes the grant an assignment takes.</summary>
+    [Fact]
+    public async Task SetMailAccountOrganizationAsync_ACallerGrantedTheConfigurationWrite_ReachesTheStore()
+    {
+        // Arrange
+        var harness = new AdministrationHarness(MailFathomPermission.AdminConfigurationWrite);
+        var mailAccount = new Guid("0197c0de-0000-4000-8000-000000000003");
+        harness.Organizations.SetMailAccountOrganizationAsync(mailAccount, OrganizationId, Arg.Any<CancellationToken>())
+            .Returns(new OrganizationWriteResult(OrganizationWriteOutcome.AssignmentsOutsideOrganization, StandingAssignments: 2));
+
+        // Act
+        var result = await harness.Administration.SetMailAccountOrganizationAsync(
+            mailAccount,
+            OrganizationId,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(OrganizationWriteOutcome.AssignmentsOutsideOrganization, result.Outcome);
+        Assert.Equal(2, result.StandingAssignments);
+    }
+
+    [Fact]
+    public async Task SetMailAccountOrganizationAsync_ACallerGrantedOnlyTheAdministrativeRead_IsRefusedWithoutTouchingTheStore()
+    {
+        // Arrange
+        var harness = new AdministrationHarness(MailFathomPermission.AdminRead);
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            harness.Administration.SetMailAccountOrganizationAsync(
+                Guid.CreateVersion7(),
+                organizationId: null,
+                TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.AdminConfigurationWrite, refusal.RequiredPermission);
+        Assert.Empty(harness.Organizations.ReceivedCalls());
+    }
+
     [Fact]
     public async Task DeleteAsync_ACallerGrantedOnlyTheAdministrativeRead_IsRefused()
     {

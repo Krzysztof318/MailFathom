@@ -9,6 +9,7 @@ namespace MailFathom.Infrastructure.Persistence.Users;
 /// <param name="DisplayName">The name an operator reads it by.</param>
 /// <param name="ShortName">The short name as the column holds it, which is text until something reads it as one.</param>
 /// <param name="Members">How many users the same statement counted against it.</param>
+/// <param name="MailAccounts">How many mail accounts the same statement counted against it.</param>
 /// <param name="CreatedAt">When the row was recorded.</param>
 /// <remarks>
 /// Named rather than anonymous so the step that decides which rows are readable is a function over values rather than a
@@ -20,4 +21,5 @@ internal sealed record StoredOrganizationRow(
     string DisplayName,
     string ShortName,
     int Members,
+    int MailAccounts,
     DateTimeOffset CreatedAt);

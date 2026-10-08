@@ -337,21 +337,22 @@ request from a permitted network still needs a valid credential, and a request w
 | `DELETE /api/admin/users/{userId}` | `mailfathom.admin.erase` | Erases the user and every message, folder, attachment, and derived index this deployment holds for them, once [the work bound to their own mailboxes has stopped](#users-and-their-records). **This is the one route here that destroys mail, and it cannot be undone.** A user this deployment does not hold is reported as nothing erased rather than as a refusal, and work that will not stop within its bound is answered `409` naming it, with nothing erased. |
 | `GET /api/admin/users/{userId}/record` | `mailfathom.admin.read` | Hands over one user's record as the redacted JSON an editing session opens, with the version it was read at. The record carries no mail accounts: [those are read on their own routes](#mail-accounts-and-who-they-are-assigned-to), under `/api/admin/mail-accounts`. |
 | `POST /api/admin/users/{userId}/record` | `mailfathom.admin.configuration.write` | Takes that record back edited and commits it as one change against the version it was opened over. It is what `mfctl user edit` sends when the editor exits, and a record another writer moved past is refused as superseded rather than merged. |
-| `GET /api/admin/mail-accounts` | `mailfathom.admin.read` | Reads [the mail accounts this deployment holds](#mail-accounts-and-who-they-are-assigned-to), at most 1024 in the order they were created in, each with its identifier, its version, the users it is assigned to, its address, and its display name, and `truncated` saying whether more were held than the answer carries. The declaration itself is read one account at a time. |
-| `POST /api/admin/mail-accounts` | `mailfathom.admin.configuration.write` | Creates a mail account from the declaration the body carries and assigns it to the user `userId` names, answering with the identifier it was generated under. An address another account already holds is refused. |
-| `GET /api/admin/mail-accounts/{accountId}` | `mailfathom.admin.read` | Hands over one account's declaration as the redacted JSON an editing session opens, with the version it was read at, or `400` naming the row to correct when the stored declaration is not one of settings. |
+| `GET /api/admin/mail-accounts` | `mailfathom.admin.read` | Reads [the mail accounts this deployment holds](#mail-accounts-and-who-they-are-assigned-to), at most 1024 in the order they were created in, each with its identifier, its version, the users it is assigned to, its address, its display name, and the `organizationId` it belongs to or `null` for none, and `truncated` saying whether more were held than the answer carries. The declaration itself is read one account at a time. |
+| `POST /api/admin/mail-accounts` | `mailfathom.admin.configuration.write` | Creates a mail account from the declaration the body carries, in the [organization](#organizations) of the user `userId` names, and assigns it to that user, answering with the identifier it was generated under. An address another account already holds is refused. |
+| `GET /api/admin/mail-accounts/{accountId}` | `mailfathom.admin.read` | Hands over one account's declaration as the redacted JSON an editing session opens, with the version it was read at and the `organizationId` it belongs to, or `400` naming the row to correct when the stored declaration is not one of settings. |
 | `POST /api/admin/mail-accounts/{accountId}` | `mailfathom.admin.configuration.write` | Takes that declaration back edited and commits it against the version it was opened over, judged against every user the account is assigned to. |
 | `DELETE /api/admin/mail-accounts/{accountId}` | `mailfathom.admin.erase` | Erases the account, every assignment to it, and every message this deployment holds for it. **This cannot be undone.** |
-| `POST /api/admin/mail-accounts/{accountId}/assignments` | `mailfathom.admin.configuration.write` | Assigns the account to the user named by `userId`, beside whoever else is already assigned it. Assigning it to somebody who already holds it writes nothing. |
+| `POST /api/admin/mail-accounts/{accountId}/assignments` | `mailfathom.admin.configuration.write` | Assigns the account to the user named by `userId`, beside whoever else is already assigned it. Assigning it to somebody who already holds it writes nothing. An account and a user of [different organizations](#organizations) — counting none as one of them — are refused, naming both. |
+| `POST /api/admin/mail-accounts/{accountId}/organization` | `mailfathom.admin.configuration.write` | Moves the account into the organization the body's `organizationId` names, or out of every organization where the body says `"none": true`. A body stating neither, or both, is refused with `400` rather than read as a move out. This is what `mfctl account set-organization` sends. It answers `204`, `404` for an account this deployment does not hold, `400` for an organization it does not hold, and `409` naming how many of the users it is assigned to the target would not admit. |
 | `POST /api/admin/mail-accounts/{accountId}/assignments/removal` | `mailfathom.admin.erase` | Ends one user's assignment and erases what that user authored under the account, their drafts and their standing instructions; the mail itself stays whole while anybody else is assigned. **Ending the last one erases the account and every message this deployment holds for it.** |
 | `POST /api/admin/users/{userId}/secrets` | `mailfathom.admin.configuration.write` | Seals the material carried in the body under the active data-encryption key and answers only with its `database:<uuid>` reference. Sending the same declared name for that user rotates the existing row and returns the same reference. It refuses when the user does not exist or the deployment configures no data-encryption key ring. |
-| `GET /api/admin/organizations` | `mailfathom.admin.read` | Reads [the organizations](#organizations) this deployment holds, ordered by short name and at most 1000, each with its display name, its short name, how many users belong to it, and when it was recorded. A row whose stored short name is not one this build reads is reported beside them under `unreadable`, by identifier, display name, and a `correction` naming what a short name may contain, rather than refusing the listing. The stored short name itself is never echoed. This is what `mfctl organization list` asks. |
+| `GET /api/admin/organizations` | `mailfathom.admin.read` | Reads [the organizations](#organizations) this deployment holds, ordered by short name and at most 1000, each with its display name, its short name, how many users belong to it, how many mail accounts belong to it as `mailAccounts`, and when it was recorded. A row whose stored short name is not one this build reads is reported beside them under `unreadable`, by identifier, display name, and a `correction` naming what a short name may contain, rather than refusing the listing. The stored short name itself is never echoed. This is what `mfctl organization list` asks. |
 | `POST /api/admin/organizations` | `mailfathom.admin.configuration.write` | Records an organization from the display name and short name the body carries, and answers with the identifier it was minted under. It answers `409` for a short name another organization holds or for a deployment already holding 1000 organizations, and `400` naming what was wrong with either name. |
 | `PUT /api/admin/organizations/{organizationId}/display-name` | `mailfathom.admin.configuration.write` | Replaces the name an operator reads the organization by. It answers `204`, `404` for an organization this deployment does not hold, and `400` for a name it does not accept. |
 | `PUT /api/admin/organizations/{organizationId}/short-name` | `mailfathom.admin.credentials.write` | Replaces the short name its members sign in under, which moves every member's login with it. It answers `204`, `404`, `409` for a short name another organization holds, and `400`. |
-| `DELETE /api/admin/organizations/{organizationId}` | `mailfathom.admin.configuration.write` | Removes an organization nobody belongs to. It answers `204`, `404`, and `409` naming how many members it still has. |
+| `DELETE /api/admin/organizations/{organizationId}` | `mailfathom.admin.configuration.write` | Removes an organization with neither members nor mail accounts. It answers `204`, `404`, and `409` naming how many members and how many mail accounts it still has. |
 | `GET /api/admin/records/held-back` | `mailfathom.admin.read` | Reads [the records this deployment will not read](#records-this-deployment-will-not-read), as three lists — `users`, `mailAccounts`, and `organizations` — each entry naming the record's identifier, the label it carries, the version refused where its kind has one, and one sentence per setting to correct. A deployment holding nothing back answers three empty lists. |
-| `PUT /api/admin/users/{userId}/organization` | `mailfathom.admin.credentials.write` | Moves the user into the organization the body's `organizationId` names, or out of every organization where the body says `"none": true`, re-scoping their passwords in the same transaction. A body stating neither, or both, is refused with `400` rather than read as a move out. This is what `mfctl user set-organization` sends. It answers `204`, `404` for a user this deployment does not hold, `400` for an organization it does not hold, and `409` naming the username the target already holds for another user. |
+| `PUT /api/admin/users/{userId}/organization` | `mailfathom.admin.credentials.write` | Moves the user into the organization the body's `organizationId` names, or out of every organization where the body says `"none": true`, re-scoping their passwords in the same transaction. A body stating neither, or both, is refused with `400` rather than read as a move out. This is what `mfctl user set-organization` sends. It answers `204`, `404` for a user this deployment does not hold, `400` for an organization it does not hold, and `409` naming the username the target already holds for another user, or how many of the user's mail accounts the target would not admit. |
 | `GET /api/admin/users/{userId}/credentials` | `mailfathom.admin.read` | Reads one user's [credentials](#user-credentials), each with its method, what it grants, whether it still authenticates, and when its material was last replaced. It publishes what each is resolved by, except where that value is derived from the secret, and for a password the `login` a person types to sign in with it. A credential whose method this build does not know, and one scoped to an organization whose short name it [will not read](#records-this-deployment-will-not-read), are left out rather than published without the login they would be typed as; the user's other credentials are listed as before. |
 | `POST /api/admin/users/{userId}/credentials` | `mailfathom.admin.credentials.write` | Provisions one of the four methods, from what that method needs. **This is one of the two routes that mint a way into somebody's mail**, and the one that answers with a minted key where the method mints one. It answers `409` where the value the credential resolves by is already taken — for a password within the user's organization, or among users in none, and for every other method across the deployment — and where the user already holds the hundred credentials one user may. |
 | `PUT /api/admin/users/{userId}/credentials/{credentialId}/material` | `mailfathom.admin.credentials.write` | Replaces what one credential's client presents, in a single statement, which stops the previous material working at that instant. **This is the other.** It is refused for a method holding no material to replace. |
@@ -1611,21 +1612,23 @@ began with and drains before its supervisor ends, so one run never reads two doc
 
 ### Organizations
 
-An organization groups users under a short name, and the short name is what its members type in front of their
-username when they sign in with a password: a member of `TESTFIRMA` signs in as `TESTFIRMA/jan`, and somebody in no
-organization as `jan`. That is what lets two companies served by one deployment each have a `jan`. A user belongs to no
-organization or to exactly one, and a user is in none until one of these routes moves them — so every credential
-provisioned before a deployment recorded an organization signs in exactly as it did. How a presented login is read is
-[the password method's](mcp-endpoint.md#passwords) to state.
+An organization groups users and mail accounts under a short name, and the short name is what its members type in
+front of their username when they sign in with a password: a member of `TESTFIRMA` signs in as `TESTFIRMA/jan`, and
+somebody in no organization as `jan`. That is what lets two companies served by one deployment each have a `jan`. A user
+and a mail account each belong to no organization or to exactly one, and each is in none until one of these routes moves
+it — so every credential provisioned before a deployment recorded an organization signs in exactly as it did, and every
+account stays assignable to everybody in none. How a presented login is read is [the password
+method's](mcp-endpoint.md#passwords) to state.
 
 | Command | What it does |
 | --- | --- |
-| `mfctl organization list` | Reads the organizations this deployment holds, with each one's short name, display name, member count, and when it was recorded, and names beneath them any row whose stored short name this deployment [will not read](#records-this-deployment-will-not-read) |
+| `mfctl organization list` | Reads the organizations this deployment holds, with each one's short name, display name, member count, mail account count, and when it was recorded, and names beneath them any row whose stored short name this deployment [will not read](#records-this-deployment-will-not-read) |
 | `mfctl organization add --short-name <name> --display-name <name>` | Records an organization, and reports the identifier it was minted under |
 | `mfctl organization rename --organization <id> --display-name <name>` | Replaces the name an operator reads it by |
 | `mfctl organization set-short-name --organization <id> --short-name <name>` | Replaces the short name its members sign in under |
-| `mfctl organization remove --organization <id>` | Removes an organization nobody belongs to |
+| `mfctl organization remove --organization <id>` | Removes an organization with neither members nor mail accounts |
 | `mfctl user set-organization (--organization <id> \| --none)` | Moves one user into an organization, or out of every organization; it takes `--user` as every other user command does |
+| `mfctl account set-organization --account <id> (--organization <id> \| --none)` | Moves one mail account into an organization, or out of every organization |
 
 **An organization is minted with an identifier that says nothing about who it is.** It is a version 7 UUID for the
 reason a user's is, minted from the moment the organization is recorded, so an administrative listing shows when each
@@ -1633,11 +1636,31 @@ company was added and in what order but nothing else about it. The display name 
 32 characters of `A`–`Z`, `0`–`9`, and `-`, folded to upper case when it is written, and unique across the deployment,
 because it is half of a login; a `/` can never appear in one, since that is what separates it from the username.
 
-**Grouping people is a configuration write, and changing how they sign in is a credential write.** Recording,
-renaming, and removing an organization take `mailfathom.admin.configuration.write`, the grant that records users,
-because they change how the deployment's people are grouped rather than how any of them signs in. Changing a short
-name and moving a user take `mailfathom.admin.credentials.write`, because each changes the login a password is typed
-as — a short name every member's at once.
+**Grouping people and mailboxes is a configuration write, and changing how people sign in is a credential write.**
+Recording, renaming, and removing an organization and moving a mail account take
+`mailfathom.admin.configuration.write`, the grant that records users and assigns accounts, because they change how the
+deployment's people and mailboxes are grouped rather than how any of them signs in. Changing a short name and moving a
+user take `mailfathom.admin.credentials.write`, because each changes the login a password is typed as — a short name
+every member's at once.
+
+**An assignment stays inside one organization.** A mail account in an organization is assigned only to that
+organization's members, and an account in none only to users in none; "none" counts as a value both sides must hold.
+So an account of one company cannot be handed to another company's person by a mistyped identifier, and neither can an
+account in none reach a member of one. Assigning across two is refused naming both:
+
+```
+The mail account belongs to organization '0197c0de-0000-7000-8000-0000000000a1' and the user to no organization. An account is assigned only to a user of its own organization, and one in none only to a user in none, so nothing was written. Move the account or the user first.
+```
+
+An account created for a user is created in that user's organization, so creating one never straddles two. What an
+organization narrows is who an account may be assigned to and nothing else: an assigned user reads and acts on the
+account exactly as anybody assigned it does, and an organization declares no setting its members or accounts inherit.
+
+**A move never leaves an assignment straddling two organizations, and never unassigns anything.** Moving a mail account
+is refused with `409` while it is assigned to any user the target would not admit, naming how many; moving a user is
+refused the same way while they are assigned any account the target would not admit. To move a company's people with its
+mailboxes, unassign them, move both sides, and assign them again. The check and the write share one transaction, under
+the locks an assignment takes, so an assignment and a move landing at once cannot both go through.
 
 **A deployment holds at most 1000 organizations.** That is the most the listing reads, and recording one past it is
 refused with `409` rather than written, so every organization a deployment holds is one the listing shows and can
@@ -1652,8 +1675,9 @@ API key, a key pair, and a mapped subject are resolved by values unique across t
 where their user belongs. A move is refused with `409` naming the username when the target — the organization, or the
 users in none — already holds one of that user's usernames for somebody else, and nothing about the user changes.
 
-**An organization with members is not removed.** The refusal says how many it still has, so an operator moves each of
-them out first rather than leaving users whose logins name a short name nobody holds.
+**An organization with members or mail accounts is not removed.** The refusal says how many of each it still has, so an
+operator moves each of them out first rather than leaving users whose logins name a short name nobody holds, or accounts
+assignable only within an organization that is gone.
 
 ### Records this deployment will not read
 
@@ -1693,11 +1717,12 @@ over exactly that set.
 
 | Command | What it does |
 | --- | --- |
-| `mfctl account list` | Reads the accounts this deployment holds, at most 1024, with each one's identifier, address, display name, version, and who it is assigned to, and says so when more were held than it lists |
-| `mfctl account show --account <id> [--format json\|yaml]` | Reads one account's declaration, secrets redacted, as JSON or as YAML |
+| `mfctl account list` | Reads the accounts this deployment holds, at most 1024, with each one's identifier, address, display name, version, who it is assigned to, and the organization it belongs to, and says so when more were held than it lists |
+| `mfctl account show --account <id> [--format json\|yaml]` | Reads one account's declaration, secrets redacted, as JSON or as YAML, beneath the organization it belongs to |
 | `mfctl account add [--user <id>] --from-file <path>` | Creates an account from the declaration in the file — JSON, or YAML where the file is named `.yaml` or `.yml` — assigns it to that user, and reports the identifier it was generated under |
 | `mfctl account edit --account <id> [--format json\|yaml]` | Opens that declaration in your `$VISUAL` or `$EDITOR`, as JSON or as YAML, and commits what you saved as one change |
 | `mfctl account assign --account <id> --user <id>` | Assigns an account to that user, beside whoever else is already assigned it |
+| `mfctl account set-organization --account <id> (--organization <id> \| --none)` | Moves the account into an [organization](#organizations), or out of every one, which decides who it may be assigned to |
 | `mfctl account unassign --account <id> --user <id>` | Ends one user's assignment, erasing what they authored there, and erasing the account and its mail when it was the last one |
 | `mfctl account delete --account <id>` | Erases the account and every message this deployment holds for it |
 | `mfctl account custody show --account <id>` | Reports which copy of that account's mailbox is the truth, how much of its source server is still to be emptied or filled again, and every append awaiting an operator's verdict |
@@ -1736,7 +1761,8 @@ Another mail account already holds 'alex@example.test', and one address is held 
 **A mailbox is served to every user it is assigned to.** `mfctl account assign` adds an assignment beside the ones
 already there, so one mailbox read by several people is one account with one copy of its mail rather than a mailbox
 each. The assignment is the row, and assigning an account to somebody who already holds it writes nothing rather than
-failing. [ADR
+failing. An account is assigned only to users of [its own organization](#organizations), or only to users in none
+when it belongs to none. [ADR
 0014](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md)
 is the decision, and what it costs a user is stated under the per-user ceilings there: a shared account counts in full
 against every assigned user's ceiling, and work on it proceeds only while every one of them is under theirs.

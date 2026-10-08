@@ -11,8 +11,10 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// <param name="Declaration">The declaration, with every secret-bearing value replaced by the redaction marker.</param>
 /// <param name="Version">The version a save states.</param>
 /// <param name="Users">The users the account is assigned to.</param>
+/// <param name="OrganizationId">The organization the account belongs to, or <see langword="null" /> for none.</param>
 internal sealed record MailAccountReading(
     Guid Id,
     string Declaration,
     long Version,
-    IReadOnlyList<UserId> Users);
+    IReadOnlyList<UserId> Users,
+    Guid? OrganizationId);

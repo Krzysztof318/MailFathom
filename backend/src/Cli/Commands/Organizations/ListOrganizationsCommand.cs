@@ -108,7 +108,7 @@ internal static class ListOrganizationsCommand
 
     private static CliTable Draw(IReadOnlyList<OrganizationEntry> organizations)
     {
-        CliTable listing = new("Organization", "Short name", "Display name", "Members", "Recorded");
+        CliTable listing = new("Organization", "Short name", "Display name", "Members", "Mail accounts", "Recorded");
 
         foreach (var organization in organizations)
         {
@@ -117,6 +117,7 @@ internal static class ListOrganizationsCommand
                 ConsoleSafeText.Sanitize(organization.ShortName) ?? "unreported",
                 ConsoleSafeText.Sanitize(organization.DisplayName) ?? "unreported",
                 organization.Members.ToString(CultureInfo.InvariantCulture),
+                organization.MailAccounts.ToString(CultureInfo.InvariantCulture),
                 $"{organization.CreatedAt:u}");
         }
 

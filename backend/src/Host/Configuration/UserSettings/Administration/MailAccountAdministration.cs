@@ -98,7 +98,7 @@ internal sealed class MailAccountAdministration(
         return await accounts.ReadAsync(accountId, cancellationToken) is { } holding ? ReadingOf(holding) : null;
     }
 
-    /// <summary>Creates an account and assigns it to one user.</summary>
+    /// <summary>Creates an account in the organization of the user it is created for, and assigns it to them.</summary>
     /// <param name="user">The user the account is created for.</param>
     /// <param name="declarationJson">The declaration.</param>
     /// <param name="cancellationToken">Cancels the reads and the commit.</param>
@@ -224,7 +224,9 @@ internal sealed class MailAccountAdministration(
     /// An account somebody else is already assigned is assigned again rather than refused, which is what serving one
     /// mailbox to several people is. The account is judged against this user's own set, so an account whose display
     /// name one of their accounts already carries is refused rather than served under a name that no longer tells two
-    /// apart — a judgement the other assignees' sets are unaffected by.
+    /// apart — a judgement the other assignees' sets are unaffected by. An assignment across two organizations is
+    /// refused naming both, counting none as one of them, and is decided by the store under both rows' locks rather
+    /// than here, because a move of either side may land between a read here and the write.
     /// </remarks>
     internal async Task<UserRecordWriteOutcome?> AssignAsync(
         Guid accountId,
@@ -267,6 +269,7 @@ internal sealed class MailAccountAdministration(
             MailAccountWriteResult.NothingToChange => UserRecordWriteOutcome.NothingToChange(
                 account.Version,
                 "The account is already assigned to this user, so nothing was written."),
+            MailAccountWriteResult.OrganizationsDiffer => StraddlesOrganizations(account.Version, write.Straddled!),
             _ => Superseded(record.Version, await this.VersionOfAsync(record, cancellationToken), "user record"),
         };
     }
@@ -578,7 +581,8 @@ internal sealed class MailAccountAdministration(
             holding.Account.Id,
             SettingRedaction.ApplyToDocument(MailAccountDeclaration.Of(holding.Account)),
             holding.Account.Version,
-            holding.Users);
+            holding.Users,
+            holding.OrganizationId);
 
     private static MailAccountRecord? AssignedAccount(UserSettingsDocument record, string accountId) =>
         Guid.TryParse(accountId, out var id) ? record.MailAccounts.FirstOrDefault(account => account.Id == id) : null;
@@ -626,6 +630,22 @@ internal sealed class MailAccountAdministration(
             MailFathomErrorCode.ConfigurationCandidateInvalid,
             version,
             [$"You are assigned no mail account '{accountId}'. Read your mail accounts to see the identifiers they are served under."]);
+
+    /// <summary>The refusal an administrator receives for an assignment that would straddle two organizations.</summary>
+    /// <remarks>Both organizations are named, "none" among them, so the administrator knows which side to move rather than only that the two disagree.</remarks>
+    private static UserRecordWriteOutcome StraddlesOrganizations(long version, StraddledOrganizations straddled) =>
+        UserRecordWriteOutcome.Refused(
+            MailFathomErrorCode.ConfigurationCandidateInvalid,
+            version,
+            [
+                $"The mail account belongs to {OrganizationNamed(straddled.AccountOrganization)} and the user to "
+                + $"{OrganizationNamed(straddled.UserOrganization)}. An account is assigned only to a user of its own "
+                + "organization, and one in none only to a user in none, so nothing was written. Move the account or the "
+                + "user first.",
+            ]);
+
+    private static string OrganizationNamed(Guid? organizationId) =>
+        organizationId is { } named ? $"organization '{named:D}'" : "no organization";
 
     private static UserRecordWriteOutcome AddressHeldForAdministrator(long version, string? emailAddress) =>
         UserRecordWriteOutcome.Refused(

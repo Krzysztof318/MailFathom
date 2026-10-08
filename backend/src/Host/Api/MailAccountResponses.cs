@@ -18,12 +18,14 @@ internal sealed record MailAccountListResponse(IReadOnlyList<MailAccountSummaryR
 /// <param name="Users">The users the account is assigned to.</param>
 /// <param name="EmailAddress">The address the account holds, or <see langword="null" /> where it holds none and is not served.</param>
 /// <param name="DisplayName">The name the account is shown under.</param>
+/// <param name="OrganizationId">The organization the account belongs to, or <see langword="null" /> for none.</param>
 internal sealed record MailAccountSummaryResponse(
     Guid Id,
     long Version,
     IReadOnlyList<Guid> Users,
     string? EmailAddress,
-    string? DisplayName)
+    string? DisplayName,
+    Guid? OrganizationId)
 {
     /// <summary>Describes one account a listing read.</summary>
     /// <param name="summary">The account and the users it is assigned to.</param>
@@ -38,7 +40,8 @@ internal sealed record MailAccountSummaryResponse(
             summary.Version,
             [.. summary.Users.Select(user => user.Value)],
             summary.EmailAddress,
-            summary.DisplayName);
+            summary.DisplayName,
+            summary.OrganizationId);
     }
 }
 
@@ -47,11 +50,13 @@ internal sealed record MailAccountSummaryResponse(
 /// <param name="Version">The version a save states.</param>
 /// <param name="Users">The users the account is assigned to.</param>
 /// <param name="Declaration">The address, the display name, and the settings, with every secret-bearing value replaced by the redaction marker.</param>
+/// <param name="OrganizationId">The organization the account belongs to, or <see langword="null" /> for none.</param>
 internal sealed record MailAccountResponse(
     Guid Id,
     long Version,
     IReadOnlyList<Guid> Users,
-    string Declaration)
+    string Declaration,
+    Guid? OrganizationId)
 {
     /// <summary>Describes one account reading.</summary>
     /// <param name="reading">The account as the administration read it.</param>
@@ -65,7 +70,8 @@ internal sealed record MailAccountResponse(
             reading.Id,
             reading.Version,
             [.. reading.Users.Select(user => user.Value)],
-            reading.Declaration);
+            reading.Declaration,
+            reading.OrganizationId);
     }
 }
 

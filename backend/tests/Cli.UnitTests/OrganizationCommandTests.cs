@@ -9,7 +9,7 @@ using Xunit;
 
 namespace MailFathom.Cli.UnitTests;
 
-/// <summary>Covers the commands that record and list organizations, and the one that moves a user between them.</summary>
+/// <summary>Covers the commands that record and list organizations, and the ones that move a user or a mail account between them.</summary>
 /// <remarks>
 /// What these hold is the part of each act that lives in the command: what a listing puts under which heading, what a
 /// write sends, and that leaving every organization is a stated decision rather than an option nobody wrote.
@@ -28,6 +28,8 @@ public sealed class OrganizationCommandTests : IDisposable
 
     private static readonly Guid Unreadable = new("88888888-8888-8888-8888-888888888888");
 
+    private static readonly Guid MailAccount = new("99999999-9999-4999-8999-999999999999");
+
     private readonly CliCommandHarness harness = new(new DateTimeOffset(2026, 8, 27, 12, 0, 0, TimeSpan.Zero));
 
     /// <summary>The short name is the half of a login an operator reads the listing for, so it is drawn under its own heading beside the identifier every other command takes.</summary>
@@ -37,7 +39,7 @@ public sealed class OrganizationCommandTests : IDisposable
         // Arrange
         using var deployment = FakeOrganizationDeployment.Holding(
             [User],
-            FakeOrganizationDeployment.Organization(Organization, "ACME", "Acme Corporation", members: 2));
+            FakeOrganizationDeployment.Organization(Organization, "ACME", "Acme Corporation", members: 2, mailAccounts: 5));
 
         // Act
         var exitCode = await this.RunAsync(deployment, "organization", "list", "--endpoint", Endpoint);
@@ -46,13 +48,14 @@ public sealed class OrganizationCommandTests : IDisposable
         Assert.Equal(CliExitCode.Success, exitCode);
 
         var listing = DrawnListing.ReadFrom(
-            this.harness.Console.Lines, "Organization", "Short name", "Display name", "Members", "Recorded");
+            this.harness.Console.Lines, "Organization", "Short name", "Display name", "Members", "Mail accounts", "Recorded");
         var row = Assert.Single(listing.Rows);
 
         Assert.Equal($"{Organization:D}", listing.Cell(row, "Organization"));
         Assert.Equal("ACME", listing.Cell(row, "Short name"));
         Assert.Equal("Acme Corporation", listing.Cell(row, "Display name"));
         Assert.Equal("2", listing.Cell(row, "Members"));
+        Assert.Equal("5", listing.Cell(row, "Mail accounts"));
     }
 
     /// <summary>
@@ -178,6 +181,57 @@ public sealed class OrganizationCommandTests : IDisposable
         // Assert
         Assert.NotEqual(CliExitCode.Success, exitCode);
         Assert.Empty(deployment.RequestsTo(HttpMethod.Put, AdminEndpointRoutes.UserOrganizationPath(User)));
+    }
+
+    /// <summary>An account is moved by a route of its own under the account it names, and the organization travels as a stated decision.</summary>
+    [Fact]
+    public async Task SetMailAccountOrganization_AnOrganization_SendsItToThatAccountsOrganizationRoute()
+    {
+        // Arrange
+        using var deployment = FakeOrganizationDeployment.Holding([User]);
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "account",
+            "set-organization",
+            "--account",
+            $"{MailAccount:D}",
+            "--organization",
+            $"{Organization:D}",
+            "--endpoint",
+            Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+
+        var move = Assert.Single(deployment.RequestsTo(HttpMethod.Post, AdminEndpointRoutes.MailAccountOrganizationPath(MailAccount)));
+        using var body = JsonDocument.Parse(move.ContentAsUtf8String());
+
+        Assert.Equal(Organization, body.RootElement.GetProperty("organizationId").GetGuid());
+        Assert.False(body.RootElement.GetProperty("none").GetBoolean());
+    }
+
+    /// <summary>An invocation naming neither an organization nor none is refused before anything is sent, rather than read as a move out.</summary>
+    [Fact]
+    public async Task SetMailAccountOrganization_NeitherAnOrganizationNorNone_IsRefusedWithoutMovingIt()
+    {
+        // Arrange
+        using var deployment = FakeOrganizationDeployment.Holding([User]);
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "account",
+            "set-organization",
+            "--account",
+            $"{MailAccount:D}",
+            "--endpoint",
+            Endpoint);
+
+        // Assert
+        Assert.NotEqual(CliExitCode.Success, exitCode);
+        Assert.Empty(deployment.RequestsTo(HttpMethod.Post, AdminEndpointRoutes.MailAccountOrganizationPath(MailAccount)));
     }
 
     /// <summary>Renaming reaches the display name alone, so a rename can never move the half of every member's login the short name is.</summary>

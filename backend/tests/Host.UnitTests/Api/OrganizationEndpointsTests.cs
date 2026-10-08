@@ -9,6 +9,7 @@ using MailFathom.Host.Api;
 using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -113,6 +114,119 @@ public sealed class OrganizationEndpointsTests
         var problem = Assert.IsType<ProblemHttpResult>(result.Result);
         Assert.Equal(StatusCodes.Status409Conflict, problem.StatusCode);
         Assert.Contains("3 member", problem.ProblemDetails.Detail, StringComparison.Ordinal);
+    }
+
+    /// <summary>An organization holding mail accounts is not removed, and the refusal says how many so the administrator knows what to move first.</summary>
+    [Fact]
+    public async Task DeleteAsync_AnOrganizationHoldingMailAccounts_IsRefusedNamingHowMany()
+    {
+        // Arrange
+        var harness = new EndpointHarness(MailFathomPermission.AdminConfigurationWrite);
+        harness.Organizations.DeleteAsync(OrganizationId, Arg.Any<CancellationToken>())
+            .Returns(new OrganizationWriteResult(
+                OrganizationWriteOutcome.StillHoldsMailAccounts,
+                OrganizationId,
+                RemainingMailAccounts: 2));
+
+        // Act
+        var result = await OrganizationEndpoints.DeleteAsync(
+            OrganizationId,
+            harness.Administration,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var problem = Assert.IsType<ProblemHttpResult>(result.Result);
+        Assert.Equal(StatusCodes.Status409Conflict, problem.StatusCode);
+        Assert.Contains("2 mail account", problem.ProblemDetails.Detail, StringComparison.Ordinal);
+    }
+
+    /// <summary>A user is not moved away from the accounts they are assigned, and the refusal says how many stand in the way rather than unassigning them.</summary>
+    [Fact]
+    public async Task SetUserOrganizationAsync_AUserAssignedAccountsOutsideTheTarget_IsAConflictNamingHowMany()
+    {
+        // Arrange
+        var harness = new EndpointHarness(MailFathomPermission.AdminCredentialsWrite);
+        harness.Organizations.SetUserOrganizationAsync(SyntheticUser.Deployment, OrganizationId, Arg.Any<CancellationToken>())
+            .Returns(new OrganizationWriteResult(OrganizationWriteOutcome.AssignmentsOutsideOrganization, StandingAssignments: 4));
+
+        // Act
+        var result = await OrganizationEndpoints.SetUserOrganizationAsync(
+            SyntheticUser.Deployment.Value,
+            new UserOrganizationRequest(OrganizationId, None: null),
+            harness.Administration,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var problem = Assert.IsType<ProblemHttpResult>(result.Result);
+        Assert.Equal(StatusCodes.Status409Conflict, problem.StatusCode);
+        Assert.Contains("4 mail account", problem.ProblemDetails.Detail, StringComparison.Ordinal);
+    }
+
+    /// <summary>An account is not moved away from the users it is assigned to, and the refusal says how many stand in the way rather than unassigning them.</summary>
+    [Fact]
+    public async Task SetMailAccountOrganizationAsync_AnAccountAssignedToUsersOutsideTheTarget_IsAConflictNamingHowMany()
+    {
+        // Arrange
+        var harness = new EndpointHarness(MailFathomPermission.AdminConfigurationWrite);
+        var mailAccount = Guid.CreateVersion7();
+        harness.Organizations.SetMailAccountOrganizationAsync(mailAccount, null, Arg.Any<CancellationToken>())
+            .Returns(new OrganizationWriteResult(OrganizationWriteOutcome.AssignmentsOutsideOrganization, StandingAssignments: 3));
+
+        // Act
+        var result = await OrganizationEndpoints.SetMailAccountOrganizationAsync(
+            mailAccount,
+            new MailAccountOrganizationRequest(null, None: true),
+            harness.Administration,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var problem = Assert.IsType<ProblemHttpResult>(result.Result);
+        Assert.Equal(StatusCodes.Status409Conflict, problem.StatusCode);
+        Assert.Contains("3 user", problem.ProblemDetails.Detail, StringComparison.Ordinal);
+    }
+
+    /// <summary>A body naming no decision is refused rather than read as a move out of every organization, which would decide who the account may be assigned to.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SetMailAccountOrganizationAsync_ABodyStatingNeitherOrBothDecisions_IsRefusedWithoutMovingIt(bool both)
+    {
+        // Arrange
+        var harness = new EndpointHarness(MailFathomPermission.AdminConfigurationWrite);
+        var request = both
+            ? new MailAccountOrganizationRequest(OrganizationId, None: true)
+            : new MailAccountOrganizationRequest(null, None: null);
+
+        // Act
+        var result = await OrganizationEndpoints.SetMailAccountOrganizationAsync(
+            Guid.CreateVersion7(),
+            request,
+            harness.Administration,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var problem = Assert.IsType<ProblemHttpResult>(result.Result);
+        Assert.Equal(StatusCodes.Status400BadRequest, problem.StatusCode);
+        Assert.Empty(harness.Organizations.ReceivedCalls());
+    }
+
+    [Fact]
+    public async Task SetMailAccountOrganizationAsync_AnAccountThisDeploymentDoesNotHold_IsNotFound()
+    {
+        // Arrange
+        var harness = new EndpointHarness(MailFathomPermission.AdminConfigurationWrite);
+        harness.Organizations.SetMailAccountOrganizationAsync(Arg.Any<Guid>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(OrganizationWriteResult.Of(OrganizationWriteOutcome.UnknownMailAccount));
+
+        // Act
+        var result = await OrganizationEndpoints.SetMailAccountOrganizationAsync(
+            Guid.CreateVersion7(),
+            new MailAccountOrganizationRequest(OrganizationId, None: null),
+            harness.Administration,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.IsType<NotFound<ProblemDetails>>(result.Result);
     }
 
     /// <summary>Changing a short name to one another organization signs in under is a conflict, not a failure.</summary>
