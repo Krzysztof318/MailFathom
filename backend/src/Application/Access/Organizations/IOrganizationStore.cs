@@ -58,20 +58,32 @@ public interface IOrganizationStore
         OrganizationShortName shortName,
         CancellationToken cancellationToken);
 
-    /// <summary>Removes an organization that has no members.</summary>
+    /// <summary>Removes an organization that has neither members nor mail accounts.</summary>
     /// <param name="organizationId">The organization.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
-    /// <returns><see cref="OrganizationWriteOutcome.Written" />, <see cref="OrganizationWriteOutcome.UnknownOrganization" />, or <see cref="OrganizationWriteOutcome.StillHasMembers" /> carrying how many.</returns>
+    /// <returns><see cref="OrganizationWriteOutcome.Written" />, <see cref="OrganizationWriteOutcome.UnknownOrganization" />, <see cref="OrganizationWriteOutcome.StillHasMembers" /> carrying how many members and accounts, or <see cref="OrganizationWriteOutcome.StillHoldsMailAccounts" /> carrying how many accounts.</returns>
     Task<OrganizationWriteResult> DeleteAsync(Guid organizationId, CancellationToken cancellationToken);
 
     /// <summary>Moves a user into an organization or out of every organization, re-scoping their password credentials with them.</summary>
     /// <param name="user">The user being moved.</param>
     /// <param name="organizationId">The organization to move them into, or <see langword="null" /> to leave them in none.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
-    /// <returns><see cref="OrganizationWriteOutcome.Written" />, <see cref="OrganizationWriteOutcome.UnknownUser" />, <see cref="OrganizationWriteOutcome.UnknownOrganization" />, or <see cref="OrganizationWriteOutcome.UsernameTaken" /> carrying the colliding username where it could be read.</returns>
+    /// <returns><see cref="OrganizationWriteOutcome.Written" />, <see cref="OrganizationWriteOutcome.UnknownUser" />, <see cref="OrganizationWriteOutcome.UnknownOrganization" />, <see cref="OrganizationWriteOutcome.AssignmentsOutsideOrganization" /> carrying how many of their accounts stand outside the target, or <see cref="OrganizationWriteOutcome.UsernameTaken" /> carrying the colliding username where it could be read.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
+    /// <remarks>Nothing is unassigned on the administrator's behalf: a user assigned an account the target would not admit stays where they are.</remarks>
     Task<OrganizationWriteResult> SetUserOrganizationAsync(
         UserId user,
+        Guid? organizationId,
+        CancellationToken cancellationToken);
+
+    /// <summary>Moves a mail account into an organization or out of every organization.</summary>
+    /// <param name="mailAccountId">The mail account being moved.</param>
+    /// <param name="organizationId">The organization to move it into, or <see langword="null" /> to leave it in none.</param>
+    /// <param name="cancellationToken">Cancels the write.</param>
+    /// <returns><see cref="OrganizationWriteOutcome.Written" />, <see cref="OrganizationWriteOutcome.UnknownMailAccount" />, <see cref="OrganizationWriteOutcome.UnknownOrganization" />, or <see cref="OrganizationWriteOutcome.AssignmentsOutsideOrganization" /> carrying how many of its users stand outside the target.</returns>
+    /// <remarks>Nothing is unassigned on the administrator's behalf: an account assigned to a user the target would not admit stays where it is.</remarks>
+    Task<OrganizationWriteResult> SetMailAccountOrganizationAsync(
+        Guid mailAccountId,
         Guid? organizationId,
         CancellationToken cancellationToken);
 }

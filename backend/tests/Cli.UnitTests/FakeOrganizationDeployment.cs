@@ -10,7 +10,7 @@ using MailFathom.TestSupport;
 
 namespace MailFathom.Cli.UnitTests;
 
-/// <summary>A deployment answering the organization routes, the user roster, and the route moving a user between organizations.</summary>
+/// <summary>A deployment answering the organization routes, the user roster, and the routes moving a user or a mail account between organizations.</summary>
 /// <remarks>
 /// The roster is answered because moving a user settles which user it acts for before anything else, and every write
 /// is accepted with no body, because acceptance is the whole of what those routes answer with.
@@ -52,10 +52,12 @@ internal static class FakeOrganizationDeployment
     /// <param name="shortName">The short name its members sign in under.</param>
     /// <param name="displayName">The name an operator reads it by.</param>
     /// <param name="members">How many users belong to it.</param>
+    /// <param name="mailAccounts">How many mail accounts belong to it.</param>
     /// <returns>The organization, as an element of the listing's array.</returns>
-    internal static string Organization(Guid id, string shortName, string displayName, int members) => string.Create(
-        CultureInfo.InvariantCulture,
-        $$"""{"id":"{{id:D}}","displayName":"{{displayName}}","shortName":"{{shortName}}","members":{{members}},"createdAt":"2026-08-20T09:00:00+00:00"}""");
+    internal static string Organization(Guid id, string shortName, string displayName, int members, int mailAccounts = 0) =>
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $$"""{"id":"{{id:D}}","displayName":"{{displayName}}","shortName":"{{shortName}}","members":{{members}},"mailAccounts":{{mailAccounts}},"createdAt":"2026-08-20T09:00:00+00:00"}""");
 
     private static HttpResponseMessage Answer(
         HttpRequestMessage request,

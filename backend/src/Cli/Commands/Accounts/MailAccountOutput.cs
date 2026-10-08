@@ -26,7 +26,14 @@ internal static class MailAccountOutput
         ArgumentNullException.ThrowIfNull(console);
         ArgumentNullException.ThrowIfNull(account);
 
-        WriteHeading(console, account.Id, account.Version, account.Users, account.EmailAddress, account.DisplayName);
+        WriteHeading(
+            console,
+            account.Id,
+            account.Version,
+            account.Users,
+            account.EmailAddress,
+            account.DisplayName,
+            account.OrganizationId);
     }
 
     /// <summary>Writes one account as a heading line and the users it is assigned to.</summary>
@@ -40,7 +47,7 @@ internal static class MailAccountOutput
 
         var (emailAddress, displayName) = NamesIn(account.Declaration);
 
-        WriteHeading(console, account.Id, account.Version, account.Users, emailAddress, displayName);
+        WriteHeading(console, account.Id, account.Version, account.Users, emailAddress, displayName, account.OrganizationId);
     }
 
     private static void WriteHeading(
@@ -49,7 +56,8 @@ internal static class MailAccountOutput
         long version,
         IReadOnlyList<Guid>? users,
         string? emailAddress,
-        string? displayName)
+        string? displayName,
+        Guid? organizationId)
     {
         var assignedTo = users is { Count: > 0 } assigned
             ? string.Join(", ", assigned.Select(user => user.ToString("D")))
@@ -57,6 +65,9 @@ internal static class MailAccountOutput
 
         console.WriteLine($"{id:D}  {displayName ?? "(no display name)"} <{emailAddress ?? "no address"}>");
         console.WriteLine($"    version {version.ToString(CultureInfo.InvariantCulture)}; assigned to: {assignedTo}");
+        console.WriteLine(organizationId is { } organization
+            ? $"    organization: {organization:D}"
+            : "    organization: none");
 
         if (emailAddress is null)
         {

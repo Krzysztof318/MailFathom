@@ -37,6 +37,16 @@ internal sealed class MailAccountRecordConfiguration : IEntityTypeConfiguration<
             .HasMaxLength(MailAccountRecordEntity.MaximumDisplayNameLength)
             .IsRequired();
 
+        // Restricted for the reason a member is: deleting an organization is refused while it holds accounts rather than
+        // taking them with it. The index serves that count, the listing's account figure, and the reads an assignment
+        // check makes.
+        entity.HasOne<OrganizationEntity>()
+            .WithMany()
+            .HasForeignKey(account => account.OrganizationId)
+            .OnDelete(DeleteBehavior.Restrict);
+        entity.HasIndex(account => account.OrganizationId)
+            .HasDatabaseName(PersistenceConstraintNames.MailAccountRecordOrganizationIndexName);
+
         entity.Property(account => account.Document).HasColumnType("jsonb").IsRequired();
 
         entity.Property(account => account.Version).IsConcurrencyToken();

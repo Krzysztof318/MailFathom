@@ -211,6 +211,7 @@ internal static class CliRootCommand
             EditMailAccountCommand.Create(context),
             AssignMailAccountCommand.Create(context),
             UnassignMailAccountCommand.Create(context),
+            SetMailAccountOrganizationCommand.Create(context),
             custodyCommand,
             DeleteMailAccountCommand.Create(context),
         };
@@ -229,9 +230,10 @@ internal static class CliRootCommand
             RemoveUserCommand.Create(context),
         };
 
-        // How the people this deployment serves are grouped, which decides the login a password credential is typed
-        // as and nothing about what anybody may read. Moving a user between organizations is under "user" rather than
-        // here, because it is a change to one user; "set-short-name" is apart from "rename" because it is the one act
+        // How the people and mailboxes this deployment serves are grouped, which decides the login a password
+        // credential is typed as and who a mail account may be assigned to, and nothing about what an assigned user
+        // reads. Moving a user or an account between organizations is under "user" or "account" rather than here,
+        // because it is a change to that one record; "set-short-name" is apart from "rename" because it is the one act
         // here that changes what every member types.
         Command organizationCommand = new("organization", "Record the organizations users sign in under, and maintain their names.")
         {

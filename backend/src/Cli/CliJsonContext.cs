@@ -116,6 +116,7 @@ namespace MailFathom.Cli;
 [JsonSerializable(typeof(MailAccountCreationRequest))]
 [JsonSerializable(typeof(MailAccountSaveRequest))]
 [JsonSerializable(typeof(MailAccountAssignmentRequest))]
+[JsonSerializable(typeof(MailAccountOrganizationRequest))]
 [JsonSerializable(typeof(MailAccountWriteAnswer))]
 [JsonSerializable(typeof(MailAccountUnassignment))]
 [JsonSerializable(typeof(MailAccountErasure))]

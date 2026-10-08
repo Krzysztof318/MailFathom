@@ -289,6 +289,11 @@ internal static class AdminEndpointRoutes
     /// <returns>The path.</returns>
     internal static string MailAccountAssignmentsPath(Guid accountId) => $"{MailAccountPath(accountId)}/assignments";
 
+    /// <summary>Where the organization one mail account belongs to is set or cleared.</summary>
+    /// <param name="accountId">The account the path names.</param>
+    /// <returns>The path.</returns>
+    internal static string MailAccountOrganizationPath(Guid accountId) => $"{MailAccountPath(accountId)}/organization";
+
     /// <summary>Where one user's assignment to a mail account is ended.</summary>
     /// <param name="accountId">The account the path names.</param>
     /// <returns>The path.</returns>

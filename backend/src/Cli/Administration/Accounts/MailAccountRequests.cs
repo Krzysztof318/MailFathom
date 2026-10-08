@@ -19,23 +19,27 @@ internal sealed record MailAccountList(
 /// <param name="Users">The users the account is assigned to.</param>
 /// <param name="EmailAddress">The address the account holds, or nothing where it holds none.</param>
 /// <param name="DisplayName">The name the account is shown under.</param>
+/// <param name="OrganizationId">The organization the account belongs to, or nothing where it belongs to none.</param>
 internal sealed record MailAccountSummary(
     [property: JsonPropertyName("id")] Guid Id,
     [property: JsonPropertyName("version")] long Version,
     [property: JsonPropertyName("users")] IReadOnlyList<Guid>? Users,
     [property: JsonPropertyName("emailAddress")] string? EmailAddress,
-    [property: JsonPropertyName("displayName")] string? DisplayName);
+    [property: JsonPropertyName("displayName")] string? DisplayName,
+    [property: JsonPropertyName("organizationId")] Guid? OrganizationId);
 
 /// <summary>One mail account as the deployment holds it.</summary>
 /// <param name="Id">The identifier the deployment generated for the account.</param>
 /// <param name="Version">The version the account was read at, which the next save is composed over.</param>
 /// <param name="Users">The users the account is assigned to.</param>
 /// <param name="Declaration">The address, the display name, and the settings, with every secret-bearing value replaced by the deployment's redaction marker.</param>
+/// <param name="OrganizationId">The organization the account belongs to, or nothing where it belongs to none.</param>
 internal sealed record MailAccountEntry(
     [property: JsonPropertyName("id")] Guid Id,
     [property: JsonPropertyName("version")] long Version,
     [property: JsonPropertyName("users")] IReadOnlyList<Guid>? Users,
-    [property: JsonPropertyName("declaration")] string? Declaration);
+    [property: JsonPropertyName("declaration")] string? Declaration,
+    [property: JsonPropertyName("organizationId")] Guid? OrganizationId);
 
 /// <summary>A mail account created for one user.</summary>
 /// <param name="UserId">The user the account is created for.</param>
@@ -50,6 +54,14 @@ internal sealed record MailAccountCreationRequest(
 internal sealed record MailAccountSaveRequest(
     [property: JsonPropertyName("version")] long Version,
     [property: JsonPropertyName("account")] string Account);
+
+/// <summary>The organization one mail account belongs to from now on.</summary>
+/// <param name="OrganizationId">The organization to move the account into, or <see langword="null" /> when <paramref name="None" /> says it belongs to none.</param>
+/// <param name="None">Whether the account is taken out of every organization.</param>
+/// <remarks>Leaving every organization is sent as a stated decision rather than as a missing identifier, because the deployment refuses a body that states neither.</remarks>
+internal sealed record MailAccountOrganizationRequest(
+    [property: JsonPropertyName("organizationId")] Guid? OrganizationId,
+    [property: JsonPropertyName("none")] bool None);
 
 /// <summary>The user an assignment is made to or ended for.</summary>
 /// <param name="UserId">The user.</param>

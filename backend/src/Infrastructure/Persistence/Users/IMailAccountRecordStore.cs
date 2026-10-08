@@ -28,7 +28,7 @@ public interface IMailAccountRecordStore
     /// <returns>The account, or <see langword="null" /> when the deployment holds none under that identifier.</returns>
     Task<MailAccountHolding?> ReadAsync(Guid accountId, CancellationToken cancellationToken);
 
-    /// <summary>Creates an account and assigns it to one user.</summary>
+    /// <summary>Creates an account in the organization of the user it is created for, and assigns it to them.</summary>
     /// <param name="user">The user the account is created for.</param>
     /// <param name="expectedUserVersion">The version of that user's record the account was judged against.</param>
     /// <param name="account">The account to create, whose version is ignored.</param>
@@ -46,12 +46,12 @@ public interface IMailAccountRecordStore
     /// <returns>What the write did.</returns>
     Task<MailAccountWrite> SaveAsync(MailAccountRecord account, CancellationToken cancellationToken);
 
-    /// <summary>Assigns an account to one more user.</summary>
+    /// <summary>Assigns an account to one more user, where the two belong to the same organization or both to none.</summary>
     /// <param name="accountId">The account.</param>
     /// <param name="user">The user it is assigned to.</param>
     /// <param name="expectedUserVersion">The version of that user's record the assignment was judged against.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
-    /// <returns>What the write did.</returns>
+    /// <returns>What the write did, carrying both organizations where they differ.</returns>
     Task<MailAccountWrite> AssignAsync(
         Guid accountId,
         UserId user,
@@ -99,7 +99,8 @@ public interface IMailAccountRecordStore
 /// <summary>One account and the users it is assigned to.</summary>
 /// <param name="Account">The account.</param>
 /// <param name="Users">Every user it is assigned to, which may be none only while an erasure is under way.</param>
-public sealed record MailAccountHolding(MailAccountRecord Account, IReadOnlyList<UserId> Users);
+/// <param name="OrganizationId">The organization the account belongs to, or <see langword="null" /> for none.</param>
+public sealed record MailAccountHolding(MailAccountRecord Account, IReadOnlyList<UserId> Users, Guid? OrganizationId);
 
 /// <summary>One account as a listing names it: by its record's columns and the users it is assigned to, without its settings.</summary>
 /// <param name="Id">The identifier the deployment generated for the account.</param>
@@ -107,17 +108,28 @@ public sealed record MailAccountHolding(MailAccountRecord Account, IReadOnlyList
 /// <param name="DisplayName">The name the account is told apart by among the accounts one user is assigned.</param>
 /// <param name="Version">The version a writer states when it changes the record.</param>
 /// <param name="Users">Every user it is assigned to.</param>
+/// <param name="OrganizationId">The organization the account belongs to, or <see langword="null" /> for none.</param>
 public sealed record MailAccountSummary(
     Guid Id,
     string? EmailAddress,
     string DisplayName,
     long Version,
-    IReadOnlyList<UserId> Users);
+    IReadOnlyList<UserId> Users,
+    Guid? OrganizationId);
 
 /// <summary>What one write to an account did.</summary>
 /// <param name="Result">How the write ended.</param>
 /// <param name="Version">The account's version once committed, or the version in force of whichever record refused it.</param>
-public readonly record struct MailAccountWrite(MailAccountWriteResult Result, long Version);
+/// <param name="Straddled">The two organizations an assignment was refused between, present only for <see cref="MailAccountWriteResult.OrganizationsDiffer" />.</param>
+public readonly record struct MailAccountWrite(
+    MailAccountWriteResult Result,
+    long Version,
+    StraddledOrganizations? Straddled = null);
+
+/// <summary>The organizations of an account and a user an assignment between them would have straddled.</summary>
+/// <param name="AccountOrganization">The account's organization, or <see langword="null" /> for none.</param>
+/// <param name="UserOrganization">The user's organization, or <see langword="null" /> for none.</param>
+public sealed record StraddledOrganizations(Guid? AccountOrganization, Guid? UserOrganization);
 
 /// <summary>How a write to an account ended.</summary>
 public enum MailAccountWriteResult
@@ -136,6 +148,9 @@ public enum MailAccountWriteResult
 
     /// <summary>The write would have changed nothing, such as an assignment that already stands.</summary>
     NothingToChange = 4,
+
+    /// <summary>The account and the user belong to different organizations, counting none as one, so the assignment was refused.</summary>
+    OrganizationsDiffer = 5,
 }
 
 /// <summary>What ending one assignment did.</summary>

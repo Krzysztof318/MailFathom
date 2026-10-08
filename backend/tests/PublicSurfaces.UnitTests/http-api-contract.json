@@ -6230,6 +6230,28 @@
         ],
         "type": "object"
       },
+      "MailAccountOrganizationRequest": {
+        "properties": {
+          "none": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "organizationId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "organizationId",
+          "none"
+        ],
+        "type": "object"
+      },
       "MailAccountResponse": {
         "properties": {
           "declaration": {
@@ -6238,6 +6260,13 @@
           "id": {
             "format": "uuid",
             "type": "string"
+          },
+          "organizationId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "users": {
             "items": {
@@ -6259,7 +6288,8 @@
           "id",
           "version",
           "users",
-          "declaration"
+          "declaration",
+          "organizationId"
         ],
         "type": "object"
       },
@@ -6438,6 +6468,13 @@
             "format": "uuid",
             "type": "string"
           },
+          "organizationId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "users": {
             "items": {
               "format": "uuid",
@@ -6459,7 +6496,8 @@
           "version",
           "users",
           "emailAddress",
-          "displayName"
+          "displayName",
+          "organizationId"
         ],
         "type": "object"
       },
@@ -8524,6 +8562,14 @@
             "format": "uuid",
             "type": "string"
           },
+          "mailAccounts": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
           "members": {
             "format": "int32",
             "pattern": "^-?(?:0|[1-9]\\d*)$",
@@ -8541,6 +8587,7 @@
           "displayName",
           "shortName",
           "members",
+          "mailAccounts",
           "createdAt"
         ],
         "type": "object"
@@ -12547,6 +12594,60 @@
               }
             },
             "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/mail-accounts/{accountId}/organization": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "accountId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/MailAccountOrganizationRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not Found"
           }
         },
         "security": [

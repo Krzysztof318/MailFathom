@@ -2089,8 +2089,9 @@ surface](admin-endpoint.md#users-and-their-records) is where a roster is read, a
 credential issued for this one.
 
 **A mailbox added here is the user's own, and an address somebody holds is refused without saying whose.** The account
-is created assigned to the signed-in user and nobody else; an administrator is who assigns it to a second person
-afterwards. One address is held by one account in the whole deployment, and an address already held — by anybody — is
+is created assigned to the signed-in user and nobody else, in [their organization](admin-endpoint.md#organizations)
+or in none when they belong to none; an administrator is who assigns it to a second person afterwards, and only to
+somebody of that same organization. One address is held by one account in the whole deployment, and an address already held — by anybody — is
 refused with the same sentence whoever holds it. It tells the caller the address cannot be added, and it never says who holds it:
 
 ```

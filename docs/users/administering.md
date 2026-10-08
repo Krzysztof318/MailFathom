@@ -878,8 +878,16 @@ person into it, taking the identifier `mfctl organization list` reports. From th
 password as `TESTFIRMA/username` rather than as `username`, so two companies can each have a `jan`; `--none` moves
 them back out. `mfctl organization rename`, `set-short-name`, and `remove` maintain the rest, and `mfctl credential list`
 shows each password credential's login in its "Resolved by" column, so you can read off what somebody should type.
+
+**A company's mailboxes belong to it too, and are assigned only to its people.** `mfctl account set-organization
+--account <id> --organization <id>` moves a mail account into an organization, and `--none` takes it out. An account in
+an organization is assigned only to that organization's members, and one in none only to people in none, so an
+assignment across the two is refused naming both, and a move of a person or an account is refused while it would leave
+an assignment straddling two. Nothing is unassigned for you: unassign first, move both sides, then assign again. An
+account you create with `mfctl account add` lands in the organization of the person it is created for, and
+`mfctl account list` and `mfctl organization list` show where each account and how many accounts each company holds.
 [Organizations](../operations/admin-endpoint.md#organizations) holds the rules — what a short name may contain, what a
-move is refused over, and when an organization cannot be removed.
+move or an assignment is refused over, and when an organization cannot be removed.
 
 **A row the deployment will not read is named rather than hidden.** A user record, a mail account declaration, or an
 organization row written by an older build, edited in the database, or restored from a backup may stop reading as one —

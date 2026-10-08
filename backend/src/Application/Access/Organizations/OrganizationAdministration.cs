@@ -6,12 +6,13 @@ using MailFathom.Domain.Access;
 
 namespace MailFathom.Application.Access.Organizations;
 
-/// <summary>What a deployment administrator does to organizations and to which organization a user belongs.</summary>
+/// <summary>What a deployment administrator does to organizations and to which organization a user or a mail account belongs.</summary>
 /// <remarks>
 /// <para>
-/// Reading is <see cref="MailFathomPermission.AdminRead" />. Recording, renaming, and deleting an organization is
-/// <see cref="MailFathomPermission.AdminConfigurationWrite" />, the grant that already records users, because those
-/// change how the deployment's people are grouped rather than how any of them signs in. Changing an organization's short
+/// Reading is <see cref="MailFathomPermission.AdminRead" />. Recording, renaming, and deleting an organization, and moving
+/// a mail account, is <see cref="MailFathomPermission.AdminConfigurationWrite" />, the grant that already records users
+/// and assigns accounts, because those change how the deployment's people and mailboxes are grouped rather than how any
+/// of them signs in. Changing an organization's short
 /// name and moving a user are <see cref="MailFathomPermission.AdminCredentialsWrite" />, because each changes the login a
 /// password is typed as — a short name every member's at once — which is a decision about how people sign in.
 /// </para>
@@ -119,10 +120,10 @@ public sealed class OrganizationAdministration
         return this.organizations.ChangeShortNameAsync(organizationId, RequireShortName(shortName), cancellationToken);
     }
 
-    /// <summary>Removes an organization, which is refused while it still has members.</summary>
+    /// <summary>Removes an organization, which is refused while it still has members or holds mail accounts.</summary>
     /// <param name="organizationId">The organization.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
-    /// <returns>What the act did, carrying how many members refused it.</returns>
+    /// <returns>What the act did, carrying how many members and mail accounts refused it.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.AdminConfigurationWrite" />.</exception>
     public Task<OrganizationWriteResult> DeleteAsync(Guid organizationId, CancellationToken cancellationToken)
     {
@@ -151,6 +152,22 @@ public sealed class OrganizationAdministration
         }
 
         return this.organizations.SetUserOrganizationAsync(user, organizationId, cancellationToken);
+    }
+
+    /// <summary>Moves a mail account into an organization, or out of every organization.</summary>
+    /// <param name="mailAccountId">The mail account being moved.</param>
+    /// <param name="organizationId">The organization to move it into, or <see langword="null" /> to leave it in none.</param>
+    /// <param name="cancellationToken">Cancels the write.</param>
+    /// <returns>What the act did, carrying how many of its users stand outside the target where that refused it.</returns>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.AdminConfigurationWrite" />.</exception>
+    public Task<OrganizationWriteResult> SetMailAccountOrganizationAsync(
+        Guid mailAccountId,
+        Guid? organizationId,
+        CancellationToken cancellationToken)
+    {
+        this.authorization.RequirePermission(MailFathomPermission.AdminConfigurationWrite);
+
+        return this.organizations.SetMailAccountOrganizationAsync(mailAccountId, organizationId, cancellationToken);
     }
 
     /// <summary>Reports why a written display name cannot be an organization's, or that it can.</summary>

@@ -44,7 +44,7 @@ internal sealed class PersistedMailAccountRecordStore(
             .OrderBy(account => account.CreatedAt)
             .ThenBy(account => account.Id)
             .Take(limit)
-            .Select(account => new { account.Id, account.EmailAddress, account.DisplayName, account.Version })
+            .Select(account => new { account.Id, account.EmailAddress, account.DisplayName, account.Version, account.OrganizationId })
             .ToListAsync(cancellationToken);
 
         var ids = accounts.Select(account => account.Id).ToArray();
@@ -66,7 +66,8 @@ internal sealed class PersistedMailAccountRecordStore(
                     .. assignments
                         .Where(assignment => assignment.MailAccountId == account.Id)
                         .Select(assignment => UserId.Create(assignment.UserId)),
-                ])),
+                ],
+                account.OrganizationId)),
         ];
     }
 
@@ -89,7 +90,7 @@ internal sealed class PersistedMailAccountRecordStore(
             .Select(assignment => assignment.UserId)
             .ToListAsync(cancellationToken);
 
-        return new MailAccountHolding(ToRecord(account), [.. users.Select(UserId.Create)]);
+        return new MailAccountHolding(ToRecord(account), [.. users.Select(UserId.Create)], account.OrganizationId);
     }
 
     /// <inheritdoc />
@@ -110,13 +111,19 @@ internal sealed class PersistedMailAccountRecordStore(
             {
                 var context = await EfCorePersistenceSessionAccessor.JoinAsync(session, token);
 
+                await LockUserAsync(context, userId, token);
+
+                // The account is created in the organization of the user it is created for, read under that user's
+                // lock, so a move of theirs either lands before this and is read here or waits and counts this account.
                 // The conflict clause names no target, so it covers the address index as well as the key: an address
                 // another account holds inserts nothing rather than raising.
                 var created = await context.Database.ExecuteSqlAsync(
                     $"""
                      INSERT INTO settings_mail_accounts
-                         ("Id", "EmailAddress", "NormalizedEmailAddress", "DisplayName", "Document", "Version", "CreatedAt", "UpdatedAt")
-                     VALUES ({account.Id}, {account.EmailAddress}, {normalized}, {account.DisplayName}, CAST({account.Document} AS jsonb), 1, {now}, {now})
+                         ("Id", "EmailAddress", "NormalizedEmailAddress", "DisplayName", "OrganizationId", "Document", "Version", "CreatedAt", "UpdatedAt")
+                     VALUES ({account.Id}, {account.EmailAddress}, {normalized}, {account.DisplayName},
+                             (SELECT "OrganizationId" FROM settings_accounts WHERE "Id" = {userId}),
+                             CAST({account.Document} AS jsonb), 1, {now}, {now})
                      ON CONFLICT DO NOTHING
                      """,
                     token);
@@ -214,6 +221,11 @@ internal sealed class PersistedMailAccountRecordStore(
             async (session, token) =>
             {
                 var context = await EfCorePersistenceSessionAccessor.JoinAsync(session, token);
+
+                if (await StraddledOrganizationsAsync(context, accountId, userId, token) is { } straddled)
+                {
+                    return new MailAccountWrite(MailAccountWriteResult.OrganizationsDiffer, 0, straddled);
+                }
 
                 var assigned = await context.Database.ExecuteSqlAsync(
                     $"""
@@ -354,6 +366,43 @@ internal sealed class PersistedMailAccountRecordStore(
             .OrderBy(accountId => accountId)
             .ToListAsync(cancellationToken);
     }
+
+    /// <summary>Reads the organizations of an account and a user under their locks, and reports them where the two differ.</summary>
+    /// <returns>The two organizations where an assignment between them would straddle both, or <see langword="null" /> where they agree or either row is gone — which the insert after this settles.</returns>
+    /// <remarks>
+    /// The account is held against a move of its own and the user against a move of theirs until this transaction
+    /// commits, so the organizations compared here are the ones the assignment is written under: a move that commits
+    /// first is read here, and a move that comes after waits and then counts this assignment. The account is taken
+    /// first and shared, which is the order a save takes it in, so two assignments of one account never wait on each
+    /// other.
+    /// </remarks>
+    private static async Task<StraddledOrganizations?> StraddledOrganizationsAsync(
+        MailFathomDbContext context,
+        Guid accountId,
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        var accountOrganization = await context.Database
+            .SqlQuery<Guid?>($"""SELECT "OrganizationId" AS "Value" FROM settings_mail_accounts WHERE "Id" = {accountId} FOR SHARE""")
+            .ToListAsync(cancellationToken);
+
+        var userOrganization = await LockUserAsync(context, userId, cancellationToken);
+
+        return accountOrganization is [var account] && userOrganization is [var user] && account != user
+            ? new StraddledOrganizations(account, user)
+            : null;
+    }
+
+    /// <summary>Locks one user's row for the rest of the transaction and reads the organization it names.</summary>
+    /// <returns>The organization, as a one-element list, or an empty list where the user is gone.</returns>
+    /// <remarks>The same lock a move of that user takes, so an account written to them and a move of theirs are never decided over each other's uncommitted state.</remarks>
+    private static Task<List<Guid?>> LockUserAsync(
+        MailFathomDbContext context,
+        Guid userId,
+        CancellationToken cancellationToken) =>
+        context.Database
+            .SqlQuery<Guid?>($"""SELECT "OrganizationId" AS "Value" FROM settings_accounts WHERE "Id" = {userId} FOR UPDATE""")
+            .ToListAsync(cancellationToken);
 
     /// <summary>Moves one user's record version where it still stands at the version a write was judged against.</summary>
     private static async Task<bool> StepUserVersionAsync(

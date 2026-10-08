@@ -31,6 +31,19 @@ public sealed class PersistedOrganizationListingTests
         Assert.Empty(listing.Unreadable);
     }
 
+    /// <summary>The two counts are read side by side, so each has to reach its own field rather than the other's.</summary>
+    [Fact]
+    public void ListingOf_AnOrganizationHoldingMembersAndMailAccounts_CarriesEachCountToItsOwnField()
+    {
+        // Act
+        var listing = PersistedOrganizations.ListingOf([Row("ACME", "Acme", members: 3, mailAccounts: 5)]);
+
+        // Assert
+        var organization = Assert.Single(listing.Organizations);
+        Assert.Equal(3, organization.Members);
+        Assert.Equal(5, organization.MailAccounts);
+    }
+
     /// <summary>
     /// The guarantee this exists for: one row this build will not read leaves every other organization listed, rather
     /// than raising through the listing an operator would repair it from.
@@ -85,11 +98,17 @@ public sealed class PersistedOrganizationListingTests
     }
 
     /// <summary>A row keyed by a stated identifier, because a test telling two rows apart by a generated one would depend on the generator.</summary>
-    private static StoredOrganizationRow Row(string shortName, string displayName, int key = 1) =>
+    private static StoredOrganizationRow Row(
+        string shortName,
+        string displayName,
+        int key = 1,
+        int members = 0,
+        int mailAccounts = 0) =>
         new(
             new Guid($"00000000-0000-0000-0000-{key:D12}"),
             displayName,
             shortName,
-            Members: 0,
+            members,
+            mailAccounts,
             Recorded);
 }

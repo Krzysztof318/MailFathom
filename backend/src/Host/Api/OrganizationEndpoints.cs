@@ -10,17 +10,18 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace MailFathom.Host.Api;
 
-/// <summary>Records, lists, renames, and removes organizations, and moves a user into or out of one.</summary>
+/// <summary>Records, lists, renames, and removes organizations, and moves a user or a mail account into or out of one.</summary>
 /// <remarks>
 /// <para>
-/// An organization groups users and scopes a Basic username: a member signs in as <c>SHORTNAME/username</c>. So these
-/// routes decide how the deployment's people are named when they sign in, and nothing about what any of them may read.
+/// An organization groups users and mail accounts and scopes a Basic username: a member signs in as
+/// <c>SHORTNAME/username</c>. So these routes decide how the deployment's people are named when they sign in and who a
+/// mailbox may be assigned to, and nothing about what an assigned user reads.
 /// </para>
 /// <para>
-/// Reading is <see cref="MailFathomPermission.AdminRead" />, recording, renaming, and removing an organization are
-/// <see cref="MailFathomPermission.AdminConfigurationWrite" />, and changing a short name and moving a user are
-/// <see cref="MailFathomPermission.AdminCredentialsWrite" />, for the reasons <see cref="OrganizationAdministration" />
-/// gives.
+/// Reading is <see cref="MailFathomPermission.AdminRead" />, recording, renaming, and removing an organization and moving
+/// a mail account are <see cref="MailFathomPermission.AdminConfigurationWrite" />, and changing a short name and moving a
+/// user are <see cref="MailFathomPermission.AdminCredentialsWrite" />, for the reasons
+/// <see cref="OrganizationAdministration" /> gives.
 /// </para>
 /// </remarks>
 internal static class OrganizationEndpoints
@@ -39,6 +40,9 @@ internal static class OrganizationEndpoints
 
     /// <summary>The route the organization one user belongs to is set or cleared at.</summary>
     internal const string UserOrganizationRoute = "/users/{userId:guid}/organization";
+
+    /// <summary>The route the organization one mail account belongs to is set or cleared at.</summary>
+    internal const string MailAccountOrganizationRoute = $"{MailAccountEndpoints.MailAccountRoute}/organization";
 
     /// <summary>The greatest request body the write routes read before refusing it.</summary>
     /// <remarks>A body here is a display name, a short name, or an identifier, every one of which is bounded far below this.</remarks>
@@ -72,6 +76,10 @@ internal static class OrganizationEndpoints
         api.MapPut(UserOrganizationRoute, SetUserOrganizationAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxRequestBytes))
             .RequirePermission(MailFathomPermission.AdminCredentialsWrite);
+
+        api.MapPost(MailAccountOrganizationRoute, SetMailAccountOrganizationAsync)
+            .WithMetadata(new RequestSizeLimitAttribute(MaxRequestBytes))
+            .RequirePermission(MailFathomPermission.AdminConfigurationWrite);
     }
 
     /// <summary>Lists the organizations this deployment holds.</summary>
@@ -180,11 +188,11 @@ internal static class OrganizationEndpoints
         };
     }
 
-    /// <summary>Removes an organization nobody belongs to.</summary>
+    /// <summary>Removes an organization that has neither members nor mail accounts.</summary>
     /// <param name="organizationId">The organization.</param>
     /// <param name="organizations">The organization administration.</param>
     /// <param name="cancellationToken">Cancels the write when the client disconnects.</param>
-    /// <returns><c>204</c> once it is gone, <c>404</c> when no such organization exists, or <c>409</c> naming how many members it still has.</returns>
+    /// <returns><c>204</c> once it is gone, <c>404</c> when no such organization exists, or <c>409</c> naming how many members and mail accounts it still has.</returns>
     internal static async Task<Results<NoContent, NotFound<ProblemDetails>, ProblemHttpResult>> DeleteAsync(
         Guid organizationId,
         [FromServices] OrganizationAdministration organizations,
@@ -197,9 +205,9 @@ internal static class OrganizationEndpoints
         return result.Outcome switch
         {
             OrganizationWriteOutcome.Written => TypedResults.NoContent(),
-            OrganizationWriteOutcome.StillHasMembers => TypedResults.Problem(
-                $"Organization '{organizationId}' still has {result.RemainingMembers} member(s). Move each of them out "
-                + "of it before removing it.",
+            OrganizationWriteOutcome.StillHasMembers or OrganizationWriteOutcome.StillHoldsMailAccounts => TypedResults.Problem(
+                $"Organization '{organizationId}' still has {result.RemainingMembers} member(s) and "
+                + $"{result.RemainingMailAccounts} mail account(s). Move each of them out of it before removing it.",
                 statusCode: StatusCodes.Status409Conflict),
             _ => NoSuchOrganization(),
         };
@@ -210,7 +218,7 @@ internal static class OrganizationEndpoints
     /// <param name="request">The organization to move them into, or none.</param>
     /// <param name="organizations">The organization administration.</param>
     /// <param name="cancellationToken">Cancels the write when the client disconnects.</param>
-    /// <returns><c>204</c> once the move stands, <c>404</c> when no such user exists, <c>409</c> naming the username the target already holds, or <c>400</c> naming what was wrong with the request.</returns>
+    /// <returns><c>204</c> once the move stands, <c>404</c> when no such user exists, <c>409</c> naming the username the target already holds or how many of the user's mail accounts it would leave outside, or <c>400</c> naming what was wrong with the request.</returns>
     internal static async Task<Results<NoContent, NotFound<ProblemDetails>, ProblemHttpResult>> SetUserOrganizationAsync(
         Guid userId,
         [FromBody] UserOrganizationRequest? request,
@@ -224,26 +232,12 @@ internal static class OrganizationEndpoints
             return Refused("The request named no user.");
         }
 
-        var leavesEveryOrganization = request?.None == true;
-
-        if (request?.OrganizationId is null && !leavesEveryOrganization)
+        if (FindTargetRefusal(request?.OrganizationId, request?.None, "the user") is { } refusal)
         {
-            return Refused("The request named neither an organization nor that the user should belong to none.");
+            return Refused(refusal);
         }
 
-        if (request?.OrganizationId is { } named && leavesEveryOrganization)
-        {
-            return Refused(
-                $"The request both named organization '{named}' and said the user should belong to none. Send one of "
-                + "the two.");
-        }
-
-        if (request?.OrganizationId == Guid.Empty)
-        {
-            return Refused("An organization is named by the identifier this deployment recorded it under.");
-        }
-
-        var target = leavesEveryOrganization ? null : request?.OrganizationId;
+        var target = request!.None == true ? null : request.OrganizationId;
 
         var result = await organizations.SetUserOrganizationAsync(
             UserId.Create(userId),
@@ -258,9 +252,12 @@ internal static class OrganizationEndpoints
                 Status = StatusCodes.Status404NotFound,
                 Detail = "This deployment holds no such user.",
             }),
-            OrganizationWriteOutcome.UnknownOrganization => Refused(
-                $"This deployment holds no organization '{target}'. List the organizations to read the "
-                + "identifiers it does hold."),
+            OrganizationWriteOutcome.UnknownOrganization => UnknownTarget(target),
+            OrganizationWriteOutcome.AssignmentsOutsideOrganization => TypedResults.Problem(
+                $"The user is assigned {result.StandingAssignments} mail account(s) outside the organization they would "
+                + "move into, and an account is assigned only to a user of its own organization. Unassign them, or move "
+                + "each account to where the user is going first.",
+                statusCode: StatusCodes.Status409Conflict),
             _ => TypedResults.Problem(
                 result.CollidingUsername is { } username
                     ? $"The target already holds a password credential under the username '{username}', so this user "
@@ -270,6 +267,71 @@ internal static class OrganizationEndpoints
                 statusCode: StatusCodes.Status409Conflict),
         };
     }
+
+    /// <summary>Moves a mail account into an organization, or out of every organization.</summary>
+    /// <param name="accountId">The mail account being moved.</param>
+    /// <param name="request">The organization to move it into, or none.</param>
+    /// <param name="organizations">The organization administration.</param>
+    /// <param name="cancellationToken">Cancels the write when the client disconnects.</param>
+    /// <returns><c>204</c> once the move stands, <c>404</c> when no such mail account exists, <c>409</c> naming how many of its users it would leave outside, or <c>400</c> naming what was wrong with the request.</returns>
+    /// <remarks>A move of an account decides who it may be assigned to and nothing about how anybody signs in, so it takes the grant an assignment takes rather than the one a move of a user takes.</remarks>
+    internal static async Task<Results<NoContent, NotFound<ProblemDetails>, ProblemHttpResult>> SetMailAccountOrganizationAsync(
+        Guid accountId,
+        [FromBody] MailAccountOrganizationRequest? request,
+        [FromServices] OrganizationAdministration organizations,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(organizations);
+
+        if (accountId == Guid.Empty)
+        {
+            return Refused("The request named no mail account.");
+        }
+
+        if (FindTargetRefusal(request?.OrganizationId, request?.None, "the mail account") is { } refusal)
+        {
+            return Refused(refusal);
+        }
+
+        var target = request!.None == true ? null : request.OrganizationId;
+
+        var result = await organizations.SetMailAccountOrganizationAsync(accountId, target, cancellationToken);
+
+        return result.Outcome switch
+        {
+            OrganizationWriteOutcome.Written => TypedResults.NoContent(),
+            OrganizationWriteOutcome.UnknownMailAccount => TypedResults.NotFound(new ProblemDetails
+            {
+                Status = StatusCodes.Status404NotFound,
+                Detail = "This deployment holds no such mail account.",
+            }),
+            OrganizationWriteOutcome.AssignmentsOutsideOrganization => TypedResults.Problem(
+                $"The mail account is assigned to {result.StandingAssignments} user(s) outside the organization it would "
+                + "move into, and an account is assigned only to users of its own organization. Unassign them, or move "
+                + "each user to where the account is going first.",
+                statusCode: StatusCodes.Status409Conflict),
+            _ => UnknownTarget(target),
+        };
+    }
+
+    /// <summary>Reports why a move's body names no single target, or that it names one.</summary>
+    /// <param name="organizationId">The organization the body named.</param>
+    /// <param name="none">Whether the body said the moved record belongs to none.</param>
+    /// <param name="moved">What is being moved, as a refusal names it.</param>
+    /// <returns>The sentence the request is refused with, or <see langword="null" /> when it names exactly one target.</returns>
+    private static string? FindTargetRefusal(Guid? organizationId, bool? none, string moved) =>
+        (organizationId, none == true) switch
+        {
+            (null, false) => $"The request named neither an organization nor that {moved} should belong to none.",
+            ({ } named, true) => $"The request both named organization '{named}' and said {moved} should belong to none. "
+                + "Send one of the two.",
+            ({ } named, false) when named == Guid.Empty =>
+                "An organization is named by the identifier this deployment recorded it under.",
+            _ => null,
+        };
+
+    private static ProblemHttpResult UnknownTarget(Guid? target) => Refused(
+        $"This deployment holds no organization '{target}'. List the organizations to read the identifiers it does hold.");
 
     private static ProblemHttpResult ShortNameTaken(OrganizationShortName shortName) => TypedResults.Problem(
         $"Another organization already signs in under '{shortName.Value}'. A short name is half of a login, so choose "
