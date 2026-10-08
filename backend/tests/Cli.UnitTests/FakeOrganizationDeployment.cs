@@ -102,7 +102,7 @@ internal static class FakeOrganizationDeployment
         {
             return request.Method == HttpMethod.Get
                 ? FakeAdminEndpoint.Json(HttpStatusCode.OK, listingPage)
-                :FakeAdminEndpoint.Json(HttpStatusCode.OK, $$"""{"organizationId":"{{ProvisionedOrganizationId:D}}"}""");
+                : FakeAdminEndpoint.Json(HttpStatusCode.OK, $$"""{"organizationId":"{{ProvisionedOrganizationId:D}}"}""");
         }
 
         if (path.StartsWith($"{AdminEndpointRoutes.OrganizationsPath}/", StringComparison.Ordinal)
