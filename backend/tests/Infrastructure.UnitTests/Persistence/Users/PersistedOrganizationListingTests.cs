@@ -37,7 +37,7 @@ public sealed class PersistedOrganizationListingTests
     public void ListingOf_AnOrganizationHoldingMembersAndMailAccounts_CarriesEachCountToItsOwnField()
     {
         // Act
-        var listing = PersistedOrganizations.ListingOf([Row("ACME", "Acme", members: 3, mailAccounts: 5)]);
+        var listing = PersistedOrganizations.ListingOf(LastPage(Row("ACME", "Acme", members: 3, mailAccounts: 5)));
 
         // Assert
         var organization = Assert.Single(listing.Organizations);

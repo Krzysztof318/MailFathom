@@ -166,7 +166,7 @@ internal static class FakeMailAccountDeployment
 
     private static string SecondSummary() => string.Create(
         CultureInfo.InvariantCulture,
-        $$"""{"id":"{{SecondAccount:D}}","version":1,"users":["{{User:D}}"],"emailAddress":"sam@example.test","displayName":"Home"}""");
+        $$"""{"id":"{{SecondAccount:D}}","version":1,"users":["{{User:D}}"],"emailAddress":"sam@example.test","displayName":"Home","organizationId":null}""");
 
     private static string Entry() => string.Create(
         CultureInfo.InvariantCulture,

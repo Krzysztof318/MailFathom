@@ -108,7 +108,7 @@ public sealed class OrganizationCommandTests : IDisposable
         Assert.Equal(CliExitCode.Success, exitCode);
 
         var listing = DrawnListing.ReadFrom(
-            this.harness.Console.Lines, "Organization", "Short name", "Display name", "Members", "Recorded");
+            this.harness.Console.Lines, "Organization", "Short name", "Display name", "Members", "Mail accounts", "Recorded");
 
         Assert.Equal(["ACME", "ZETA"], listing.Rows.Select(row => listing.Cell(row, "Short name")));
         Assert.Contains(this.harness.Console.Lines, line => line.Contains($"{Unreadable:D}", StringComparison.Ordinal));
