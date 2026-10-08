@@ -82,12 +82,14 @@ internal sealed record UnreadableOrganizationResponse(Guid Id, string DisplayNam
     }
 }
 
-/// <summary>The organizations a deployment holds.</summary>
-/// <param name="Organizations">The organizations, ordered by short name.</param>
-/// <param name="Unreadable">The rows this build will not read as an organization, which are held back one at a time rather than refusing the listing.</param>
+/// <summary>One page of the organizations a deployment holds.</summary>
+/// <param name="Organizations">The organizations, in identifier order.</param>
+/// <param name="Unreadable">The rows on this page this build will not read as an organization, which are held back one at a time rather than refusing the listing.</param>
+/// <param name="NextCursor">The cursor the following page is asked with, or <see langword="null" /> at the end.</param>
 internal sealed record OrganizationListResponse(
     IReadOnlyList<OrganizationResponse> Organizations,
-    IReadOnlyList<UnreadableOrganizationResponse> Unreadable);
+    IReadOnlyList<UnreadableOrganizationResponse> Unreadable,
+    string? NextCursor);
 
 /// <summary>What recording an organization answers with.</summary>
 /// <param name="OrganizationId">The identifier the organization was minted under.</param>

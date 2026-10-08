@@ -57,12 +57,6 @@ internal static class ListMailAccountsCommand
             MailAccountOutput.WriteHeading(context.Console, account);
         }
 
-        if (listing.Truncated)
-        {
-            context.Console.WriteLine(
-                $"This deployment holds more than {accounts.Count} mail accounts; only the first {accounts.Count} are listed.");
-        }
-
         return CliExitCode.Success;
     }
 }

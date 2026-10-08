@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Access;
+using MailFathom.Application.Paging;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Api;
 using MailFathom.Host.Configuration.UserSettings;
@@ -39,11 +40,15 @@ public sealed class UserRecordEndpointsTests
 
         // Act
         var result = await UserRecordEndpoints.ReadRosterAsync(
+            pageSize: null,
+            cursor: null,
             deployment.Roster,
             TestContext.Current.CancellationToken);
 
         // Assert
-        var entry = Assert.Single(result.Value!.Users);
+        var roster = Assert.IsType<Ok<UserRosterResponse>>(result.Result).Value!;
+        Assert.Null(roster.NextCursor);
+        var entry = Assert.Single(roster.Users);
 
         Assert.Equal(SyntheticUser.Deployment.Value, entry.Id);
         Assert.Equal("alex", entry.DisplayName);
@@ -558,7 +563,32 @@ public sealed class UserRecordEndpointsTests
 
         // Act & Assert
         await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
-            () => UserRecordEndpoints.ReadRosterAsync(deployment.Roster, TestContext.Current.CancellationToken));
+            () => UserRecordEndpoints.ReadRosterAsync(
+                pageSize: null,
+                cursor: null,
+                deployment.Roster,
+                TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>A page is bounded at both ends, so a size outside them is refused naming the range rather than read.</summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(AdministrativeListingQuery.MaximumPageSize + 1)]
+    public async Task ReadRosterAsync_APageSizeOutsideTheRange_IsRefusedNamingIt(int pageSize)
+    {
+        // Arrange
+        var deployment = new UserRecordDeployment([MailFathomPermission.AdminRead]);
+
+        // Act
+        var result = await UserRecordEndpoints.ReadRosterAsync(
+            pageSize,
+            cursor: null,
+            deployment.Roster,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var detail = AssertRefusal(result.Result, StatusCodes.Status400BadRequest);
+        Assert.Contains($"{AdministrativeListingQuery.MaximumPageSize}", detail, StringComparison.Ordinal);
     }
 
     private static string AssertRefusal(IResult result, int expectedStatus)

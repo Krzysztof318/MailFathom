@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Paging;
 using MailFathom.Domain.Access;
 
 namespace MailFathom.Application.Access;
@@ -27,6 +28,16 @@ public interface IUserDirectory
     /// about the same user both times.
     /// </remarks>
     Task<IReadOnlyList<UserRecord>> ReadUsersAsync(int limit, CancellationToken cancellationToken);
+
+    /// <summary>Reads one page of the users this deployment holds, in identifier order.</summary>
+    /// <param name="query">The page asked for.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The page, and where the following one continues.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="query" /> is <see langword="null" />.</exception>
+    /// <remarks>This is the administrative listing's read, which walks every user a page at a time rather than reading as many as a caller bounds it to.</remarks>
+    Task<AdministrativeListingPage<UserRecord>> ReadUserPageAsync(
+        AdministrativeListingQuery query,
+        CancellationToken cancellationToken);
 
     /// <summary>Reads the envelope of one user this deployment holds.</summary>
     /// <param name="user">The user whose envelope is read.</param>

@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Paging;
 using MailFathom.Domain.Access;
 
 namespace MailFathom.Application.Access.Organizations;
@@ -20,11 +21,18 @@ namespace MailFathom.Application.Access.Organizations;
 /// </remarks>
 public interface IOrganizationStore
 {
-    /// <summary>Reads the organizations this deployment holds, ordered by short name.</summary>
+    /// <summary>Reads one page of the organizations this deployment holds, in identifier order.</summary>
+    /// <param name="query">The page asked for.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>At most <see cref="Organization.MaximumListed" /> rows, each readable one with how many members it has, and each unreadable one named apart.</returns>
+    /// <returns>At most <see cref="AdministrativeListingQuery.PageSize" /> rows, each readable one with how many members it has, each unreadable one named apart, and where the following page continues.</returns>
     /// <remarks>A row this build will not read is reported beside the listing rather than raised through it: one organization nobody can repair must not be every organization nobody can list.</remarks>
-    Task<OrganizationListing> ReadAsync(CancellationToken cancellationToken);
+    Task<OrganizationListing> ReadAsync(AdministrativeListingQuery query, CancellationToken cancellationToken);
+
+    /// <summary>Reads every organization row this build will not read as one, across the whole deployment.</summary>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The unreadable rows, in identifier order.</returns>
+    /// <remarks>Apart from the paged listing because a broken row is reported wherever it sits, not only when it falls on the page somebody asked for.</remarks>
+    Task<IReadOnlyList<UnreadableOrganization>> ReadUnreadableAsync(CancellationToken cancellationToken);
 
     /// <summary>Records an organization.</summary>
     /// <param name="organizationId">The identifier the organization is to carry.</param>
@@ -32,7 +40,7 @@ public interface IOrganizationStore
     /// <param name="shortName">The short name its members will sign in under.</param>
     /// <param name="createdAt">When it was recorded.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
-    /// <returns><see cref="OrganizationWriteOutcome.Written" />, <see cref="OrganizationWriteOutcome.ShortNameTaken" />, or <see cref="OrganizationWriteOutcome.OrganizationCeilingReached" />.</returns>
+    /// <returns><see cref="OrganizationWriteOutcome.Written" /> or <see cref="OrganizationWriteOutcome.ShortNameTaken" />.</returns>
     Task<OrganizationWriteResult> CreateAsync(
         Guid organizationId,
         string displayName,

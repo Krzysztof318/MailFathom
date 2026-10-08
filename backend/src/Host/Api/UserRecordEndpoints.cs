@@ -4,6 +4,7 @@
 
 using System.Text;
 using System.Text.Json;
+using MailFathom.Application.Paging;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Failures;
 using MailFathom.Host.Configuration.UserSettings.Administration;
@@ -116,18 +117,27 @@ internal static class UserRecordEndpoints
             .RequirePermission(MailFathomPermission.AdminConfigurationWrite);
     }
 
-    /// <summary>Lists the users this deployment holds.</summary>
+    /// <summary>Lists one page of the users this deployment holds.</summary>
+    /// <param name="pageSize">How many users the page may hold, or <see langword="null" /> for the default.</param>
+    /// <param name="cursor">The cursor the previous page returned, or <see langword="null" /> for the first page.</param>
     /// <param name="roster">The roster administration.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
-    /// <returns><c>200</c> with the users.</returns>
+    /// <returns><c>200</c> with the page's users and the cursor the following page is asked with, or <c>400</c> naming what was wrong with the request.</returns>
     /// <remarks>An administrator selects a user before doing anything else here, and this is where the identifier to select comes from; a deployment serving one person answers with one entry, which is what lets a client act without asking.</remarks>
-    internal static async Task<Ok<UserRosterResponse>> ReadRosterAsync(
+    internal static async Task<Results<Ok<UserRosterResponse>, ProblemHttpResult>> ReadRosterAsync(
+        [FromQuery] int? pageSize,
+        [FromQuery] string? cursor,
         [FromServices] UserRosterAdministration roster,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(roster);
 
-        return TypedResults.Ok(UserRosterResponse.For(await roster.ReadRosterAsync(cancellationToken)));
+        if (!AdminListingRequest.TryResolve(AdministrativeListing.Users, pageSize, cursor, out var query, out var refusal))
+        {
+            return refusal;
+        }
+
+        return TypedResults.Ok(UserRosterResponse.For(await roster.ReadRosterAsync(query, cancellationToken)));
     }
 
     /// <summary>Records a user this deployment did not hold.</summary>

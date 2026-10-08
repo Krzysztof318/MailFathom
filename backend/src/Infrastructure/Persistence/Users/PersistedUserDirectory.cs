@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Access;
+using MailFathom.Application.Paging;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Access;
 using Microsoft.EntityFrameworkCore;
@@ -51,6 +52,43 @@ internal sealed class PersistedUserDirectory(MailFathomDbContext dbContext) : IU
                 EndpointAccess = new UserEndpointAccess(user.McpEndpointEnabled, user.ClientEndpointEnabled),
             }),
         ];
+    }
+
+    /// <inheritdoc />
+    public async Task<AdministrativeListingPage<UserRecord>> ReadUserPageAsync(
+        AdministrativeListingQuery query,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        var users = dbContext.UserAccounts.AsNoTracking();
+
+        // Compared by PostgreSQL as a `uuid`, which is the order the primary key's index holds.
+        if (query.After is { } after)
+        {
+            users = users.Where(user => user.Id > after);
+        }
+
+        var read = await users
+            .OrderBy(user => user.Id)
+            .Take(query.PageSize + 1)
+            .Select(user => new
+            {
+                user.Id,
+                user.DisplayName,
+                user.McpEndpointEnabled,
+                user.ClientEndpointEnabled,
+            })
+            .ToArrayAsync(cancellationToken);
+
+        return query.PageOf(
+            [
+                .. read.Select(user => new UserRecord(UserId.Create(user.Id), user.DisplayName)
+                {
+                    EndpointAccess = new UserEndpointAccess(user.McpEndpointEnabled, user.ClientEndpointEnabled),
+                }),
+            ],
+            record => record.User.Value);
     }
 
     /// <inheritdoc />

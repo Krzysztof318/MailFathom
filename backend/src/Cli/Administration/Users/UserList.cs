@@ -6,15 +6,17 @@ using System.Text.Json.Serialization;
 
 namespace MailFathom.Cli.Administration.Users;
 
-/// <summary>The users a deployment holds records for.</summary>
+/// <summary>The users a deployment holds records for, as one page of the listing answers with them or as every page read together.</summary>
 /// <param name="Users">The users, in the deployment's own stable order.</param>
+/// <param name="NextCursor">The cursor the following page is asked with, or <see langword="null" /> at the end.</param>
 /// <remarks>
 /// The listing an administrator selects a user from before doing anything else, which is why every user-scoped path
 /// is composed from what it returns. A deployment serving one person answers with one entry, which is what lets a
 /// command act without asking which user was meant.
 /// </remarks>
 internal sealed record UserList(
-    [property: JsonPropertyName("users")] IReadOnlyList<UserRosterEntry>? Users);
+    [property: JsonPropertyName("users")] IReadOnlyList<UserRosterEntry>? Users,
+    [property: JsonPropertyName("nextCursor")] string? NextCursor);
 
 /// <summary>One user a deployment holds.</summary>
 /// <param name="Id">The identifier the deployment minted for them, which every act names them by.</param>

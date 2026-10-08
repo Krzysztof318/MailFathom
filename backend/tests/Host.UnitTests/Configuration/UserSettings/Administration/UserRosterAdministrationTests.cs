@@ -4,6 +4,7 @@
 
 using System.Globalization;
 using MailFathom.Application.Access;
+using MailFathom.Application.Paging;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Configuration.UserSettings;
@@ -30,6 +31,8 @@ public sealed class UserRosterAdministrationTests
 {
     private const string AdministratorIdentity = "operations";
 
+    private static readonly AdministrativeListingQuery FirstPage = AdministrativeListingQuery.Create(pageSize: null, after: null)!;
+
     [Fact]
     public async Task ReadRosterAsync_ADeploymentHoldingUsers_ReportsEachOneWithWhatThisProcessIsDoingAboutThem()
     {
@@ -41,31 +44,32 @@ public sealed class UserRosterAdministrationTests
         harness.Serving(SyntheticUser.Deployment);
 
         // Act
-        var roster = await harness.Roster.ReadRosterAsync(TestContext.Current.CancellationToken);
+        var roster = await harness.Roster.ReadRosterAsync(FirstPage, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(
             [("alex", true), ("morgan", false)],
-            roster.Select(entry => (entry.DisplayName, entry.Served)));
+            roster.Entries.Select(entry => (entry.DisplayName, entry.Served)));
     }
 
-    /// <summary>
-    /// One more than a deployment may declare is read, so a roster past the bound is observable rather than silently
-    /// truncated into a listing an administrator would then act on as though it were complete.
-    /// </summary>
+    /// <summary>A page the directory says more follow is answered with where the next one continues, so a walk reaches every user.</summary>
     [Fact]
-    public async Task ReadRosterAsync_AnyDeployment_ReadsOneMoreUserThanADeploymentMayHold()
+    public async Task ReadRosterAsync_APageWithMoreFollowing_CarriesWhereTheNextPageContinues()
     {
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminRead);
+        var query = AdministrativeListingQuery.Create(pageSize: 1, after: SyntheticUser.Another.Value)!;
+        harness.Directory.ReadUserPageAsync(query, Arg.Any<CancellationToken>())
+            .Returns(new AdministrativeListingPage<UserRecord>(
+                [new UserRecord(SyntheticUser.Deployment, "alex")],
+                ContinuesAfter: SyntheticUser.Deployment.Value));
 
         // Act
-        await harness.Roster.ReadRosterAsync(TestContext.Current.CancellationToken);
+        var roster = await harness.Roster.ReadRosterAsync(query, TestContext.Current.CancellationToken);
 
         // Assert
-        await harness.Directory.Received(1).ReadUsersAsync(
-            ServedUsers.MaximumUsers + 1,
-            Arg.Any<CancellationToken>());
+        Assert.Equal("alex", Assert.Single(roster.Entries).DisplayName);
+        Assert.Equal(SyntheticUser.Deployment.Value, roster.ContinuesAfter);
     }
 
     [Fact]
@@ -76,7 +80,7 @@ public sealed class UserRosterAdministrationTests
 
         // Act & Assert
         await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
-            () => harness.Roster.ReadRosterAsync(TestContext.Current.CancellationToken));
+            () => harness.Roster.ReadRosterAsync(FirstPage, TestContext.Current.CancellationToken));
     }
 
     /// <summary>
@@ -762,10 +766,12 @@ public sealed class UserRosterAdministrationTests
         });
 
         // Act
-        var roster = await harness.Roster.ReadRosterAsync(TestContext.Current.CancellationToken);
+        var roster = await harness.Roster.ReadRosterAsync(FirstPage, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(new UserEndpointAccess(McpEndpoint: false, ClientEndpoint: true), Assert.Single(roster).EndpointAccess);
+        Assert.Equal(
+            new UserEndpointAccess(McpEndpoint: false, ClientEndpoint: true),
+            Assert.Single(roster.Entries).EndpointAccess);
     }
 
     /// <summary>The roster over substituted rows, with the endpoint posture a deployment's several-user refusal is read from.</summary>
@@ -853,8 +859,12 @@ public sealed class UserRosterAdministrationTests
 
         internal ServedUsers ServedUsers { get; } = new();
 
-        internal void Holding(params UserRecord[] held) =>
+        internal void Holding(params UserRecord[] held)
+        {
             this.Directory.ReadUsersAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(held);
+            this.Directory.ReadUserPageAsync(Arg.Any<AdministrativeListingQuery>(), Arg.Any<CancellationToken>())
+                .Returns(new AdministrativeListingPage<UserRecord>(held, ContinuesAfter: null));
+        }
 
         internal void Serving(UserId user) =>
             this.ServedUsers.Resolved([new(user, "served", [])]);

@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Access;
+using MailFathom.Application.Paging;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Failures;
 using MailFathom.Host.Configuration.Administration;
@@ -684,9 +685,12 @@ public sealed class MailAccountAdministrationTests
         Assert.Equal(created.AccountId, Assert.Single(deployment.MailAccountRecords.Accounts).Id);
     }
 
-    /// <summary>A listing cut at its bound says so, because an administrator reading it would otherwise take it as every account the deployment holds.</summary>
+    /// <summary>
+    /// A walk over the accounts reaches every one exactly once: the first page says where the next continues, and the
+    /// page it continues to is the last and says nothing more follows.
+    /// </summary>
     [Fact]
-    public async Task ReadAllAsync_MoreAccountsThanOneListingReads_ListsTheFirstAndSaysTheListingWasCut()
+    public async Task ReadPageAsync_AWalkFromTheFirstPageToTheLast_ServesEveryAccountOnce()
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminRead]);
@@ -694,15 +698,24 @@ public sealed class MailAccountAdministrationTests
             Alex,
             EmptyRecord,
             version: 1,
-            [.. Enumerable.Range(0, MailAccountAdministration.MaximumListed + 1)
-                .Select(index => Mailbox($"box{index}@example.test", $"box{index}"))]);
+            [.. Enumerable.Range(0, 3).Select(index => Mailbox($"box{index}@example.test", $"box{index}"))]);
 
         // Act
-        var listing = await deployment.MailAccounts.ReadAllAsync(TestContext.Current.CancellationToken);
+        var first = await deployment.MailAccounts.ReadPageAsync(
+            AdministrativeListingQuery.Create(pageSize: 2, after: null)!,
+            TestContext.Current.CancellationToken);
+        var last = await deployment.MailAccounts.ReadPageAsync(
+            AdministrativeListingQuery.Create(pageSize: 2, first.ContinuesAfter)!,
+            TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.True(listing.Truncated);
-        Assert.Equal(MailAccountAdministration.MaximumListed, listing.Accounts.Count);
+        Assert.Equal(2, first.Entries.Count);
+        Assert.Equal(first.Entries[^1].Id, first.ContinuesAfter);
+        Assert.Single(last.Entries);
+        Assert.Null(last.ContinuesAfter);
+        Assert.Equal(
+            deployment.MailAccountRecords.Accounts.Select(account => account.Id).Order(),
+            first.Entries.Concat(last.Entries).Select(account => account.Id));
     }
 
     /// <summary>A refused account changed nothing, so no replica is asked to read anything again.</summary>

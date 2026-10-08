@@ -139,7 +139,7 @@ public sealed class MailAccountEndpointsTests
 
     /// <summary>A listing names an account by what its record holds rather than by its settings, so an unreadable row is still listed and reachable to repair.</summary>
     [Fact]
-    public async Task ReadAllAsync_AnAccountWhoseStoredSettingsAreNotADeclaration_ListsItByAddressAndName()
+    public async Task ReadPageAsync_AnAccountWhoseStoredSettingsAreNotADeclaration_ListsItByAddressAndName()
     {
         // Arrange
         var unreadable = UnreadableAccount();
@@ -147,10 +147,16 @@ public sealed class MailAccountEndpointsTests
         deployment.Holding(SyntheticUser.Deployment, "{}", version: 1, unreadable);
 
         // Act
-        var result = await MailAccountEndpoints.ReadAllAsync(deployment.MailAccounts, TestContext.Current.CancellationToken);
+        var result = await MailAccountEndpoints.ReadPageAsync(
+            pageSize: null,
+            cursor: null,
+            deployment.MailAccounts,
+            TestContext.Current.CancellationToken);
 
         // Assert
-        var account = Assert.Single(result.Value!.Accounts);
+        var page = Assert.IsType<Ok<MailAccountListResponse>>(result.Result).Value!;
+        Assert.Null(page.NextCursor);
+        var account = Assert.Single(page.Accounts);
         Assert.Equal((unreadable.Id, "broken@example.test", "broken"), (account.Id, account.EmailAddress, account.DisplayName));
     }
 

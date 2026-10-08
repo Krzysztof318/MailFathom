@@ -24,6 +24,22 @@ internal static class FakeMailAccountDeployment
     internal const string Declaration =
         """{"EmailAddress":"alex@example.test","DisplayName":"Work","Host":"imap.example.test"}""";
 
+    /// <summary>The cursor the first page of a listing spread over two pages names the second by.</summary>
+    private const string SecondPageCursor = "second-page";
+
+    /// <summary>How the account listing answers.</summary>
+    private enum ListingShape
+    {
+        /// <summary>Every account on one page.</summary>
+        OnePage = 0,
+
+        /// <summary>One account per page, the first naming the second.</summary>
+        TwoPages = 1,
+
+        /// <summary>Two pages, the second naming itself again.</summary>
+        RepeatingItsCursor = 2,
+    }
+
     /// <summary>Gets the one user the roster reports.</summary>
     internal static Guid User { get; } = new("11111111-1111-1111-1111-111111111111");
 
@@ -45,13 +61,24 @@ internal static class FakeMailAccountDeployment
         Committed,
         """{"unassigned":true,"accountErased":false}""");
 
-    /// <summary>Builds a deployment holding more accounts than one listing carries, of which it lists the one.</summary>
+    /// <summary>Gets the account the second page of a listing spread over two pages holds.</summary>
+    internal static Guid SecondAccount { get; } = new("88888888-8888-8888-8888-888888888888");
+
+    /// <summary>Builds a deployment whose listing answers its accounts on two pages, the first naming the cursor of the second.</summary>
     /// <returns>The deployment.</returns>
-    internal static FakeHttpMessageHandler HoldingMoreThanOneListing() => Answering(
+    internal static FakeHttpMessageHandler HoldingAccountsOnTwoPages() => Answering(
         Committed,
         Committed,
         """{"unassigned":true,"accountErased":false}""",
-        truncated: true);
+        ListingShape.TwoPages);
+
+    /// <summary>Builds a deployment whose listing answers its second page with the cursor that asked for it, so following it would never end.</summary>
+    /// <returns>The deployment.</returns>
+    internal static FakeHttpMessageHandler RepeatingTheListingCursor() => Answering(
+        Committed,
+        Committed,
+        """{"unassigned":true,"accountErased":false}""",
+        ListingShape.RepeatingItsCursor);
 
     /// <summary>Builds a deployment whose last assignment to the account is the one being ended.</summary>
     /// <returns>The deployment.</returns>
@@ -81,15 +108,15 @@ internal static class FakeMailAccountDeployment
         string creationAnswer,
         string writeAnswer,
         string unassignment,
-        bool truncated = false) =>
-        new((request, _) => Task.FromResult(Answer(request, creationAnswer, writeAnswer, unassignment, truncated)));
+        ListingShape listing = ListingShape.OnePage) =>
+        new((request, _) => Task.FromResult(Answer(request, creationAnswer, writeAnswer, unassignment, listing)));
 
     private static HttpResponseMessage Answer(
         HttpRequestMessage request,
         string creationAnswer,
         string writeAnswer,
         string unassignment,
-        bool truncated)
+        ListingShape listing)
     {
         var path = request.RequestUri?.AbsolutePath ?? string.Empty;
 
@@ -99,7 +126,7 @@ internal static class FakeMailAccountDeployment
                 HttpStatusCode.OK,
                 $$"""{"users":[{"id":"{{User:D}}","displayName":"alex","served":true,"mcpEndpoint":true,"clientEndpoint":true}]}"""),
             AdminEndpointRoutes.MailAccountsPath => request.Method == HttpMethod.Get
-                ? FakeAdminEndpoint.Json(HttpStatusCode.OK, $$"""{"accounts":[{{Summary()}}],"truncated":{{(truncated ? "true" : "false")}}}""")
+                ? FakeAdminEndpoint.Json(HttpStatusCode.OK, ListingPage(request, listing))
                 : FakeAdminEndpoint.Json(HttpStatusCode.OK, creationAnswer),
             _ when path == AdminEndpointRoutes.MailAccountPath(Account) => AnswerAccount(request, writeAnswer),
             _ when path == AdminEndpointRoutes.MailAccountAssignmentsPath(Account) =>
@@ -115,9 +142,31 @@ internal static class FakeMailAccountDeployment
         : request.Method == HttpMethod.Delete ? FakeAdminEndpoint.Json(HttpStatusCode.OK, """{"erased":true}""")
         : FakeAdminEndpoint.Json(HttpStatusCode.OK, writeAnswer);
 
+    /// <summary>Answers one page of the listing in the shape the deployment was built with.</summary>
+    private static string ListingPage(HttpRequestMessage request, ListingShape shape)
+    {
+        if (shape == ListingShape.OnePage)
+        {
+            return $$"""{"accounts":[{{Summary()}}],"nextCursor":null}""";
+        }
+
+        if (request.RequestUri?.Query != $"?cursor={SecondPageCursor}")
+        {
+            return $$"""{"accounts":[{{Summary()}}],"nextCursor":"{{SecondPageCursor}}"}""";
+        }
+
+        return shape == ListingShape.RepeatingItsCursor
+            ? $$"""{"accounts":[{{SecondSummary()}}],"nextCursor":"{{SecondPageCursor}}"}"""
+            : $$"""{"accounts":[{{SecondSummary()}}],"nextCursor":null}""";
+    }
+
     private static string Summary() => string.Create(
         CultureInfo.InvariantCulture,
         $$"""{"id":"{{Account:D}}","version":{{AccountVersion}},"users":["{{User:D}}"],"emailAddress":"alex@example.test","displayName":"Work","organizationId":"{{Organization:D}}"}""");
+
+    private static string SecondSummary() => string.Create(
+        CultureInfo.InvariantCulture,
+        $$"""{"id":"{{SecondAccount:D}}","version":1,"users":["{{User:D}}"],"emailAddress":"sam@example.test","displayName":"Home"}""");
 
     private static string Entry() => string.Create(
         CultureInfo.InvariantCulture,

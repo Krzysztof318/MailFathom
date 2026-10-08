@@ -2,23 +2,27 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Paging;
 using MailFathom.Host.Configuration.UserSettings.Administration;
 
 namespace MailFathom.Host.Api;
 
-/// <summary>What the deployment reports when asked which users it holds.</summary>
-/// <param name="Users">One entry per user, in the order the deployment recorded them.</param>
-internal sealed record UserRosterResponse(IReadOnlyList<UserRosterEntryResponse> Users)
+/// <summary>What the deployment reports when asked for one page of the users it holds.</summary>
+/// <param name="Users">One entry per user, in identifier order.</param>
+/// <param name="NextCursor">The cursor the following page is asked with, or <see langword="null" /> at the end.</param>
+internal sealed record UserRosterResponse(IReadOnlyList<UserRosterEntryResponse> Users, string? NextCursor)
 {
-    /// <summary>Describes a roster reading.</summary>
-    /// <param name="roster">The users the deployment holds.</param>
+    /// <summary>Describes one page of the roster.</summary>
+    /// <param name="page">The page of users read.</param>
     /// <returns>The response body.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="roster" /> is <see langword="null" />.</exception>
-    internal static UserRosterResponse For(IReadOnlyList<UserRosterEntry> roster)
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="page" /> is <see langword="null" />.</exception>
+    internal static UserRosterResponse For(AdministrativeListingPage<UserRosterEntry> page)
     {
-        ArgumentNullException.ThrowIfNull(roster);
+        ArgumentNullException.ThrowIfNull(page);
 
-        return new UserRosterResponse([.. roster.Select(UserRosterEntryResponse.For)]);
+        return new UserRosterResponse(
+            [.. page.Entries.Select(UserRosterEntryResponse.For)],
+            AdminListingRequest.NextCursor(AdministrativeListing.Users, page.ContinuesAfter));
     }
 }
 

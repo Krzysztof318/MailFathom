@@ -6,12 +6,14 @@ using System.Text.Json.Serialization;
 
 namespace MailFathom.Cli.Administration.Organizations;
 
-/// <summary>The organizations a deployment holds.</summary>
-/// <param name="Organizations">The organizations, ordered by short name.</param>
+/// <summary>The organizations a deployment holds, as one page of the listing answers with them or as every page read together.</summary>
+/// <param name="Organizations">The organizations, in the deployment's identifier order.</param>
 /// <param name="Unreadable">The rows the deployment will not read as an organization, which it holds back one at a time rather than refusing the listing.</param>
+/// <param name="NextCursor">The cursor the following page is asked with, or <see langword="null" /> at the end.</param>
 internal sealed record OrganizationList(
     [property: JsonPropertyName("organizations")] IReadOnlyList<OrganizationEntry>? Organizations,
-    [property: JsonPropertyName("unreadable")] IReadOnlyList<UnreadableOrganizationEntry>? Unreadable);
+    [property: JsonPropertyName("unreadable")] IReadOnlyList<UnreadableOrganizationEntry>? Unreadable,
+    [property: JsonPropertyName("nextCursor")] string? NextCursor);
 
 /// <summary>One organization row the deployment will not read as one.</summary>
 /// <param name="Id">The identifier every act on the organization names it by, which is what repairs the row.</param>

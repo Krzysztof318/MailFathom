@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Access;
+using MailFathom.Application.Paging;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.StoredFiles;
 using MailFathom.Domain.Access;
@@ -229,8 +230,12 @@ internal sealed class UserRecordDeployment
 
     /// <summary>States the users this deployment holds, whether or not this process serves them.</summary>
     /// <param name="held">The users.</param>
-    internal void Held(params UserRecord[] held) =>
+    internal void Held(params UserRecord[] held)
+    {
         this.Directory.ReadUsersAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(held);
+        this.Directory.ReadUserPageAsync(Arg.Any<AdministrativeListingQuery>(), Arg.Any<CancellationToken>())
+            .Returns(new AdministrativeListingPage<UserRecord>(held, ContinuesAfter: null));
+    }
 
     /// <summary>States the roster this process settled at start.</summary>
     /// <param name="served">The users served, and where each one's mail accounts are read from.</param>

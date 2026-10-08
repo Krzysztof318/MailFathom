@@ -25,9 +25,6 @@ public enum OrganizationWriteOutcome
     /// <summary>The organization a user was moving into or out of already holds one of their usernames.</summary>
     UsernameTaken = 5,
 
-    /// <summary>The deployment already holds <see cref="Organization.MaximumListed" /> organizations, so recording another was refused.</summary>
-    OrganizationCeilingReached = 6,
-
     /// <summary>The organization still holds mail accounts, so deleting it was refused.</summary>
     StillHoldsMailAccounts = 7,
 
