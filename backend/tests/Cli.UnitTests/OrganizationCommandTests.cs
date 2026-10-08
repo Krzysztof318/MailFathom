@@ -212,6 +212,59 @@ public sealed class OrganizationCommandTests : IDisposable
         Assert.False(body.RootElement.GetProperty("none").GetBoolean());
     }
 
+    /// <summary>Taking an account out of every organization is sent as a stated decision rather than as a missing identifier.</summary>
+    [Fact]
+    public async Task SetMailAccountOrganization_None_SendsTheDecisionToBelongToNone()
+    {
+        // Arrange
+        using var deployment = FakeOrganizationDeployment.Holding([User]);
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "account",
+            "set-organization",
+            "--account",
+            $"{MailAccount:D}",
+            "--none",
+            "--endpoint",
+            Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+
+        var move = Assert.Single(deployment.RequestsTo(HttpMethod.Post, AdminEndpointRoutes.MailAccountOrganizationPath(MailAccount)));
+        using var body = JsonDocument.Parse(move.ContentAsUtf8String());
+
+        Assert.Equal(JsonValueKind.Null, body.RootElement.GetProperty("organizationId").ValueKind);
+        Assert.True(body.RootElement.GetProperty("none").GetBoolean());
+    }
+
+    /// <summary>An organization named beside the decision to belong to none contradicts itself, so it is answered rather than resolved to either.</summary>
+    [Fact]
+    public async Task SetMailAccountOrganization_AnOrganizationAndNoneAtOnce_IsRefusedWithoutMovingIt()
+    {
+        // Arrange
+        using var deployment = FakeOrganizationDeployment.Holding([User]);
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "account",
+            "set-organization",
+            "--account",
+            $"{MailAccount:D}",
+            "--organization",
+            $"{Organization:D}",
+            "--none",
+            "--endpoint",
+            Endpoint);
+
+        // Assert
+        Assert.NotEqual(CliExitCode.Success, exitCode);
+        Assert.Empty(deployment.RequestsTo(HttpMethod.Post, AdminEndpointRoutes.MailAccountOrganizationPath(MailAccount)));
+    }
+
     /// <summary>An invocation naming neither an organization nor none is refused before anything is sent, rather than read as a move out.</summary>
     [Fact]
     public async Task SetMailAccountOrganization_NeitherAnOrganizationNorNone_IsRefusedWithoutMovingIt()

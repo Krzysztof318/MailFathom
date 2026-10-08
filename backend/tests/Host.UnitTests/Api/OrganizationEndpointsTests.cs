@@ -295,6 +295,34 @@ public sealed class OrganizationEndpointsTests
         Assert.Empty(harness.Organizations.ReceivedCalls());
     }
 
+    /// <summary>The listing publishes how many members and how many mail accounts each organization holds, each under its own name.</summary>
+    [Fact]
+    public async Task ListAsync_AnOrganizationHoldingMembersAndMailAccounts_PublishesEachCount()
+    {
+        // Arrange
+        var harness = new EndpointHarness(MailFathomPermission.AdminRead);
+        harness.Organizations.ReadAsync(Arg.Any<CancellationToken>())
+            .Returns(new OrganizationListing(
+                [
+                    new Organization(
+                        OrganizationId,
+                        "Acme",
+                        OrganizationShortName.Create("ACME"),
+                        Members: 3,
+                        MailAccounts: 5,
+                        new DateTimeOffset(2026, 9, 13, 12, 0, 0, TimeSpan.Zero)),
+                ],
+                []));
+
+        // Act
+        var result = await OrganizationEndpoints.ListAsync(harness.Administration, TestContext.Current.CancellationToken);
+
+        // Assert
+        var organization = Assert.Single(result.Value!.Organizations);
+        Assert.Equal(3, organization.Members);
+        Assert.Equal(5, organization.MailAccounts);
+    }
+
     private sealed class EndpointHarness
     {
         internal EndpointHarness(MailFathomPermission granted)
