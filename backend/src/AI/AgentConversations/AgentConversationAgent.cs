@@ -108,7 +108,7 @@ internal sealed class AgentConversationAgent : IAgentAnswerComposer
         ArgumentNullException.ThrowIfNull(brief);
         ArgumentNullException.ThrowIfNull(journal);
 
-        var scope = this.readers.ScopeResolver.ReadableScope([], [], JunkMailInclusion.Excluded);
+        var scope = await this.readers.ScopeResolver.ReadableScopeAsync([], [], JunkMailInclusion.Excluded, cancellationToken);
         var runLedger = new MailAnsweringRunLedger(this.runBounds);
         var retrieval = new ScopedMailKnowledgeRetrieval(
             this.readers.KnowledgeSearch,

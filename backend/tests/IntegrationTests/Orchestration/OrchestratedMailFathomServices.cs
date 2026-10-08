@@ -552,6 +552,11 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
                 spamClassification ?? SpamClassificationSettings.Disabled,
                 SyntheticMailAccount.AccountId));
 
+        // The folder sets every deployment-wide reading asks for, which infrastructure registers over the account records
+        // and this harness answers from the account above instead, after infrastructure so this registration is the one
+        // resolved: the suite stores no account record, so the records would answer with no folder at all.
+        builder.Services.AddSingleton<IDeploymentMailFolders>(account);
+
         // The three remaining readers an account is worked on under, and the one resolution still composed from a
         // user's own setting. A composition root registers all four; a harness without them fails to resolve the
         // classifier, the redacting reader, and the attachment deriver rather than behaving like the deployment that

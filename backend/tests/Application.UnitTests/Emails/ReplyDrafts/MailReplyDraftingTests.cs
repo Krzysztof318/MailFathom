@@ -375,11 +375,13 @@ public sealed class MailReplyDraftingTests
         catalog.AssignedAccounts.Returns([.. accounts.Select(static accountId => SyntheticServedAccount.Of(accountId))]);
         catalog.User.Returns(SyntheticUser.Deployment);
 
+        var participation = StubMailFolderParticipation.Mapping(
+            [.. accounts.Select(accountId => new MailFolderIdentity(accountId, MailFolderAlias.Create("inbox")))]);
+
         var scopeResolver = new MailboxScopeResolver(
             catalog,
-            StubMailFolderParticipation.Mapping(
-                [.. accounts.Select(accountId => new MailFolderIdentity(accountId, MailFolderAlias.Create("inbox")))]),
-            StubJunkMailFolderCatalog.None,
+            participation,
+            StubDeploymentMailFolders.Of(participation),
             StubMailFolderMappings.ResolvingNothing);
 
         return new MailReplyDrafting(

@@ -24,19 +24,19 @@ internal sealed class StubMailFolderParticipation : IMailFolderParticipationRead
     /// <remarks>A new instance each time, because the reader is built by adding folders to it and a shared one would carry another test's arrangement.</remarks>
     public static StubMailFolderParticipation Nothing => new();
 
-    /// <inheritdoc />
+    /// <summary>Gets every folder a mapping names, which <see cref="StubDeploymentMailFolders" /> answers the mapped set with.</summary>
     public IReadOnlyList<MailFolderIdentity> FoldersMapped =>
         [.. this.folders.Select(static folder => folder.Identity)];
 
-    /// <inheritdoc />
+    /// <summary>Gets the mapped folders that are mirrored.</summary>
     public IReadOnlyList<MailFolderIdentity> FoldersSynchronized =>
         [.. this.folders.Where(static folder => folder.Participation.IsSynchronized).Select(static folder => folder.Identity)];
 
-    /// <inheritdoc />
+    /// <summary>Gets the mapped folders a tool may read.</summary>
     public IReadOnlyList<MailFolderIdentity> FoldersVisibleToTools =>
         [.. this.folders.Where(static folder => folder.Participation.IsVisibleToTools).Select(static folder => folder.Identity)];
 
-    /// <inheritdoc />
+    /// <summary>Gets the mapped folders whose mail is embedded.</summary>
     public IReadOnlyList<MailFolderIdentity> FoldersGeneratingEmbeddings =>
         [.. this.folders.Where(static folder => folder.Participation.GeneratesEmbeddings).Select(static folder => folder.Identity)];
 

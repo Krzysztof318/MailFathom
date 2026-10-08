@@ -20,7 +20,7 @@ namespace MailFathom.Application.SensitiveContent;
 /// It is the account rather than the user because the mail is one copy: a mailbox two people are assigned is scanned
 /// once, under the settings written on the account they share, so neither of them reads mail the other's posture
 /// judged. A path that reads across the accounts one user is assigned has no single account to ask about and asks
-/// <see cref="AcrossAccountsOf" /> instead, which answers with the strictest of them.
+/// <see cref="AcrossAccountsOfAsync" /> instead, which answers with the strictest of them.
 /// </para>
 /// <para>
 /// A record already held is composed rather than refused, so this port and the record are two different readings and a
@@ -33,9 +33,10 @@ namespace MailFathom.Application.SensitiveContent;
 /// </para>
 /// <para>
 /// It is a port because the postures are composed from configuration, which is the host's, while every path that scans
-/// lives above it. Resolution is synchronous and allocation-free on the common path: the answer follows the roster the
-/// startup gate published and each account commit republishes, so no path that scans puts a database read in front of
-/// a scan.
+/// lives above it. The answer about one account is synchronous, because a path that scans holds the account it scans
+/// for. The three answers about more than one account — every account, or every account of one user — are read from the
+/// account records themselves, because no replica holds every account to walk; a work unit reads each of them once,
+/// when it begins, rather than in front of each value it guards.
 /// </para>
 /// </remarks>
 public interface ISensitiveContentPostures
@@ -46,7 +47,9 @@ public interface ISensitiveContentPostures
     /// guarded operation, parsing a message back into values — never as permission to hand text on unguarded. A
     /// deployment where this is false constructs no detector and takes no permit on any path.
     /// </remarks>
-    bool IsActiveForAnyAccount { get; }
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns><see langword="true" /> when the deployment, or any account it serves, switched a scanner on.</returns>
+    Task<bool> IsActiveForAnyAccountAsync(CancellationToken cancellationToken);
 
     /// <summary>Gets what every account this deployment serves has its mail scanned under, ordered by account.</summary>
     /// <remarks>
@@ -69,6 +72,7 @@ public interface ISensitiveContentPostures
 
     /// <summary>Finds what a read spanning every account one user is assigned is scanned under.</summary>
     /// <param name="user">The user whose mail is about to be handed out.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The strictest posture over their accounts, which scans nothing where none of them switched anything on.</returns>
     /// <remarks>
     /// For a read that resolves a user and then hands out mail from whichever of their accounts matched — a search, a
@@ -77,15 +81,16 @@ public interface ISensitiveContentPostures
     /// under at least what its own account asked for, and a scanner another of the user's accounts switched on only
     /// ever redacts more.
     /// </remarks>
-    SensitiveContentPosture AcrossAccountsOf(UserId user);
+    Task<SensitiveContentPosture> AcrossAccountsOfAsync(UserId user, CancellationToken cancellationToken);
 
     /// <summary>Reports whether one scanner runs over any mail on this deployment.</summary>
     /// <param name="scanner">The scanner to ask about.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns><see langword="true" /> when at least one account's posture runs it.</returns>
     /// <remarks>
     /// Asked by what answers for a scanner's own dependency rather than by anything that scans: the readiness probe of
     /// the analyzer the personal-data scanner reaches. A deployment that stood that analyzer up and scans no mail with
     /// it is not unready while the analyzer is silent, and one where a single account switched it on is.
     /// </remarks>
-    bool RunsForAnyAccount(SensitiveContentScannerKind scanner);
+    Task<bool> RunsForAnyAccountAsync(SensitiveContentScannerKind scanner, CancellationToken cancellationToken);
 }

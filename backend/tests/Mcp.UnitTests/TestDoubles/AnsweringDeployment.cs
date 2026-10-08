@@ -82,7 +82,7 @@ internal static class AnsweringDeployment
             new MailboxScopeResolver(
                 AccountCatalog(),
                 StubMailFolderParticipation.Nothing,
-                StubJunkMailFolderCatalog.None,
+                StubDeploymentMailFolders.None,
                 StubMailFolderMappings.ResolvingNothing),
             spendLedger ?? LedgerAdmitting(),
             bounds ?? MailAnswerBounds.Default,

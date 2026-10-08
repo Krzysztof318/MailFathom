@@ -28,7 +28,7 @@ public sealed class GuardedEmailEnrichmentTests
     {
         // Arrange
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
-        using var acting = egress.Guard.ActingFor(ScanningSensitiveContentEgress.User);
+        using var acting = egress.Guard.ActingFor(await egress.ReadUserPostureAsync(TestContext.Current.CancellationToken));
         var mark = Mark($"a key {Marker} was pasted", $"the passage carries {Marker}");
         var enrichment = Enrichment(mark);
 

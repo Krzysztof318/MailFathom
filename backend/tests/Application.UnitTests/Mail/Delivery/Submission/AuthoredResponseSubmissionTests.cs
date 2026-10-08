@@ -13,7 +13,6 @@ using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
-using MailFathom.Application.Folders;
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Mail.Delivery;
 using MailFathom.Application.Mail.Delivery.Addressing;
@@ -319,7 +318,7 @@ public sealed class AuthoredResponseSubmissionTests
             summary: arrangement.Summary,
             summaryReader: arrangement.SummaryReader,
             contentStore: arrangement.ContentStore,
-            folderParticipation: arrangement.FolderParticipation);
+            folderParticipation: arrangement.MapsNoFolder ? StubMailFolderParticipation.Nothing : null);
 
         // Act
         var refusal = await Assert.ThrowsAsync<MailSubmissionRefusedException>(
@@ -335,7 +334,7 @@ public sealed class AuthoredResponseSubmissionTests
     {
         {
             "a folder withheld from tools",
-            new AnsweredEmailArrangement { FolderParticipation = StubMailFolderParticipation.Nothing }
+            new AnsweredEmailArrangement { MapsNoFolder = true }
         },
         {
             "an identity this deployment holds nothing for",
@@ -633,8 +632,8 @@ public sealed class AuthoredResponseSubmissionTests
         /// <summary>Gets the content store, or <see langword="null" /> for one holding an intact copy.</summary>
         public IEmailContentStore? ContentStore { get; init; }
 
-        /// <summary>Gets what the deployment maps for tools, or <see langword="null" /> to map the answered folder.</summary>
-        public IMailFolderParticipationReader? FolderParticipation { get; init; }
+        /// <summary>Gets whether the deployment maps no folder for tools, rather than the answered one.</summary>
+        public bool MapsNoFolder { get; init; }
     }
 
     private static AuthoredResponseSubmission SubmissionOver(
@@ -644,7 +643,7 @@ public sealed class AuthoredResponseSubmissionTests
         IStoredEmailSummaryReader? summaryReader = null,
         IEmailContentStore? contentStore = null,
         IEmailContentRepairRequestStore? repairRequestStore = null,
-        IMailFolderParticipationReader? folderParticipation = null,
+        StubMailFolderParticipation? folderParticipation = null,
         IOutgoingSenderIdentityReader? senderIdentities = null,
         IAuthoredEmailComposer? composing = null,
         AccessAuthorization? authorization = null,
@@ -657,6 +656,9 @@ public sealed class AuthoredResponseSubmissionTests
                 MailFathomPermission.MailSend,
                 MailFathomPermission.MailRead);
 
+        var participation = folderParticipation ?? StubMailFolderParticipation.Mapping(
+            new MailFolderIdentity(answered.Account, answered.FolderAlias));
+
         var authoring = new StoredEmailResponseAuthoring(
             summaryReader ?? SummaryReaderReturning(answered),
             contentStore ?? ContentStoreReturning(IntactContent()),
@@ -665,9 +667,8 @@ public sealed class AuthoredResponseSubmissionTests
             repairRequestStore ?? new RecordingEmailContentRepairRequestStore(),
             new MailboxScopeResolver(
                 CatalogServing(answered.Account),
-                folderParticipation ?? StubMailFolderParticipation.Mapping(
-                    new MailFolderIdentity(answered.Account, answered.FolderAlias)),
-                StubJunkMailFolderCatalog.None,
+                participation,
+                StubDeploymentMailFolders.Of(participation),
                 StubMailFolderMappings.ResolvingNothing),
             senderIdentities ?? SenderIdentitiesFor(answered.Account),
             new NamedRecipientResolver(new InMemoryContactBookStore(), ContactBookOwnerships.For(granted)),

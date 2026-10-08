@@ -34,8 +34,8 @@ internal sealed class FixedSensitiveContentPostures : ISensitiveContentPostures
     public static MailAccountId SoleAccount { get; } = MailAccountId.Create("primary");
 
     /// <inheritdoc />
-    public bool IsActiveForAnyAccount =>
-        this.fallback.IsActive || this.byAccount.Values.Any(posture => posture.IsActive);
+    public Task<bool> IsActiveForAnyAccountAsync(CancellationToken cancellationToken) =>
+        Task.FromResult(this.fallback.IsActive || this.byAccount.Values.Any(posture => posture.IsActive));
 
     /// <inheritdoc />
     public IReadOnlyList<MailAccountSensitiveContentPosture> Current =>
@@ -79,7 +79,7 @@ internal sealed class FixedSensitiveContentPostures : ISensitiveContentPostures
     /// <returns>Postures answering each named account its own and every other the fallback.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     /// <remarks>
-    /// The assignee travels with the posture because <see cref="AcrossAccountsOf" /> answers a read that spans a user's
+    /// The assignee travels with the posture because <see cref="AcrossAccountsOfAsync" /> answers a read that spans a user's
     /// mailboxes, and a double that did not know who holds which account could not compose that answer at all.
     /// </remarks>
     public static FixedSensitiveContentPostures Of(
@@ -137,7 +137,10 @@ internal sealed class FixedSensitiveContentPostures : ISensitiveContentPostures
     /// </para>
     /// </remarks>
     /// <exception cref="InvalidOperationException">Thrown when the user's accounts ask for scanning or screening no one of their postures covers, which this double cannot compose.</exception>
-    public SensitiveContentPosture AcrossAccountsOf(UserId user)
+    public Task<SensitiveContentPosture> AcrossAccountsOfAsync(UserId user, CancellationToken cancellationToken) =>
+        Task.FromResult(this.AcrossAccountsOf(user));
+
+    private SensitiveContentPosture AcrossAccountsOf(UserId user)
     {
         var candidates = this.assignees
             .Where(entry => entry.Value == user)
@@ -153,6 +156,6 @@ internal sealed class FixedSensitiveContentPostures : ISensitiveContentPostures
     }
 
     /// <inheritdoc />
-    public bool RunsForAnyAccount(SensitiveContentScannerKind scanner) =>
-        this.fallback.Runs(scanner) || this.byAccount.Values.Any(posture => posture.Runs(scanner));
+    public Task<bool> RunsForAnyAccountAsync(SensitiveContentScannerKind scanner, CancellationToken cancellationToken) =>
+        Task.FromResult(this.fallback.Runs(scanner) || this.byAccount.Values.Any(posture => posture.Runs(scanner)));
 }

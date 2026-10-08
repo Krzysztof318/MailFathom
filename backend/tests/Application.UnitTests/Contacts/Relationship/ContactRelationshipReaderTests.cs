@@ -160,7 +160,7 @@ public sealed class ContactRelationshipReaderTests
         var scopeResolver = new MailboxScopeResolver(
             CatalogServing(TheAccount),
             StubMailFolderParticipation.Nothing,
-            StubJunkMailFolderCatalog.None,
+            StubDeploymentMailFolders.None,
             StubMailFolderMappings.ResolvingNothing);
 
         return new ContactRelationshipReader(

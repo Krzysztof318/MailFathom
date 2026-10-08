@@ -126,7 +126,8 @@ public sealed class MailBodyCleaning
         // The read above opened a scope of its own and closed it again, so the outline would otherwise be guarded on a
         // flow acting for nobody — which a deployment scanning anybody refuses outright rather than degrading. The user
         // is named here instead, where the payload that leaves the deployment is composed.
-        using var actingFor = this.egressGuard.ActingFor(this.scopeResolver.User);
+        using var actingFor = this.egressGuard.ActingFor(
+            await this.egressGuard.ReadPostureAcrossAccountsOfAsync(this.scopeResolver.User, cancellationToken));
 
         return await this.ProposedAsync(outline, document, cancellationToken);
     }

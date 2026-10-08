@@ -155,7 +155,7 @@ public sealed class MailBodyCleanupAgentTests
         // Arrange
         using var provider = ScriptedTransport.Answering(Completion(Partition));
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
-        using var actingFor = egress.ActingForUser();
+        using var actingFor = egress.Guard.ActingFor(await egress.ReadUserPostureAsync(TestContext.Current.CancellationToken));
         var carryingASecret = new CleanableMailBody(
             $"the key {Marker}",
             Marker,

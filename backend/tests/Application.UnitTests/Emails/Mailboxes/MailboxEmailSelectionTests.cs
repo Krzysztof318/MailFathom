@@ -5,7 +5,6 @@
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.Enrichment;
 using MailFathom.Application.Emails.Mailboxes;
-using MailFathom.Application.Folders;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -310,14 +309,14 @@ public sealed class MailboxEmailSelectionTests
 
     /// <summary>Including junk adds rows in the middle of an ordering, so a walk cannot be resumed under the other answer.</summary>
     [Fact]
-    public void Create_TheCallersAnswerAboutJunk_IsPartOfWhatACursorIsAuthenticatedAgainst()
+    public async Task Create_TheCallersAnswerAboutJunk_IsPartOfWhatACursorIsAuthenticatedAgainst()
     {
         // Arrange
         var resolver = ResolverWithJunkFolder();
 
         // Act
-        var excludingJunk = SelectionWith(resolver.ReadableScope([], [], JunkMailInclusion.Excluded));
-        var includingJunk = SelectionWith(resolver.ReadableScope([], [], JunkMailInclusion.Included));
+        var excludingJunk = SelectionWith(await ReadableScopeAsync(resolver, JunkMailInclusion.Excluded));
+        var includingJunk = SelectionWith(await ReadableScopeAsync(resolver, JunkMailInclusion.Included));
 
         // Assert
         Assert.NotEqual(excludingJunk.CanonicalText, includingJunk.CanonicalText);
@@ -325,15 +324,15 @@ public sealed class MailboxEmailSelectionTests
 
     /// <summary>A configured folder is not a filter the caller chose, so mapping one must not invalidate an outstanding cursor.</summary>
     [Fact]
-    public void Create_TheFoldersConfigurationWithholds_StayOutOfTheCursorFingerprint()
+    public async Task Create_TheFoldersConfigurationWithholds_StayOutOfTheCursorFingerprint()
     {
         // Arrange
         var beforeTheMapping = ResolverWithJunkFolder(StubJunkMailFolderCatalog.None);
         var afterTheMapping = ResolverWithJunkFolder();
 
         // Act
-        var before = SelectionWith(beforeTheMapping.ReadableScope([], [], JunkMailInclusion.Excluded));
-        var after = SelectionWith(afterTheMapping.ReadableScope([], [], JunkMailInclusion.Excluded));
+        var before = SelectionWith(await ReadableScopeAsync(beforeTheMapping, JunkMailInclusion.Excluded));
+        var after = SelectionWith(await ReadableScopeAsync(afterTheMapping, JunkMailInclusion.Excluded));
 
         // Assert
         Assert.Equal(before.CanonicalText, after.CanonicalText);
@@ -395,7 +394,7 @@ public sealed class MailboxEmailSelectionTests
     }
 
     /// <summary>Builds the resolver a mailbox read gets its scope from, since the scope's own narrowing is not public.</summary>
-    private static MailboxScopeResolver ResolverWithJunkFolder(IJunkMailFolderCatalog? junkFolders = null)
+    private static MailboxScopeResolver ResolverWithJunkFolder(StubJunkMailFolderCatalog? junkFolders = null)
     {
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
         catalog.AssignedAccounts.Returns(
@@ -409,10 +408,14 @@ public sealed class MailboxEmailSelectionTests
         return new MailboxScopeResolver(
             catalog,
             StubMailFolderParticipation.Nothing,
-            junkFolders ?? StubJunkMailFolderCatalog.Naming(
-                new MailFolderIdentity(Account, MailFolderAlias.Create("JUNK"))),
+            new StubDeploymentMailFolders(
+                StubMailFolderParticipation.Nothing,
+                junkFolders ?? StubJunkMailFolderCatalog.Naming(new MailFolderIdentity(Account, MailFolderAlias.Create("JUNK")))),
             StubMailFolderMappings.ResolvingNothing);
     }
+
+    private static Task<MailboxScope> ReadableScopeAsync(MailboxScopeResolver resolver, JunkMailInclusion junkMail) =>
+        resolver.ReadableScopeAsync([], [], junkMail, TestContext.Current.CancellationToken);
 
     private static MailboxEmailSelection SelectionWith(
         MailboxScope? scope = null,

@@ -280,7 +280,7 @@ public sealed class ClientCitationEndpointTests
         var scopeResolver = new MailboxScopeResolver(
             catalog,
             StubMailFolderParticipation.Nothing,
-            StubJunkMailFolderCatalog.None,
+            StubDeploymentMailFolders.None,
             StubMailFolderMappings.ResolvingNothing);
 
         var content = new EmailContentReader(

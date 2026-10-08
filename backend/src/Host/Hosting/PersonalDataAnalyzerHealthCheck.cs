@@ -122,7 +122,7 @@ internal sealed partial class PersonalDataAnalyzerHealthCheck : IHealthCheck
         HealthCheckContext context,
         CancellationToken cancellationToken = default)
     {
-        if (!this.postures.RunsForAnyAccount(SensitiveContentScannerKind.Pii))
+        if (!await this.postures.RunsForAnyAccountAsync(SensitiveContentScannerKind.Pii, cancellationToken))
         {
             // Forgotten rather than recorded as available, so a user who switches the scanner on after an outage
             // began meets a check that reports that outage instead of one holding a verdict about nobody's mail. The

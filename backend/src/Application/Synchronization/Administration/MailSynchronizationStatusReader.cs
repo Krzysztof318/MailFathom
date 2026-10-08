@@ -39,7 +39,7 @@ namespace MailFathom.Application.Synchronization.Administration;
 public sealed class MailSynchronizationStatusReader
 {
     private readonly IDeploymentMailAccountCatalog accounts;
-    private readonly IMailFolderParticipationReader folders;
+    private readonly IDeploymentMailFolders folders;
     private readonly MailSynchronizationRunLedger runLedger;
     private readonly IMailFolderSynchronizationProgressReader progressReader;
     private readonly IAttachmentDerivationCoverageReader attachmentCoverage;
@@ -59,7 +59,7 @@ public sealed class MailSynchronizationStatusReader
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public MailSynchronizationStatusReader(
         IDeploymentMailAccountCatalog accounts,
-        IMailFolderParticipationReader folders,
+        IDeploymentMailFolders folders,
         MailSynchronizationRunLedger runLedger,
         IMailFolderSynchronizationProgressReader progressReader,
         IAttachmentDerivationCoverageReader attachmentCoverage,
@@ -103,10 +103,11 @@ public sealed class MailSynchronizationStatusReader
 
         var progress = await this.progressReader.ReadAsync(cancellationToken);
         var progressByFolder = progress.ToDictionary(entry => entry.Folder);
-        var mirrored = this.folders.FoldersSynchronized.ToHashSet();
-        var mappedByAccount = this.folders.FoldersMapped
+        var mirrored = (await this.folders.ReadAsync(MailFolderSelection.Synchronized, cancellationToken)).ToHashSet();
+        var mappedByAccount = (await this.folders.ReadAsync(MailFolderSelection.Mapped, cancellationToken))
             .ToLookup(folder => folder.AccountId);
-        var supervisionByAccount = await this.ReadSupervisionAsync(cancellationToken);
+        var servedAccounts = await this.accounts.ReadServedAccountsAsync(cancellationToken);
+        var supervisionByAccount = await this.ReadSupervisionAsync(servedAccounts, cancellationToken);
 
         // Counted per account rather than once for the deployment, because that is the scope this answer is read at:
         // an operator looking at one account's folders needs the attachment figure for that account beside them. The
@@ -114,7 +115,7 @@ public sealed class MailSynchronizationStatusReader
         // an unbounded fan-out, and awaiting them in order is what keeps them on one scoped database context.
         List<MailAccountSynchronizationStatus> accountStatuses = [];
 
-        foreach (var account in this.accounts.ServedAccounts)
+        foreach (var account in servedAccounts)
         {
             var supervision = supervisionByAccount.GetValueOrDefault(account.Id);
 
@@ -139,9 +140,10 @@ public sealed class MailSynchronizationStatusReader
     /// state rather than an absence to interpret: a deployment with synchronization switched off holds none of them.
     /// </remarks>
     private async Task<Dictionary<MailAccountId, MailAccountSupervision>> ReadSupervisionAsync(
+        IReadOnlyList<ServedMailAccount> servedAccounts,
         CancellationToken cancellationToken)
     {
-        var accountsByScope = this.accounts.ServedAccounts
+        var accountsByScope = servedAccounts
             .ToDictionary(account => MailAccountSupervisionScope.For(account.Id), account => account.Id);
 
         var held = await this.leases.ReadHeldAsync(accountsByScope.Keys, cancellationToken);

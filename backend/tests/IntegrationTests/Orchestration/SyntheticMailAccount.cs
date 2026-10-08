@@ -63,6 +63,7 @@ internal sealed class SyntheticMailAccount(
     IDeploymentMailAccountCatalog,
     IMailAccountAssignments,
     IMailFolderParticipationReader,
+    IDeploymentMailFolders,
     IMailFolderMappingReader,
     IJunkMailFolderCatalog,
     ITrustedAuthenticationAuthorityReader,
@@ -242,6 +243,10 @@ internal sealed class SyntheticMailAccount(
     ];
 
     /// <inheritdoc />
+    public Task<IReadOnlyList<ServedMailAccount>> ReadServedAccountsAsync(CancellationToken cancellationToken) =>
+        Task.FromResult(this.ServedAccounts);
+
+    /// <inheritdoc />
     /// <remarks>
     /// On, because every orchestrated test arranges a deployment that synchronizes: the flag reports the operator's
     /// switch and nothing in the suite exercises a deployment that turned it off.
@@ -263,6 +268,31 @@ internal sealed class SyntheticMailAccount(
 
     /// <inheritdoc />
     /// <remarks>
+    /// Read from the four sets below, which is what this account's own record would have been projected into. No folder
+    /// plays the junk role and the account classifies nothing on its own: the suite states its classification posture
+    /// through the settings reader it registers, so the two sets about classification answer with nothing.
+    /// </remarks>
+    public Task<IReadOnlyList<MailFolderIdentity>> ReadAsync(
+        MailFolderSelection selection,
+        CancellationToken cancellationToken) =>
+        Task.FromResult(selection switch
+        {
+            MailFolderSelection.Mapped => this.FoldersMapped,
+            MailFolderSelection.Synchronized => this.FoldersSynchronized,
+            MailFolderSelection.VisibleToTools => this.FoldersVisibleToTools,
+            MailFolderSelection.GeneratingEmbeddings => this.FoldersGeneratingEmbeddings,
+            _ => (IReadOnlyList<MailFolderIdentity>)[],
+        });
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<MailFolderIdentity>> ReadAsync(
+        MailFolderSelection selection,
+        IReadOnlyCollection<MailAccountId> accounts,
+        CancellationToken cancellationToken) =>
+        [.. (await this.ReadAsync(selection, cancellationToken)).Where(folder => accounts.Contains(folder.AccountId))];
+
+    /// <summary>Gets every folder this suite maps, less the ones a test stopped mirroring.</summary>
+    /// <remarks>
     /// Every folder this suite maps, less the ones a test stopped mirroring. That is the list a pass over stored mail
     /// runs against, so it is what keeps two kinds of row out of one: mail of a folder whose synchronization was
     /// switched off, which a test arranges here, and mail of a folder outside <see cref="MappedFolderAliases" />, which
@@ -271,11 +301,10 @@ internal sealed class SyntheticMailAccount(
     public IReadOnlyList<MailFolderIdentity> FoldersSynchronized =>
         [.. MappedFolders.Where(folder => !(foldersNotMirrored ?? []).Contains(folder))];
 
-    /// <inheritdoc />
-    /// <remarks>Every folder this suite maps, whatever a test stopped mirroring or withheld, which is what being mapped means.</remarks>
+    /// <summary>Gets every folder this suite maps, whatever a test stopped mirroring or withheld, which is what being mapped means.</summary>
     public IReadOnlyList<MailFolderIdentity> FoldersMapped => MappedFolders;
 
-    /// <inheritdoc />
+    /// <summary>Gets every folder this suite maps, less the ones a test withheld from tools.</summary>
     /// <remarks>
     /// Every folder this suite maps, less the ones a test withheld. The subtraction is stated that way round because a
     /// withholding is what a test arranges, while being mapped at all is what makes MailFathom have the folder: an
@@ -286,7 +315,7 @@ internal sealed class SyntheticMailAccount(
     public IReadOnlyList<MailFolderIdentity> FoldersVisibleToTools =>
         [.. this.FoldersSynchronized.Where(folder => !(foldersHiddenFromTools ?? []).Contains(folder))];
 
-    /// <inheritdoc />
+    /// <summary>Gets every folder this suite maps, less the ones a test left unembedded.</summary>
     /// <remarks>
     /// Read the same way as the folders above. The one class that leaves a mapped folder unembedded names a folder of
     /// its own, because whether a message is cut into passages at all is settled by the rows a real transaction leaves
@@ -360,17 +389,11 @@ internal sealed class SyntheticMailAccount(
 
     /// <inheritdoc />
     /// <remarks>
-    /// Nothing, because the one mapping this account carries plays the inbox role and no test maps a junk folder. That
-    /// is a deployment an operator can have — the production reader answers with nothing for exactly the same reason,
-    /// an account whose configuration names no junk folder — and it is what makes every mailbox read here behave as it
-    /// did before junk was withheld from one. A test that needs the narrowing itself has to map a folder to the junk
-    /// role first, because a catalog answering with nothing withholds nothing and would report the narrowing as working
-    /// whatever the query did.
+    /// Never, because the one mapping this account carries plays the inbox role and no test maps a junk folder. That is
+    /// a deployment an operator can have, and it is what makes every mailbox read here behave as it did before junk was
+    /// withheld from one. A test that needs the narrowing itself has to map a folder to the junk role first, because a
+    /// catalog answering with nothing withholds nothing and would report the narrowing as working whatever the query did.
     /// </remarks>
-    public IReadOnlyList<MailFolderIdentity> JunkFolders => [];
-
-    /// <inheritdoc />
-    /// <remarks>Answered from the same mapping the list above is read from, so the per-folder question and the per-query one cannot disagree.</remarks>
     public bool IsJunkFolder(MailAccountId accountId, MailFolderAlias folderAlias) => false;
 
     /// <inheritdoc />

@@ -676,7 +676,7 @@ public sealed class MailTimelineBrowserTests
         new MailboxScopeResolver(
             accountCatalog ?? CatalogServing(EveryAccountTheSyntheticTimelineUses),
             StubMailFolderParticipation.Nothing,
-            StubJunkMailFolderCatalog.None,
+            StubDeploymentMailFolders.None,
             StubMailFolderMappings.ResolvingNothing),
         egressGuard ?? SensitiveContentEgressGuards.Inactive(),
         readTelemetry ?? new RecordingMailboxReadTelemetry(),

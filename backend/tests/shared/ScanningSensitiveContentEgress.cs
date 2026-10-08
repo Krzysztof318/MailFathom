@@ -130,13 +130,16 @@ internal sealed class ScanningSensitiveContentEgress : IDisposable
             timeProvider);
     }
 
-    /// <summary>States that what follows is that user's mail, as a use case does before it reads any.</summary>
-    /// <returns>The scope, which the test disposes.</returns>
+    /// <summary>Reads what that user's mail is scanned under, for a test to state that what follows is their mail.</summary>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The posture, which the test enters with <see cref="SensitiveContentEgressGuard.ActingFor(UserSensitiveContentPosture)" /> and disposes.</returns>
     /// <remarks>
     /// Needed by a test that exercises the guard directly rather than through a use case. Everything reached inside a
-    /// use case is already acting for the user it resolved, so a suite going through one never opens this.
+    /// use case is already acting for the user it resolved, so a suite going through one never reads this. The test
+    /// enters the scope itself, because a scope entered inside an asynchronous method ends with that method.
     /// </remarks>
-    public IDisposable ActingForUser() => this.Guard.ActingFor(User);
+    public Task<UserSensitiveContentPosture> ReadUserPostureAsync(CancellationToken cancellationToken) =>
+        this.Guard.ReadPostureAcrossAccountsOfAsync(User, cancellationToken);
 
     /// <inheritdoc />
     public void Dispose() => this.concurrency.Dispose();

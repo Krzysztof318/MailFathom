@@ -211,14 +211,16 @@ public sealed class MailboxChangeProgressReaderTests
         var callerAuthorization =
             authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead);
 
+        var participation = StubMailFolderParticipation
+            .Mapping(new MailFolderIdentity(Account, Inbox))
+            .Hiding(new MailFolderIdentity(Account, Withheld));
+
         return new MailboxChangeProgressReader(
             callerAuthorization,
             new MailboxScopeResolver(
                 AssignedMailAccountCatalogs.For(callerAuthorization, SyntheticServedAccount.Of(Account)),
-                StubMailFolderParticipation
-                    .Mapping(new MailFolderIdentity(Account, Inbox))
-                    .Hiding(new MailFolderIdentity(Account, Withheld)),
-                StubJunkMailFolderCatalog.None,
+                participation,
+                StubDeploymentMailFolders.Of(participation),
                 StubMailFolderMappings.ResolvingNothing),
             this.records);
     }

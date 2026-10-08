@@ -23,7 +23,7 @@ public sealed class ScanningSensitiveContentEgressTests
     {
         // Arrange
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, this.timeProvider);
-        using var actingFor = egress.ActingForUser();
+        using var actingFor = egress.Guard.ActingFor(await egress.ReadUserPostureAsync(TestContext.Current.CancellationToken));
 
         // Act
         var guarded = await egress.Guard.GuardAsync(
@@ -32,7 +32,7 @@ public sealed class ScanningSensitiveContentEgressTests
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.True(egress.Guard.IsActive);
+        Assert.True(await egress.Guard.IsActiveAsync(TestContext.Current.CancellationToken));
         Assert.Equal("the key is [redacted:CloudKey]", guarded);
         Assert.Equal([$"the key is {Marker}"], egress.Scanner.ScannedTexts);
 
@@ -50,7 +50,7 @@ public sealed class ScanningSensitiveContentEgressTests
     {
         // Arrange
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, this.timeProvider, scanner);
-        using var actingFor = egress.ActingForUser();
+        using var actingFor = egress.Guard.ActingFor(await egress.ReadUserPostureAsync(TestContext.Current.CancellationToken));
 
         // Act
         var guarded = await egress.Guard.GuardAsync(
@@ -72,7 +72,7 @@ public sealed class ScanningSensitiveContentEgressTests
             Marker,
             this.timeProvider,
             bounds: SensitiveContentScanBounds.Create(8, TimeSpan.FromSeconds(5), 4));
-        using var actingFor = egress.ActingForUser();
+        using var actingFor = egress.Guard.ActingFor(await egress.ReadUserPostureAsync(TestContext.Current.CancellationToken));
 
         // Act
         var guarded = await egress.Guard.GuardWithOmissionAsync(
@@ -90,7 +90,7 @@ public sealed class ScanningSensitiveContentEgressTests
     {
         // Arrange
         using var egress = ScanningSensitiveContentEgress.Unavailable(this.timeProvider);
-        using var actingFor = egress.ActingForUser();
+        using var actingFor = egress.Guard.ActingFor(await egress.ReadUserPostureAsync(TestContext.Current.CancellationToken));
 
         // Act
         var refusal = await Assert.ThrowsAsync<SensitiveContentScannerUnavailableException>(() =>
@@ -139,7 +139,7 @@ public sealed class ScanningSensitiveContentEgressTests
         // Arrange
         var egress = ScanningSensitiveContentEgress.Finding(Marker, this.timeProvider);
 
-        using var actingFor = egress.ActingForUser();
+        using var actingFor = egress.Guard.ActingFor(await egress.ReadUserPostureAsync(TestContext.Current.CancellationToken));
 
         // Act
         egress.Dispose();

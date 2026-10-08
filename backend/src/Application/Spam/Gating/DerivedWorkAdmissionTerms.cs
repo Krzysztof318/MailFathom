@@ -10,11 +10,11 @@ namespace MailFathom.Application.Spam.Gating;
 /// <summary>The terms one moment's admissions are decided under, as a value a query can be narrowed by.</summary>
 /// <remarks>
 /// <para>
-/// The reason this exists beside <see cref="DerivedWorkGate.Admit(DerivedWorkCandidate)" /> is the reason
-/// <see cref="Folders.IMailFolderParticipationReader" /> answers in two shapes: a walk over stored mail narrows a table
-/// and needs the whole decision as a value it can put into a predicate, while the arrival path holds one occurrence and
-/// asks about that one. Both are built here, from one reading of the settings and one reading of the clock, so the two
-/// cannot disagree about what a moment admits.
+/// It is the whole decision as a value, because a walk over stored mail narrows a table and needs it as something it
+/// can put into a predicate, while the arrival path holds one occurrence and asks
+/// <see cref="DerivedWorkGate.Admit(DerivedWorkAdmissionTerms, DerivedWorkCandidate)" /> about that one. Both read the
+/// same terms, built from one reading of the settings and one reading of the clock, so the two cannot disagree about
+/// what a moment admits.
 /// </para>
 /// <para>
 /// It is a snapshot rather than a live view, so one decision is never made against a settings reload half way through

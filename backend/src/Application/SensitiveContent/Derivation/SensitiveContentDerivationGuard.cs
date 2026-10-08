@@ -66,13 +66,16 @@ public sealed class SensitiveContentDerivationGuard
         this.timeProvider = timeProvider;
     }
 
-    /// <summary>Gets whether any account this deployment serves has what is derived from its mail redacted.</summary>
+    /// <summary>Reads whether any account this deployment serves has what is derived from its mail redacted.</summary>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns><see langword="true" /> when at least one served account's mail is redacted.</returns>
     /// <remarks>
     /// Read by a walk deciding whether work only a redaction makes necessary is worth arranging at all. What one
     /// message is judged by is <see cref="StampFor" />, because a deployment that redacts one mailbox's mail need not
     /// redact every mailbox's.
     /// </remarks>
-    public bool IsActive => this.postures.IsActiveForAnyAccount;
+    public Task<bool> IsActiveAsync(CancellationToken cancellationToken) =>
+        this.postures.IsActiveForAnyAccountAsync(cancellationToken);
 
     /// <summary>Gets what every account this deployment serves has its mail derived under, ordered by account.</summary>
     /// <remarks>

@@ -36,7 +36,7 @@ namespace MailFathom.Infrastructure.Persistence.ThreadStates;
 [RequiresIntegrationCoverage]
 internal sealed class StoredThreadStateStore(
     MailFathomDbContext dbContext,
-    IMailFolderParticipationReader folderParticipation,
+    IDeploymentMailFolders deploymentFolders,
     DerivedWorkGate derivedWorkGate)
     : IStoredThreadStateStore
 {
@@ -72,12 +72,16 @@ internal sealed class StoredThreadStateStore(
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumCharactersPerMessage);
 
         var mailboxAccountId = account.Value;
-        var terms = derivedWorkGate.ReadTerms();
+        var terms = await derivedWorkGate.ReadTermsAsync(cancellationToken);
+        var foldersGeneratingEmbeddings = await deploymentFolders.ReadAsync(
+            MailFolderSelection.GeneratingEmbeddings,
+            [account],
+            cancellationToken);
 
         var counted = Selecting(
             dbContext.StoredEmails.AsNoTracking(),
             mailboxAccountId,
-            folderParticipation.FoldersGeneratingEmbeddings,
+            foldersGeneratingEmbeddings,
             terms);
 
         var awaiting = await Awaiting(counted, dbContext.EmailThreadStates.AsNoTracking())
@@ -99,7 +103,7 @@ internal sealed class StoredThreadStateStore(
             : await Selecting(
                     dbContext.StoredEmails.AsNoTracking(),
                     mailboxAccountId,
-                    folderParticipation.FoldersGeneratingEmbeddings,
+                    foldersGeneratingEmbeddings,
                     terms)
                 .Where(email => readable.Contains(email.EmailThreadId!.Value))
                 .OrderBy(email => email.SentAt)

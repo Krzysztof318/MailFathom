@@ -35,55 +35,53 @@ namespace MailFathom.Application.Spam.Gating;
 public sealed class DerivedWorkGate
 {
     private readonly ISpamClassificationSettingsReader settingsReader;
-    private readonly IJunkMailFolderCatalog junkFolders;
+    private readonly IDeploymentMailFolders deploymentFolders;
     private readonly TimeProvider timeProvider;
 
     /// <summary>Initializes the gate from the decisions it obeys.</summary>
     /// <param name="settingsReader">Answers which users classify, over which of their folders, and how long a verdict may take.</param>
-    /// <param name="junkFolders">Answers which folder of an account its server files junk into.</param>
+    /// <param name="deploymentFolders">Answers which folder of each account its server files junk into.</param>
     /// <param name="timeProvider">Reads the moment a wait is measured against.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public DerivedWorkGate(
         ISpamClassificationSettingsReader settingsReader,
-        IJunkMailFolderCatalog junkFolders,
+        IDeploymentMailFolders deploymentFolders,
         TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(settingsReader);
-        ArgumentNullException.ThrowIfNull(junkFolders);
+        ArgumentNullException.ThrowIfNull(deploymentFolders);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
         this.settingsReader = settingsReader;
-        this.junkFolders = junkFolders;
+        this.deploymentFolders = deploymentFolders;
         this.timeProvider = timeProvider;
     }
 
     /// <summary>Reads the terms in force now, as one snapshot a whole walk is decided under.</summary>
+    /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The terms, which admit everything belonging to a user who classifies nothing.</returns>
     /// <remarks>
+    /// <para>
     /// The junk folders are narrowed to the accounts of users who classify, which is what keeps the withholding an
     /// ordering behind classification rather than a rule of its own: a user who switched classification off has
     /// mail in their junk folder derived from like any other, exactly as every user did before the gate existed.
+    /// </para>
+    /// <para>
+    /// Every part of it is read from the account records, so a caller reads it once for its work rather than once per
+    /// message: a walk reads it per batch, and a run that meets messages one at a time reads it once for the run and
+    /// decides each of them with <see cref="Admit(DerivedWorkAdmissionTerms, DerivedWorkCandidate)" />.
+    /// </para>
     /// </remarks>
-    public DerivedWorkAdmissionTerms ReadTerms()
+    public async Task<DerivedWorkAdmissionTerms> ReadTermsAsync(CancellationToken cancellationToken)
     {
-        var scope = this.settingsReader.ScopeInForce;
+        var scope = await this.settingsReader.ReadScopeInForceAsync(cancellationToken);
+        var junkFolders = await this.deploymentFolders.ReadAsync(MailFolderSelection.Junk, cancellationToken);
 
         return new DerivedWorkAdmissionTerms(
             scope.ClassifyingAccounts,
-            [.. this.junkFolders.JunkFolders.Where(folder => scope.ClassifyingAccounts.Contains(folder.AccountId))],
+            [.. junkFolders.Where(folder => scope.ClassifyingAccounts.Contains(folder.AccountId))],
             scope.ClassifiedFolders,
             this.timeProvider.GetUtcNow() - scope.MaximumClassificationWait);
-    }
-
-    /// <summary>Decides what classification says about one occurrence right now.</summary>
-    /// <param name="candidate">The four facts an admission is decided from.</param>
-    /// <returns>The admission, which only <see cref="DerivedWorkAdmission.Admitted" /> and the two released answers permit derived work.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="candidate" /> is <see langword="null" />.</exception>
-    public DerivedWorkAdmission Admit(DerivedWorkCandidate candidate)
-    {
-        ArgumentNullException.ThrowIfNull(candidate);
-
-        return Admit(this.ReadTerms(), candidate);
     }
 
     /// <summary>Decides what one occurrence's admission is under terms already read.</summary>

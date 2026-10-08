@@ -253,11 +253,12 @@ public sealed class AgentConversationAgentTests : IAsyncDisposable
             catalog.AssignedAccounts.Returns([SyntheticServedAccount.Of(Primary)]);
             catalog.User.Returns(SyntheticUser.Deployment);
 
+            var participation = StubMailFolderParticipation.Mapping(new MailFolderIdentity(Primary, MailFolderAlias.Create("inbox")));
             var readers = new AgentConversationReaders(
                 new MailboxScopeResolver(
                     catalog,
-                    StubMailFolderParticipation.Mapping(new MailFolderIdentity(Primary, MailFolderAlias.Create("inbox"))),
-                    StubJunkMailFolderCatalog.None,
+                    participation,
+                    StubDeploymentMailFolders.Of(participation),
                     StubMailFolderMappings.ResolvingNothing),
                 Substitute.For<IEmailKnowledgeSearch>(),
                 ContentReader: null!,

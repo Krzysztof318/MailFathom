@@ -311,6 +311,7 @@ internal static class SynchronizationTestHost
         // A stub rather than a substitute, because the gate resolved above enumerates the folder list: a substituted
         // IReadOnlyList happens to enumerate as empty today, which is the right answer reached by accident.
         services.AddSingleton<IJunkMailFolderCatalog>(StubJunkMailFolderCatalog.None);
+        services.AddSingleton<IDeploymentMailFolders>(StubDeploymentMailFolders.None);
         services.AddSingleton(Substitute.For<ISpamActionOccurrenceReader>());
         services.AddScoped(_ => new SpamClassificationRunOptions());
         services.AddScoped(_ => CreateClassificationSettingsReader());
@@ -412,7 +413,8 @@ internal static class SynchronizationTestHost
         services.AddSingleton<IDeploymentUserSource>(provider => provider.GetRequiredService<ServedUsers>());
         services.AddScoped(provider => new ConfiguredMailAccountCatalog(
             provider.GetRequiredService<MailSynchronizationOptions>(),
-            provider.GetRequiredService<ServedUsers>()));
+            provider.GetRequiredService<ServedUsers>(),
+            ServedMailAccountReaders.HoldingNothing()));
         services.AddScoped<IDeploymentMailAccountCatalog>(provider =>
             provider.GetRequiredService<ConfiguredMailAccountCatalog>());
         services.AddScoped<IMailAccountAssignments>(provider =>
@@ -508,11 +510,10 @@ internal static class SynchronizationTestHost
     {
         var reader = Substitute.For<ISpamClassificationSettingsReader>();
         reader.SettingsFor(Arg.Any<MailAccountId>()).Returns(SpamClassificationSettings.Disabled);
-        reader.ScopeInForce.Returns(SpamClassificationScope.None);
+        reader.ReadScopeInForceAsync(Arg.Any<CancellationToken>()).Returns(SpamClassificationScope.None);
 
         return reader;
     }
-
     /// <summary>Answers with neither junk switch on, so a verdict here could ask a mailbox for nothing.</summary>
     private static ISpamActionSettingsReader CreateSpamActionSettingsReader()
     {

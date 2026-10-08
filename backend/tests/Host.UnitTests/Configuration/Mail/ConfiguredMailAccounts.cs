@@ -10,8 +10,10 @@ using MailFathom.Host.Configuration.Mail.Readers;
 using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Mail;
+using MailFathom.Infrastructure.Persistence.Users.AccountSettings;
 using MailFathom.Infrastructure.Secrets.Discovery;
 using MailFathom.TestSupport;
+using NSubstitute;
 
 namespace MailFathom.Host.UnitTests.Configuration.Mail;
 
@@ -55,7 +57,8 @@ internal static class ConfiguredMailAccounts
 
         return new ConfiguredMailAccountCatalog(
             options,
-            ResolvedServedUsers.Serving([.. options.ServedUsers ?? []]));
+            ResolvedServedUsers.Serving([.. options.ServedUsers ?? []]),
+            Substitute.For<IServedMailAccountReader>());
     }
 
     /// <summary>Builds a complete reading account, which is what a delivery rule is added to and judged over.</summary>

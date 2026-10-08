@@ -31,13 +31,13 @@ public sealed class MailboxScopeResolverTests
     private static readonly MailAccountId SharedAccountId = MailAccountId.Create("shared");
 
     [Fact]
-    public void ReadableScope_AnAccountNamedByItsIdentifier_ResolvesToThatAccount()
+    public async Task ReadableScopeAsync_AnAccountNamedByItsIdentifier_ResolvesToThatAccount()
     {
         // Arrange
         var resolver = ResolverServing(Work, Private);
 
         // Act
-        var scope = resolver.ReadableScope([MailAccountSelector.Create("acct-1")], [], JunkMailInclusion.Excluded);
+        var scope = await resolver.ReadableScopeAsync([MailAccountSelector.Create("acct-1")], [], JunkMailInclusion.Excluded, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal([Work.Id], scope.AccountIds);
@@ -49,13 +49,13 @@ public sealed class MailboxScopeResolverTests
     [InlineData("work mail")]
     [InlineData("WORK MAIL")]
     [InlineData("  Work mail  ")]
-    public void ReadableScope_AnAccountNamedByItsDisplayName_ResolvesToThatAccountWhateverTheCase(string named)
+    public async Task ReadableScopeAsync_AnAccountNamedByItsDisplayName_ResolvesToThatAccountWhateverTheCase(string named)
     {
         // Arrange
         var resolver = ResolverServing(Work, Private);
 
         // Act
-        var scope = resolver.ReadableScope([MailAccountSelector.Create(named)], [], JunkMailInclusion.Excluded);
+        var scope = await resolver.ReadableScopeAsync([MailAccountSelector.Create(named)], [], JunkMailInclusion.Excluded, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal([Work.Id], scope.AccountIds);
@@ -63,16 +63,16 @@ public sealed class MailboxScopeResolverTests
 
     /// <summary>Both spellings resolve to one identity, so a request written either way is one query with one cursor.</summary>
     [Fact]
-    public void ReadableScope_OneAccountNamedBothWays_IsOneAccountInTheScope()
+    public async Task ReadableScopeAsync_OneAccountNamedBothWays_IsOneAccountInTheScope()
     {
         // Arrange
         var resolver = ResolverServing(Work, Private);
 
         // Act
-        var scope = resolver.ReadableScope(
+        var scope = await resolver.ReadableScopeAsync(
             [MailAccountSelector.Create("acct-1"), MailAccountSelector.Create("Work mail")],
             [],
-            JunkMailInclusion.Excluded);
+            JunkMailInclusion.Excluded, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal([Work.Id], scope.AccountIds);
@@ -80,28 +80,28 @@ public sealed class MailboxScopeResolverTests
 
     /// <summary>An identifier is a configured key, so a request that recases one names no account rather than that account.</summary>
     [Fact]
-    public void ReadableScope_AnIdentifierNamedInAnotherCase_IsRefused()
+    public async Task ReadableScopeAsync_AnIdentifierNamedInAnotherCase_IsRefused()
     {
         // Arrange
         var resolver = ResolverServing(Work);
 
         // Act, Assert
-        Assert.Throws<MailAccountNotAccessibleException>(
-            () => resolver.ReadableScope([MailAccountSelector.Create("ACCT-1")], [], JunkMailInclusion.Excluded));
+        await Assert.ThrowsAsync<MailAccountNotAccessibleException>(
+            () => resolver.ReadableScopeAsync([MailAccountSelector.Create("ACCT-1")], [], JunkMailInclusion.Excluded, TestContext.Current.CancellationToken));
     }
 
     /// <summary>Text naming nothing meets the refusal an unserved identifier meets, so a caller learns neither which spelling was wrong nor that the other exists.</summary>
     [Theory]
     [InlineData("acct-3")]
     [InlineData("Somebody else's mail")]
-    public void ReadableScope_TextNamingNoServedAccount_IsRefusedTheSameWay(string named)
+    public async Task ReadableScopeAsync_TextNamingNoServedAccount_IsRefusedTheSameWay(string named)
     {
         // Arrange
         var resolver = ResolverServing(Work, Private);
 
         // Act
-        var failure = Assert.Throws<MailAccountNotAccessibleException>(
-            () => resolver.ReadableScope([MailAccountSelector.Create(named)], [], JunkMailInclusion.Excluded));
+        var failure = await Assert.ThrowsAsync<MailAccountNotAccessibleException>(
+            () => resolver.ReadableScopeAsync([MailAccountSelector.Create(named)], [], JunkMailInclusion.Excluded, TestContext.Current.CancellationToken));
 
         // Assert
         Assert.Equal(MailAccountSelector.Create(named), failure.RequestedAccount);
@@ -110,16 +110,16 @@ public sealed class MailboxScopeResolverTests
 
     /// <summary>Naming no account reads every served one, which is what stops a removed account's stored mail from being published.</summary>
     [Fact]
-    public void ReadableScope_NoAccountNamed_IsRestrictedToTheServedAccounts()
+    public async Task ReadableScopeAsync_NoAccountNamed_IsRestrictedToTheServedAccounts()
     {
         // Arrange
         var resolver = ResolverServing(Private, Work);
 
         // Act
-        var scope = resolver.ReadableScope(
+        var scope = await resolver.ReadableScopeAsync(
             [],
             [MailFolderReference.ToAlias(MailFolderAlias.Create("INBOX"))],
-            JunkMailInclusion.Excluded);
+            JunkMailInclusion.Excluded, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal([Work.Id, Private.Id], scope.AccountIds);
@@ -138,13 +138,13 @@ public sealed class MailboxScopeResolverTests
     /// caller entitled to none of it.
     /// </summary>
     [Fact]
-    public void ReadableScope_ADeploymentServingNoAccount_ReadsNothingRatherThanEverything()
+    public async Task ReadableScopeAsync_ADeploymentServingNoAccount_ReadsNothingRatherThanEverything()
     {
         // Arrange
         var resolver = ResolverServing(MappingAnInboxOnEachServedAccount());
 
         // Act
-        var scope = resolver.ReadableScope([], [], JunkMailInclusion.Excluded);
+        var scope = await resolver.ReadableScopeAsync([], [], JunkMailInclusion.Excluded, TestContext.Current.CancellationToken);
 
         // Assert
         AssertNothingIsReadable(scope);
@@ -162,23 +162,23 @@ public sealed class MailboxScopeResolverTests
     /// records is the user axis rather than a mapping that admitted nothing to begin with.
     /// </remarks>
     [Fact]
-    public void ReadableScope_AUserAssignedNoAccount_ReadsNothingRatherThanEverything()
+    public async Task ReadableScopeAsync_AUserAssignedNoAccount_ReadsNothingRatherThanEverything()
     {
         // Arrange
         var resolver = ResolverFor(SyntheticUser.Another, MappingAnInboxOnEachServedAccount(), Work, Private);
 
         // Act
-        var scope = resolver.ReadableScope([], [], JunkMailInclusion.Excluded);
+        var scope = await resolver.ReadableScopeAsync([], [], JunkMailInclusion.Excluded, TestContext.Current.CancellationToken);
 
         // Assert
         AssertNothingIsReadable(scope);
 
-        var forTheOwningUser = ResolverFor(
+        var forTheOwningUser = await ResolverFor(
                 SyntheticUser.Deployment,
                 MappingAnInboxOnEachServedAccount(),
                 Work,
                 Private)
-            .ReadableScope([], [], JunkMailInclusion.Excluded);
+            .ReadableScopeAsync([], [], JunkMailInclusion.Excluded, TestContext.Current.CancellationToken);
 
         Assert.NotEmpty(forTheOwningUser.AccountIds);
         Assert.NotEmpty(forTheOwningUser.ReadableFolders);
@@ -192,7 +192,7 @@ public sealed class MailboxScopeResolverTests
     [Theory]
     [InlineData(JunkMailInclusion.Included, true)]
     [InlineData(JunkMailInclusion.Excluded, false)]
-    public void ReadableScope_AUserAssignedNoAccount_StillRecordsWhatTheCallerAskedAboutJunkMail(
+    public async Task ReadableScopeAsync_AUserAssignedNoAccount_StillRecordsWhatTheCallerAskedAboutJunkMail(
         JunkMailInclusion junkMail,
         bool recorded)
     {
@@ -200,7 +200,7 @@ public sealed class MailboxScopeResolverTests
         var resolver = ResolverFor(SyntheticUser.Another, MappingAnInboxOnEachServedAccount(), Work, Private);
 
         // Act
-        var scope = resolver.ReadableScope([], [], junkMail);
+        var scope = await resolver.ReadableScopeAsync([], [], junkMail, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(recorded, scope.IncludesJunkMail);
@@ -213,18 +213,18 @@ public sealed class MailboxScopeResolverTests
     /// belongs to somebody else.
     /// </summary>
     [Fact]
-    public void ReadableScope_AnAccountAnotherUserIsAssigned_IsRefusedTheSameWayAsOneNobodyServes()
+    public async Task ReadableScopeAsync_AnAccountAnotherUserIsAssigned_IsRefusedTheSameWayAsOneNobodyServes()
     {
         // Arrange
         var resolver = ResolverFor(SyntheticUser.Another, Work);
         var accountOfAnotherUser = MailAccountSelector.Create(Work.Id.Value);
 
         // Act
-        var refusedForAnotherUsersAccount = Assert.Throws<MailAccountNotAccessibleException>(
-            () => resolver.ReadableScope([accountOfAnotherUser], [], JunkMailInclusion.Excluded));
-        var refusedForNoSuchAccount = Assert.Throws<MailAccountNotAccessibleException>(
+        var refusedForAnotherUsersAccount = await Assert.ThrowsAsync<MailAccountNotAccessibleException>(
+            () => resolver.ReadableScopeAsync([accountOfAnotherUser], [], JunkMailInclusion.Excluded, TestContext.Current.CancellationToken));
+        var refusedForNoSuchAccount = await Assert.ThrowsAsync<MailAccountNotAccessibleException>(
             () => ResolverFor(SyntheticUser.Deployment, Work)
-                .ReadableScope([MailAccountSelector.Create("no-such-account")], [], JunkMailInclusion.Excluded));
+                .ReadableScopeAsync([MailAccountSelector.Create("no-such-account")], [], JunkMailInclusion.Excluded, TestContext.Current.CancellationToken));
 
         // Assert
         Assert.Equal(accountOfAnotherUser, refusedForAnotherUsersAccount.RequestedAccount);
@@ -241,15 +241,15 @@ public sealed class MailboxScopeResolverTests
     [Theory]
     [InlineData("shared")]
     [InlineData("The shared mailbox")]
-    public void ReadableScope_AMailboxAssignedToTwoUsers_ResolvesToTheSameAccountForEach(string named)
+    public async Task ReadableScopeAsync_AMailboxAssignedToTwoUsers_ResolvesToTheSameAccountForEach(string named)
     {
         // Arrange
         var ofOneUser = ResolverOwning(SyntheticUser.Deployment, TheSharedAccount());
         var ofAnotherUser = ResolverOwning(SyntheticUser.Another, TheSharedAccount());
 
         // Act
-        var forOneUser = ofOneUser.ReadableScope([MailAccountSelector.Create(named)], [], JunkMailInclusion.Excluded);
-        var forAnotherUser = ofAnotherUser.ReadableScope([MailAccountSelector.Create(named)], [], JunkMailInclusion.Excluded);
+        var forOneUser = await ofOneUser.ReadableScopeAsync([MailAccountSelector.Create(named)], [], JunkMailInclusion.Excluded, TestContext.Current.CancellationToken);
+        var forAnotherUser = await ofAnotherUser.ReadableScopeAsync([MailAccountSelector.Create(named)], [], JunkMailInclusion.Excluded, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal([SharedAccountId], forOneUser.AccountIds);
@@ -261,7 +261,7 @@ public sealed class MailboxScopeResolverTests
     /// names nothing meets — so a caller cannot use a name to learn which mailboxes somebody else was assigned.
     /// </summary>
     [Fact]
-    public void ReadableScope_AMailboxThisUserIsNotAssigned_IsRefusedAsTextNamingNothingIs()
+    public async Task ReadableScopeAsync_AMailboxThisUserIsNotAssigned_IsRefusedAsTextNamingNothingIs()
     {
         // Arrange
         var studio = SyntheticServedAccount.Of("studio");
@@ -269,10 +269,10 @@ public sealed class MailboxScopeResolverTests
         var onlyTheOtherUserCarries = MailAccountSelector.Create(studio.Id.Value);
 
         // Act
-        var refusedForTheirName = Assert.Throws<MailAccountNotAccessibleException>(
-            () => resolver.ReadableScope([onlyTheOtherUserCarries], [], JunkMailInclusion.Excluded));
-        var refusedForNoName = Assert.Throws<MailAccountNotAccessibleException>(
-            () => resolver.ReadableScope([MailAccountSelector.Create("no-such-account")], [], JunkMailInclusion.Excluded));
+        var refusedForTheirName = await Assert.ThrowsAsync<MailAccountNotAccessibleException>(
+            () => resolver.ReadableScopeAsync([onlyTheOtherUserCarries], [], JunkMailInclusion.Excluded, TestContext.Current.CancellationToken));
+        var refusedForNoName = await Assert.ThrowsAsync<MailAccountNotAccessibleException>(
+            () => resolver.ReadableScopeAsync([MailAccountSelector.Create("no-such-account")], [], JunkMailInclusion.Excluded, TestContext.Current.CancellationToken));
 
         // Assert
         Assert.Equal(
@@ -282,11 +282,9 @@ public sealed class MailboxScopeResolverTests
 
         // The control: the user who is assigned that mailbox reaches it by the same name, so the refusal above is the
         // assignment rather than a name nothing in this deployment is called.
-        Assert.Equal(
-            [studio.Id],
-            ResolverOwning(SyntheticUser.Another, studio)
-                .ReadableScope([onlyTheOtherUserCarries], [], JunkMailInclusion.Excluded)
-                .AccountIds);
+        var forTheAssignedUser = await ResolverOwning(SyntheticUser.Another, studio)
+            .ReadableScopeAsync([onlyTheOtherUserCarries], [], JunkMailInclusion.Excluded, TestContext.Current.CancellationToken);
+        Assert.Equal([studio.Id], forTheAssignedUser.AccountIds);
     }
 
     /// <summary>The identity question a tool asks about one folder answers on the same user scope as the listing does.</summary>
@@ -310,7 +308,7 @@ public sealed class MailboxScopeResolverTests
 
     /// <summary>The count is refused before anything is resolved, so a request enumerating names never walks the served set once per name.</summary>
     [Fact]
-    public void ReadableScope_MoreAccountsNamedThanTheLimitPermits_IsRefusedAsAFilter()
+    public async Task ReadableScopeAsync_MoreAccountsNamedThanTheLimitPermits_IsRefusedAsAFilter()
     {
         // Arrange
         var resolver = ResolverServing(Work);
@@ -320,13 +318,13 @@ public sealed class MailboxScopeResolverTests
             .ToArray();
 
         // Act, Assert
-        Assert.Throws<MailboxQueryFilterInvalidException>(
-            () => resolver.ReadableScope(tooMany, [], JunkMailInclusion.Excluded));
+        await Assert.ThrowsAsync<MailboxQueryFilterInvalidException>(
+            () => resolver.ReadableScopeAsync(tooMany, [], JunkMailInclusion.Excluded, TestContext.Current.CancellationToken));
     }
 
     /// <summary>A withheld folder reaches every read model through the scope, which is what makes one decision cover four tools.</summary>
     [Fact]
-    public void ReadableScope_AFolderWithheldFromTools_LeavesItOutOfTheReadableFoldersWhateverTheRequestNamed()
+    public async Task ReadableScopeAsync_AFolderWithheldFromTools_LeavesItOutOfTheReadableFoldersWhateverTheRequestNamed()
     {
         // Arrange
         var privateFolder = new MailFolderIdentity(Work.Id, MailFolderAlias.Create("PRIVATE"));
@@ -337,10 +335,10 @@ public sealed class MailboxScopeResolverTests
             Private);
 
         // Act
-        var scope = resolver.ReadableScope(
+        var scope = await resolver.ReadableScopeAsync(
             [],
             [MailFolderReference.ToAlias(MailFolderAlias.Create("PRIVATE"))],
-            JunkMailInclusion.Excluded);
+            JunkMailInclusion.Excluded, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal([inbox], scope.ReadableFolders);
@@ -349,7 +347,7 @@ public sealed class MailboxScopeResolverTests
 
     /// <summary>A folder no mapping names is not a folder this deployment has, so nothing admits it and no read reaches its stored mail.</summary>
     [Fact]
-    public void ReadableScope_AnAliasNoMappingNames_IsNotAmongTheReadableFolders()
+    public async Task ReadableScopeAsync_AnAliasNoMappingNames_IsNotAmongTheReadableFolders()
     {
         // Arrange
         var inbox = new MailFolderIdentity(Work.Id, MailFolderAlias.Create("INBOX"));
@@ -357,10 +355,10 @@ public sealed class MailboxScopeResolverTests
         var resolver = ResolverServing(StubMailFolderParticipation.Mapping(inbox), Work);
 
         // Act
-        var scope = resolver.ReadableScope(
+        var scope = await resolver.ReadableScopeAsync(
             [],
             [MailFolderReference.ToAlias(MailFolderAlias.Create("ARCHIVE"))],
-            JunkMailInclusion.Excluded);
+            JunkMailInclusion.Excluded, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal([inbox], scope.ReadableFolders);
@@ -370,13 +368,13 @@ public sealed class MailboxScopeResolverTests
 
     /// <summary>A deployment whose configuration maps nothing has no folder to read, which is the opposite of reading every folder.</summary>
     [Fact]
-    public void ReadableScope_ConfigurationMappingNoFolder_ReadsNoFolderAtAll()
+    public async Task ReadableScopeAsync_ConfigurationMappingNoFolder_ReadsNoFolderAtAll()
     {
         // Arrange
         var resolver = ResolverServing(StubMailFolderParticipation.Nothing, Work);
 
         // Act
-        var scope = resolver.ReadableScope([], [], JunkMailInclusion.Excluded);
+        var scope = await resolver.ReadableScopeAsync([], [], JunkMailInclusion.Excluded, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Empty(scope.ReadableFolders);
@@ -384,7 +382,7 @@ public sealed class MailboxScopeResolverTests
 
     /// <summary>Two readings of one configuration must produce one predicate, so the readable folders are ordered rather than left as read.</summary>
     [Fact]
-    public void ReadableScope_SeveralFoldersAdmitted_OrdersThemByAccountAndAlias()
+    public async Task ReadableScopeAsync_SeveralFoldersAdmitted_OrdersThemByAccountAndAlias()
     {
         // Arrange
         var resolver = ResolverServing(
@@ -396,7 +394,7 @@ public sealed class MailboxScopeResolverTests
             Private);
 
         // Act
-        var scope = resolver.ReadableScope([], [], JunkMailInclusion.Excluded);
+        var scope = await resolver.ReadableScopeAsync([], [], JunkMailInclusion.Excluded, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(
@@ -451,14 +449,14 @@ public sealed class MailboxScopeResolverTests
 
     /// <summary>Junk is what a reader means by mail they never asked to see, so a read that says nothing about it gets none.</summary>
     [Fact]
-    public void ReadableScope_ARequestSayingNothingAboutJunk_WithholdsEveryMappedJunkFolder()
+    public async Task ReadableScopeAsync_ARequestSayingNothingAboutJunk_WithholdsEveryMappedJunkFolder()
     {
         // Arrange
         var junkFolder = new MailFolderIdentity(Work.Id, MailFolderAlias.Create("JUNK"));
         var resolver = ResolverServing(StubJunkMailFolderCatalog.Naming(junkFolder), Work, Private);
 
         // Act
-        var scope = resolver.ReadableScope([], [], JunkMailInclusion.Excluded);
+        var scope = await resolver.ReadableScopeAsync([], [], JunkMailInclusion.Excluded, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal([junkFolder], scope.WithheldJunkFolders);
@@ -467,7 +465,7 @@ public sealed class MailboxScopeResolverTests
 
     /// <summary>Somebody looking for a message a filter took is the whole reason the override exists.</summary>
     [Fact]
-    public void ReadableScope_ARequestAskingForJunk_WithholdsNoneOfItAndRecordsTheAnswer()
+    public async Task ReadableScopeAsync_ARequestAskingForJunk_WithholdsNoneOfItAndRecordsTheAnswer()
     {
         // Arrange
         var resolver = ResolverServing(
@@ -475,7 +473,7 @@ public sealed class MailboxScopeResolverTests
             Work);
 
         // Act
-        var scope = resolver.ReadableScope([], [], JunkMailInclusion.Included);
+        var scope = await resolver.ReadableScopeAsync([], [], JunkMailInclusion.Included, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Empty(scope.WithheldJunkFolders);
@@ -484,7 +482,7 @@ public sealed class MailboxScopeResolverTests
 
     /// <summary>The caller's answer may add mail back, never a folder the operator withheld from every tool.</summary>
     [Fact]
-    public void ReadableScope_AJunkFolderAlsoWithheldFromTools_StaysUnreadableWhenTheCallerAsksForJunk()
+    public async Task ReadableScopeAsync_AJunkFolderAlsoWithheldFromTools_StaysUnreadableWhenTheCallerAsksForJunk()
     {
         // Arrange
         var junkFolder = new MailFolderIdentity(Work.Id, MailFolderAlias.Create("JUNK"));
@@ -494,7 +492,7 @@ public sealed class MailboxScopeResolverTests
             Work);
 
         // Act
-        var scope = resolver.ReadableScope([], [], JunkMailInclusion.Included);
+        var scope = await resolver.ReadableScopeAsync([], [], JunkMailInclusion.Included, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.DoesNotContain(junkFolder, scope.ReadableFolders);
@@ -503,7 +501,7 @@ public sealed class MailboxScopeResolverTests
 
     /// <summary>The two decisions narrow one query from opposite directions, and a read has to apply both.</summary>
     [Fact]
-    public void ReadableScope_AWithheldFolderBesideAJunkFolder_AdmitsNeitherThroughTheOthersDecision()
+    public async Task ReadableScopeAsync_AWithheldFolderBesideAJunkFolder_AdmitsNeitherThroughTheOthersDecision()
     {
         // Arrange
         var inbox = new MailFolderIdentity(Work.Id, MailFolderAlias.Create("INBOX"));
@@ -515,7 +513,7 @@ public sealed class MailboxScopeResolverTests
             Work);
 
         // Act
-        var scope = resolver.ReadableScope([], [], JunkMailInclusion.Excluded);
+        var scope = await resolver.ReadableScopeAsync([], [], JunkMailInclusion.Excluded, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal([inbox, junkFolder], scope.ReadableFolders);
@@ -524,7 +522,7 @@ public sealed class MailboxScopeResolverTests
 
     /// <summary>Two readings of one configuration have to produce one predicate, whichever order the folders were read in.</summary>
     [Fact]
-    public void ReadableScope_SeveralJunkFoldersWithheld_OrdersThemByAccountAndAlias()
+    public async Task ReadableScopeAsync_SeveralJunkFoldersWithheld_OrdersThemByAccountAndAlias()
     {
         // Arrange
         var resolver = ResolverServing(
@@ -536,7 +534,7 @@ public sealed class MailboxScopeResolverTests
             Private);
 
         // Act
-        var scope = resolver.ReadableScope([], [], JunkMailInclusion.Excluded);
+        var scope = await resolver.ReadableScopeAsync([], [], JunkMailInclusion.Excluded, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(
@@ -550,13 +548,13 @@ public sealed class MailboxScopeResolverTests
 
     /// <summary>A deployment that maps no junk folder pays for nothing, and the caller's answer is still recorded.</summary>
     [Fact]
-    public void ReadableScope_NoAccountMappingAJunkFolder_WithholdsNothingAndStillRecordsTheAnswer()
+    public async Task ReadableScopeAsync_NoAccountMappingAJunkFolder_WithholdsNothingAndStillRecordsTheAnswer()
     {
         // Arrange
         var resolver = ResolverServing(Work);
 
         // Act
-        var scope = resolver.ReadableScope([], [], JunkMailInclusion.Excluded);
+        var scope = await resolver.ReadableScopeAsync([], [], JunkMailInclusion.Excluded, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Empty(scope.WithheldJunkFolders);
@@ -564,19 +562,19 @@ public sealed class MailboxScopeResolverTests
     }
 
     [Fact]
-    public void ReadableScope_AnInclusionOutsideTheDeclaredSet_IsRefused()
+    public async Task ReadableScopeAsync_AnInclusionOutsideTheDeclaredSet_IsRefused()
     {
         // Arrange
         var resolver = ResolverServing(Work);
 
         // Act, Assert
-        Assert.Throws<ArgumentOutOfRangeException>(() =>
-            resolver.ReadableScope([], [], (JunkMailInclusion)7));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+            resolver.ReadableScopeAsync([], [], (JunkMailInclusion)7, TestContext.Current.CancellationToken));
     }
 
     /// <summary>A role names a different folder in each account, so a read across two of them narrows to both rather than to one name.</summary>
     [Fact]
-    public void ReadableScope_AFolderNamedByItsRole_ResolvesToEachAccountsOwnFolder()
+    public async Task ReadableScopeAsync_AFolderNamedByItsRole_ResolvesToEachAccountsOwnFolder()
     {
         // Arrange
         var resolver = ResolverMapping(
@@ -592,10 +590,10 @@ public sealed class MailboxScopeResolverTests
             Private);
 
         // Act
-        var scope = resolver.ReadableScope(
+        var scope = await resolver.ReadableScopeAsync(
             [],
             [MailFolderReference.ToRole(MailFolderSpecialUse.Junk)],
-            JunkMailInclusion.Excluded);
+            JunkMailInclusion.Excluded, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(
@@ -608,7 +606,7 @@ public sealed class MailboxScopeResolverTests
 
     /// <summary>An account without the folder contributes nothing rather than refusing the read for the accounts that have it.</summary>
     [Fact]
-    public void ReadableScope_ARoleOnlyOneAccountInScopeMaps_ResolvesToThatAccountsFolderAlone()
+    public async Task ReadableScopeAsync_ARoleOnlyOneAccountInScopeMaps_ResolvesToThatAccountsFolderAlone()
     {
         // Arrange
         var resolver = ResolverMapping(
@@ -619,10 +617,10 @@ public sealed class MailboxScopeResolverTests
             Private);
 
         // Act
-        var scope = resolver.ReadableScope(
+        var scope = await resolver.ReadableScopeAsync(
             [],
             [MailFolderReference.ToRole(MailFolderSpecialUse.Archive)],
-            JunkMailInclusion.Excluded);
+            JunkMailInclusion.Excluded, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(
@@ -632,17 +630,17 @@ public sealed class MailboxScopeResolverTests
 
     /// <summary>A role naming no folder anywhere in scope is a request nothing could satisfy, so it is refused rather than read as no filter.</summary>
     [Fact]
-    public void ReadableScope_ARoleNoAccountInScopeMaps_IsRefusedNamingTheRole()
+    public async Task ReadableScopeAsync_ARoleNoAccountInScopeMaps_IsRefusedNamingTheRole()
     {
         // Arrange
         var resolver = ResolverServing(Work, Private);
 
         // Act
-        var failure = Assert.Throws<MailFolderRoleUnmappedException>(
-            () => resolver.ReadableScope(
+        var failure = await Assert.ThrowsAsync<MailFolderRoleUnmappedException>(
+            () => resolver.ReadableScopeAsync(
                 [],
                 [MailFolderReference.ToRole(MailFolderSpecialUse.Junk)],
-                JunkMailInclusion.Excluded));
+                JunkMailInclusion.Excluded, TestContext.Current.CancellationToken));
 
         // Assert
         Assert.Equal(MailFolderSpecialUse.Junk, failure.Role);
@@ -652,7 +650,7 @@ public sealed class MailboxScopeResolverTests
 
     /// <summary>The ceiling counts what the caller wrote, so expanding one role over many accounts can never trip it.</summary>
     [Fact]
-    public void ReadableScope_MoreFoldersNamedThanTheLimitPermits_IsRefusedAsAFilter()
+    public async Task ReadableScopeAsync_MoreFoldersNamedThanTheLimitPermits_IsRefusedAsAFilter()
     {
         // Arrange
         var resolver = ResolverServing(Work);
@@ -662,8 +660,50 @@ public sealed class MailboxScopeResolverTests
             .ToArray();
 
         // Act, Assert
-        Assert.Throws<MailboxQueryFilterInvalidException>(
-            () => resolver.ReadableScope([], tooMany, JunkMailInclusion.Excluded));
+        await Assert.ThrowsAsync<MailboxQueryFilterInvalidException>(
+            () => resolver.ReadableScopeAsync([], tooMany, JunkMailInclusion.Excluded, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// The folder sets a scope is narrowed by are read for the accounts in scope alone, so a read of one mailbox never
+    /// asks the records about the folders of another the caller was not reading.
+    /// </summary>
+    [Fact]
+    public async Task ReadableScopeAsync_OneOfTwoAssignedAccountsNamed_ReadsTheFolderSetsOfThatAccountAlone()
+    {
+        // Arrange
+        var catalog = Substitute.For<ICallerMailAccountCatalog>();
+        catalog.AssignedAccounts.Returns([Work, Private]);
+        var deploymentFolders = Substitute.For<IDeploymentMailFolders>();
+        deploymentFolders
+            .ReadAsync(Arg.Any<MailFolderSelection>(), Arg.Any<IReadOnlyCollection<MailAccountId>>(), Arg.Any<CancellationToken>())
+            .Returns([]);
+        var resolver = new MailboxScopeResolver(
+            catalog,
+            StubMailFolderParticipation.Nothing,
+            deploymentFolders,
+            StubMailFolderMappings.Nothing.Resolver);
+
+        // Act
+        await resolver.ReadableScopeAsync(
+            [MailAccountSelector.Create("acct-1")],
+            [],
+            JunkMailInclusion.Excluded,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        await deploymentFolders.Received(1).ReadAsync(
+            MailFolderSelection.VisibleToTools,
+            Arg.Is<IReadOnlyCollection<MailAccountId>>(accounts => accounts!.SequenceEqual(new[] { Work.Id })),
+            Arg.Any<CancellationToken>());
+        await deploymentFolders.Received(1).ReadAsync(
+            MailFolderSelection.Junk,
+            Arg.Is<IReadOnlyCollection<MailAccountId>>(accounts => accounts!.SequenceEqual(new[] { Work.Id })),
+            Arg.Any<CancellationToken>());
+        await deploymentFolders.DidNotReceive().ReadAsync(
+            Arg.Any<MailFolderSelection>(),
+            Arg.Is<IReadOnlyCollection<MailAccountId>>(accounts => accounts!.Contains(Private.Id)),
+            Arg.Any<CancellationToken>());
     }
 
     /// <summary>Asserts a scope admits no mail at all, which is three statements rather than one.</summary>
@@ -702,7 +742,7 @@ public sealed class MailboxScopeResolverTests
             servedAccounts);
 
     private static MailboxScopeResolver ResolverServing(
-        IMailFolderParticipationReader folderParticipation,
+        StubMailFolderParticipation folderParticipation,
         params ServedMailAccount[] servedAccounts) =>
         Resolver(
             folderParticipation,
@@ -711,7 +751,7 @@ public sealed class MailboxScopeResolverTests
             servedAccounts);
 
     private static MailboxScopeResolver ResolverServing(
-        IJunkMailFolderCatalog junkFolders,
+        StubJunkMailFolderCatalog junkFolders,
         params ServedMailAccount[] servedAccounts) =>
         Resolver(
             StubMailFolderParticipation.Nothing,
@@ -720,8 +760,8 @@ public sealed class MailboxScopeResolverTests
             servedAccounts);
 
     private static MailboxScopeResolver ResolverServing(
-        IMailFolderParticipationReader folderParticipation,
-        IJunkMailFolderCatalog junkFolders,
+        StubMailFolderParticipation folderParticipation,
+        StubJunkMailFolderCatalog junkFolders,
         params ServedMailAccount[] servedAccounts) =>
         Resolver(folderParticipation, junkFolders, StubMailFolderMappings.Nothing, servedAccounts);
 
@@ -745,12 +785,12 @@ public sealed class MailboxScopeResolverTests
 
     private static MailboxScopeResolver ResolverFor(
         UserId user,
-        IMailFolderParticipationReader folderParticipation,
+        StubMailFolderParticipation folderParticipation,
         params ServedMailAccount[] servedAccounts) =>
         new(
             AssignedMailAccountCatalogs.For(AccessAuthorizations.ForUserGranted(user), servedAccounts),
             folderParticipation,
-            StubJunkMailFolderCatalog.None,
+            StubDeploymentMailFolders.Of(folderParticipation),
             StubMailFolderMappings.Nothing.Resolver);
 
     /// <summary>Builds the one mailbox both users are assigned, under the identifier the deployment gave it.</summary>
@@ -777,13 +817,13 @@ public sealed class MailboxScopeResolverTests
         return new MailboxScopeResolver(
             catalog,
             StubMailFolderParticipation.Nothing,
-            StubJunkMailFolderCatalog.None,
+            StubDeploymentMailFolders.None,
             StubMailFolderMappings.Nothing.Resolver);
     }
 
     private static MailboxScopeResolver Resolver(
-        IMailFolderParticipationReader folderParticipation,
-        IJunkMailFolderCatalog junkFolders,
+        StubMailFolderParticipation folderParticipation,
+        StubJunkMailFolderCatalog junkFolders,
         StubMailFolderMappings folderMappings,
         params ServedMailAccount[] servedAccounts)
     {
@@ -793,6 +833,10 @@ public sealed class MailboxScopeResolverTests
             .. servedAccounts.OrderBy(account => account.Id.Value, StringComparer.Ordinal),
         ]);
 
-        return new MailboxScopeResolver(catalog, folderParticipation, junkFolders, folderMappings.Resolver);
+        return new MailboxScopeResolver(
+            catalog,
+            folderParticipation,
+            new StubDeploymentMailFolders(folderParticipation, junkFolders),
+            folderMappings.Resolver);
     }
 }

@@ -677,6 +677,13 @@ public sealed class MailThreadBrowserTests
                 .Select(accountId => SyntheticServedAccount.Of(accountId)),
         ]);
 
+        var participation = StubMailFolderParticipation
+            .Mapping(
+                new MailFolderIdentity(Account, Inbox),
+                new MailFolderIdentity(Account, Sent),
+                new MailFolderIdentity(SecondAccount, Inbox))
+            .Hiding(new MailFolderIdentity(Account, Withheld));
+
         return new MailThreadBrowser(
             threadReader,
             summaryReader ?? new InMemoryStoredEmailSummaries(),
@@ -684,13 +691,8 @@ public sealed class MailThreadBrowserTests
             enrichmentReader ?? new InMemoryStoredEmailEnrichments(),
             new MailboxScopeResolver(
                 accountCatalog,
-                StubMailFolderParticipation
-                    .Mapping(
-                        new MailFolderIdentity(Account, Inbox),
-                        new MailFolderIdentity(Account, Sent),
-                        new MailFolderIdentity(SecondAccount, Inbox))
-                    .Hiding(new MailFolderIdentity(Account, Withheld)),
-                StubJunkMailFolderCatalog.None,
+                participation,
+                StubDeploymentMailFolders.Of(participation),
                 StubMailFolderMappings.ResolvingNothing),
             egressGuard ?? SensitiveContentEgressGuards.Inactive(),
             readTelemetry ?? new RecordingMailboxReadTelemetry(),

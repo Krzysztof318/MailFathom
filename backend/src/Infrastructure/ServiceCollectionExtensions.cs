@@ -175,6 +175,7 @@ using MailFathom.Infrastructure.Persistence.Synchronization;
 using MailFathom.Infrastructure.Persistence.Tasks;
 using MailFathom.Infrastructure.Persistence.ThreadStates;
 using MailFathom.Infrastructure.Persistence.Users;
+using MailFathom.Infrastructure.Persistence.Users.AccountSettings;
 using MailFathom.Infrastructure.Resilience;
 using MailFathom.Infrastructure.Secrets.Database;
 using MailFathom.Infrastructure.Secrets.References;
@@ -661,6 +662,14 @@ public static class ServiceCollectionExtensions
         // because an erasure of an account runs the same model-derived walk a user's erasure runs, in one of the
         // request's own transactions.
         services.AddScoped<IMailAccountRecordStore, PersistedMailAccountRecordStore>();
+        // Every question about all the accounts this deployment serves, answered from the columns each account's document
+        // was read into. A singleton over the pool beside the record reader above, because the scanning postures and the
+        // rule set's reload ask it as well as work units, and every answer is one statement that joins no transaction.
+        services.AddSingleton(provider => new PersistedServedMailAccounts(
+            () => provider.GetRequiredService<NpgsqlDataSource>(),
+            provider.GetRequiredService<DatabaseCommandTimeout>()));
+        services.AddSingleton<IServedMailAccountReader>(provider => provider.GetRequiredService<PersistedServedMailAccounts>());
+        services.AddSingleton<IDeploymentMailFolders>(provider => provider.GetRequiredService<PersistedServedMailAccounts>());
         // What one person set about their own client, which is beside the record above rather than in it: this is a
         // preference about the client and that document is configuration. Scoped because both the read and the upsert
         // are ordinary statements on the request's own context, and registered unconditionally because it is a store

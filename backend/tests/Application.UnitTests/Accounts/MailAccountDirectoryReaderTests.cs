@@ -213,7 +213,7 @@ public sealed class MailAccountDirectoryReaderTests
             new MailboxScopeResolver(
                 catalog,
                 StubMailFolderParticipation.Nothing,
-                StubJunkMailFolderCatalog.None,
+                StubDeploymentMailFolders.None,
                 StubMailFolderMappings.ResolvingNothing),
             new RecordingMailboxReadTelemetry(),
             authorization);
@@ -246,7 +246,7 @@ public sealed class MailAccountDirectoryReaderTests
             new MailboxScopeResolver(
                 catalog,
                 StubMailFolderParticipation.Nothing,
-                StubJunkMailFolderCatalog.None,
+                StubDeploymentMailFolders.None,
                 StubMailFolderMappings.ResolvingNothing),
             readTelemetry,
             AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead));

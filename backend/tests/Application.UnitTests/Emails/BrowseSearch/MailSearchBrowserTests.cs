@@ -689,7 +689,7 @@ public sealed class MailSearchBrowserTests
         new MailboxScopeResolver(
             accountCatalog ?? CatalogServing(MailAccountId.Create(SyntheticEmailSummaries.DefaultAccountId)),
             StubMailFolderParticipation.Nothing,
-            StubJunkMailFolderCatalog.None,
+            StubDeploymentMailFolders.None,
             StubMailFolderMappings.ResolvingNothing),
         EmailSearchSnippetBounds.Default,
         egressGuard ?? SensitiveContentEgressGuards.Inactive(),

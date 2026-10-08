@@ -167,7 +167,8 @@ public sealed class MailboxSearchReader
 
         using var read = this.readTelemetry.BeginRead(MailboxReadOperation.SearchMailbox, cancellationToken);
 
-        using var actingFor = this.egressGuard.ActingFor(this.scopeResolver.User);
+        using var actingFor = this.egressGuard.ActingFor(
+            await this.egressGuard.ReadPostureAcrossAccountsOfAsync(this.scopeResolver.User, cancellationToken));
 
         var window = await this.SearchWindowAsync(request, cancellationToken);
         var matches = await this.GuardedAsync(window.Matches, cancellationToken);
@@ -207,7 +208,7 @@ public sealed class MailboxSearchReader
         ArgumentNullException.ThrowIfNull(request);
 
         var queryText = EmailSearchQueryText.Create(request.QueryText);
-        var selection = this.ReadableSelection(request);
+        var selection = await this.ReadableSelectionAsync(request, cancellationToken);
         var resultLimit = EmailSearchResultLimit.FromRequested(request.ResultLimit);
 
         // Every filter has been validated by this point, so a deployment that serves no account answers the same
@@ -281,7 +282,7 @@ public sealed class MailboxSearchReader
         IReadOnlyList<EmailSearchMatch> matches,
         CancellationToken cancellationToken)
     {
-        if (!this.egressGuard.IsActive)
+        if (!await this.egressGuard.IsActiveAsync(cancellationToken))
         {
             return matches;
         }
@@ -392,11 +393,12 @@ public sealed class MailboxSearchReader
     /// time. <see cref="SearchEmailsRequest.ResolvedScope" /> says why that is the narrower answer as well as the
     /// cheaper one, and why nothing outside this assembly can set it.
     /// </remarks>
-    private MailboxEmailSelection ReadableSelection(SearchEmailsRequest request) => MailboxEmailSelection.Create(
-        request.ResolvedScope ?? this.scopeResolver.ReadableScope(
+    private async Task<MailboxEmailSelection> ReadableSelectionAsync(SearchEmailsRequest request, CancellationToken cancellationToken) => MailboxEmailSelection.Create(
+        request.ResolvedScope ?? await this.scopeResolver.ReadableScopeAsync(
             request.Accounts,
             request.Folders,
-            request.IncludeJunkMail ? JunkMailInclusion.Included : JunkMailInclusion.Excluded),
+            request.IncludeJunkMail ? JunkMailInclusion.Included : JunkMailInclusion.Excluded,
+            cancellationToken),
         request.SenderAddress,
         request.RecipientAddress,
         request.SubjectFragment,

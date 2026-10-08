@@ -31,13 +31,13 @@ public sealed class DerivedWorkGateTests
     private static readonly MailFolderAlias Archive = MailFolderAlias.Create("ARCHIVE");
 
     [Fact]
-    public void Admit_ClassificationSwitchedOff_AdmitsMailInTheJunkFolderItself()
+    public async Task Admit_ClassificationSwitchedOff_AdmitsMailInTheJunkFolderItself()
     {
         // Arrange
         var gate = Gate(SpamClassificationSettings.Disabled, StubJunkMailFolderCatalog.Naming(new MailFolderIdentity(Primary, Junk)));
 
         // Act
-        var admission = gate.Admit(Occurrence(Junk, Now, verdict: SpamVerdict.Spam));
+        var admission = await AdmitAsync(gate, Occurrence(Junk, Now, verdict: SpamVerdict.Spam));
 
         // Assert
         Assert.Equal(DerivedWorkAdmission.Admitted, admission);
@@ -46,13 +46,13 @@ public sealed class DerivedWorkGateTests
 
     /// <summary>Mail already sitting in the junk folder is junk with nothing having had to score it.</summary>
     [Fact]
-    public void Admit_AnUnclassifiedOccurrenceInTheJunkFolder_IsWithheld()
+    public async Task Admit_AnUnclassifiedOccurrenceInTheJunkFolder_IsWithheld()
     {
         // Arrange
         var gate = Gate(Enabled(Inbox), StubJunkMailFolderCatalog.Naming(new MailFolderIdentity(Primary, Junk)));
 
         // Act
-        var admission = gate.Admit(Occurrence(Junk, Now, verdict: null));
+        var admission = await AdmitAsync(gate, Occurrence(Junk, Now, verdict: null));
 
         // Assert
         Assert.Equal(DerivedWorkAdmission.WithheldAsJunk, admission);
@@ -68,13 +68,13 @@ public sealed class DerivedWorkGateTests
     [Theory]
     [InlineData(SpamVerdict.NotSpam)]
     [InlineData(SpamVerdict.Undetermined)]
-    public void Admit_AnOccurrenceInTheJunkFolderScoredAsAnythingElse_IsStillWithheld(SpamVerdict verdict)
+    public async Task Admit_AnOccurrenceInTheJunkFolderScoredAsAnythingElse_IsStillWithheld(SpamVerdict verdict)
     {
         // Arrange
         var gate = Gate(Enabled(Junk), StubJunkMailFolderCatalog.Naming(new MailFolderIdentity(Primary, Junk)));
 
         // Act
-        var admission = gate.Admit(Occurrence(Junk, Now, verdict));
+        var admission = await AdmitAsync(gate, Occurrence(Junk, Now, verdict));
 
         // Assert
         Assert.Equal(DerivedWorkAdmission.WithheldAsJunk, admission);
@@ -83,13 +83,13 @@ public sealed class DerivedWorkGateTests
 
     /// <summary>An alias is unique inside an account and nowhere else, so one account's junk folder is not another's.</summary>
     [Fact]
-    public void Admit_AnotherAccountsFolderOfTheSameName_IsNotWithheldAsJunk()
+    public async Task Admit_AnotherAccountsFolderOfTheSameName_IsNotWithheldAsJunk()
     {
         // Arrange
         var gate = Gate(Enabled(Junk), StubJunkMailFolderCatalog.Naming(new MailFolderIdentity(Secondary, Junk)));
 
         // Act
-        var admission = gate.Admit(Occurrence(Junk, Now, verdict: SpamVerdict.NotSpam));
+        var admission = await AdmitAsync(gate, Occurrence(Junk, Now, verdict: SpamVerdict.NotSpam));
 
         // Assert
         Assert.Equal(DerivedWorkAdmission.Admitted, admission);
@@ -102,7 +102,7 @@ public sealed class DerivedWorkGateTests
     /// user switched classification off, and its chunking, embedding, and rule evaluation would stop for good.
     /// </remarks>
     [Fact]
-    public void Admit_MailOfAnAccountThatDoesNotClassify_IsAdmittedWhateverWasRecordedAboutIt()
+    public async Task Admit_MailOfAnAccountThatDoesNotClassify_IsAdmittedWhateverWasRecordedAboutIt()
     {
         // Arrange
         var gate = Gate(
@@ -111,7 +111,7 @@ public sealed class DerivedWorkGateTests
             Secondary);
 
         // Act
-        var admission = gate.Admit(Occurrence(Junk, Now, verdict: SpamVerdict.Spam));
+        var admission = await AdmitAsync(gate, Occurrence(Junk, Now, verdict: SpamVerdict.Spam));
 
         // Assert
         Assert.Equal(DerivedWorkAdmission.Admitted, admission);
@@ -120,13 +120,13 @@ public sealed class DerivedWorkGateTests
 
     /// <summary>A verdict withholds wherever the message sits, which is what an operator who scores without filing gets.</summary>
     [Fact]
-    public void Admit_AnOccurrenceScoredAsSpamAndNeverFiled_IsWithheld()
+    public async Task Admit_AnOccurrenceScoredAsSpamAndNeverFiled_IsWithheld()
     {
         // Arrange
         var gate = Gate(Enabled(Inbox), StubJunkMailFolderCatalog.None);
 
         // Act
-        var admission = gate.Admit(Occurrence(Inbox, Now, SpamVerdict.Spam));
+        var admission = await AdmitAsync(gate, Occurrence(Inbox, Now, SpamVerdict.Spam));
 
         // Assert
         Assert.Equal(DerivedWorkAdmission.WithheldAsJunk, admission);
@@ -135,26 +135,26 @@ public sealed class DerivedWorkGateTests
     [Theory]
     [InlineData(SpamVerdict.NotSpam)]
     [InlineData(SpamVerdict.Undetermined)]
-    public void Admit_AVerdictThatIsNotSpam_Admits(SpamVerdict verdict)
+    public async Task Admit_AVerdictThatIsNotSpam_Admits(SpamVerdict verdict)
     {
         // Arrange
         var gate = Gate(Enabled(Inbox), StubJunkMailFolderCatalog.None);
 
         // Act
-        var admission = gate.Admit(Occurrence(Inbox, Now, verdict));
+        var admission = await AdmitAsync(gate, Occurrence(Inbox, Now, verdict));
 
         // Assert
         Assert.Equal(DerivedWorkAdmission.Admitted, admission);
     }
 
     [Fact]
-    public void Admit_AnOccurrenceInsideTheScopeStillWithinItsWait_IsAwaitingClassification()
+    public async Task Admit_AnOccurrenceInsideTheScopeStillWithinItsWait_IsAwaitingClassification()
     {
         // Arrange
         var gate = Gate(Enabled(Inbox), StubJunkMailFolderCatalog.None);
 
         // Act
-        var admission = gate.Admit(Occurrence(Inbox, Now - Wait + TimeSpan.FromSeconds(1), verdict: null));
+        var admission = await AdmitAsync(gate, Occurrence(Inbox, Now - Wait + TimeSpan.FromSeconds(1), verdict: null));
 
         // Assert
         Assert.Equal(DerivedWorkAdmission.AwaitingClassification, admission);
@@ -163,13 +163,13 @@ public sealed class DerivedWorkGateTests
 
     /// <summary>The failure mode the gate must not have: a wedged scanner delays the index rather than stopping it.</summary>
     [Fact]
-    public void Admit_AnOccurrenceThatHasWaitedLongerThanTheBound_IsReleased()
+    public async Task Admit_AnOccurrenceThatHasWaitedLongerThanTheBound_IsReleased()
     {
         // Arrange
         var gate = Gate(Enabled(Inbox), StubJunkMailFolderCatalog.None);
 
         // Act
-        var admission = gate.Admit(Occurrence(Inbox, Now - Wait, verdict: null));
+        var admission = await AdmitAsync(gate, Occurrence(Inbox, Now - Wait, verdict: null));
 
         // Assert
         Assert.Equal(DerivedWorkAdmission.ReleasedAfterWaiting, admission);
@@ -178,13 +178,13 @@ public sealed class DerivedWorkGateTests
 
     /// <summary>Waiting and never being classifiable are separate answers, because they have separate remedies.</summary>
     [Fact]
-    public void Admit_AnOccurrenceWhosePayloadWasNeverStored_IsReleasedAsUnclassifiableWithoutWaiting()
+    public async Task Admit_AnOccurrenceWhosePayloadWasNeverStored_IsReleasedAsUnclassifiableWithoutWaiting()
     {
         // Arrange
         var gate = Gate(Enabled(Inbox), StubJunkMailFolderCatalog.None);
 
         // Act
-        var admission = gate.Admit(new DerivedWorkCandidate(
+        var admission = await AdmitAsync(gate, new DerivedWorkCandidate(
             Primary,
             Inbox,
             Now,
@@ -198,13 +198,13 @@ public sealed class DerivedWorkGateTests
 
     /// <summary>A payload a later run will fetch is still expected, so the message waits rather than being released now.</summary>
     [Fact]
-    public void Admit_AnOccurrenceWhosePayloadIsStillComing_KeepsWaiting()
+    public async Task Admit_AnOccurrenceWhosePayloadIsStillComing_KeepsWaiting()
     {
         // Arrange
         var gate = Gate(Enabled(Inbox), StubJunkMailFolderCatalog.None);
 
         // Act
-        var admission = gate.Admit(new DerivedWorkCandidate(
+        var admission = await AdmitAsync(gate, new DerivedWorkCandidate(
             Primary,
             Inbox,
             Now,
@@ -217,26 +217,26 @@ public sealed class DerivedWorkGateTests
 
     /// <summary>Nothing is ever going to score mail outside the scope, so waiting on a verdict for it would never end.</summary>
     [Fact]
-    public void Admit_AnUnclassifiedOccurrenceOutsideTheClassifiedScope_IsAdmittedWithoutWaiting()
+    public async Task Admit_AnUnclassifiedOccurrenceOutsideTheClassifiedScope_IsAdmittedWithoutWaiting()
     {
         // Arrange
         var gate = Gate(Enabled(Inbox), StubJunkMailFolderCatalog.None);
 
         // Act
-        var admission = gate.Admit(Occurrence(Archive, Now, verdict: null));
+        var admission = await AdmitAsync(gate, Occurrence(Archive, Now, verdict: null));
 
         // Assert
         Assert.Equal(DerivedWorkAdmission.Admitted, admission);
     }
 
     [Fact]
-    public void ReadTerms_ClassificationSwitchedOn_MeasuresTheWaitFromTheCurrentInstant()
+    public async Task ReadTermsAsync_ClassificationSwitchedOn_MeasuresTheWaitFromTheCurrentInstant()
     {
         // Arrange
         var gate = Gate(Enabled(Inbox), StubJunkMailFolderCatalog.Naming(new MailFolderIdentity(Primary, Junk)));
 
         // Act
-        var terms = gate.ReadTerms();
+        var terms = await gate.ReadTermsAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(terms.IsApplied);
@@ -247,26 +247,43 @@ public sealed class DerivedWorkGateTests
     }
 
     [Fact]
-    public void ReadTerms_ClassificationSwitchedOff_IsNotApplied()
+    public async Task ReadTermsAsync_ClassificationSwitchedOff_IsNotApplied()
     {
         // Arrange
         var gate = Gate(SpamClassificationSettings.Disabled, StubJunkMailFolderCatalog.None);
 
         // Act
-        var terms = gate.ReadTerms();
+        var terms = await gate.ReadTermsAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.False(terms.IsApplied);
     }
 
+    /// <summary>The junk folders of an account whose user does not classify are ordinary folders, so the terms never name them.</summary>
     [Fact]
-    public void Admit_NoCandidate_Throws()
+    public async Task ReadTermsAsync_AJunkFolderOfAnAccountThatDoesNotClassify_IsLeftOutOfTheTerms()
     {
         // Arrange
-        var gate = Gate(Enabled(Inbox), StubJunkMailFolderCatalog.None);
+        var gate = Gate(
+            Enabled(Inbox),
+            StubJunkMailFolderCatalog.Naming(new MailFolderIdentity(Primary, Junk), new MailFolderIdentity(Secondary, Junk)),
+            Primary);
+
+        // Act
+        var terms = await gate.ReadTermsAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal([new MailFolderIdentity(Primary, Junk)], terms.JunkFolders);
+    }
+
+    [Fact]
+    public async Task Admit_NoCandidate_Throws()
+    {
+        // Arrange
+        var terms = await Gate(Enabled(Inbox), StubJunkMailFolderCatalog.None).ReadTermsAsync(TestContext.Current.CancellationToken);
 
         // Act, Assert
-        Assert.Throws<ArgumentNullException>(() => gate.Admit(null!));
+        Assert.Throws<ArgumentNullException>(() => DerivedWorkGate.Admit(terms, null!));
     }
 
     /// <summary>Only the two withholding answers stop derived work, and every reason for releasing a message is one.</summary>
@@ -313,6 +330,10 @@ public sealed class DerivedWorkGateTests
             new StubSpamClassificationSettingsReader(
                 settings,
                 classifyingAccounts.Length > 0 ? classifyingAccounts : [Primary, Secondary]),
-            junkFolders,
+            new StubDeploymentMailFolders(StubMailFolderParticipation.Nothing, junkFolders),
             new FakeTimeProvider(Now));
+
+    /// <summary>Decides one occurrence under the terms the gate reads now, which is how a run that meets one message at a time decides it.</summary>
+    private static async Task<DerivedWorkAdmission> AdmitAsync(DerivedWorkGate gate, DerivedWorkCandidate candidate) =>
+        DerivedWorkGate.Admit(await gate.ReadTermsAsync(TestContext.Current.CancellationToken), candidate);
 }

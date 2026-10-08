@@ -126,7 +126,7 @@ public sealed class DiscoveryCompositionAgentTests
         using var provider = ScriptedTransport.Answering(Completion(
             """{\"answer\": \"They accepted.\", \"sources\": [\"s1\"]}"""));
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
-        using var actingFor = egress.ActingForUser();
+        using var actingFor = egress.Guard.ActingFor(await egress.ReadUserPostureAsync(TestContext.Current.CancellationToken));
         var composer = provider.ComposerOver(egressGuard: egress.Guard);
 
         // Act
@@ -150,7 +150,7 @@ public sealed class DiscoveryCompositionAgentTests
         using var provider = ScriptedTransport.Answering(Completion(
             """{\"answer\": \"They accepted.\", \"sources\": [\"s1\"]}"""));
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
-        using var actingFor = egress.ActingForUser();
+        using var actingFor = egress.Guard.ActingFor(await egress.ReadUserPostureAsync(TestContext.Current.CancellationToken));
         var composer = provider.ComposerOver(egressGuard: egress.Guard);
 
         // Act
@@ -197,7 +197,7 @@ public sealed class DiscoveryCompositionAgentTests
         using var provider = ScriptedTransport.Answering(Completion(
             """{\"answer\": \"They accepted.\", \"sources\": [\"s1\"]}"""));
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
-        using var actingFor = egress.ActingForUser();
+        using var actingFor = egress.Guard.ActingFor(await egress.ReadUserPostureAsync(TestContext.Current.CancellationToken));
         var composer = provider.ComposerOver(egressGuard: egress.Guard);
 
         // Act

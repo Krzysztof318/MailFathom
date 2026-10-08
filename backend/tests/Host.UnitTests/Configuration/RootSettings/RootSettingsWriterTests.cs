@@ -7,7 +7,6 @@ using MailFathom.Application.Configuration;
 using MailFathom.Domain.Failures;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.RootSettings;
-using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.Signals;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Persistence.Settings;
@@ -601,7 +600,7 @@ public sealed class RootSettingsWriterTests
                 row,
                 row,
                 new CandidateConfigurationComposer(configuration, layer),
-                new CandidateSettingsValidator([], new ServedUsers()),
+                new CandidateSettingsValidator([], ServedMailAccountReaders.HoldingNothing()),
                 new RootSettingsReloader(layer.Provider, row, new RecordingLogger<RootSettingsReloader>()),
                 new ConfigurationChangeAnnouncements(
                     () => Task.FromResult(this.Backplane.Connect()),

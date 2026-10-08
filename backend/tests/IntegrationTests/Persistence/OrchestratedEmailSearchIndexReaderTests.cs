@@ -221,9 +221,9 @@ public sealed class OrchestratedEmailSearchIndexReaderTests(MailFathomOrchestrat
         MailboxEmailSelection? selection = null,
         EmailSearchSnippetBounds? snippetBounds = null,
         EmailSearchRetrievalMode? retrievalMode = null) => services.AsCallerInScopeAsync(
-            (scope, token) => RankedWindowAsync(
+            async (scope, token) => await RankedWindowAsync(
                 scope.GetRequiredService<IEmailSearchIndexReader>(),
-                selection ?? SeededSelection(scope),
+                selection ?? await ReadSeededSelectionAsync(scope, token),
                 queryText,
                 snippetBounds ?? EmailSearchSnippetBounds.Default,
                 token,
@@ -259,8 +259,10 @@ public sealed class OrchestratedEmailSearchIndexReaderTests(MailFathomOrchestrat
             cancellationToken);
     }
 
-    private static MailboxEmailSelection SeededSelection(IServiceProvider scope) => MailboxEmailSelection.Create(
-        OrchestratedMailboxScope.Readable(scope, [FolderAlias]),
+    private static async Task<MailboxEmailSelection> ReadSeededSelectionAsync(
+        IServiceProvider scope,
+        CancellationToken cancellationToken) => MailboxEmailSelection.Create(
+        await OrchestratedMailboxScope.ReadableAsync(scope, [FolderAlias], cancellationToken),
         senderAddress: null,
         recipientAddress: null,
         subjectFragment: null,
@@ -281,7 +283,7 @@ public sealed class OrchestratedEmailSearchIndexReaderTests(MailFathomOrchestrat
         await EnsureSeededAsync(services, binding, cancellationToken);
 
         return await services.AsCallerInScopeAsync(
-            (scope, _) => Task.FromResult(SeededSelection(scope)),
+            ReadSeededSelectionAsync,
             [],
             cancellationToken);
     }

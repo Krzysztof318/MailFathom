@@ -319,6 +319,13 @@ folder included, while another account's mail in the same walk goes on waiting o
 with it because withholding it is an ordering behind a verdict rather than a rule of its own: nothing is
 ever going to score that mail, so holding it back would hold it back forever.
 
+**Which accounts classify, and which of their folders are junk or classified, is read from the database.** Each
+account's record carries those answers in columns beside its settings document, written in the same transaction as the
+document, so the gate asks one query per question rather than reading every account's settings. It asks them once per
+unit of work — one synchronization run, one pass of a walk — and judges every message that unit reaches by that one
+reading, so an account switched on halfway through a run is gated from the next run rather than from the next message.
+[The account records](../architecture/stored-email-schema.md#what-every-account-is-asked-about-at-once) hold the columns.
+
 ### What is decided about one message
 
 | Answer | When | What follows |

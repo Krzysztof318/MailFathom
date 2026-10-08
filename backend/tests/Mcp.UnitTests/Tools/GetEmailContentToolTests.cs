@@ -1379,7 +1379,7 @@ public sealed class GetEmailContentToolTests
             new MailboxScopeResolver(
                 new StubMailAccountCatalog(ServedAccountId),
                 MappedInbox,
-                StubJunkMailFolderCatalog.None,
+                StubDeploymentMailFolders.Of(MappedInbox),
                 StubMailFolderMappings.ResolvingNothing),
             linkIssuer ?? new StubAttachmentDownloadLinkIssuer(),
             SensitiveContentEgressGuards.Inactive(),

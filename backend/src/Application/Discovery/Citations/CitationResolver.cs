@@ -183,12 +183,13 @@ public sealed class CitationResolver
         Dictionary<(StoredEmailId Email, EmailChunkId Fragment), CitedFragment> passages,
         CancellationToken cancellationToken)
     {
-        if (!this.egressGuard.IsActive)
+        if (!await this.egressGuard.IsActiveAsync(cancellationToken))
         {
             return passages;
         }
 
-        using var actingFor = this.egressGuard.ActingFor(this.scopeResolver.User);
+        using var actingFor = this.egressGuard.ActingFor(
+            await this.egressGuard.ReadPostureAcrossAccountsOfAsync(this.scopeResolver.User, cancellationToken));
         using var scan = this.egressGuard.BeginGuardedOperation(
             SensitiveContentEgressPoint.ClientCitationResolution,
             cancellationToken);

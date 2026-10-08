@@ -44,7 +44,9 @@ internal sealed class StoredEmailExtractionBackfillStore(
     /// </para>
     /// </remarks>
     private IReadOnlyList<MailAccountSensitiveContentPosture> RebuiltTowards =>
-        field ??= options.RebuildsStaleDerivedData && derivationGuard.IsActive ? derivationGuard.Current : [];
+        field ??= options.RebuildsStaleDerivedData && derivationGuard.Current.Any(account => account.Posture.IsActive)
+            ? derivationGuard.Current
+            : [];
 
     /// <summary>Gets what mail whose account the roster no longer names is re-derived towards, and nothing where no rebuild runs.</summary>
     /// <remarks>
@@ -506,7 +508,7 @@ internal sealed class StoredEmailExtractionBackfillStore(
         StoredEmailId storedEmailId,
         CancellationToken cancellationToken)
     {
-        var terms = derivedWorkGate.ReadTerms();
+        var terms = await derivedWorkGate.ReadTermsAsync(cancellationToken);
         // Written inline rather than through MailAwaitingRelocation's and MailAwaitingRuleEvaluation's expressions,
         // because both are one branch of a larger predicate here: the two orderings hold a first cut back together, and
         // a re-cut answers past both of them.

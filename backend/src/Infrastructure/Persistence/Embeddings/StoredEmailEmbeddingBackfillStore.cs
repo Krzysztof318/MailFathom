@@ -9,6 +9,7 @@ using MailFathom.Application.Persistence;
 using MailFathom.Application.Spam.Gating;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
 using MailFathom.Infrastructure.Persistence.Emails;
 using MailFathom.Infrastructure.Persistence.Entities;
@@ -24,7 +25,7 @@ internal sealed class StoredEmailEmbeddingBackfillStore(
     MailFathomDbContext dbContext,
     TimeProvider timeProvider,
     EmailChunkWriter chunkWriter,
-    IMailFolderParticipationReader folderParticipation,
+    IDeploymentMailFolders deploymentFolders,
     DerivedWorkGate derivedWorkGate)
     : IStoredEmailEmbeddingBackfillStore
 {
@@ -41,10 +42,18 @@ internal sealed class StoredEmailEmbeddingBackfillStore(
     }
 
     /// <inheritdoc />
-    public Task<int> CountEmailsAwaitingEmbeddingAsync(
+    public async Task<int> CountEmailsAwaitingEmbeddingAsync(
         EmbeddingProfileId profileId,
-        CancellationToken cancellationToken) =>
-        this.EmailsAwaitingEmbedding(profileId.Value, derivedWorkGate.ReadTerms()).CountAsync(cancellationToken);
+        CancellationToken cancellationToken)
+    {
+        var terms = await derivedWorkGate.ReadTermsAsync(cancellationToken);
+        var foldersGeneratingEmbeddings = await deploymentFolders.ReadAsync(
+            MailFolderSelection.GeneratingEmbeddings,
+            cancellationToken);
+
+        return await this.EmailsAwaitingEmbedding(profileId.Value, foldersGeneratingEmbeddings, terms)
+            .CountAsync(cancellationToken);
+    }
 
     /// <inheritdoc />
     /// <remarks>
@@ -65,8 +74,11 @@ internal sealed class StoredEmailEmbeddingBackfillStore(
         // One snapshot for both halves. The predicate narrows the batch and the answer below names which of the gate's
         // decisions admitted each row, so a second reading taken microseconds later would let the query select a row
         // the answer then reported as still waiting.
-        var terms = derivedWorkGate.ReadTerms();
-        var candidates = await this.EmailsAwaitingEmbedding(profileId.Value, terms)
+        var terms = await derivedWorkGate.ReadTermsAsync(cancellationToken);
+        var foldersGeneratingEmbeddings = await deploymentFolders.ReadAsync(
+            MailFolderSelection.GeneratingEmbeddings,
+            cancellationToken);
+        var candidates = await this.EmailsAwaitingEmbedding(profileId.Value, foldersGeneratingEmbeddings, terms)
             .Where(email => resumeAfterId == null || email.Id > resumeAfterId)
             .OrderBy(email => email.Id)
             .Take(batchSize)
@@ -189,6 +201,7 @@ internal sealed class StoredEmailEmbeddingBackfillStore(
     /// </remarks>
     private IQueryable<StoredEmailEntity> EmailsAwaitingEmbedding(
         Guid profileId,
+        IReadOnlyList<MailFolderIdentity> foldersGeneratingEmbeddings,
         DerivedWorkAdmissionTerms terms) => DerivedWorkAdmittedEmails.Admitting(
         AccountScopedMailFolders.Admitting(
             dbContext.StoredEmails
@@ -213,7 +226,7 @@ internal sealed class StoredEmailEmbeddingBackfillStore(
                             && mutation.Stage != MailboxMutationStage.Completed
                             && mutation.Stage != MailboxMutationStage.Abandoned
                             && mutation.Stage != MailboxMutationStage.Cancelled))),
-            folderParticipation.FoldersGeneratingEmbeddings),
+            foldersGeneratingEmbeddings),
         terms);
 
     /// <summary>One outstanding message, as the walk's projection returns it.</summary>

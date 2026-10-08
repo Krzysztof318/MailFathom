@@ -169,7 +169,7 @@ public sealed class MailAnsweringAgentTests
     {
         // Arrange
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
-        using var actingFor = egress.ActingForUser();
+        using var actingFor = egress.Guard.ActingFor(await egress.ReadUserPostureAsync(TestContext.Current.CancellationToken));
         using var provider = ScriptedTransport.Answering(Completion("It is rotated now."));
         var agent = provider.AgentOver(new RecordingEmailKnowledgeSearch(), egressGuard: egress.Guard);
 
@@ -222,7 +222,7 @@ public sealed class MailAnsweringAgentTests
     {
         // Arrange
         using var egress = ScanningSensitiveContentEgress.Unavailable(TimeProvider.System);
-        using var actingFor = egress.ActingForUser();
+        using var actingFor = egress.Guard.ActingFor(await egress.ReadUserPostureAsync(TestContext.Current.CancellationToken));
         using var provider = ScriptedTransport.Answering(Completion("never reached"));
         var agent = provider.AgentOver(new RecordingEmailKnowledgeSearch(), egressGuard: egress.Guard);
 

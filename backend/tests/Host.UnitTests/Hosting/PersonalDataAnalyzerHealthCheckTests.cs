@@ -248,7 +248,7 @@ public sealed class PersonalDataAnalyzerHealthCheckTests
 
         var postures = Substitute.For<ISensitiveContentPostures>();
         var scanned = true;
-        postures.RunsForAnyAccount(SensitiveContentScannerKind.Pii).Returns(_ => scanned);
+        postures.RunsForAnyAccountAsync(SensitiveContentScannerKind.Pii, Arg.Any<CancellationToken>()).Returns(_ => scanned);
 
         var check = new PersonalDataAnalyzerHealthCheck(
             probe,
@@ -322,7 +322,7 @@ public sealed class PersonalDataAnalyzerHealthCheckTests
     private static ISensitiveContentPostures ScanningForPersonalData()
     {
         var postures = Substitute.For<ISensitiveContentPostures>();
-        postures.RunsForAnyAccount(SensitiveContentScannerKind.Pii).Returns(true);
+        postures.RunsForAnyAccountAsync(SensitiveContentScannerKind.Pii, Arg.Any<CancellationToken>()).Returns(true);
 
         return postures;
     }

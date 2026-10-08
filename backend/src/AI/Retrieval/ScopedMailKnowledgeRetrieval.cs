@@ -310,7 +310,7 @@ internal sealed class ScopedMailKnowledgeRetrieval
         IReadOnlyList<EmailKnowledgePassage> passages,
         CancellationToken cancellationToken)
     {
-        if (!this.egressGuard.IsActive)
+        if (!await this.egressGuard.IsActiveAsync(cancellationToken))
         {
             return passages;
         }

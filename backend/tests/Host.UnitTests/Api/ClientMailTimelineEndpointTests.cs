@@ -536,7 +536,7 @@ public sealed class ClientMailTimelineEndpointTests
             new MailboxScopeResolver(
                 catalog,
                 StubMailFolderParticipation.Nothing,
-                StubJunkMailFolderCatalog.None,
+                StubDeploymentMailFolders.None,
                 StubMailFolderMappings.ResolvingNothing),
             SensitiveContentEgressGuards.Inactive(),
             readTelemetry,

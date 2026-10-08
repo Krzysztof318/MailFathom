@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Folders;
 using MailFathom.Application.Spam;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
@@ -35,16 +36,16 @@ namespace MailFathom.Host.Configuration.Spam;
 /// </remarks>
 internal sealed class ConfiguredSpamClassificationSettingsReader(
     IOptionsMonitor<SpamClassificationOptions> deploymentOptions,
-    MailSynchronizationOptions synchronizationOptions)
+    MailSynchronizationOptions synchronizationOptions,
+    IDeploymentMailFolders deploymentFolders)
     : ISpamClassificationSettingsReader
 {
     /// <inheritdoc />
     /// <remarks>
     /// <para>
-    /// Composed from the same per-account reading <see cref="SettingsFor(MailAccountId)" /> answers with, so the walk
-    /// that narrows a table and the arrival that asks about one message cannot disagree about which mail is classified.
-    /// A deployment whose roster is not settled yet classifies nothing, which is the answer every path takes before the
-    /// startup gate has run.
+    /// Read from the settings each account's document was read into when it was written, which are composed by the same
+    /// <see cref="Compose" /> that <see cref="SettingsFor(MailAccountId)" /> answers with, so the walk that narrows a
+    /// table and the arrival that asks about one message cannot disagree about which mail is classified.
     /// </para>
     /// <para>
     /// The deployment's section supplies the wait every classification is bounded by and nothing about which mail is
@@ -52,33 +53,18 @@ internal sealed class ConfiguredSpamClassificationSettingsReader(
     /// reload landing part way through cannot bound one account's walk by the old value and the next by the new one.
     /// </para>
     /// </remarks>
-    public SpamClassificationScope ScopeInForce
+    public async Task<SpamClassificationScope> ReadScopeInForceAsync(CancellationToken cancellationToken)
     {
-        get
-        {
-            if (synchronizationOptions.ServedUsers is null)
-            {
-                return SpamClassificationScope.None;
-            }
+        var deployment = deploymentOptions.CurrentValue;
+        var ofClassifyingAccounts = await deploymentFolders.ReadAsync(
+            MailFolderSelection.OfAccountsClassifyingSpam,
+            cancellationToken);
+        var classified = await deploymentFolders.ReadAsync(MailFolderSelection.ClassifiedForSpam, cancellationToken);
 
-            var deployment = deploymentOptions.CurrentValue;
-
-            // Filtered before the folders are composed, because this property is read once per stored message and a
-            // folder graph built for an account that classifies nothing is allocated and then discarded.
-            var classifying = this.DeclaredAccounts()
-                .Select(account => new { Account = account, Settings = Compose(account) })
-                .Where(entry => entry.Settings.IsEnabled)
-                .Select(entry => new { entry.Settings, Folders = ConfiguredMailFolders.Of([entry.Account]).ToArray() })
-                .ToArray();
-
-            return SpamClassificationScope.Create(
-                classifying.SelectMany(entry => entry.Folders
-                    .Select(static folder => folder.Identity.AccountId)),
-                classifying.SelectMany(entry => entry.Folders
-                    .Where(folder => entry.Settings.Covers(folder.Identity.Alias))
-                    .Select(static folder => folder.Identity)),
-                deployment.ClassificationWait);
-        }
+        return SpamClassificationScope.Create(
+            ofClassifyingAccounts.Select(static folder => folder.AccountId),
+            classified,
+            deployment.ClassificationWait);
     }
 
     /// <inheritdoc />
@@ -88,7 +74,9 @@ internal sealed class ConfiguredSpamClassificationSettingsReader(
             : SpamClassificationSettings.Disabled;
 
     /// <summary>Builds one account's settings out of the block its own declaration carries.</summary>
-    private static SpamClassificationSettings Compose(MailSynchronizationAccountOptions account)
+    /// <param name="account">The account's bound declaration.</param>
+    /// <returns>The settings that account's mail is classified under.</returns>
+    internal static SpamClassificationSettings Compose(MailSynchronizationAccountOptions account)
     {
         var record = account.SpamClassification ?? new MailAccountSpamClassificationOptions();
 
@@ -114,14 +102,4 @@ internal sealed class ConfiguredSpamClassificationSettingsReader(
                 .Where(static alias => !string.IsNullOrWhiteSpace(alias))
                 .Select(MailFolderAlias.Create)
             : ConfiguredMailFolders.InboxAliasesOf([account]);
-
-    /// <summary>Reads every account this deployment serves, one entry per mailbox however many users hold it.</summary>
-    /// <remarks>
-    /// A mailbox assigned to two people is one record with one posture, so classifying it twice would file one message
-    /// under two verdicts and narrow the walk by the same folders twice.
-    /// </remarks>
-    private IEnumerable<MailSynchronizationAccountOptions> DeclaredAccounts() =>
-        synchronizationOptions.DeclaredAccounts
-            .Where(static account => MailSynchronizationOptions.TryReadAccountId(account.AccountId) is not null)
-            .DistinctBy(static account => MailSynchronizationOptions.TryReadAccountId(account.AccountId), StringComparer.Ordinal);
 }

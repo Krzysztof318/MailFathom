@@ -89,6 +89,7 @@ using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Mail.OAuth;
 using MailFathom.Infrastructure.ObjectStorage;
 using MailFathom.Infrastructure.Persistence.Connections;
+using MailFathom.Infrastructure.Persistence.Users.AccountSettings;
 using MailFathom.Infrastructure.Rules;
 using MailFathom.Infrastructure.Secrets.Resolution;
 using MailFathom.Mcp;
@@ -395,7 +396,8 @@ internal static class HostComposition
             provider.GetServices<ISensitiveContentScanner>,
             provider.GetRequiredService<TimeProvider>(),
             provider.GetRequiredService<SensitiveContentScanConcurrency>(),
-            provider.GetRequiredService<ServedUsers>()));
+            provider.GetRequiredService<ServedUsers>(),
+            provider.GetRequiredService<IServedMailAccountReader>()));
     }
 
     /// <summary>Registers spam classification, and reports whether a scanner was declared behind it.</summary>
@@ -471,16 +473,15 @@ internal static class HostComposition
         // silence. That default is the wrong behavior here above everywhere else: a user who mistypes a fact name would
         // get an instance that goes on acting on mail under the previous rules while their file says otherwise. A refused
         // candidate is logged and the last proven rule set stays in effect.
-        // The accounts a scope may name are read from the published synchronization snapshot rather than captured here, so
-        // an account added at run time is one a rule can be scoped to without restarting the process.
+        // The accounts a scope may name are read from the account records rather than captured here, so an account added
+        // at run time is one a rule can be scoped to without restarting the process.
         builder.Services.AddSingleton(provider => new ValidatedSettingsSnapshot<MailRulesOptions>(
             provider.GetRequiredService<IOptionsMonitor<MailRulesOptions>>(),
-            (candidate, _) => Task.FromResult(
-                MailRuleDeclarationRules.FindDeclarationErrors(
-                    candidate,
-                    mailRuleConditionCompiler,
-                    DeclaredMailAccounts.ReadFrom(
-                        provider.GetRequiredService<ISettingsSnapshot<MailSynchronizationOptions>>().Current))),
+            async (candidate, cancellationToken) => MailRuleDeclarationRules.FindDeclarationErrors(
+                candidate,
+                mailRuleConditionCompiler,
+                DeclaredMailAccounts.ReadFrom(
+                    await provider.GetRequiredService<IServedMailAccountReader>().ReadServedRecordsAsync(cancellationToken))),
             MailRulesOptions.SectionName,
             provider.GetRequiredService<ILogger<ValidatedSettingsSnapshot<MailRulesOptions>>>()));
         builder.Services.AddSingleton<ISettingsSnapshot<MailRulesOptions>>(
@@ -558,7 +559,8 @@ internal static class HostComposition
         // accounts and the assignments into it are one reading of one roster.
         builder.Services.AddScoped(provider => new ConfiguredMailAccountCatalog(
             provider.GetRequiredService<MailSynchronizationOptions>(),
-            provider.GetRequiredService<ServedUsers>()));
+            provider.GetRequiredService<ServedUsers>(),
+            provider.GetRequiredService<IServedMailAccountReader>()));
         builder.Services.AddScoped<IDeploymentMailAccountCatalog>(provider =>
             provider.GetRequiredService<ConfiguredMailAccountCatalog>());
         builder.Services.AddScoped<IMailAccountAssignments>(provider =>

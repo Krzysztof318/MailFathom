@@ -328,10 +328,12 @@ public sealed class ClientReplyDraftingEndpointTests
         catalog.AssignedAccounts.Returns([SyntheticServedAccount.Of(Account)]);
         catalog.User.Returns(SyntheticUser.Deployment);
 
+        var participation = StubMailFolderParticipation.Mapping([new MailFolderIdentity(Account, MailFolderAlias.Create("inbox"))]);
+
         var scopeResolver = new MailboxScopeResolver(
             catalog,
-            StubMailFolderParticipation.Mapping([new MailFolderIdentity(Account, MailFolderAlias.Create("inbox"))]),
-            StubJunkMailFolderCatalog.None,
+            participation,
+            StubDeploymentMailFolders.Of(participation),
             StubMailFolderMappings.ResolvingNothing);
 
         return new MailReplyDrafting(

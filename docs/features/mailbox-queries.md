@@ -215,6 +215,13 @@ tool may read a folder; the junk exclusion is a default a caller may lift. The t
 their union, so asking for junk can never reveal a folder the operator withheld — a folder that is both is still outside
 every read.
 
+Both sets are read from the account records when a read resolves its scope, narrowed to the accounts that read reaches,
+and the read keeps them for as long as it runs: a conversation assembled from several threads, or a page of a timeline,
+is judged by the one reading its scope was resolved with. They are held in the columns
+[every account is asked about at once](../architecture/stored-email-schema.md#what-every-account-is-asked-about-at-once),
+written with the account's settings, so a folder switched out of tool visibility leaves the next read rather than the
+next restart.
+
 The override is the caller's own filter rather than configuration, so it **does** take part in the cursor's fingerprint:
 including junk adds rows in the middle of an ordering, and a walk resumed under the other answer would skip or repeat.
 The junk folders themselves stay out of the fingerprint, exactly as the withheld folders above do, so mapping one does

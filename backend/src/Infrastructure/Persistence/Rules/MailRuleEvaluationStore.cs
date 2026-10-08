@@ -54,7 +54,7 @@ namespace MailFathom.Infrastructure.Persistence.Rules;
 [RequiresIntegrationCoverage]
 internal sealed class MailRuleEvaluationStore(
     MailFathomDbContext dbContext,
-    IMailFolderParticipationReader folderParticipation,
+    IDeploymentMailFolders deploymentFolders,
     DerivedWorkGate derivedWorkGate) : IMailRuleEvaluationStore
 {
     /// <inheritdoc />
@@ -169,10 +169,13 @@ internal sealed class MailRuleEvaluationStore(
         // retained and refreshed by nothing, and mail of a folder configuration no longer names at all. Only an
         // admission reaches the second — no list of withheld names carries a folder nobody named — and a rule acting on
         // either would move or flag mail nothing here is still reading.
+        var synchronizedFolders = await deploymentFolders.ReadAsync(
+            MailFolderSelection.Synchronized,
+            [account],
+            cancellationToken);
+        var terms = await derivedWorkGate.ReadTermsAsync(cancellationToken);
         var candidates = await DerivedWorkAdmittedEmails
-            .Admitting(
-                AccountScopedMailFolders.Admitting(emails, folderParticipation.FoldersSynchronized),
-                derivedWorkGate.ReadTerms())
+            .Admitting(AccountScopedMailFolders.Admitting(emails, synchronizedFolders), terms)
             .AsNoTracking()
             .Where(StoredEmailTombstone.IsNotTombstoned)
             // The copies this deployment filed of its own outgoing mail. They are stored, searchable, and readable like

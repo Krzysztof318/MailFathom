@@ -16,44 +16,14 @@ namespace MailFathom.Application.Folders;
 /// than from the tools somebody remembered.
 /// </para>
 /// <para>
-/// The lists exist beside <see cref="GetParticipation" /> because a query cannot ask one folder at a time. A read
-/// narrows a table and needs the whole admitted set as a value it can put into a predicate, while a write path holds
-/// one email and asks about that email's folder; both answers come from the same configuration, so neither can drift
-/// from the other.
-/// </para>
-/// <para>
-/// Every list names what is admitted rather than what is withheld, because a set of names cannot exclude a folder nobody
-/// named. Configuration enumerates the folders MailFathom has, so anything outside it is not a folder that was left in
-/// by an exclusion that failed to mention it — it is a folder this deployment does not have.
+/// This is the answer about one folder, for a write path that holds one email and asks about that email's folder. A
+/// read narrows a table and needs the whole admitted set as a value it can put into a predicate, which
+/// <see cref="IDeploymentMailFolders" /> answers from the same settings, written in the same transaction as the
+/// account's document, so neither can drift from the other.
 /// </para>
 /// </remarks>
 public interface IMailFolderParticipationReader
 {
-    /// <summary>Gets every folder configuration names, whatever each of them is admitted to.</summary>
-    /// <remarks>
-    /// The set the three lists below are subsets of, and the only one that answers "which folders does this deployment
-    /// have". Nothing that acts on mail reads it, because acting is what the narrower lists decide; what needs it is a
-    /// surface reporting on the folders themselves, where a mapped folder nothing mirrors has to appear as exactly that
-    /// rather than be missing.
-    /// </remarks>
-    IReadOnlyList<MailFolderIdentity> FoldersMapped { get; }
-
-    /// <summary>Gets the folders whose mail this deployment mirrors, and no others.</summary>
-    /// <remarks>
-    /// It is what a pass over stored mail runs against — rule evaluation today — rather than what a synchronization run
-    /// schedules, which reads the same decision one account at a time. Switching a folder's synchronization off keeps
-    /// what it had already stored, so such a walk meets rows nothing refreshes and rows of folders configuration no
-    /// longer names at all; admitting the mirrored folders is what leaves both out, and it is one list rather than two
-    /// because a walk asking which folders it may act on is asking one question.
-    /// </remarks>
-    IReadOnlyList<MailFolderIdentity> FoldersSynchronized { get; }
-
-    /// <summary>Gets the folders an MCP tool may list, search, read, or answer from, and no others.</summary>
-    IReadOnlyList<MailFolderIdentity> FoldersVisibleToTools { get; }
-
-    /// <summary>Gets the folders whose content is cut into passages and embedded, and no others.</summary>
-    IReadOnlyList<MailFolderIdentity> FoldersGeneratingEmbeddings { get; }
-
     /// <summary>Gets what one folder takes part in.</summary>
     /// <param name="accountId">The account the folder belongs to.</param>
     /// <param name="folderAlias">MailFathom's own name for the folder.</param>

@@ -32,7 +32,7 @@ namespace MailFathom.Infrastructure.Persistence.Enrichment;
 [RequiresIntegrationCoverage]
 internal sealed class StoredEmailEnrichmentStore(
     MailFathomDbContext dbContext,
-    IMailFolderParticipationReader folderParticipation,
+    IDeploymentMailFolders deploymentFolders,
     EmailAttachmentTextBounds attachmentTextBounds,
     DerivedWorkGate derivedWorkGate)
     : IStoredEmailEnrichmentStore
@@ -62,12 +62,12 @@ internal sealed class StoredEmailEnrichmentStore(
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumPassagesPerEmail);
 
         var mailboxAccountId = account.Value;
-        var terms = derivedWorkGate.ReadTerms();
+        var terms = await derivedWorkGate.ReadTermsAsync(cancellationToken);
 
         var rows = await Selecting(
                 dbContext.StoredEmails.AsNoTracking(),
                 mailboxAccountId,
-                folderParticipation.FoldersGeneratingEmbeddings,
+                await deploymentFolders.ReadAsync(MailFolderSelection.GeneratingEmbeddings, [account], cancellationToken),
                 attachmentTextBounds.IsEnabled,
                 terms)
             .OrderBy(email => email.Id)

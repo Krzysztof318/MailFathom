@@ -13,7 +13,6 @@ using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
-using MailFathom.Application.Folders;
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Mail.Delivery;
 using MailFathom.Application.Mail.Delivery.Addressing;
@@ -87,7 +86,7 @@ internal static class AnsweredMailSubmissions
         out IAuthoredEmailComposer composer,
         EmailSummary? summary = null,
         EmailContentRendering? rendering = null,
-        IMailFolderParticipationReader? participationReader = null,
+        StubMailFolderParticipation? participationReader = null,
         AccessAuthorization? authorization = null)
     {
         var answered = summary ?? AnsweredEmail();
@@ -96,6 +95,8 @@ internal static class AnsweredMailSubmissions
             ?? AccessAuthorizations.ForCallerGranted(
                 MailFathomPermission.MailSend,
                 MailFathomPermission.MailRead);
+
+        var participation = participationReader ?? MappedInbox;
 
         var authoring = new StoredEmailResponseAuthoring(
             new StubStoredEmailSummaryReader(answered),
@@ -106,8 +107,8 @@ internal static class AnsweredMailSubmissions
             Substitute.For<IEmailContentRepairRequestStore>(),
             new MailboxScopeResolver(
                 new StubMailAccountCatalog(ServedAccountId),
-                participationReader ?? MappedInbox,
-                StubJunkMailFolderCatalog.None,
+                participation,
+                StubDeploymentMailFolders.Of(participation),
                 StubMailFolderMappings.ResolvingNothing),
             SenderIdentities(),
             new NamedRecipientResolver(Substitute.For<IContactDirectory>(), ContactBookOwnerships.For(granted)),

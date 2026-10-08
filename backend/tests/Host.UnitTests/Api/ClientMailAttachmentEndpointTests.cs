@@ -249,6 +249,9 @@ public sealed class ClientMailAttachmentEndpointTests
         var principals = Substitute.For<IAuthorizedPrincipalSource>();
         principals.Current.Returns(AuthorizedPrincipal.Caller("client-key", [MailFathomPermission.MailRead]));
 
+        var participation = StubMailFolderParticipation.Mapping(
+            new MailFolderIdentity(summary.Account, summary.FolderAlias));
+
         return new EmailAttachmentDownloadReader(
             summaryReader,
             resolvedContentStore,
@@ -258,9 +261,8 @@ public sealed class ClientMailAttachmentEndpointTests
             screen ?? ScreensNothing(),
             new MailboxScopeResolver(
                 accountCatalog,
-                StubMailFolderParticipation.Mapping(
-                    new MailFolderIdentity(summary.Account, summary.FolderAlias)),
-                StubJunkMailFolderCatalog.None,
+                participation,
+                StubDeploymentMailFolders.Of(participation),
                 StubMailFolderMappings.ResolvingNothing),
             new AccessAuthorization(principals));
     }

@@ -211,7 +211,7 @@ public sealed class AuthoredResponseDraftingTests
             new MailboxScopeResolver(
                 catalog,
                 StubMailFolderParticipation.Nothing,
-                StubJunkMailFolderCatalog.None,
+                StubDeploymentMailFolders.None,
                 StubMailFolderMappings.ResolvingNothing),
             Substitute.For<IOutgoingSenderIdentityReader>(),
             new NamedRecipientResolver(new InMemoryContactBookStore(), ContactBookOwnerships.For(granted)),
@@ -290,6 +290,8 @@ public sealed class AuthoredResponseDraftingTests
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
         catalog.AssignedAccounts.Returns([SyntheticServedAccount.Of(Account)]);
 
+        var participation = StubMailFolderParticipation.Mapping(new MailFolderIdentity(answered.Account, answered.FolderAlias));
+
         var authoring = new StoredEmailResponseAuthoring(
             summaries,
             contentStore,
@@ -298,8 +300,8 @@ public sealed class AuthoredResponseDraftingTests
             Substitute.For<IEmailContentRepairRequestStore>(),
             new MailboxScopeResolver(
                 catalog,
-                StubMailFolderParticipation.Mapping(new MailFolderIdentity(answered.Account, answered.FolderAlias)),
-                StubJunkMailFolderCatalog.None,
+                participation,
+                StubDeploymentMailFolders.Of(participation),
                 StubMailFolderMappings.ResolvingNothing),
             senderIdentities,
             new NamedRecipientResolver(new InMemoryContactBookStore(), ContactBookOwnerships.For(granted)),

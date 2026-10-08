@@ -7,6 +7,7 @@ using MailFathom.Application.Emails.ThreadStates;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Spam.Gating;
 using MailFathom.CodeCoverage;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Infrastructure.Persistence.Emails;
@@ -37,7 +38,7 @@ namespace MailFathom.Infrastructure.Persistence.ThreadStates;
 [RequiresIntegrationCoverage]
 internal sealed class StoredThreadStateReader(
     MailFathomDbContext dbContext,
-    IMailFolderParticipationReader folderParticipation,
+    IDeploymentMailFolders deploymentFolders,
     DerivedWorkGate derivedWorkGate)
     : IStoredThreadStateReader
 {
@@ -85,13 +86,19 @@ internal sealed class StoredThreadStateReader(
             return null;
         }
 
+        var foldersGeneratingEmbeddings = await deploymentFolders.ReadAsync(
+            MailFolderSelection.GeneratingEmbeddings,
+            [MailAccountId.Create(stored.MailboxAccountId)],
+            cancellationToken);
+        var terms = await derivedWorkGate.ReadTermsAsync(cancellationToken);
+
         var owed = await OwedADerivation(
                 dbContext.StoredEmails.AsNoTracking(),
                 dbContext.EmailThreadStates.AsNoTracking(),
                 surviving,
                 stored.MailboxAccountId,
-                folderParticipation.FoldersGeneratingEmbeddings,
-                derivedWorkGate.ReadTerms())
+                foldersGeneratingEmbeddings,
+                terms)
             .AnyAsync(cancellationToken);
 
         return new EmailThreadState(

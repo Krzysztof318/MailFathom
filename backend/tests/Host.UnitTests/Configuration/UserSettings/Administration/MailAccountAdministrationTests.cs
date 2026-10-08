@@ -6,6 +6,7 @@ using MailFathom.Application.Access;
 using MailFathom.Application.Paging;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Failures;
+using MailFathom.Domain.Folders;
 using MailFathom.Host.Configuration.Administration;
 using MailFathom.Host.Configuration.SensitiveContent;
 using MailFathom.Host.Configuration.UserSettings.Administration;
@@ -53,6 +54,30 @@ public sealed class MailAccountAdministrationTests
         Assert.Equal(created.AccountId, assigned.Id);
         Assert.Equal("archive@example.test", assigned.EmailAddress);
         Assert.Equal(assigned.Version, created.Outcome.Version);
+    }
+
+    /// <summary>
+    /// What the deployment reads across accounts is written beside the document in the same write, so a created
+    /// account's folders take part in every read from the moment it commits rather than once some process rebinds it.
+    /// </summary>
+    [Fact]
+    public async Task CreateAsync_ADeclarationCarryingAFolder_WritesTheSettingsItsDocumentBindsTo()
+    {
+        // Arrange
+        var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
+        deployment.Holding(Alex, EmptyRecord, version: 4);
+
+        // Act
+        var created = await deployment.MailAccounts.CreateAsync(
+            Alex,
+            DeclarationWithFolder("""{"Alias":"INBOX/PROJECTS","RemotePath":"INBOX/Projects"}"""),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(created!.Outcome.IsCommitted);
+        var settings = deployment.MailAccountRecords.Settings[Assert.NotNull(created.AccountId)];
+        Assert.True(settings.IsReadable);
+        Assert.Contains(MailFolderAlias.Create("INBOX/PROJECTS"), settings.Folders.Select(folder => folder.Alias));
     }
 
     [Fact]
@@ -444,6 +469,29 @@ public sealed class MailAccountAdministrationTests
 
         Assert.Contains("\"Synchronize\":true", saved, StringComparison.Ordinal);
         Assert.Contains("\"CreateIfMissing\":true", saved, StringComparison.Ordinal);
+    }
+
+    /// <summary>A folder added to an account reaches the settings written beside its document, in the write that added it.</summary>
+    [Fact]
+    public async Task AddOwnFolderAsync_AFolderOnTheirOwnAccount_WritesTheSettingsTheSavedDocumentBindsTo()
+    {
+        // Arrange
+        var work = Mailbox("work@example.test", "work", ProvisionedFor(Alex, "work"));
+        var deployment = new UserRecordDeployment([MailFathomPermission.MailAccountsWrite], Alex);
+        deployment.Holding(Alex, EmptyRecord, version: 1, work);
+
+        // Act
+        var outcome = await deployment.MailAccounts.AddOwnFolderAsync(
+            work.Id.ToString("D"),
+            """{"Alias":"INBOX/PROJECTS","RemotePath":"INBOX/Projects"}""",
+            expectedVersion: 1,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(outcome!.IsCommitted);
+        var settings = deployment.MailAccountRecords.Settings[work.Id];
+        Assert.True(settings.IsReadable);
+        Assert.Contains(MailFolderAlias.Create("INBOX/PROJECTS"), settings.Folders.Select(folder => folder.Alias));
     }
 
     /// <summary>A switch this surface sets is refused rather than silently overwritten, so the client can say what was not taken.</summary>

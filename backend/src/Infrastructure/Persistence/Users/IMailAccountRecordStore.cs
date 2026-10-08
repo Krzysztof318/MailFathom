@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Paging;
 using MailFathom.Domain.Access;
+using MailFathom.Infrastructure.Persistence.Users.AccountSettings;
 
 namespace MailFathom.Infrastructure.Persistence.Users;
 
@@ -35,19 +36,25 @@ public interface IMailAccountRecordStore
     /// <param name="user">The user the account is created for.</param>
     /// <param name="expectedUserVersion">The version of that user's record the account was judged against.</param>
     /// <param name="account">The account to create, whose version is ignored.</param>
+    /// <param name="settings">The settings its document holds that a question about every account filters on, written in the same transaction.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>What the write did; an address another account holds leaves nothing written.</returns>
     Task<MailAccountWrite> CreateAsync(
         UserId user,
         long expectedUserVersion,
         MailAccountRecord account,
+        MailAccountQueryableSettings settings,
         CancellationToken cancellationToken);
 
     /// <summary>Replaces an account's address, name, and settings where it still stands at the version they were composed over.</summary>
     /// <param name="account">The account as it is to stand, carrying the version it was composed over.</param>
+    /// <param name="settings">The settings its document holds that a question about every account filters on, written in the same transaction.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>What the write did.</returns>
-    Task<MailAccountWrite> SaveAsync(MailAccountRecord account, CancellationToken cancellationToken);
+    Task<MailAccountWrite> SaveAsync(
+        MailAccountRecord account,
+        MailAccountQueryableSettings settings,
+        CancellationToken cancellationToken);
 
     /// <summary>Assigns an account to one more user, where the two belong to the same organization or both to none.</summary>
     /// <param name="accountId">The account.</param>

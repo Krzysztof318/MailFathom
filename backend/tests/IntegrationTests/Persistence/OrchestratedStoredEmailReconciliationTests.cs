@@ -456,9 +456,9 @@ public sealed class OrchestratedStoredEmailReconciliationTests(MailFathomOrchest
         CancellationToken cancellationToken,
         string? keyword = null,
         bool? isRemotelyFlagged = null) => services.AsCallerInScopeAsync(
-            (scope, token) => scope.GetRequiredService<IStoredEmailTimelineReader>().ReadPageAsync(
+            async (scope, token) => await scope.GetRequiredService<IStoredEmailTimelineReader>().ReadPageAsync(
                 EmailTimelineFilter.Create(
-                    ScopeOf(scope, binding),
+                    await ReadScopeAsync(scope, binding, token),
                     senderAddress: null,
                     recipientAddress: null,
                     subjectFragment: null,
@@ -483,7 +483,7 @@ public sealed class OrchestratedStoredEmailReconciliationTests(MailFathomOrchest
             {
                 var reader = scope.GetRequiredService<IEmailSearchIndexReader>();
                 var selection = MailboxEmailSelection.Create(
-                    ScopeOf(scope, binding),
+                    await ReadScopeAsync(scope, binding, token),
                     senderAddress: null,
                     recipientAddress: null,
                     subjectFragment: null,
@@ -507,8 +507,11 @@ public sealed class OrchestratedStoredEmailReconciliationTests(MailFathomOrchest
             [],
             cancellationToken);
 
-    private static MailboxScope ScopeOf(IServiceProvider scope, MailFolderResolution binding) =>
-        OrchestratedMailboxScope.Readable(scope, [binding.Alias.Value]);
+    private static Task<MailboxScope> ReadScopeAsync(
+        IServiceProvider scope,
+        MailFolderResolution binding,
+        CancellationToken cancellationToken) =>
+        OrchestratedMailboxScope.ReadableAsync(scope, [binding.Alias.Value], cancellationToken);
 
     /// <summary>Reads every row one folder holds, keyed by UID so an assertion names a message rather than an identifier.</summary>
     private static async Task<IReadOnlyDictionary<uint, StoredEmailEntity>> ReadRowsAsync(

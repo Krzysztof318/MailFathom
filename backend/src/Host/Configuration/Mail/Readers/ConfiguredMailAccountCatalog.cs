@@ -6,6 +6,7 @@ using MailFathom.Application.Accounts;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Host.Configuration.UserSettings;
+using MailFathom.Infrastructure.Persistence.Users.AccountSettings;
 
 namespace MailFathom.Host.Configuration.Mail.Readers;
 
@@ -25,7 +26,8 @@ namespace MailFathom.Host.Configuration.Mail.Readers;
 /// </remarks>
 internal sealed class ConfiguredMailAccountCatalog(
     MailSynchronizationOptions settings,
-    ServedUsers servedUsers) : IDeploymentMailAccountCatalog, IMailAccountAssignments
+    ServedUsers servedUsers,
+    IServedMailAccountReader servedAccountReader) : IDeploymentMailAccountCatalog, IMailAccountAssignments
 {
     /// <inheritdoc />
     public bool SynchronizationEnabled => settings.Enabled;
@@ -64,6 +66,24 @@ internal sealed class ConfiguredMailAccountCatalog(
 
     /// <inheritdoc />
     /// <remarks>
+    /// An account whose display name is unusable is omitted here for the reason it is omitted above, and the order is
+    /// the same ordinal order of the identifiers.
+    /// </remarks>
+    public async Task<IReadOnlyList<ServedMailAccount>> ReadServedAccountsAsync(CancellationToken cancellationToken)
+    {
+        var served = await servedAccountReader.ReadServedAsync(cancellationToken);
+
+        return
+        [
+            .. served
+                .Select(static account => TryCreateServedAccount(account))
+                .OfType<ServedMailAccount>()
+                .OrderBy(static account => account.Id.Value, StringComparer.Ordinal),
+        ];
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
     /// A user this roster does not hold is assigned nothing, which is the same answer as a user holding a record that
     /// declares no account. Both are served nothing rather than served everything, and neither is told apart here:
     /// what a caller acting for a user the roster never established reads is decided by the resolution, which turns an
@@ -95,6 +115,21 @@ internal sealed class ConfiguredMailAccountCatalog(
             .Distinct()
             .OrderBy(static user => user.Value),
     ];
+
+    private static ServedMailAccount? TryCreateServedAccount(ServedMailAccountRow account)
+    {
+        try
+        {
+            return new ServedMailAccount(
+                MailAccountId.Create(account.Id.ToString("D")),
+                MailAccountDisplayName.Create(account.DisplayName),
+                account.SynchronizationMode);
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
+    }
 
     /// <summary>Every mail account declared by any user's record, an account assigned to several appearing once per assignment.</summary>
     private IEnumerable<MailSynchronizationAccountOptions> DeclaredAccounts() =>

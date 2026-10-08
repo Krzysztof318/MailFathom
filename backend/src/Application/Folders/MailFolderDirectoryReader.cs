@@ -91,7 +91,7 @@ public sealed class MailFolderDirectoryReader
         // read in process, and resolving it here is what keeps the folders this counts mail in identical to the folders
         // that reading reported freshness for. Junk is included for the reason the mailbox list includes it — the
         // withholding is about not returning its mail unasked, and no mail is returned here.
-        var scope = this.scopeResolver.ReadableScope([], [], JunkMailInclusion.Included);
+        var scope = await this.scopeResolver.ReadableScopeAsync([], [], JunkMailInclusion.Included, cancellationToken);
 
         var stored = await this.storedFolders.ReadAsync(scope, cancellationToken);
         var storedByFolder = stored.ToDictionary(static folder => folder.Folder);

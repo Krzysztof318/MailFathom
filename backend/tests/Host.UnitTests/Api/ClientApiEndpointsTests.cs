@@ -1056,6 +1056,6 @@ public sealed class ClientApiEndpointsTests
         new(
             Substitute.For<ICallerMailAccountCatalog>(),
             Substitute.For<IMailFolderParticipationReader>(),
-            Substitute.For<IJunkMailFolderCatalog>(),
+            Substitute.For<IDeploymentMailFolders>(),
             new MailFolderReferenceResolver(Substitute.For<IMailFolderMappingReader>()));
 }

@@ -105,7 +105,7 @@ public sealed class MailAccountDirectoryReader
         // that lists them. Naming a folder is publishing that it exists, which is the whole of what this answer does.
         // Junk is included because it is a mapped folder whose freshness the operator asked to see; withholding it is
         // about not returning its mail unasked, and no mail is returned here.
-        var scope = this.scopeResolver.ReadableScope([], [], JunkMailInclusion.Included);
+        var scope = await this.scopeResolver.ReadableScopeAsync([], [], JunkMailInclusion.Included, cancellationToken);
 
         var folderFreshness = await this.freshnessReader.ReadAsync(scope, cancellationToken);
         var foldersByAccount = folderFreshness

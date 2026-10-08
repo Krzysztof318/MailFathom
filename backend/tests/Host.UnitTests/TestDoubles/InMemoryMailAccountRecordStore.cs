@@ -5,6 +5,7 @@
 using MailFathom.Application.Paging;
 using MailFathom.Domain.Access;
 using MailFathom.Infrastructure.Persistence.Users;
+using MailFathom.Infrastructure.Persistence.Users.AccountSettings;
 
 namespace MailFathom.Host.UnitTests.TestDoubles;
 
@@ -26,6 +27,9 @@ internal sealed class InMemoryMailAccountRecordStore : IMailAccountRecordStore
 
     /// <summary>Gets every account the store holds, in the order they were created in.</summary>
     internal IReadOnlyList<MailAccountRecord> Accounts => this.accounts;
+
+    /// <summary>Gets the queryable settings the last write of each account carried, by account.</summary>
+    internal Dictionary<Guid, MailAccountQueryableSettings> Settings { get; } = [];
 
     /// <summary>States one user's record and the accounts assigned to them.</summary>
     /// <param name="user">The user.</param>
@@ -115,6 +119,7 @@ internal sealed class InMemoryMailAccountRecordStore : IMailAccountRecordStore
         UserId user,
         long expectedUserVersion,
         MailAccountRecord account,
+        MailAccountQueryableSettings settings,
         CancellationToken cancellationToken)
     {
         if (!this.users.TryGetValue(user, out var held))
@@ -133,6 +138,7 @@ internal sealed class InMemoryMailAccountRecordStore : IMailAccountRecordStore
         }
 
         this.accounts.Add(account with { Version = 1 });
+        this.Settings[account.Id] = settings;
         this.assignments[account.Id] = [user];
         this.accountOrganizations[account.Id] = held.OrganizationId;
         this.MoveVersionOf(user);
@@ -141,7 +147,10 @@ internal sealed class InMemoryMailAccountRecordStore : IMailAccountRecordStore
     }
 
     /// <inheritdoc />
-    public Task<MailAccountWrite> SaveAsync(MailAccountRecord account, CancellationToken cancellationToken)
+    public Task<MailAccountWrite> SaveAsync(
+        MailAccountRecord account,
+        MailAccountQueryableSettings settings,
+        CancellationToken cancellationToken)
     {
         if (this.Find(account.Id) is not { } standing)
         {
@@ -161,6 +170,7 @@ internal sealed class InMemoryMailAccountRecordStore : IMailAccountRecordStore
         var saved = account with { Version = standing.Version + 1 };
 
         this.accounts[this.accounts.IndexOf(standing)] = saved;
+        this.Settings[account.Id] = settings;
         this.assignments[account.Id].ForEach(this.MoveVersionOf);
 
         return Written(MailAccountWriteResult.Committed, saved.Version);

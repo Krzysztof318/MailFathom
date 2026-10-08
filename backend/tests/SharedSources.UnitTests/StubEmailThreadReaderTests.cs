@@ -158,17 +158,22 @@ public sealed class StubEmailThreadReaderTests
     };
 
     /// <summary>Builds the scope admitting the account's inbox and withholding its junk folder, as configuration would.</summary>
-    private static MailboxScope ReadableScope() => new MailboxScopeResolver(
-            new ServingCatalog(SyntheticServedAccount.Of(Account)),
-            StubMailFolderParticipation.Mapping(new MailFolderIdentity(Account, Inbox)),
-            StubJunkMailFolderCatalog.Naming(new MailFolderIdentity(Account, Junk)),
-            StubMailFolderMappings.ResolvingNothing)
-        .ReadableScope([], [], JunkMailInclusion.Excluded);
+    private static Task<MailboxScope> ReadableScopeAsync()
+    {
+        var participation = StubMailFolderParticipation.Mapping(new MailFolderIdentity(Account, Inbox));
 
-    private static Task<IReadOnlyList<ThreadedEmailSummary>> ReadAsync(
+        return new MailboxScopeResolver(
+                new ServingCatalog(SyntheticServedAccount.Of(Account)),
+                participation,
+                new StubDeploymentMailFolders(participation, StubJunkMailFolderCatalog.Naming(new MailFolderIdentity(Account, Junk))),
+                StubMailFolderMappings.ResolvingNothing)
+            .ReadableScopeAsync([], [], JunkMailInclusion.Excluded, TestContext.Current.CancellationToken);
+    }
+
+    private static async Task<IReadOnlyList<ThreadedEmailSummary>> ReadAsync(
         StubEmailThreadReader reader,
         EmailThreadId threadId) =>
-        reader.ReadEmailsAsync(threadId, ReadableScope(), TestContext.Current.CancellationToken);
+        await reader.ReadEmailsAsync(threadId, await ReadableScopeAsync(), TestContext.Current.CancellationToken);
 
     /// <summary>Serves the accounts a test names, because this project carries no substitute package to produce one.</summary>
     private sealed class ServingCatalog(params IReadOnlyList<ServedMailAccount> served) : ICallerMailAccountCatalog

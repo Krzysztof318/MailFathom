@@ -102,9 +102,10 @@ public sealed class MailboxTimelineReader
 
         using var read = this.readTelemetry.BeginRead(MailboxReadOperation.ListMailboxTimeline, cancellationToken);
 
-        using var actingFor = this.egressGuard.ActingFor(this.scopeResolver.User);
+        using var actingFor = this.egressGuard.ActingFor(
+            await this.egressGuard.ReadPostureAcrossAccountsOfAsync(this.scopeResolver.User, cancellationToken));
 
-        var filter = this.ReadableFilter(request);
+        var filter = await this.ReadableFilterAsync(request, cancellationToken);
         var pageSize = MailboxQueryPageSize.FromRequested(request.PageSize);
         var continueAfter = ContinuationPosition(request.Cursor, filter);
 
@@ -167,7 +168,7 @@ public sealed class MailboxTimelineReader
         IReadOnlyList<EmailSummary> page,
         CancellationToken cancellationToken)
     {
-        if (!this.egressGuard.IsActive)
+        if (!await this.egressGuard.IsActiveAsync(cancellationToken))
         {
             return page;
         }
@@ -200,11 +201,12 @@ public sealed class MailboxTimelineReader
     }
 
     /// <summary>Validates the request's filters and restricts the query to the accounts this deployment serves.</summary>
-    private EmailTimelineFilter ReadableFilter(ListEmailsRequest request) => EmailTimelineFilter.Create(
-        this.scopeResolver.ReadableScope(
+    private async Task<EmailTimelineFilter> ReadableFilterAsync(ListEmailsRequest request, CancellationToken cancellationToken) => EmailTimelineFilter.Create(
+        await this.scopeResolver.ReadableScopeAsync(
             request.Accounts,
             request.Folders,
-            request.IncludeJunkMail ? JunkMailInclusion.Included : JunkMailInclusion.Excluded),
+            request.IncludeJunkMail ? JunkMailInclusion.Included : JunkMailInclusion.Excluded,
+            cancellationToken),
         request.SenderAddress,
         request.RecipientAddress,
         request.SubjectFragment,

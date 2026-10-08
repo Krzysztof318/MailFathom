@@ -160,17 +160,19 @@ public sealed class MailboxQuestionReader
         // Junk is left out with no override, unlike a listing and a search. Answering a question is exactly the path the
         // exclusion exists for: content written to manipulate whoever reads it now has a model reading it, and a caller
         // hunting a wrongly filed message uses the listing or the search that can ask for it.
-        var scope = this.scopeResolver.ReadableScope(
+        var scope = await this.scopeResolver.ReadableScopeAsync(
             request.Accounts,
             request.Folders,
-            JunkMailInclusion.Excluded);
+            JunkMailInclusion.Excluded,
+            cancellationToken);
 
         // Stated before the capability is read rather than after the run begins, because everything a run publishes to
         // a provider is this user's mail: the question is composed with extracts from it, and the query text is placed
         // in a vector space by the same provider before any of them is retrieved. Read from the resolver rather than
         // from the scope, which names nobody where the caller owns no served account — a run that still sends its
         // question text out, and would send it under the deployment's floor instead of this user's posture.
-        using var actingFor = this.egressGuard.ActingFor(this.scopeResolver.User);
+        using var actingFor = this.egressGuard.ActingFor(
+            await this.egressGuard.ReadPostureAcrossAccountsOfAsync(this.scopeResolver.User, cancellationToken));
 
         var gate = await this.capability.ResolveAsync(cancellationToken);
         if (gate.Answerer is not { } answerer)

@@ -59,6 +59,9 @@ public sealed class MailboxSynchronizer
     private readonly TimeProvider timeProvider;
     private readonly MailboxSynchronizationOptions options;
 
+    /// <summary>The terms every arrival of this work unit is admitted under, read when the first message arrives rather than per message.</summary>
+    private DerivedWorkAdmissionTerms? admissionTerms;
+
     /// <summary>Initializes a new mailbox synchronizer.</summary>
     public MailboxSynchronizer(
         MailFolderResolver folderResolver,
@@ -1198,7 +1201,8 @@ public sealed class MailboxSynchronizer
         // message nobody has scored yet is the only place the two withholding answers are ever reached — a later stage
         // sees a message the gate admits or does not see it at all — so a run that recorded nothing until the cut would
         // report a mailbox held behind classification exactly as it reports a mailbox with no mail in it.
-        this.gateTelemetry.RecordAdmission(this.derivedWorkGate.Admit(new DerivedWorkCandidate(
+        this.admissionTerms ??= await this.derivedWorkGate.ReadTermsAsync(cancellationToken);
+        this.gateTelemetry.RecordAdmission(DerivedWorkGate.Admit(this.admissionTerms, new DerivedWorkCandidate(
             metadata.OccurrenceId.AccountId,
             metadata.OccurrenceId.FolderResolutionId.Alias,
             this.timeProvider.GetUtcNow(),

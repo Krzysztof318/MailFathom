@@ -5,10 +5,12 @@
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Paging;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.SensitiveContent;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Access;
 using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Sessions;
+using MailFathom.Infrastructure.Persistence.Users.AccountSettings;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -108,9 +110,11 @@ internal sealed class PersistedMailAccountRecordStore(
         UserId user,
         long expectedUserVersion,
         MailAccountRecord account,
+        MailAccountQueryableSettings settings,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(account);
+        ArgumentNullException.ThrowIfNull(settings);
 
         var userId = RequireNamed(user);
         var now = timeProvider.GetUtcNow();
@@ -159,15 +163,21 @@ internal sealed class PersistedMailAccountRecordStore(
                      """,
                     token);
 
+                await WriteQueryableSettingsAsync(context, account.Id, settings, token);
+
                 return new MailAccountWrite(MailAccountWriteResult.Committed, 1);
             },
             cancellationToken);
     }
 
     /// <inheritdoc />
-    public async Task<MailAccountWrite> SaveAsync(MailAccountRecord account, CancellationToken cancellationToken)
+    public async Task<MailAccountWrite> SaveAsync(
+        MailAccountRecord account,
+        MailAccountQueryableSettings settings,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(account);
+        ArgumentNullException.ThrowIfNull(settings);
 
         var now = timeProvider.GetUtcNow();
         var normalized = MailAccountRecord.NormalizedFormOf(account.EmailAddress);
@@ -204,6 +214,7 @@ internal sealed class PersistedMailAccountRecordStore(
                     }
 
                     await StepAssignedUsersAsync(context, account.Id, now, token);
+                    await WriteQueryableSettingsAsync(context, account.Id, settings, token);
 
                     return new MailAccountWrite(MailAccountWriteResult.Committed, saved[0]);
                 },
@@ -440,6 +451,66 @@ internal sealed class PersistedMailAccountRecordStore(
              WHERE "Id" IN (SELECT "UserId" FROM mail_account_assignments WHERE "MailAccountId" = {accountId})
              """,
             cancellationToken);
+
+    /// <summary>Writes the settings a question about every account filters on, replacing whatever the account held before.</summary>
+    /// <remarks>
+    /// Written inside the transaction that wrote the document, so a reader meets either both as they stood or both as
+    /// they stand now. The folders are replaced whole rather than reconciled, because they are a reading of the document
+    /// and the document was just replaced whole.
+    /// </remarks>
+    private static async Task WriteQueryableSettingsAsync(
+        MailFathomDbContext context,
+        Guid accountId,
+        MailAccountQueryableSettings settings,
+        CancellationToken cancellationToken)
+    {
+        var scansFor = ToColumn(settings.ScansFor);
+        var screensOutgoingMailFor = ToColumn(settings.ScreensOutgoingMailFor);
+        var synchronizationMode = (int)settings.SynchronizationMode;
+
+        await context.Database.ExecuteSqlAsync(
+            $"""
+             UPDATE settings_mail_accounts
+             SET "HasReadableSettings" = {settings.IsReadable},
+                 "SynchronizationMode" = {synchronizationMode},
+                 "ClassifiesSpam" = {settings.ClassifiesSpam},
+                 "ScansFor" = {scansFor},
+                 "ScreensOutgoingMailFor" = {screensOutgoingMailFor}
+             WHERE "Id" = {accountId}
+             """,
+            cancellationToken);
+
+        await context.Database.ExecuteSqlAsync(
+            $"""DELETE FROM mail_account_folder_settings WHERE "MailAccountId" = {accountId}""",
+            cancellationToken);
+
+        var folders = settings.Folders.DistinctBy(folder => folder.Alias).ToArray();
+
+        if (folders.Length == 0)
+        {
+            return;
+        }
+
+        var aliases = folders.Select(folder => folder.Alias.Value).ToArray();
+        var specialUses = folders.Select(folder => (int?)folder.SpecialUse).ToArray();
+        var synchronized = folders.Select(folder => folder.Participation.IsSynchronized).ToArray();
+        var visibleToTools = folders.Select(folder => folder.Participation.IsVisibleToTools).ToArray();
+        var generatingEmbeddings = folders.Select(folder => folder.Participation.GeneratesEmbeddings).ToArray();
+        var classifiedForSpam = folders.Select(folder => folder.IsClassifiedForSpam).ToArray();
+
+        await context.Database.ExecuteSqlAsync(
+            $"""
+             INSERT INTO mail_account_folder_settings
+                 ("MailAccountId", "Alias", "SpecialUse", "IsSynchronized", "IsVisibleToTools", "GeneratesEmbeddings", "IsClassifiedForSpam")
+             SELECT {accountId}, folder.alias, folder.special_use, folder.synchronized, folder.visible_to_tools, folder.generating_embeddings, folder.classified_for_spam
+             FROM unnest({aliases}::text[], {specialUses}::integer[], {synchronized}::boolean[], {visibleToTools}::boolean[], {generatingEmbeddings}::boolean[], {classifiedForSpam}::boolean[])
+                 AS folder(alias, special_use, synchronized, visible_to_tools, generating_embeddings, classified_for_spam)
+             """,
+            cancellationToken);
+    }
+
+    private static int[] ToColumn(IReadOnlyList<SensitiveContentScannerKind> scanners) =>
+        [.. scanners.Distinct().Order().Select(scanner => (int)scanner)];
 
     /// <summary>Reads back why a conditional save matched no row.</summary>
     private static async Task<MailAccountWrite> WhyNotSavedAsync(

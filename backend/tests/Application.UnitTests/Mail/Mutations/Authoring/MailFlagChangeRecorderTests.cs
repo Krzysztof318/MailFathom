@@ -351,14 +351,16 @@ public sealed class MailFlagChangeRecorderTests
                 ? new StubPersistenceSession(PersistenceCommitResult.Committed)
                 : sessionFactory());
 
+        var participation = StubMailFolderParticipation
+            .Mapping(new MailFolderIdentity(Account, Inbox))
+            .Hiding(new MailFolderIdentity(Account, Withheld));
+
         return new MailFlagChangeRecorder(
             callerAuthorization,
             new MailboxScopeResolver(
                 accountCatalog,
-                StubMailFolderParticipation
-                    .Mapping(new MailFolderIdentity(Account, Inbox))
-                    .Hiding(new MailFolderIdentity(Account, Withheld)),
-                StubJunkMailFolderCatalog.None,
+                participation,
+                StubDeploymentMailFolders.Of(participation),
                 StubMailFolderMappings.ResolvingNothing),
             targets,
             MailboxChangeSubmissions.Over(records),

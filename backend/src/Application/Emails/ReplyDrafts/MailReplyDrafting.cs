@@ -136,7 +136,8 @@ public sealed class MailReplyDrafting
 
         var user = this.scopeResolver.User;
 
-        using var actingFor = this.egressGuard.ActingFor(user);
+        using var actingFor = this.egressGuard.ActingFor(
+            await this.egressGuard.ReadPostureAcrossAccountsOfAsync(user, cancellationToken));
 
         var instruction = Bounded(request.Instruction, ReplyDraftRequest.MaximumInstructionLength);
 
@@ -188,7 +189,7 @@ public sealed class MailReplyDrafting
         StoredEmailId answeredEmailId,
         CancellationToken cancellationToken)
     {
-        var scope = this.scopeResolver.ReadableScope([], [], JunkMailInclusion.Included);
+        var scope = await this.scopeResolver.ReadableScopeAsync([], [], JunkMailInclusion.Included, cancellationToken);
 
         return scope.AccountIds.Count is 0
             ? null
@@ -238,7 +239,7 @@ public sealed class MailReplyDrafting
     /// </remarks>
     private async Task<ReplyDraft> GuardedAsync(ReplyDraft draft, CancellationToken cancellationToken)
     {
-        if (!this.egressGuard.IsActive)
+        if (!await this.egressGuard.IsActiveAsync(cancellationToken))
         {
             return draft;
         }

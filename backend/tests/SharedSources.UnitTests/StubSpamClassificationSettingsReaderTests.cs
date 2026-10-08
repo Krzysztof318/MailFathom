@@ -72,7 +72,7 @@ public sealed class StubSpamClassificationSettingsReaderTests
     }
 
     [Fact]
-    public void ScopeInForce_TheAccountsItWasGiven_ClassifiesEachOverTheConfiguredFolders()
+    public async Task ReadScopeInForceAsync_TheAccountsItWasGiven_ClassifiesEachOverTheConfiguredFolders()
     {
         // Arrange
         var settings = SpamClassificationSettings.Create(
@@ -82,7 +82,8 @@ public sealed class StubSpamClassificationSettingsReaderTests
         var account = MailAccountId.Create("primary");
 
         // Act
-        var scope = new StubSpamClassificationSettingsReader(settings, account).ScopeInForce;
+        var scope = await new StubSpamClassificationSettingsReader(settings, account)
+            .ReadScopeInForceAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal([account], scope.ClassifyingAccounts);
@@ -90,7 +91,7 @@ public sealed class StubSpamClassificationSettingsReaderTests
     }
 
     [Fact]
-    public void Disabled_ADeploymentThatConfiguredNothing_ClassifiesNoMail()
+    public async Task Disabled_ADeploymentThatConfiguredNothing_ClassifiesNoMail()
     {
         // Arrange, Act
         var reader = StubSpamClassificationSettingsReader.Disabled;
@@ -98,6 +99,6 @@ public sealed class StubSpamClassificationSettingsReaderTests
         // Assert
         Assert.False(reader.SettingsFor(MailAccountId.Create("anything")).IsEnabled);
         Assert.Empty(reader.SettingsFor(MailAccountId.Create("anything")).ScannedFolderAliases);
-        Assert.Empty(reader.ScopeInForce.ClassifyingAccounts);
+        Assert.Empty((await reader.ReadScopeInForceAsync(TestContext.Current.CancellationToken)).ClassifyingAccounts);
     }
 }

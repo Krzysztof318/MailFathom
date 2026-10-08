@@ -147,12 +147,17 @@ internal static class CorpusReaders
             RemoteFlags = RemoteEmailFlagSnapshot.NeverObserved,
         };
 
-    private static MailboxScopeResolver ScopeFor(AccessAuthorization authorization) =>
-        new(
+    private static MailboxScopeResolver ScopeFor(AccessAuthorization authorization)
+    {
+        var participation = StubMailFolderParticipation.Mapping(
+            new MailFolderIdentity(CorpusKnowledgeSearch.Account, CorpusKnowledgeSearch.Inbox));
+
+        return new(
             AssignedMailAccountCatalogs.For(authorization, SyntheticServedAccount.Of(CorpusKnowledgeSearch.Account)),
-            StubMailFolderParticipation.Mapping(new MailFolderIdentity(CorpusKnowledgeSearch.Account, CorpusKnowledgeSearch.Inbox)),
-            StubJunkMailFolderCatalog.None,
+            participation,
+            StubDeploymentMailFolders.Of(participation),
             StubMailFolderMappings.ResolvingNothing);
+    }
 
     private static EmailContentReader ContentReaderOver(MailboxScopeResolver scope, AccessAuthorization authorization) =>
         new(

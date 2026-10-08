@@ -15,7 +15,6 @@ using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Extraction.Attachments;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
-using MailFathom.Application.Folders;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Application.UnitTests.TestDoubles;
@@ -736,7 +735,7 @@ public sealed class EmailAttachmentDownloadReaderTests
         IAttachmentTextExtractor? attachmentText = null,
         SensitiveContentEgressScreen? screen = null,
         ICallerMailAccountCatalog? accountCatalog = null,
-        IMailFolderParticipationReader? folderParticipation = null,
+        StubMailFolderParticipation? folderParticipation = null,
         AccessAuthorization? authorization = null) => new(
         SummaryReaderReturning(summary),
         contentStore ?? ContentStoreReturning(IntactContent()),
@@ -744,12 +743,18 @@ public sealed class EmailAttachmentDownloadReaderTests
         repairRequestStore ?? new RecordingEmailContentRepairRequestStore(),
         attachmentText ?? ExtractorReporting(AttachmentTextExtractionResult.FormatNotRecognized()),
         screen ?? InactiveScreen(),
-        new MailboxScopeResolver(
+        ScopeResolverOver(
             accountCatalog ?? CatalogServing(MailAccountId.Create(summary?.Account.Value ?? ServedAccountId)),
-            folderParticipation ?? MappingFolderOf(summary),
-            StubJunkMailFolderCatalog.None,
-            StubMailFolderMappings.ResolvingNothing),
+            folderParticipation ?? MappingFolderOf(summary)),
         authorization ?? AuthorizationOver(RedeemedCapability));
+
+    private static MailboxScopeResolver ScopeResolverOver(
+        ICallerMailAccountCatalog accountCatalog,
+        StubMailFolderParticipation participation) => new(
+        accountCatalog,
+        participation,
+        StubDeploymentMailFolders.Of(participation),
+        StubMailFolderMappings.ResolvingNothing);
 
     /// <summary>The screen of a deployment that screens nothing, which is what every test not about screening arranges.</summary>
     private static SensitiveContentEgressScreen InactiveScreen() => new(

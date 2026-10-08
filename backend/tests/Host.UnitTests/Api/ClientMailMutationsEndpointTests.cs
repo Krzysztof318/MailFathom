@@ -627,10 +627,12 @@ public sealed class ClientMailMutationsEndpointTests
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
         catalog.AssignedAccounts.Returns([SyntheticServedAccount.Of(ServedAccount)]);
 
+        var reachable = participation ?? StubMailFolderParticipation.Nothing;
+
         return new MailboxScopeResolver(
             catalog,
-            participation ?? StubMailFolderParticipation.Nothing,
-            StubJunkMailFolderCatalog.None,
+            reachable,
+            StubDeploymentMailFolders.Of(reachable),
             StubMailFolderMappings.ResolvingNothing);
     }
 

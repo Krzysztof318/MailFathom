@@ -5,7 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Host.Configuration.Rules;
-using MailFathom.Host.Configuration.UserSettings;
+using MailFathom.Infrastructure.Persistence.Users.AccountSettings;
 using Microsoft.Extensions.Options;
 
 namespace MailFathom.Host.Configuration.RootSettings;
@@ -25,8 +25,9 @@ namespace MailFathom.Host.Configuration.RootSettings;
 /// be judged, the failures are collected, and the provider is disposed, so a candidate that would have configured a
 /// scanner, a client, or a worker configures none of them. What the rules need from outside the candidate is handed in
 /// from the running process rather than rebuilt, because what a deployment registered is a property of the deployment
-/// rather than of the candidate: the scanners a write is judged against are the ones the process actually has, and so
-/// is the roster a rule's mailbox scope is judged against — no candidate file states who this deployment serves.
+/// rather than of the candidate: the scanners a write is judged against are the ones the process actually has, and the
+/// mailboxes a rule's scope is judged against are the account records — no candidate file states who this deployment
+/// serves.
 /// </para>
 /// <para>
 /// Four shapes of failure arrive and all four are an operator's to fix. A data annotation or a custom validator
@@ -42,49 +43,46 @@ namespace MailFathom.Host.Configuration.RootSettings;
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this validator.")]
 internal sealed class CandidateSettingsValidator(
     IEnumerable<ISensitiveContentCatalog> sensitiveContentCatalogs,
-    ServedUsers servedUsers)
+    IServedMailAccountReader servedAccounts)
 {
     /// <summary>Finds what an operator must change before a candidate configuration could be the deployment's.</summary>
     /// <param name="candidate">The composed configuration the candidate document would produce.</param>
+    /// <param name="cancellationToken">Cancels the read of the account records a rule's mailboxes are judged against.</param>
     /// <returns>One sentence per refused setting, empty when the candidate binds and validates.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="candidate" /> is <see langword="null" />.</exception>
-    public IReadOnlyList<string> FindErrors(IConfiguration candidate)
+    public async Task<IReadOnlyList<string>> FindErrorsAsync(IConfiguration candidate, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(candidate);
+
+        // The records a reload of the rule set is judged against, so a write naming a mailbox no record holds is refused
+        // here rather than committed as a rule set the reload would then refuse to apply.
+        // ponytail: every served record is read and bound per write; narrow to the accounts the rules name if a
+        // deployment with many accounts measures it.
+        var declaredAccounts = DeclaredMailAccounts.ReadFrom(await servedAccounts.ReadServedRecordsAsync(cancellationToken));
 
         // Both halves of what a start judges, and the composed half first because it is the half a start takes before a
         // container exists at all: a candidate turning every surface off, or naming a rule condition the compiler
         // refuses, would otherwise commit and stop the next start.
         return
         [
-            .. this.FindComposedErrorsIn(candidate),
+            .. FindComposedErrorsIn(candidate, declaredAccounts),
             .. this.FindBoundErrorsIn(candidate),
         ];
     }
 
-    private IReadOnlyList<string> FindComposedErrorsIn(IConfiguration candidate)
+    private static IReadOnlyList<string> FindComposedErrorsIn(
+        IConfiguration candidate,
+        IReadOnlyCollection<DeclaredMailAccount> declaredAccounts)
     {
         try
         {
-            return [.. ComposedSettings.FindRefusals(candidate, this.DeclaredAccounts()).SelectMany(refusal => refusal.Errors)];
+            return [.. ComposedSettings.FindRefusals(candidate, declaredAccounts).SelectMany(refusal => refusal.Errors)];
         }
         catch (InvalidOperationException refusal)
         {
             return [refusal.Message];
         }
     }
-
-    /// <summary>Reads the mailboxes a rule may be scoped to off the roster this process serves.</summary>
-    /// <remarks>
-    /// Nothing, before the startup gate has settled the roster, which leaves a rule's claims about mailboxes unjudged
-    /// exactly as composition does. After it, the running roster is what a reload of the rule set is judged against, so
-    /// a write naming a mailbox nobody records is refused here rather than committed as a rule set the reload would
-    /// then refuse to apply.
-    /// </remarks>
-    private IReadOnlyCollection<DeclaredMailAccount>? DeclaredAccounts() =>
-        servedUsers.TryGetUsers() is { } users
-            ? DeclaredMailAccounts.ReadFrom(users.SelectMany(user => user.MailAccounts))
-            : null;
 
     /// <summary>Registers the bound sections over the candidate and runs the validators a start runs.</summary>
     /// <remarks>

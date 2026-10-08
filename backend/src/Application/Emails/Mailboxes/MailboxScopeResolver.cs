@@ -34,29 +34,29 @@ public sealed class MailboxScopeResolver
 {
     private readonly ICallerMailAccountCatalog accountCatalog;
     private readonly IMailFolderParticipationReader folderParticipation;
-    private readonly IJunkMailFolderCatalog junkFolders;
+    private readonly IDeploymentMailFolders deploymentFolders;
     private readonly MailFolderReferenceResolver folderReferences;
 
     /// <summary>Initializes the resolver.</summary>
     /// <param name="accountCatalog">Answers which accounts the user this work is acting for is assigned.</param>
-    /// <param name="folderParticipation">Answers which folders a tool may read from.</param>
-    /// <param name="junkFolders">Answers which folder each account advertises as its junk folder.</param>
+    /// <param name="folderParticipation">Answers whether one folder is one a tool may read from.</param>
+    /// <param name="deploymentFolders">Answers which folders of the accounts in scope a tool may read from, and which is each one's junk folder.</param>
     /// <param name="folderReferences">Turns the alias or the role a request named into the folder of an account it means.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public MailboxScopeResolver(
         ICallerMailAccountCatalog accountCatalog,
         IMailFolderParticipationReader folderParticipation,
-        IJunkMailFolderCatalog junkFolders,
+        IDeploymentMailFolders deploymentFolders,
         MailFolderReferenceResolver folderReferences)
     {
         ArgumentNullException.ThrowIfNull(accountCatalog);
         ArgumentNullException.ThrowIfNull(folderParticipation);
-        ArgumentNullException.ThrowIfNull(junkFolders);
+        ArgumentNullException.ThrowIfNull(deploymentFolders);
         ArgumentNullException.ThrowIfNull(folderReferences);
 
         this.accountCatalog = accountCatalog;
         this.folderParticipation = folderParticipation;
-        this.junkFolders = junkFolders;
+        this.deploymentFolders = deploymentFolders;
         this.folderReferences = folderReferences;
     }
 
@@ -64,6 +64,7 @@ public sealed class MailboxScopeResolver
     /// <param name="accountSelectors">The text a request named accounts with, or empty for every account the caller's user is assigned.</param>
     /// <param name="folders">The folders a request named, each by alias or by role, or empty for every folder.</param>
     /// <param name="junkMail">Whether the caller asked for the account's junk folder, which defaults to it being left out.</param>
+    /// <param name="cancellationToken">Cancels the reads of which folders the accounts in scope admit.</param>
     /// <returns>The scope a query runs with.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the work in hand is acting for no user, which the deployment administrator and this process's own identity both are.</exception>
     /// <exception cref="MailboxQueryFilterInvalidException">Thrown when either list names more values than its limit permits.</exception>
@@ -119,10 +120,11 @@ public sealed class MailboxScopeResolver
     /// applies, so a read that names it and does not also ask for junk mail returns nothing.
     /// </para>
     /// </remarks>
-    public MailboxScope ReadableScope(
+    public async Task<MailboxScope> ReadableScopeAsync(
         IReadOnlyList<MailAccountSelector> accountSelectors,
         IReadOnlyList<MailFolderReference> folders,
-        JunkMailInclusion junkMail)
+        JunkMailInclusion junkMail,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(accountSelectors);
         ArgumentNullException.ThrowIfNull(folders);
@@ -168,16 +170,27 @@ public sealed class MailboxScopeResolver
         // caller's own filter back to them differently is a page whose cursor no longer matches the request.
         if (accountsInScope.Length is 0)
         {
-            return MailboxScope.NothingReadable.WithJunkMail(junkMail, this.junkFolders.JunkFolders);
+            return MailboxScope.NothingReadable.WithJunkMail(junkMail, []);
         }
 
         var resolvedScope = MailboxScope.Create(
             accountsInScope,
             this.ResolvedFolders(accountsInScope, folders));
 
+        // Read for the accounts in scope alone, because the folders of anybody else's mailbox are no part of a read
+        // that cannot reach them.
+        var visibleToTools = await this.deploymentFolders.ReadAsync(
+            MailFolderSelection.VisibleToTools,
+            accountsInScope,
+            cancellationToken);
+        var junkFolders = await this.deploymentFolders.ReadAsync(
+            MailFolderSelection.Junk,
+            accountsInScope,
+            cancellationToken);
+
         return resolvedScope
-            .RestrictedTo(this.folderParticipation.FoldersVisibleToTools)
-            .WithJunkMail(junkMail, this.junkFolders.JunkFolders);
+            .RestrictedTo(visibleToTools)
+            .WithJunkMail(junkMail, junkFolders);
     }
 
     /// <summary>Gets the user this unit of work is acting for, which is what decides the posture its content is scanned under.</summary>
@@ -195,7 +208,7 @@ public sealed class MailboxScopeResolver
     /// <summary>Gets the accounts this unit of work may reach, which is what a read that builds no scope narrows by.</summary>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the work in hand is acting for no user.</exception>
     /// <remarks>
-    /// The same answer <see cref="ReadableScope" /> narrows a query with, published for the reads that reach a row by
+    /// The same answer <see cref="ReadableScopeAsync" /> narrows a query with, published for the reads that reach a row by
     /// its own generated identifier and build no scope at all: a mutation record, a withdrawal, a release. A caller
     /// assigned nothing gets an empty list, and a containment test against an empty list reads nothing, which is the
     /// same fail-closed answer <see cref="MailboxScope.NothingReadable" /> is.
@@ -209,7 +222,7 @@ public sealed class MailboxScopeResolver
     /// <returns><see langword="true" /> when the user in hand is assigned that account and a mapping admits that folder to tools.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the work in hand is acting for no user, which is a refusal rather than the <see langword="false" /> a caller with nothing readable is answered with.</exception>
     /// <remarks>
-    /// This is <see cref="ReadableScope" /> asked about one email instead of about a query, and it exists because
+    /// This is <see cref="ReadableScopeAsync" /> asked about one email instead of about a query, and it exists because
     /// several reads reach an email by its identifier and build no scope at all. Both questions are answered from the
     /// same catalog and the same folder mapping here, so a folder an operator withheld cannot be readable through one
     /// entry point and withheld through another, and an account this caller is not assigned cannot be reachable by

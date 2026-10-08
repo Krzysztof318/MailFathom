@@ -818,7 +818,7 @@ public sealed class SearchEmailsToolTests
                 new MailboxScopeResolver(
                     new StubMailAccountCatalog(ServedAccountId),
                     StubMailFolderParticipation.Nothing,
-                    junkFolders ?? StubJunkMailFolderCatalog.None,
+                    new StubDeploymentMailFolders(StubMailFolderParticipation.Nothing, junkFolders ?? StubJunkMailFolderCatalog.None),
                     StubMailFolderMappings.ResolvingNothing),
                 bounds,
                 egressGuard ?? SensitiveContentEgressGuards.Inactive(),

@@ -75,6 +75,21 @@ public sealed class MailRuleScheduleSourceTests
         Assert.Empty(schedules);
     }
 
+    /// <summary>A deployment whose rules declare no schedule has no walk to declare, so it never reads the account records for one.</summary>
+    [Fact]
+    public async Task ReadSchedulesAsync_RulesDeclaringNoSchedule_ReadsNoServedAccount()
+    {
+        // Arrange
+        this.ArrangeAccounts("personal");
+        var source = this.CreateSource(MailRule.Create("on-arrival", Matching(), triggers: [MailRuleTrigger.Arrival]));
+
+        // Act
+        await source.ReadSchedulesAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        await this.accounts.DidNotReceive().ReadServedAccountsAsync(Arg.Any<CancellationToken>());
+    }
+
     /// <summary>The occasions are the rule's own, so two rules with different intervals declare two schedules.</summary>
     [Fact]
     public async Task ReadSchedulesAsync_TwoScheduledRules_DeclareTheirOwnOccasionsSeparately()
@@ -129,7 +144,7 @@ public sealed class MailRuleScheduleSourceTests
         return new MailRuleScheduleSource(ruleSetSource, this.accounts);
     }
 
-    private void ArrangeAccounts(params string[] identifiers) => this.accounts.ServedAccounts.Returns(
+    private void ArrangeAccounts(params string[] identifiers) => this.accounts.ReadServedAccountsAsync(Arg.Any<CancellationToken>()).Returns(
     [
         .. identifiers.Select(identifier => new ServedMailAccount(
             MailAccountId.Create(identifier),

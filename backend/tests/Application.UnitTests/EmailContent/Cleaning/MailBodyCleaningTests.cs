@@ -329,13 +329,14 @@ public sealed class MailBodyCleaningTests
         var accountCatalog = Substitute.For<ICallerMailAccountCatalog>();
         accountCatalog.AssignedAccounts.Returns(
             [SyntheticServedAccount.Of(MailAccountId.Create(SyntheticEmailSummaries.DefaultAccountId))]);
+        var participation = StubMailFolderParticipation.Mapping(summary is null
+            ? []
+            : [new MailFolderIdentity(summary.Account, summary.FolderAlias)]);
 
         return new MailboxScopeResolver(
             accountCatalog,
-            StubMailFolderParticipation.Mapping(summary is null
-                ? []
-                : [new MailFolderIdentity(summary.Account, summary.FolderAlias)]),
-            StubJunkMailFolderCatalog.None,
+            participation,
+            StubDeploymentMailFolders.Of(participation),
             StubMailFolderMappings.ResolvingNothing);
     }
 

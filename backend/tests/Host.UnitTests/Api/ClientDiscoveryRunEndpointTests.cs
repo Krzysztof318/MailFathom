@@ -536,7 +536,7 @@ public sealed class ClientDiscoveryRunEndpointTests
                 AccessAuthorizations.ForUserGranted(user, MailFathomPermission.MailAsk),
                 SyntheticServedAccount.Of("primary")),
             StubMailFolderParticipation.Nothing,
-            StubJunkMailFolderCatalog.None,
+            StubDeploymentMailFolders.None,
             StubMailFolderMappings.Nothing.Resolver);
 
     /// <summary>Builds the launcher the asking route hands a run to, over a store of its own.</summary>

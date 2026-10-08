@@ -176,7 +176,8 @@ public sealed class EmailContentReader
 
         using var read = this.readTelemetry.BeginRead(MailboxReadOperation.ReadEmailContent, cancellationToken);
 
-        using var actingFor = this.egressGuard.ActingFor(this.scopeResolver.User);
+        using var actingFor = this.egressGuard.ActingFor(
+            await this.egressGuard.ReadPostureAcrossAccountsOfAsync(this.scopeResolver.User, cancellationToken));
 
         // One instance per read, because a call routinely names several messages of one exchange: assembling per email
         // would read that conversation, order it, and scan its subjects once for each of them.
@@ -374,7 +375,7 @@ public sealed class EmailContentReader
     /// </remarks>
     private async Task<ReadEmailContent> GuardedAsync(ReadEmailContent content, CancellationToken cancellationToken)
     {
-        if (!this.egressGuard.IsActive)
+        if (!await this.egressGuard.IsActiveAsync(cancellationToken))
         {
             return content;
         }

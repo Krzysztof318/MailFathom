@@ -68,7 +68,7 @@ internal sealed partial class StaleDerivedDataStartupReport : IHostedService
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A report that cannot read the count says so and lets the host start; it decides nothing.")]
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        if (!this.derivationGuard.IsActive)
+        if (!await this.derivationGuard.IsActiveAsync(cancellationToken))
         {
             return;
         }

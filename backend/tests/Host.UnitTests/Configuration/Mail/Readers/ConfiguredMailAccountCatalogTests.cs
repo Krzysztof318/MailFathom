@@ -3,10 +3,13 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Synchronization;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.Mail.Readers;
 using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.UnitTests.TestDoubles;
+using MailFathom.Infrastructure.Persistence.Users.AccountSettings;
+using NSubstitute;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Configuration.Mail.Readers;
@@ -39,7 +42,8 @@ public sealed class ConfiguredMailAccountCatalogTests
             settings,
             ResolvedServedUsers.Serving(
                 Declaring(Alex, "alex", Mailbox("alex-work", "Alex at work")),
-                Declaring(Morgan, "morgan", Mailbox("morgan-work", "Morgan at work"))));
+                Declaring(Morgan, "morgan", Mailbox("morgan-work", "Morgan at work"))),
+            Substitute.For<IServedMailAccountReader>());
 
         // Act
         var served = catalog.ServedAccounts;
@@ -62,7 +66,8 @@ public sealed class ConfiguredMailAccountCatalogTests
             settings,
             ResolvedServedUsers.Serving(
                 Declaring(Morgan, "morgan", Mailbox("zeta", "Morgan at zeta"), Mailbox("beta", "Morgan at beta")),
-                Declaring(Alex, "alex", Mailbox("alpha", "Alex at alpha"))));
+                Declaring(Alex, "alex", Mailbox("alpha", "Alex at alpha"))),
+            Substitute.For<IServedMailAccountReader>());
 
         // Act
         var served = catalog.ServedAccounts;
@@ -81,7 +86,8 @@ public sealed class ConfiguredMailAccountCatalogTests
             settings,
             ResolvedServedUsers.Serving(
                 new ServedUser(Alex, "alex", MailAccounts: []),
-                Declaring(Morgan, "morgan", Mailbox("morgan-work", "Morgan at work"))));
+                Declaring(Morgan, "morgan", Mailbox("morgan-work", "Morgan at work"))),
+            Substitute.For<IServedMailAccountReader>());
 
         // Act
         var served = catalog.ServedAccounts;
@@ -102,13 +108,71 @@ public sealed class ConfiguredMailAccountCatalogTests
                 new ServedUser(
                     Alex,
                     "alex",
-                    [Mailbox("alex-adopted", "Alex, adopted")])));
+                    [Mailbox("alex-adopted", "Alex, adopted")])),
+            Substitute.For<IServedMailAccountReader>());
 
         // Act
         var served = catalog.ServedAccounts;
 
         // Assert
         Assert.Equal(["alex-adopted"], served.Select(account => account.Id.Value));
+    }
+
+    /// <summary>The records are the source a reader of the whole set is answered from, so each row becomes the account it names.</summary>
+    [Fact]
+    public async Task ReadServedAccountsAsync_ServedRows_AnswersEachAsTheAccountItNamesInOrdinalOrder()
+    {
+        // Arrange
+        var later = new ServedMailAccountRow(
+            new Guid("0199a0c0-0000-7000-8000-00000000000b"),
+            "Morgan at work",
+            MailSynchronizationMode.Push);
+        var earlier = new ServedMailAccountRow(
+            new Guid("0199a0c0-0000-7000-8000-00000000000a"),
+            "Alex at work",
+            MailSynchronizationMode.Polling);
+        var catalog = CatalogReading(later, earlier);
+
+        // Act
+        var served = await catalog.ReadServedAccountsAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            [
+                ("0199a0c0-0000-7000-8000-00000000000a", "Alex at work", MailSynchronizationMode.Polling),
+                ("0199a0c0-0000-7000-8000-00000000000b", "Morgan at work", MailSynchronizationMode.Push),
+            ],
+            served.Select(account => (account.Id.Value, account.DisplayName.Value, account.SynchronizationMode)));
+    }
+
+    /// <summary>A row whose name cannot be shown is left out of the set, as the composed roster leaves it out.</summary>
+    [Fact]
+    public async Task ReadServedAccountsAsync_ARowWhoseDisplayNameIsUnusable_IsLeftOut()
+    {
+        // Arrange
+        var catalog = CatalogReading(
+            new ServedMailAccountRow(
+                new Guid("0199a0c0-0000-7000-8000-00000000000a"),
+                "Alex at work",
+                MailSynchronizationMode.Polling),
+            new ServedMailAccountRow(
+                new Guid("0199a0c0-0000-7000-8000-00000000000b"),
+                "Morgan\u0007at work",
+                MailSynchronizationMode.Polling));
+
+        // Act
+        var served = await catalog.ReadServedAccountsAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(["0199a0c0-0000-7000-8000-00000000000a"], served.Select(account => account.Id.Value));
+    }
+
+    private static ConfiguredMailAccountCatalog CatalogReading(params ServedMailAccountRow[] rows)
+    {
+        var reader = Substitute.For<IServedMailAccountReader>();
+        reader.ReadServedAsync(Arg.Any<CancellationToken>()).Returns(rows);
+
+        return new ConfiguredMailAccountCatalog(Synchronizing(), ResolvedServedUsers.Serving(), reader);
     }
 
     private static ServedUser Declaring(

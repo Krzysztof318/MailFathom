@@ -186,7 +186,7 @@ public sealed class ClientContactCorrespondenceEndpointTests
         new MailboxScopeResolver(
             CatalogServing(MailAccountId.Create("work")),
             StubMailFolderParticipation.Nothing,
-            StubJunkMailFolderCatalog.None,
+            StubDeploymentMailFolders.None,
             StubMailFolderMappings.ResolvingNothing),
         SensitiveContentEgressGuards.Inactive(),
         ReadTelemetry(),

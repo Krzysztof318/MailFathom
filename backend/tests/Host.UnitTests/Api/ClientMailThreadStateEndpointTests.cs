@@ -251,13 +251,15 @@ public sealed class ClientMailThreadStateEndpointTests
         catalog.AssignedAccounts.Returns([SyntheticServedAccount.Of(accountId)]);
         catalog.User.Returns(SyntheticUser.Deployment);
 
+        var participation = StubMailFolderParticipation.Mapping(
+            [new MailFolderIdentity(accountId, MailFolderAlias.Create("inbox"))]);
+
         return new MailThreadStateBrowser(
             this.stateReader,
             new MailboxScopeResolver(
                 catalog,
-                StubMailFolderParticipation.Mapping(
-                    [new MailFolderIdentity(accountId, MailFolderAlias.Create("inbox"))]),
-                StubJunkMailFolderCatalog.None,
+                participation,
+                StubDeploymentMailFolders.Of(participation),
                 StubMailFolderMappings.ResolvingNothing),
             SensitiveContentEgressGuards.Inactive(),
             AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead));

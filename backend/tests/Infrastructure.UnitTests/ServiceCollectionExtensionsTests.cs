@@ -340,7 +340,7 @@ public sealed class ServiceCollectionExtensionsTests : IDisposable
     /// guard has to come back inert rather than fail to compose the readers that take it.
     /// </summary>
     [Fact]
-    public void AddInfrastructure_WithoutAScanner_StillResolvesAnEgressGuardThatScansNothing()
+    public async Task AddInfrastructure_WithoutAScanner_StillResolvesAnEgressGuardThatScansNothing()
     {
         // Arrange
         var services = new ServiceCollection();
@@ -356,12 +356,12 @@ public sealed class ServiceCollectionExtensionsTests : IDisposable
         // Assert
         using var provider = services.BuildServiceProvider();
 
-        Assert.False(provider.GetRequiredService<SensitiveContentEgressGuard>().IsActive);
+        Assert.False(await provider.GetRequiredService<SensitiveContentEgressGuard>().IsActiveAsync(TestContext.Current.CancellationToken));
     }
 
     /// <summary>The other half: a deployment that switched a scanner on gets a guard that redacts through it.</summary>
     [Fact]
-    public void AddInfrastructure_WithARedactor_ResolvesAnEgressGuardThatScansThroughIt()
+    public async Task AddInfrastructure_WithARedactor_ResolvesAnEgressGuardThatScansThroughIt()
     {
         // Arrange
         var services = new ServiceCollection();
@@ -377,7 +377,7 @@ public sealed class ServiceCollectionExtensionsTests : IDisposable
         // Assert
         using var provider = services.BuildServiceProvider();
 
-        Assert.True(provider.GetRequiredService<SensitiveContentEgressGuard>().IsActive);
+        Assert.True(await provider.GetRequiredService<SensitiveContentEgressGuard>().IsActiveAsync(TestContext.Current.CancellationToken));
     }
 
     /// <summary>

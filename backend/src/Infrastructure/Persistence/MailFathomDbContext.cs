@@ -83,6 +83,9 @@ internal sealed class MailFathomDbContext : DbContext
 
     internal DbSet<MailAccountAssignmentEntity> MailAccountAssignments => this.Set<MailAccountAssignmentEntity>();
 
+    internal DbSet<MailAccountFolderSettingsEntity> MailAccountFolderSettings =>
+        this.Set<MailAccountFolderSettingsEntity>();
+
     internal DbSet<UserCredentialEntity> UserCredentials =>
         this.Set<UserCredentialEntity>();
 
@@ -276,6 +279,7 @@ internal sealed class MailFathomDbContext : DbContext
         modelBuilder.ApplyConfiguration(new UserAccountConfiguration());
         modelBuilder.ApplyConfiguration(new MailAccountRecordConfiguration());
         modelBuilder.ApplyConfiguration(new MailAccountAssignmentConfiguration());
+        modelBuilder.ApplyConfiguration(new MailAccountFolderSettingsConfiguration());
         modelBuilder.ApplyConfiguration(new StoredSecretConfiguration());
         modelBuilder.ApplyConfiguration(new UserCredentialConfiguration());
         modelBuilder.ApplyConfiguration(new RoleConfiguration());

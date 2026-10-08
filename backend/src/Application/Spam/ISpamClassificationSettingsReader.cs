@@ -24,13 +24,15 @@ namespace MailFathom.Application.Spam;
 /// </remarks>
 public interface ISpamClassificationSettingsReader
 {
-    /// <summary>Gets which of the deployment's mailboxes classification runs for, as one value a walk can be narrowed by.</summary>
+    /// <summary>Reads which of the deployment's mailboxes classification runs for, as one value a walk can be narrowed by.</summary>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The scope in force now.</returns>
     /// <remarks>
-    /// The set-based shape of the same decision <see cref="SettingsFor" /> answers per account, composed here so the
-    /// two are one reading of the same postures. A walk over stored mail spans accounts and cannot ask about each of
-    /// them in turn, so it narrows by the accounts and folders this names.
+    /// The set-based shape of the same decision <see cref="SettingsFor" /> answers per account, read from the settings
+    /// each account's document was read into when it was written. A walk over stored mail spans accounts and cannot ask
+    /// about each of them in turn, so it reads this once and narrows by the accounts and folders it names.
     /// </remarks>
-    SpamClassificationScope ScopeInForce { get; }
+    Task<SpamClassificationScope> ReadScopeInForceAsync(CancellationToken cancellationToken);
 
     /// <summary>Gets the settings in force now for one account.</summary>
     /// <param name="account">The account whose mail the decision is about.</param>

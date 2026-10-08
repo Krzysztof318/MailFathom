@@ -86,7 +86,7 @@ public sealed class AgentConversationSummarizerTests
         // Arrange
         using var provider = ScriptedTransport.Answering(Completion("A key was shared."));
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, new FakeTimeProvider());
-        using var actingFor = egress.ActingForUser();
+        using var actingFor = egress.Guard.ActingFor(await egress.ReadUserPostureAsync(TestContext.Current.CancellationToken));
 
         // Act
         await provider.SummarizerOver(egress.Guard).SummarizeAsync(

@@ -67,6 +67,24 @@ internal sealed class MailAccountSensitiveContentOptions
     /// </remarks>
     public string[]? ScreenOutgoingMailFor { get; set; }
 
+    /// <summary>Gets the scanners <see cref="ScreenOutgoingMailFor" /> names, leaving out any name no scanner carries.</summary>
+    /// <remarks>
+    /// A name no scanner carries is refused where the record is written, so passing it over here only ever reaches a
+    /// record written by something other than the administration — and no answer can stop mail on a scanner that does
+    /// not exist.
+    /// </remarks>
+    internal IReadOnlyList<SensitiveContentScannerKind> ScreenedScanners =>
+    [
+        .. (this.ScreenOutgoingMailFor ?? [])
+            .Select(scanner => Enum.TryParse<SensitiveContentScannerKind>(scanner, ignoreCase: true, out var kind)
+                && Enum.IsDefined(kind)
+                ? kind
+                : (SensitiveContentScannerKind?)null)
+            .OfType<SensitiveContentScannerKind>()
+            .Distinct()
+            .Order(),
+    ];
+
     /// <summary>Finds what this account says about one scanner.</summary>
     /// <param name="scanner">The switch to read.</param>
     /// <returns>What the record said, which may be nothing.</returns>

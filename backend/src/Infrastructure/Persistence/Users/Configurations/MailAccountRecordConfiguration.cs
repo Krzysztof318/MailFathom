@@ -50,5 +50,12 @@ internal sealed class MailAccountRecordConfiguration : IEntityTypeConfiguration<
         entity.Property(account => account.Document).HasColumnType("jsonb").IsRequired();
 
         entity.Property(account => account.Version).IsConcurrencyToken();
+
+        // Defaults stand for a row whose document nothing has read yet, which no question about every account counts:
+        // an account with unreadable settings is served nothing and asks for nothing.
+        entity.Property(account => account.HasReadableSettings).HasDefaultValue(false);
+        entity.Property(account => account.ClassifiesSpam).HasDefaultValue(false);
+        entity.Property(account => account.ScansFor).HasDefaultValueSql("'{}'::integer[]").IsRequired();
+        entity.Property(account => account.ScreensOutgoingMailFor).HasDefaultValueSql("'{}'::integer[]").IsRequired();
     }
 }
