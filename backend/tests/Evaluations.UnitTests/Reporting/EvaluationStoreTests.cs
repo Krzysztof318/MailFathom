@@ -151,6 +151,26 @@ public sealed class EvaluationStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task CacheOverAsync_TheSameRequestUnderAnotherAliasInOneRun_TalliesTheAliasReadingItBackAsReused()
+    {
+        // Arrange
+        var reporting = EvaluationStore.OpenUnjudgedAt(this.store.FullName, "only", []);
+        var unnamed = ScriptedStructuredAnswerRun.PlanFor(ScriptedStructuredAnswerRun.ModelUnderTest);
+        var renamed = Assert.Single(EvaluationDeclaration.Parse(
+            $"{{MainModel: {{Model: {ScriptedStructuredAnswerRun.ModelUnderTest}, Alias: renamed}}}}",
+            fallbackMainModel: null,
+            address: null).ModelsFor(ChatCapability.Enrichment)).Plan;
+
+        // Act
+        await ReachesTheModelAsync(reporting, Held, unnamed);
+        await ReachesTheModelAsync(reporting, Held, renamed);
+        var tally = EvaluationStore.TallyOf(reporting, Held, EvaluationStore.IterationNameFor(renamed.Endpoint.Alias, repetition: 1));
+
+        // Assert
+        Assert.Equal((0, 1, 0), (tally.Replayed, tally.Reused, tally.Asked));
+    }
+
+    [Fact]
     public async Task CacheOverAsync_AToolWhoseDescriptionChanged_AsksTheModelAgainRatherThanReadingTheAnswerGivenUnderTheOldOne()
     {
         // Arrange
