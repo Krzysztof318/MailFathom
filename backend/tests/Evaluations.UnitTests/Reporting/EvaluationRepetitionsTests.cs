@@ -86,14 +86,14 @@ public sealed class EvaluationRepetitionsTests : IDisposable
         // Assert
         Assert.Equal(
             [
-                $"{Scenario} under {Model}: 1 of 3 repetition(s) fell short; 0 of its 3 answer(s) were read from the cache.",
+                $"{Scenario} under {Model}: 1 of 3 repetition(s) fell short; 0 of its 3 answer(s) were replayed from an earlier run.",
                 "  repetition 2: missed the point",
             ],
             shortfalls);
     }
 
     [Fact]
-    public async Task MeasureAsync_ACaseFallingShortOnAnswersReadBack_NamesHowManyCameFromTheCache()
+    public async Task MeasureAsync_ACaseFallingShortOnAnswersAnEarlierRunAsked_NamesHowManyWereReplayed()
     {
         // Arrange
         using var model = ScriptedStructuredAnswerRun.Model("{}");
@@ -104,7 +104,7 @@ public sealed class EvaluationRepetitionsTests : IDisposable
 
         // Assert
         Assert.Equal(
-            $"{Scenario} under {Model}: 1 of 3 repetition(s) fell short; 3 of its 3 answer(s) were read from the cache.",
+            $"{Scenario} under {Model}: 1 of 3 repetition(s) fell short; 3 of its 3 answer(s) were replayed from an earlier run.",
             shortfalls[0]);
     }
 
@@ -174,15 +174,14 @@ public sealed class EvaluationRepetitionsTests : IDisposable
 
         // Act
         await this.MeasureAsync("only", model, fallingShort: [], repetitions: 2);
-        var read = await this.FiledAsync("only", 2, EvaluationRepetitions.CachedAnswersMetricName);
-        var asked = await this.FiledAsync("only", 2, EvaluationRepetitions.AskedAnswersMetricName);
+        var origins = await this.FiledOriginsAsync("only", 2);
 
         // Assert
-        Assert.Equal([(0d, 1d), (0d, 1d)], read.Zip(asked, static (cached, fresh) => (cached.Value!.Value, fresh.Value!.Value)));
+        Assert.Equal([(0d, 0d, 1d), (0d, 0d, 1d)], origins);
     }
 
     [Fact]
-    public async Task MeasureAsync_ARepeatedRun_FilesEveryRepetitionsAnswerAsReadFromTheCache()
+    public async Task MeasureAsync_ARepeatedRun_FilesEveryRepetitionsAnswerAsReplayedFromTheEarlierRun()
     {
         // Arrange
         using var model = ScriptedStructuredAnswerRun.Model("{}");
@@ -190,11 +189,27 @@ public sealed class EvaluationRepetitionsTests : IDisposable
 
         // Act
         await this.MeasureAsync("second", model, fallingShort: [], repetitions: 2);
-        var read = await this.FiledAsync("second", 2, EvaluationRepetitions.CachedAnswersMetricName);
-        var asked = await this.FiledAsync("second", 2, EvaluationRepetitions.AskedAnswersMetricName);
+        var origins = await this.FiledOriginsAsync("second", 2);
 
         // Assert
-        Assert.Equal([(1d, 0d), (1d, 0d)], read.Zip(asked, static (cached, fresh) => (cached.Value!.Value, fresh.Value!.Value)));
+        Assert.Equal([(1d, 0d, 0d), (1d, 0d, 0d)], origins);
+    }
+
+    [Fact]
+    public async Task MeasureAsync_ARepetitionAskingOneQuestionTwice_FilesTheSecondAnswerAsReusedWithinTheRun()
+    {
+        // Arrange
+        using var model = ScriptedStructuredAnswerRun.Model("{}");
+
+        // Act
+        var shortfalls = await this.MeasureAsync("only", model, fallingShort: [1], repetitions: 2, asksPerRepetition: 2);
+        var origins = await this.FiledOriginsAsync("only", 2);
+
+        // Assert
+        Assert.Equal([(0d, 1d, 1d), (0d, 1d, 1d)], origins);
+        Assert.Equal(
+            $"{Scenario} under {Model}: 1 of 2 repetition(s) fell short; 0 of its 4 answer(s) were replayed from an earlier run.",
+            shortfalls[0]);
     }
 
     [Fact]
@@ -240,7 +255,8 @@ public sealed class EvaluationRepetitionsTests : IDisposable
         ScriptedChatClient model,
         int[] fallingShort,
         int repetitions,
-        PaidUsage[]? spend = null)
+        PaidUsage[]? spend = null,
+        int asksPerRepetition = 1)
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var reporting = EvaluationStore.OpenUnjudgedAt(this.store.FullName, executionName, []);
@@ -263,6 +279,12 @@ public sealed class EvaluationRepetitionsTests : IDisposable
 
                 var cached = await EvaluationStore.CacheOverAsync(reporting, model, plan, Scenario, iterationName, repetition, cancellationToken);
                 var answer = await cached.GetResponseAsync(question, cancellationToken: cancellationToken);
+
+                for (var ask = 2; ask <= asksPerRepetition; ask++)
+                {
+                    answer = await cached.GetResponseAsync(question, cancellationToken: cancellationToken);
+                }
+
                 var verdict = await scenarioRun.EvaluateAsync(question, answer, cancellationToken: cancellationToken);
 
                 EvaluationCost.Record(verdict, Model, spend?[repetition - 1] ?? default, judgeSpend: default);
@@ -270,6 +292,16 @@ public sealed class EvaluationRepetitionsTests : IDisposable
                 return fallingShort.Contains(repetition) ? ["missed the point"] : [];
             },
             cancellationToken);
+    }
+
+    /// <summary>Reads where every repetition the store filed under a run says its answers came from.</summary>
+    private async Task<IReadOnlyList<(double Replayed, double Reused, double Asked)>> FiledOriginsAsync(string executionName, int repetitions)
+    {
+        var replayed = await this.FiledAsync(executionName, repetitions, EvaluationRepetitions.ReplayedAnswersMetricName);
+        var reused = await this.FiledAsync(executionName, repetitions, EvaluationRepetitions.ReusedAnswersMetricName);
+        var asked = await this.FiledAsync(executionName, repetitions, EvaluationRepetitions.AskedAnswersMetricName);
+
+        return [.. replayed.Zip(reused, asked).Select(static origin => (origin.First.Value!.Value, origin.Second.Value!.Value, origin.Third.Value!.Value))];
     }
 
     /// <summary>Reads one metric from every repetition the store filed under a run.</summary>

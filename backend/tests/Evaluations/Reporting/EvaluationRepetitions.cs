@@ -28,9 +28,10 @@ namespace MailFathom.Evaluations.Reporting;
 /// where a run discards the cache.
 /// </para>
 /// <para>
-/// Every repetition therefore also records how many of its answers were read from the cache and how many were asked
-/// afresh, because a rate replayed from the cache and a rate just measured read the same in a report and are not
-/// comparable.
+/// Every repetition therefore also records how many of its answers were replayed from an earlier run, how many it reused
+/// from answers this run had already asked, and how many were asked afresh, because a rate replayed from an earlier run
+/// and a rate just measured read the same in a report and are not comparable. A reused answer is a measurement all the
+/// same: a scenario asking one question under several settings reads its own fresh answer back by design.
 /// </para>
 /// </remarks>
 internal static class EvaluationRepetitions
@@ -38,9 +39,13 @@ internal static class EvaluationRepetitions
     /// <summary>The name the share of repetitions that passed is recorded under.</summary>
     public const string PassingShareMetricName = "Passing share";
 
-    /// <summary>The name the count of a repetition's answers read from the cache is recorded under.</summary>
+    /// <summary>The name the count of a repetition's answers read from entries an earlier run wrote is recorded under.</summary>
     /// <remarks><c>scripts/run-ai-evaluations.sh</c> sums it over a run by this name.</remarks>
-    public const string CachedAnswersMetricName = "Answers read from the cache";
+    public const string ReplayedAnswersMetricName = "Answers replayed from an earlier run";
+
+    /// <summary>The name the count of a repetition's answers read from entries this run wrote is recorded under.</summary>
+    /// <remarks><c>scripts/run-ai-evaluations.sh</c> sums it over a run by this name.</remarks>
+    public const string ReusedAnswersMetricName = "Answers reused within the run";
 
     /// <summary>The name the count of a repetition's answers asked of the model is recorded under.</summary>
     /// <remarks><c>scripts/run-ai-evaluations.sh</c> sums it over a run by this name.</remarks>
@@ -83,7 +88,7 @@ internal static class EvaluationRepetitions
     /// <param name="repetitions">How many times the case is asked.</param>
     /// <param name="measure">Asks the case once, as the numbered repetition, and names what that answer fell short on.</param>
     /// <param name="cancellationToken">Withdraws the run.</param>
-    /// <returns>One line naming the case, the model, how many repetitions fell short, and how many of its answers were read from the cache, followed by why each fell short; none where the share holds.</returns>
+    /// <returns>One line naming the case, the model, how many repetitions fell short, and how many of its answers were replayed from an earlier run, followed by why each fell short; none where the share holds.</returns>
     /// <remarks>
     /// The repetitions run one after another, because a model's spend meter is read once per answer and two answers
     /// running at once would each be charged with the other's calls.
@@ -121,12 +126,12 @@ internal static class EvaluationRepetitions
             return [];
         }
 
-        var readFromCache = tallies.Sum(static tally => tally.Read);
-        var answers = readFromCache + tallies.Sum(static tally => tally.Asked);
+        var replayed = tallies.Sum(static tally => tally.Replayed);
+        var answers = tallies.Sum(static tally => tally.Replayed + tally.Reused + tally.Asked);
 
         return
         [
-            $"{scenarioName} under {modelName}: {repetitions - passed} of {repetitions} repetition(s) fell short; {readFromCache} of its {answers} answer(s) were read from the cache.",
+            $"{scenarioName} under {modelName}: {repetitions - passed} of {repetitions} repetition(s) fell short; {replayed} of its {answers} answer(s) were replayed from an earlier run.",
             .. shortfalls.SelectMany(static (repetitionShortfalls, index) =>
                 repetitionShortfalls.Select(shortfall => $"  repetition {index + 1}: {shortfall}")),
         ];
@@ -177,11 +182,12 @@ internal static class EvaluationRepetitions
         {
             var origin = string.Create(
                 CultureInfo.InvariantCulture,
-                $"{tally.Read} of the {tally.Read + tally.Asked} answer(s) the model gave in this repetition were read from the cache, and {tally.Asked} asked afresh.");
+                $"{tally.Replayed} of the {tally.Replayed + tally.Reused + tally.Asked} answer(s) the model gave in this repetition were replayed from an earlier run, {tally.Reused} reused from this run's own, and {tally.Asked} asked afresh.");
 
             result.EvaluationResult.Metrics[share.Name] = share;
             result.EvaluationResult.Metrics[cost.Name] = cost;
-            result.EvaluationResult.Metrics[CachedAnswersMetricName] = new NumericMetric(CachedAnswersMetricName, tally.Read, origin);
+            result.EvaluationResult.Metrics[ReplayedAnswersMetricName] = new NumericMetric(ReplayedAnswersMetricName, tally.Replayed, origin);
+            result.EvaluationResult.Metrics[ReusedAnswersMetricName] = new NumericMetric(ReusedAnswersMetricName, tally.Reused, origin);
             result.EvaluationResult.Metrics[AskedAnswersMetricName] = new NumericMetric(AskedAnswersMetricName, tally.Asked, origin);
         }
 

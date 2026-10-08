@@ -29,7 +29,7 @@ public sealed class EvaluationStoreTests : IDisposable
     private readonly DirectoryInfo store = Directory.CreateTempSubdirectory("mailfathom-evaluations-");
 
     [Fact]
-    public async Task CacheOverAsync_AQuestionAskedTwice_TalliesOneAnswerAskedAfreshAndOneReadFromTheCache()
+    public async Task CacheOverAsync_AQuestionAskedTwiceInOneRun_TalliesOneAnswerAskedAfreshAndOneReusedWithinTheRun()
     {
         // Arrange
         var reporting = EvaluationStore.OpenUnjudgedAt(this.store.FullName, "only", []);
@@ -41,7 +41,24 @@ public sealed class EvaluationStoreTests : IDisposable
         var tally = EvaluationStore.TallyOf(reporting, Held, iterationName);
 
         // Assert
-        Assert.Equal((1, 1), (tally.Read, tally.Asked));
+        Assert.Equal((0, 1, 1), (tally.Replayed, tally.Reused, tally.Asked));
+    }
+
+    [Fact]
+    public async Task CacheOverAsync_AQuestionAnEarlierRunAsked_TalliesTheAnswerAsReplayed()
+    {
+        // Arrange
+        await ReachesTheModelAsync(EvaluationStore.OpenUnjudgedAt(this.store.FullName, "first", []), Held);
+        var reporting = EvaluationStore.OpenUnjudgedAt(this.store.FullName, "second", []);
+        var iterationName = EvaluationStore.IterationNameFor(ScriptedStructuredAnswerRun.ModelUnderTest, repetition: 1);
+
+        // Act
+        await ReachesTheModelAsync(reporting, Held);
+        await ReachesTheModelAsync(reporting, Held);
+        var tally = EvaluationStore.TallyOf(reporting, Held, iterationName);
+
+        // Assert
+        Assert.Equal((2, 0, 0), (tally.Replayed, tally.Reused, tally.Asked));
     }
 
     [Fact]
@@ -131,6 +148,26 @@ public sealed class EvaluationStoreTests : IDisposable
 
         // Assert
         Assert.Equal([true, false], reached);
+    }
+
+    [Fact]
+    public async Task CacheOverAsync_TheSameRequestUnderAnotherAliasInOneRun_TalliesTheAliasReadingItBackAsReused()
+    {
+        // Arrange
+        var reporting = EvaluationStore.OpenUnjudgedAt(this.store.FullName, "only", []);
+        var unnamed = ScriptedStructuredAnswerRun.PlanFor(ScriptedStructuredAnswerRun.ModelUnderTest);
+        var renamed = Assert.Single(EvaluationDeclaration.Parse(
+            $"{{MainModel: {{Model: {ScriptedStructuredAnswerRun.ModelUnderTest}, Alias: renamed}}}}",
+            fallbackMainModel: null,
+            address: null).ModelsFor(ChatCapability.Enrichment)).Plan;
+
+        // Act
+        await ReachesTheModelAsync(reporting, Held, unnamed);
+        await ReachesTheModelAsync(reporting, Held, renamed);
+        var tally = EvaluationStore.TallyOf(reporting, Held, EvaluationStore.IterationNameFor(renamed.Endpoint.Alias, repetition: 1));
+
+        // Assert
+        Assert.Equal((0, 1, 0), (tally.Replayed, tally.Reused, tally.Asked));
     }
 
     [Fact]
