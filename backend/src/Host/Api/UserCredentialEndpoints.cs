@@ -116,11 +116,11 @@ internal static class UserCredentialEndpoints
             return EmptyUser();
         }
 
-        var held = await credentials.ReadCredentialsAsync(user, cancellationToken);
+        var listing = await credentials.ReadCredentialsAsync(user, cancellationToken);
 
         return TypedResults.Ok(new UserCredentialListResponse(
             userId,
-            [.. held.Select(UserCredentialResponse.For)]));
+            [.. listing.Credentials.Select(credential => UserCredentialResponse.For(credential, listing.UserGrant))]));
     }
 
     /// <summary>Provisions a credential one user's clients can present.</summary>
@@ -455,7 +455,7 @@ internal static class UserCredentialEndpoints
     }
 
     /// <summary>Reads the grant a request named, or reports the sentence naming what to write instead.</summary>
-    /// <remarks>An unwritten grant is not a refusal and is not an empty one: it is the whole mail surface, which is the reading a configuration entry writing no grant already had. An empty list is the opposite statement, and is passed through as one.</remarks>
+    /// <remarks>An unwritten narrowing is not a refusal and is not an empty one: it names nothing, so the credential holds what its user's roles grant. An empty list is the opposite statement, and is passed through as one.</remarks>
     private static bool TryReadGrant(
         IReadOnlyList<string>? written,
         out IReadOnlyList<MailFathomPermission>? permissions,

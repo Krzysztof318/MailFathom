@@ -9,12 +9,12 @@ namespace MailFathom.Application.Access.Credentials;
 /// <summary>What judging a user-facing credential establishes, whichever method was judged.</summary>
 /// <param name="CredentialId">The credential that matched, which is what an audit record and a diagnostic correlate on.</param>
 /// <param name="User">The user the request acts for.</param>
-/// <param name="Permissions">What the request may do, in the published order.</param>
+/// <param name="Permissions">The names the request is kept to, in the published order, which narrow what its user's roles grant rather than granting anything.</param>
 /// <param name="EndpointAccess">Which endpoints the user may be served on, as read when the credential or the session was resolved, which the surface judging the request asks of its own switch.</param>
 /// <remarks>
 /// <para>
 /// The four facts are one shape because they are established together and travel together: a credential resolves a
-/// user, what that user's caller may do was decided when the credential was provisioned, and which endpoints the user
+/// user, the narrowing its caller is kept to was decided when the credential was provisioned, and which endpoints the user
 /// is served on is read in the same statement. Four methods producing four shapes of the same answer would be four
 /// places for one of them to be dropped on the way to the principal.
 /// </para>

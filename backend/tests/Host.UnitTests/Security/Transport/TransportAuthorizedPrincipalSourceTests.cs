@@ -6,9 +6,11 @@ using System.Security.Claims;
 using MailFathom.Application.Access;
 using MailFathom.Application.Access.Grants;
 using MailFathom.Domain.Access;
+using MailFathom.Host.Api;
 using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Mcp;
+using MailFathom.Host.Observability.ClientTelemetry;
 using MailFathom.Host.Security.ApiKeys;
 using MailFathom.Host.Security.Transport;
 using MailFathom.Mcp;
@@ -188,6 +190,36 @@ public sealed class TransportAuthorizedPrincipalSourceTests
         Assert.NotNull(principal);
         Assert.Equal([MailFathomPermission.MailRead], principal.Permissions);
         Assert.Equal([userScope], principal.Grant.ScopesOf(MailFathomPermission.MailRead));
+    }
+
+    /// <summary>
+    /// A credential naming nothing is admitted kept to every name the mail half publishes, so what its caller holds is
+    /// exactly its user's grant: a mail name no role carries — which is what a permission a later release publishes is
+    /// until somebody writes it into one — is not held, and the session route reports that grant rather than the
+    /// credential's own list.
+    /// </summary>
+    [Fact]
+    public async Task Current_ACredentialNamingNothing_HoldsOnlyWhatItsUsersRolesGrantAndTheSessionReportsThat()
+    {
+        // Arrange
+        var source = SourceOver(
+            RequestBy(
+                AuthenticatedUserHolding(SyntheticUser.Another, [.. MailFathomPermission.PublishedFor(ProtectedSurface.Mail)]),
+                ClientEndpointOptions.RoutePrefix + ClientApiEndpoints.SessionRoute),
+            clientConfiguresACredential: true);
+        var userGrant = ScopedGrant.Of([
+            (MailFathomPermission.MailRead, AssignmentScope.User(SyntheticUser.Another)),
+            (MailFathomPermission.MailAsk, AssignmentScope.User(SyntheticUser.Another)),
+        ]);
+
+        // Act
+        var principal = await ResolvedAsync(source, userGrant);
+        var session = ClientSessionResponse.For(principal, forwardsTelemetry: false, ClientTelemetryLevel.Info);
+
+        // Assert
+        Assert.NotNull(principal);
+        Assert.DoesNotContain(MailFathomPermission.MailSend, principal.Permissions);
+        Assert.Equal([MailFathomPermission.MailRead.Name, MailFathomPermission.MailAsk.Name], session.Permissions);
     }
 
     /// <summary>A mail-serving surface reads the mail half of a grant, so a role carrying administrative names grants nothing there by them, whatever the credential lists.</summary>

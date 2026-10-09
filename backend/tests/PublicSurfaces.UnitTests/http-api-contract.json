@@ -10367,6 +10367,12 @@
             "format": "date-time",
             "type": "string"
           },
+          "effectivePermissions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "enabled": {
             "type": "boolean"
           },
@@ -10397,7 +10403,10 @@
             "items": {
               "type": "string"
             },
-            "type": "array"
+            "type": [
+              "null",
+              "array"
+            ]
           },
           "version": {
             "format": "int64",
@@ -10413,6 +10422,7 @@
           "method",
           "lookup",
           "permissions",
+          "effectivePermissions",
           "enabled",
           "version",
           "createdAt",

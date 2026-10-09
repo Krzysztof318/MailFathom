@@ -104,21 +104,21 @@ internal sealed class UserCredentialEntity
     /// </remarks>
     public string? Material { get; set; }
 
-    /// <summary>The published permission names a request this credential admits may hold.</summary>
+    /// <summary>The published permission names this credential narrows its user's grant to, or <see langword="null" /> where it names none.</summary>
     /// <remarks>
     /// <para>
-    /// The grant lives on the credential because the credential is what resolves a user: what a caller may do and
-    /// whose mail they may do it to are one decision, taken when the credential is provisioned, and splitting them
-    /// across a row and a configuration entry would leave an operator narrowing one while the other stayed where it
-    /// was.
+    /// What a caller holds is its user's grant, computed from the roles assigned to the user; the credential only takes
+    /// away from it. A row naming permissions keeps those of the user's names it lists, and a listed name the user does
+    /// not hold grants nothing, so the list is accepted while the user's grant moves under it.
     /// </para>
     /// <para>
-    /// An empty array is a credential that authenticates and may do nothing, which is how one is retired without being
-    /// deleted. It is not the same as an unwritten grant, which the administrative surface resolves to the whole mail
-    /// surface before the row is written — so nothing stored here is ever a question the reader has to answer.
+    /// <see langword="null" /> is a credential that names nothing and holds exactly what its user holds, now and after
+    /// every change to the user's assignments. An empty array is the opposite statement — a credential that
+    /// authenticates and may do nothing, which is how one is retired without being deleted — so the two are kept apart
+    /// rather than read alike.
     /// </para>
     /// </remarks>
-    public required string[] Permissions { get; set; }
+    public string[]? Permissions { get; set; }
 
     /// <summary>Whether the credential currently authenticates requests.</summary>
     /// <remarks>

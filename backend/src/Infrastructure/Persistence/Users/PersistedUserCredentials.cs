@@ -138,7 +138,7 @@ internal sealed class PersistedUserCredentials(MailFathomDbContext dbContext, Ti
                 stored.Id,
                 UserId.Create(stored.UserId),
                 method,
-                GrantOf(stored.Permissions),
+                NarrowingAdmittedBy(stored.Permissions),
                 stored.Enabled,
                 stored.Material,
                 new UserEndpointAccess(stored.McpEndpointEnabled, stored.ClientEndpointEnabled));
@@ -183,7 +183,7 @@ internal sealed class PersistedUserCredentials(MailFathomDbContext dbContext, Ti
                     user,
                     MethodOf(credential.Method),
                     LookupOf(credential.Lookup),
-                    GrantOf(credential.Permissions),
+                    NarrowingOf(credential.Permissions),
                     credential.Enabled,
                     credential.Version,
                     credential.CreatedAt,
@@ -221,11 +221,9 @@ internal sealed class PersistedUserCredentials(MailFathomDbContext dbContext, Ti
         UserCredentialMethod method,
         UserCredentialLookup lookup,
         string? material,
-        IReadOnlyList<MailFathomPermission> permissions,
+        IReadOnlyList<MailFathomPermission>? permissions,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(permissions);
-
         var storedUserId = RequireUser(user);
         var storedCredentialId = RequireCredential(credentialId);
         var storedMethod = RequireMethod(method);
@@ -253,7 +251,7 @@ internal sealed class PersistedUserCredentials(MailFathomDbContext dbContext, Ti
                  ("Id", "UserId", "Method", "OrganizationId", "Lookup", "Material", "Permissions", "Enabled", "Version", "CreatedAt", "MaterialChangedAt")
              SELECT {storedCredentialId}, {storedUserId}, {storedMethod},
                     CASE WHEN {scopedToTheUsersOrganization} THEN (SELECT "OrganizationId" FROM settings_accounts WHERE "Id" = {storedUserId}) END,
-                    {storedLookup}, {storedMaterial}, {storedPermissions}, TRUE, 1, {provisionedAt}, {provisionedAt}
+                    {storedLookup}, {storedMaterial}, CAST({storedPermissions} AS text[]), TRUE, 1, {provisionedAt}, {provisionedAt}
              WHERE EXISTS (SELECT 1 FROM settings_accounts WHERE "Id" = {storedUserId})
                AND (SELECT COUNT(*) FROM user_credentials WHERE "UserId" = {storedUserId}) < {Ceiling}
              ON CONFLICT DO NOTHING
@@ -489,36 +487,52 @@ internal sealed class PersistedUserCredentials(MailFathomDbContext dbContext, Ti
         UserCredentialMethod.TryParse(method, out _)
         && (organizationShortName is null || OrganizationShortName.TryCreate(organizationShortName, out _));
 
-    /// <summary>Reads a stored grant back into the permissions it names.</summary>
+    /// <summary>Reads a stored narrowing back into the permissions it names, or nothing where it names none.</summary>
     /// <remarks>
     /// A name this release does not publish is dropped rather than raising, and the direction is deliberate: a row
     /// written by a release that published a permission this one withdrew must not stop a credential working, and
-    /// admitting a name nothing enforces would be a grant that says more than the deployment can do. The published
-    /// order is restored here, because a grant is a set and two rows written in two orders are one grant.
+    /// admitting a name nothing enforces would be a narrowing that says more than the deployment can do. The published
+    /// order is restored here, because a narrowing is a set and two rows written in two orders are one narrowing.
     /// </remarks>
-    private static IReadOnlyList<MailFathomPermission> GrantOf(string[] storedPermissions)
+    internal static IReadOnlyList<MailFathomPermission>? NarrowingOf(string[]? storedPermissions)
     {
-        var granted = new HashSet<MailFathomPermission>();
+        if (storedPermissions is null)
+        {
+            return null;
+        }
+
+        var named = new HashSet<MailFathomPermission>();
 
         foreach (var storedPermission in storedPermissions)
         {
             if (MailFathomPermission.TryParse(storedPermission, out var permission))
             {
-                granted.Add(permission);
+                named.Add(permission);
             }
         }
 
-        return [.. MailFathomPermission.All.Where(granted.Contains)];
+        return [.. MailFathomPermission.All.Where(named.Contains)];
     }
 
-    private static string[] StoredGrant(IReadOnlyList<MailFathomPermission> permissions) =>
-    [
-        .. permissions.Select(permission => permission.IsSpecified
-            ? permission.Name
-            : throw new ArgumentException(
-                "A credential grants published permissions.",
-                nameof(permissions))),
-    ];
+    /// <summary>Reads a stored narrowing into the names a request this credential admits is kept to.</summary>
+    /// <remarks>
+    /// A credential naming nothing keeps every name the mail half publishes in this build, which takes nothing away from
+    /// its user's grant: the grant is kept to that half anyway, so the user's roles alone decide what the caller holds,
+    /// and a name a later build publishes reaches the caller only once a role carries it.
+    /// </remarks>
+    internal static IReadOnlyList<MailFathomPermission> NarrowingAdmittedBy(string[]? storedPermissions) =>
+        NarrowingOf(storedPermissions) ?? MailFathomPermission.PublishedFor(ProtectedSurface.Mail);
+
+    private static string[]? StoredGrant(IReadOnlyList<MailFathomPermission>? permissions) => permissions is null
+        ? null
+        :
+        [
+            .. permissions.Select(permission => permission.IsSpecified
+                ? permission.Name
+                : throw new ArgumentException(
+                    "A credential narrows to published permissions.",
+                    nameof(permissions))),
+        ];
 
     private static UserCredentialMethod MethodOf(string storedMethod) =>
         UserCredentialMethod.TryParse(storedMethod, out var method)

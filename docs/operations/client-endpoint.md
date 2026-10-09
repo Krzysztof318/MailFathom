@@ -216,8 +216,10 @@ unreachable one: it falls back to what the session route's challenge says about 
 ### The session route
 
 It answers with four fields: `service`, which is always `MailFathom`; `version`, the running release; `permissions`, the
-published names the credential just presented carries, in the order this project publishes them; and `telemetry`, how
-much of a client's own telemetry this deployment wants forwarded.
+published names the caller holds — its user's grant, kept to what the credential it presented names — in the order this
+project publishes them; and `telemetry`, how much of a client's own telemetry this deployment wants forwarded.
+`permissions` is computed on every read rather than copied from the credential, so a role assigned or revoked since the
+sign-in is already in it, and a credential naming no permission reports exactly what its user's roles grant.
 
 That is what a client needs before it has drawn a single message: that this is MailFathom rather than something else
 answering the port, which contract it speaks, and what the rest of the surface will serve it. It is also what lets
@@ -262,9 +264,9 @@ them in. This surface's reader is a page holding a token, which brought no name 
 response echoing a deployment's configured identity for a credential would be a way to read configuration back out of
 the service from a browser.
 
-A caller granted nothing reads an empty `permissions` list rather than a refusal, because "nothing" is the accurate
-answer to what such a caller may do, and because a credential retired by narrowing its grant to nothing should be
-distinguishable from one that no longer works.
+A caller holding nothing reads an empty `permissions` list rather than a refusal, because "nothing" is the accurate
+answer to what such a caller may do, and because a credential retired by narrowing it to nothing — or a user no role is
+assigned to — should be distinguishable from one that no longer works.
 
 It is the one route on this surface published under no permission, for the reason the administrative session route is:
 it reports the credential the caller already presented and the version this deployment already publishes, so putting it

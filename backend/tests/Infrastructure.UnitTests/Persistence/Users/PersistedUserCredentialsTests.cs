@@ -94,6 +94,36 @@ public sealed class PersistedUserCredentialsTests
         Assert.False(listable);
     }
 
+    /// <summary>
+    /// A row naming nothing is read back as naming nothing for an administrator, and admitted kept to every mail name
+    /// this build publishes — which takes nothing from its user's grant, so the user's roles alone decide.
+    /// </summary>
+    [Fact]
+    public void Narrowing_ARowNamingNothing_IsReportedAsNoneAndAdmitsTheWholeMailHalf()
+    {
+        // Act
+        var reported = PersistedUserCredentials.NarrowingOf(null);
+        var admitted = PersistedUserCredentials.NarrowingAdmittedBy(null);
+
+        // Assert
+        Assert.Null(reported);
+        Assert.Equal(MailFathomPermission.PublishedFor(ProtectedSurface.Mail), admitted);
+    }
+
+    /// <summary>A row naming some keeps them in the published order, drops a name this build no longer publishes, and keeps the empty list empty.</summary>
+    [Fact]
+    public void Narrowing_ARowNamingSome_KeepsThePublishedNamesInThePublishedOrder()
+    {
+        // Act
+        var named = PersistedUserCredentials.NarrowingAdmittedBy(
+            [MailFathomPermission.MailSend.Name, "mailfathom.mail.retired", MailFathomPermission.MailRead.Name]);
+        var empty = PersistedUserCredentials.NarrowingAdmittedBy([]);
+
+        // Assert
+        Assert.Equal([MailFathomPermission.MailRead, MailFathomPermission.MailSend], named);
+        Assert.Empty(empty);
+    }
+
     private static MailFathomDbContext DesignTimeContext() => new(
         MailFathomDbContextDesignTimeFactory.BuildOptions(
             orchestratedConnectionString: null,

@@ -793,10 +793,32 @@ public sealed class UserCredentialCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
 
-        var listing = DrawnListing.ReadFrom(this.harness.Console.Lines, "Credential", "Method", "Resolved by", "Grants");
+        var listing = DrawnListing.ReadFrom(this.harness.Console.Lines, "Credential", "Method", "Resolved by", "Narrows to", "Holds");
         var row = Assert.Single(listing.Rows);
 
         Assert.Equal("ACME/jan", listing.Cell(row, "Resolved by"));
+    }
+
+    /// <summary>A credential naming nothing is listed as such, beside what its user's roles currently leave it holding.</summary>
+    [Fact]
+    public async Task List_ACredentialNamingNothing_ShowsNoNarrowingAndWhatItHolds()
+    {
+        // Arrange
+        using var deployment = FakeUserCredentialDeployment.Holding(
+            [User],
+            FakeUserCredentialDeployment.CredentialNamingNothing(CredentialId, "mailfathom.mail.read", "mailfathom.mail.ask"));
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "credential", "list", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+
+        var listing = DrawnListing.ReadFrom(this.harness.Console.Lines, "Credential", "Method", "Resolved by", "Narrows to", "Holds", "State");
+        var row = Assert.Single(listing.Rows);
+
+        Assert.Equal("nothing named", listing.Cell(row, "Narrows to"));
+        Assert.Equal("mailfathom.mail.read, mailfathom.mail.ask", listing.Cell(row, "Holds"));
     }
 
     /// <summary>Nothing about an invocation may carry the password, which is what keeps it out of a shell history and a process table.</summary>

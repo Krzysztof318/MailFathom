@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access.Grants;
 using MailFathom.Domain.Access;
 
 namespace MailFathom.Application.Access.Credentials;
@@ -54,6 +55,7 @@ public sealed class UserCredentialAdministration
     private readonly IUserApiKeyMinter apiKeyMinter;
     private readonly IClientPublicKeyReader publicKeyReader;
     private readonly IUserCredentialAuditor auditor;
+    private readonly UserGrantResolver grants;
     private readonly TimeProvider timeProvider;
 
     /// <summary>Initializes the administration over one deployment's credential records.</summary>
@@ -63,6 +65,7 @@ public sealed class UserCredentialAdministration
     /// <param name="apiKeyMinter">What draws a key and reduces one to the value it is resolved by.</param>
     /// <param name="publicKeyReader">What reads a client's public key into what is stored and what resolves it.</param>
     /// <param name="auditor">Where a change to who can reach a user's mail is written down.</param>
+    /// <param name="grants">Computes what a user holds, which a listing reports each credential's narrowing of.</param>
     /// <param name="timeProvider">The clock a record is stamped with.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public UserCredentialAdministration(
@@ -72,6 +75,7 @@ public sealed class UserCredentialAdministration
         IUserApiKeyMinter apiKeyMinter,
         IClientPublicKeyReader publicKeyReader,
         IUserCredentialAuditor auditor,
+        UserGrantResolver grants,
         TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(authorization);
@@ -80,6 +84,7 @@ public sealed class UserCredentialAdministration
         ArgumentNullException.ThrowIfNull(apiKeyMinter);
         ArgumentNullException.ThrowIfNull(publicKeyReader);
         ArgumentNullException.ThrowIfNull(auditor);
+        ArgumentNullException.ThrowIfNull(grants);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
         this.authorization = authorization;
@@ -88,30 +93,39 @@ public sealed class UserCredentialAdministration
         this.apiKeyMinter = apiKeyMinter;
         this.publicKeyReader = publicKeyReader;
         this.auditor = auditor;
+        this.grants = grants;
         this.timeProvider = timeProvider;
     }
 
-    /// <summary>Reads the credentials one user holds, of every method.</summary>
+    /// <summary>Reads the credentials one user holds, of every method, beside what the user currently holds.</summary>
     /// <param name="user">The user being asked about.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The credentials, oldest first, empty when the user holds none.</returns>
+    /// <returns>The credentials, oldest first and empty when the user holds none, with the user's grant each one narrows.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.AdminRead" />.</exception>
-    /// <remarks>A user this deployment holds no record for is answered with an empty listing rather than a refusal, because "which credentials does this user hold" has the same answer either way and telling the two apart would report which user identifiers exist.</remarks>
-    public Task<IReadOnlyList<UserCredential>> ReadCredentialsAsync(
+    /// <remarks>
+    /// A user this deployment holds no record for is answered with an empty listing and a grant holding nothing rather
+    /// than a refusal, because "which credentials does this user hold" has the same answer either way and telling the
+    /// two apart would report which user identifiers exist. The grant travels with the listing because a credential's
+    /// narrowing alone does not say what it admits: a listed name the user does not hold yields nothing.
+    /// </remarks>
+    public async Task<UserCredentialListing> ReadCredentialsAsync(
         UserId user,
         CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.AdminRead);
 
-        return this.credentials.ReadForUserAsync(user, cancellationToken);
+        var credentials = await this.credentials.ReadForUserAsync(user, cancellationToken);
+        var userGrant = await this.grants.ResolveAsync(user, cancellationToken);
+
+        return new UserCredentialListing(credentials, userGrant);
     }
 
     /// <summary>Provisions a username and password a user signs in with.</summary>
     /// <param name="user">The user the credential authenticates.</param>
     /// <param name="username">The canonical username it will be resolved by.</param>
     /// <param name="password">The plaintext, read within this call and never retained.</param>
-    /// <param name="permissions">What the credential grants, or <see langword="null" /> to grant the whole mail surface.</param>
+    /// <param name="permissions">The names the credential narrows its user's grant to, or <see langword="null" /> to name none and hold what the user holds.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>What the act did, or why it did nothing.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody, <paramref name="username" /> is the unspecified struct default, the password breaks <see cref="UserPasswordPolicy" />, or the grant names something a user-facing credential cannot hold.</exception>
@@ -140,7 +154,7 @@ public sealed class UserCredentialAdministration
 
     /// <summary>Draws a key one of a user's clients presents, and provisions the credential it resolves.</summary>
     /// <param name="user">The user the credential authenticates.</param>
-    /// <param name="permissions">What the credential grants, or <see langword="null" /> to grant the whole mail surface.</param>
+    /// <param name="permissions">The names the credential narrows its user's grant to, or <see langword="null" /> to name none and hold what the user holds.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>What the act did, and the key to report where it was performed.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody or the grant names something a user-facing credential cannot hold.</exception>
@@ -169,7 +183,7 @@ public sealed class UserCredentialAdministration
     /// <summary>Registers a public key whose signed assertions authenticate one user.</summary>
     /// <param name="user">The user the credential authenticates.</param>
     /// <param name="writtenPublicKey">The client's public key as the operator supplied it.</param>
-    /// <param name="permissions">What the credential grants, or <see langword="null" /> to grant the whole mail surface.</param>
+    /// <param name="permissions">The names the credential narrows its user's grant to, or <see langword="null" /> to name none and hold what the user holds.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>What the act did, and the fingerprint the client's assertions must name.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody, the written key is not one this deployment accepts, or the grant names something a user-facing credential cannot hold.</exception>
@@ -199,12 +213,12 @@ public sealed class UserCredentialAdministration
     /// <param name="user">The user the subject acts for.</param>
     /// <param name="issuer">The issuer exactly as it is configured and as a token carries it.</param>
     /// <param name="subject">The subject claim the server issues for that person.</param>
-    /// <param name="permissions">What the mapping grants, or <see langword="null" /> to grant the whole mail surface.</param>
+    /// <param name="permissions">The names the mapping narrows its user's grant to, or <see langword="null" /> to name none and hold what the user holds.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>What the act did, or why it did nothing.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody, the pair cannot compose a lookup, or the grant names something a user-facing credential cannot hold.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.AdminCredentialsWrite" />.</exception>
-    /// <remarks>What this grants is not what the token may do where the endpoint reads a grant from a token's own scopes; there it is the ceiling the scopes narrow. The user comes from here either way, because a token cannot carry one.</remarks>
+    /// <remarks>Where the endpoint reads a token's own scopes, they narrow what this leaves of the user's grant further. The user comes from here either way, because a token cannot carry one.</remarks>
     public Task<UserCredentialProvisioning> ProvisionOAuthSubjectAsync(
         UserId user,
         string? issuer,
@@ -408,14 +422,15 @@ public sealed class UserCredentialAdministration
         return outcome;
     }
 
-    /// <summary>Reports why a written grant cannot be held by a user-facing credential, or that it can.</summary>
+    /// <summary>Reports why a written narrowing cannot be kept by a user-facing credential, or that it can.</summary>
     /// <param name="permissions">The permissions the request named, or <see langword="null" /> where it named none.</param>
-    /// <returns>The sentence naming what to write instead, or <see langword="null" /> when the grant is one this deployment accepts.</returns>
+    /// <returns>The sentence naming what to write instead, or <see langword="null" /> when the narrowing is one this deployment accepts.</returns>
     /// <remarks>
     /// Published here rather than at each boundary, so an operator provisioning over HTTP and one provisioning from a
-    /// terminal are refused in one sentence. An unstated grant is not a refusal: it is the whole mail surface, which is
-    /// the reading configuration already gave an entry that wrote no grant, and an empty list is the opposite
-    /// statement — a credential that authenticates and may do nothing.
+    /// terminal are refused in one sentence. An unstated narrowing is not a refusal: it names nothing and holds what the
+    /// user's roles grant, and an empty list is the opposite statement — a credential that authenticates and may do
+    /// nothing. A mail name the user does not hold is accepted, because the user's grant moves while the credential's
+    /// list does not.
     /// </remarks>
     public static string? FindGrantRefusal(IReadOnlyList<MailFathomPermission>? permissions)
     {
@@ -433,9 +448,9 @@ public sealed class UserCredentialAdministration
 
             if (permission.Surface != ProtectedSurface.Mail)
             {
-                return $"'{permission.Name}' belongs to the administrative surface and grants nothing to a user's "
-                    + "credential, which reaches that user's mail and nothing else. Write one of "
-                    + $"{PublishedMailPermissionNames()}, or leave the grant unwritten to hold all of them.";
+                return $"'{permission.Name}' belongs to the administrative surface, and a user's credential narrows "
+                    + "what its user holds of their own mail and nothing else. Write one of "
+                    + $"{PublishedMailPermissionNames()}, or name none to hold whatever the user's roles grant.";
             }
         }
 
@@ -455,7 +470,7 @@ public sealed class UserCredentialAdministration
         UserCredentialMethod method,
         UserCredentialLookup lookup,
         string? material,
-        IReadOnlyList<MailFathomPermission> permissions,
+        IReadOnlyList<MailFathomPermission>? permissions,
         string? mintedKey,
         CancellationToken cancellationToken)
     {
@@ -522,25 +537,25 @@ public sealed class UserCredentialAdministration
                 + this.publicKeyReader.DescribeAcceptedForm(),
                 parameterName);
 
-    /// <summary>Settles what a credential grants, refusing a grant a user-facing credential cannot hold.</summary>
-    /// <exception cref="ArgumentException">Thrown when the grant was not checked at the boundary that composed it.</exception>
-    private static IReadOnlyList<MailFathomPermission> GrantOrThrow(IReadOnlyList<MailFathomPermission>? permissions)
+    /// <summary>Settles what a credential narrows to, refusing a narrowing a user-facing credential cannot keep.</summary>
+    /// <exception cref="ArgumentException">Thrown when the narrowing was not checked at the boundary that composed it.</exception>
+    private static IReadOnlyList<MailFathomPermission>? GrantOrThrow(IReadOnlyList<MailFathomPermission>? permissions)
     {
         if (FindGrantRefusal(permissions) is { } refusal)
         {
             throw new ArgumentException(
-                $"The grant was not checked before it reached the use case. {refusal}",
+                $"The narrowing was not checked before it reached the use case. {refusal}",
                 nameof(permissions));
         }
 
         if (permissions is null)
         {
-            return MailFathomPermission.PublishedFor(ProtectedSurface.Mail);
+            return null;
         }
 
-        var granted = permissions.ToHashSet();
+        var named = permissions.ToHashSet();
 
-        return [.. MailFathomPermission.All.Where(granted.Contains)];
+        return [.. MailFathomPermission.All.Where(named.Contains)];
     }
 
     private static string PublishedMailPermissionNames() => string.Join(
@@ -623,3 +638,11 @@ public sealed record UserCredentialRotation(
     /// <inheritdoc />
     public override string ToString() => $"{nameof(UserCredentialRotation)} {{ {this.Outcome} }}";
 }
+
+/// <summary>The credentials one user holds, beside the grant each of them narrows.</summary>
+/// <param name="Credentials">The credentials, oldest first.</param>
+/// <param name="UserGrant">What the user currently holds, from the roles assigned to them directly and through their groups.</param>
+/// <remarks>What one credential admits is <see cref="UserCredential.HeldUnder" /> this grant, which moves with the user's assignments while the credential's own list stays as it was written.</remarks>
+public sealed record UserCredentialListing(
+    IReadOnlyList<UserCredential> Credentials,
+    ScopedGrant UserGrant);

@@ -85,6 +85,37 @@ public sealed class OrchestratedUserCredentialTests(MailFathomOrchestrationFixtu
         Assert.True(provisioned.Enabled);
     }
 
+    /// <summary>A credential naming nothing is stored as naming nothing — the null crosses the insert's untyped parameter as an array — and is listed so.</summary>
+    [Fact]
+    public async Task CreateAsync_ACredentialNamingNothing_IsListedAsNamingNothing()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var credentialId = Guid.CreateVersion7();
+
+        // Act
+        var outcome = await services.InScopeAsync(
+            (scope, token) => Store(scope).CreateAsync(
+                credentialId,
+                SyntheticMailAccount.User,
+                UserCredentialMethod.ApiKey,
+                UserCredentialLookup.ForDigest("orchestrated-naming-nothing"),
+                UserCredentialMethod.ApiKey.StoresMaterial ? StoredHash : null,
+                permissions: null,
+                token),
+            cancellationToken);
+
+        // Assert
+        Assert.Equal(UserCredentialWriteOutcome.Written, outcome);
+
+        var listed = await services.InScopeAsync(
+            (scope, token) => Store(scope).ReadForUserAsync(SyntheticMailAccount.User, token),
+            cancellationToken);
+
+        Assert.Null(Assert.Single(listed, credential => credential.Id == credentialId).Permissions);
+    }
+
     /// <summary>A lookup is unique within its method across the deployment, and it is the unique index rather than a read that says so.</summary>
     [Fact]
     public async Task CreateAsync_ALookupAlreadyHeldUnderTheSameMethod_IsRefusedByTheIndexRatherThanWritten()

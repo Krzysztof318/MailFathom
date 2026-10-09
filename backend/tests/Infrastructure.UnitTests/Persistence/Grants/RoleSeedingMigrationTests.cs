@@ -18,12 +18,24 @@ namespace MailFathom.Infrastructure.UnitTests.Persistence.Grants;
 /// <remarks>
 /// A seeded role is an ordinary row an operator may have renamed, edited, or deleted, and a release that published a
 /// permission and wrote it into a seeded list would widen everybody holding that role on upgrade — the drift an
-/// explicit list exists to prevent. So no migration after the one that seeds them may touch a role or its list.
+/// explicit list exists to prevent. So no migration after the one that seeds them may write a role table in a
+/// statement naming a seeded role. A later migration may still write roles of its own, as the one carrying credential
+/// grants onto users does, because a role it creates is one nobody held before it.
 /// </remarks>
 public sealed class RoleSeedingMigrationTests
 {
+    private static readonly string[] SeededRoleIdentities =
+    [
+        "01a11deb-3808-7000-8000-000000000001",
+        "01a11deb-3808-7000-8000-000000000002",
+        "01a11deb-3808-7000-8000-000000000003",
+        "'Mail user'",
+        "'Organization administrator'",
+        "'Administrator'",
+    ];
+
     [Fact]
-    public void Migrations_AfterTheSeedingOne_WriteNoRoleAndNoRolesPermissions()
+    public void Migrations_AfterTheSeedingOne_WriteNoSeededRole()
     {
         // Arrange
         using var context = CreateContext();
@@ -36,7 +48,7 @@ public sealed class RoleSeedingMigrationTests
             .Where(migration => migrations
                 .CreateMigration(migration.Value, context.Database.ProviderName!)
                 .UpOperations
-                .Any(WritesARole))
+                .Any(WritesASeededRole))
             .Select(migration => migration.Key)
             .ToArray();
 
@@ -44,9 +56,9 @@ public sealed class RoleSeedingMigrationTests
         Assert.Empty(writers);
     }
 
-    /// <summary>The control: the seeding migration itself is recognized as writing roles, so the rule above is not passing over operations it cannot see.</summary>
+    /// <summary>The control: the seeding migration itself is recognized as writing seeded roles, so the rule above is not passing over operations it cannot see.</summary>
     [Fact]
-    public void Migrations_TheSeedingOne_IsRecognizedAsWritingRoles()
+    public void Migrations_TheSeedingOne_IsRecognizedAsWritingSeededRoles()
     {
         // Arrange
         using var context = CreateContext();
@@ -58,8 +70,15 @@ public sealed class RoleSeedingMigrationTests
             context.Database.ProviderName!);
 
         // Assert
-        Assert.Contains(seeding.UpOperations, WritesARole);
+        Assert.Contains(seeding.UpOperations, WritesASeededRole);
     }
+
+    private static bool WritesASeededRole(MigrationOperation operation) => operation switch
+    {
+        SqlOperation sql => WritesARole(sql)
+            && SeededRoleIdentities.Any(identity => sql.Sql.Contains(identity, StringComparison.Ordinal)),
+        _ => WritesARole(operation),
+    };
 
     private static bool WritesARole(MigrationOperation operation) => operation switch
     {

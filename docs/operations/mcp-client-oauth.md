@@ -256,8 +256,8 @@ Provisioned oauth-subject credential 41d7… for user 6f1c….
 ```
 
 The issuer is the one written in the entry below, byte for byte, because the pair is what resolves the record.
-`--permission` records what tokens admitted under it keep of the user's grant; naming none records every name the MCP
-surface publishes.
+`--permission` records what tokens admitted under it keep of the user's grant; naming none records no narrowing, so
+they hold whatever the user's roles grant.
 [User credentials](admin-endpoint.md#user-credentials) specifies the command, and the mapping takes effect at once —
 it is a record rather than a setting, so nothing restarts and closing one is `mfctl credential disable` or
 `mfctl credential delete` rather than an edit here.

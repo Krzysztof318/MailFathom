@@ -5,6 +5,7 @@
 using System.Globalization;
 using MailFathom.Application.Access;
 using MailFathom.Application.Access.Credentials;
+using MailFathom.Application.Access.Grants;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Api;
 using MailFathom.TestSupport;
@@ -34,14 +35,15 @@ public sealed class UserCredentialEndpointsTests
 
     private static readonly Guid CredentialId = new("33333333-3333-3333-3333-333333333333");
 
-    /// <summary>A listing says what exists, how it is presented, and what it grants — never anything the secret produced.</summary>
+    /// <summary>A listing says what exists, how it is presented, what it narrows to, and what that leaves the credential holding — never anything the secret produced.</summary>
     [Fact]
-    public async Task ListAsync_AUserHoldingACredential_ReportsWhatItIsAndWhatItGrants()
+    public async Task ListAsync_AUserHoldingACredential_ReportsWhatItIsWhatItNarrowsToAndWhatItHolds()
     {
         // Arrange
         var harness = new EndpointHarness(MailFathomPermission.AdminRead);
         harness.Credentials.ReadForUserAsync(SyntheticUser.Deployment, Arg.Any<CancellationToken>())
             .Returns([AHeldCredential(UserCredentialMethod.Password, "user")]);
+        harness.UserHolds(MailFathomPermission.MailRead, MailFathomPermission.MailSend);
 
         // Act
         var result = await UserCredentialEndpoints.ListAsync(
@@ -58,7 +60,33 @@ public sealed class UserCredentialEndpointsTests
         Assert.Equal(UserCredentialMethod.Password.Name, credential.Method);
         Assert.Equal("user", credential.Lookup);
         Assert.Equal([MailFathomPermission.MailRead.Name], credential.Permissions);
+        Assert.Equal([MailFathomPermission.MailRead.Name], credential.EffectivePermissions);
         Assert.True(credential.Enabled);
+    }
+
+    /// <summary>A credential naming nothing is listed as naming nothing, and as holding exactly what its user's roles grant.</summary>
+    [Fact]
+    public async Task ListAsync_ACredentialNamingNothing_ReportsNoNarrowingAndTheUsersGrant()
+    {
+        // Arrange
+        var harness = new EndpointHarness(MailFathomPermission.AdminRead);
+        harness.Credentials.ReadForUserAsync(SyntheticUser.Deployment, Arg.Any<CancellationToken>())
+            .Returns([AHeldCredential(UserCredentialMethod.ApiKey, "digest") with { Permissions = null }]);
+        harness.UserHolds(MailFathomPermission.MailRead, MailFathomPermission.MailAsk, MailFathomPermission.AdminRead);
+
+        // Act
+        var result = await UserCredentialEndpoints.ListAsync(
+            SyntheticUser.Deployment.Value,
+            harness.Administration,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var credential = Assert.Single(Assert.IsType<Ok<UserCredentialListResponse>>(result.Result).Value!.Credentials);
+
+        Assert.Null(credential.Permissions);
+        Assert.Equal(
+            [MailFathomPermission.MailRead.Name, MailFathomPermission.MailAsk.Name],
+            credential.EffectivePermissions);
     }
 
     /// <summary>
@@ -1000,6 +1028,9 @@ public sealed class UserCredentialEndpointsTests
 
             this.PasswordHasher = new RecordingPasswordHasher();
 
+            this.Grants = Substitute.For<IGrantStore>();
+            this.Grants.ReadGrantOfAsync(Arg.Any<UserId>(), Arg.Any<CancellationToken>()).Returns(ScopedGrant.None);
+
             this.Administration = new UserCredentialAdministration(
                 new AccessAuthorization(principals),
                 this.Credentials,
@@ -1007,6 +1038,7 @@ public sealed class UserCredentialEndpointsTests
                 new StatedApiKeyMinter(),
                 new StatedPublicKeyReader(),
                 Substitute.For<IUserCredentialAuditor>(),
+                new UserGrantResolver(this.Grants, new UserGrantCache()),
                 new FakeTimeProvider(Moment));
         }
 
@@ -1018,13 +1050,20 @@ public sealed class UserCredentialEndpointsTests
 
         internal RecordingPasswordHasher PasswordHasher { get; }
 
+        internal IGrantStore Grants { get; }
+
+        internal void UserHolds(params MailFathomPermission[] permissions) =>
+            this.Grants.ReadGrantOfAsync(Arg.Any<UserId>(), Arg.Any<CancellationToken>())
+                .Returns(ScopedGrant.Of(permissions.Select(permission =>
+                    (permission, AssignmentScope.User(SyntheticUser.Deployment)))));
+
         internal void AnswerCreateWith(UserCredentialWriteOutcome outcome) => this.Credentials.CreateAsync(
                 Arg.Any<Guid>(),
                 Arg.Any<UserId>(),
                 Arg.Any<UserCredentialMethod>(),
                 Arg.Any<UserCredentialLookup>(),
                 Arg.Any<string>(),
-                Arg.Any<IReadOnlyList<MailFathomPermission>>(),
+                Arg.Any<IReadOnlyList<MailFathomPermission>?>(),
                 Arg.Any<CancellationToken>())
             .Returns(outcome);
 

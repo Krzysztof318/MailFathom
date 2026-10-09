@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Access;
 using MailFathom.Application.Access.Credentials;
+using MailFathom.Application.Access.Grants;
 using MailFathom.Domain.Access;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
@@ -256,9 +257,13 @@ public sealed class UserCredentialAdministrationTests
         Assert.Empty(harness.Credentials.ReceivedCalls());
     }
 
-    /// <summary>An unwritten grant is the whole mail surface, which is what an operator who narrowed nothing asked for.</summary>
+    /// <summary>
+    /// An unwritten narrowing is stored as one naming nothing rather than expanded into today's mail half, so the
+    /// credential goes on holding what its user holds and a permission a later release publishes reaches it only
+    /// through a role.
+    /// </summary>
     [Fact]
-    public async Task ProvisionApiKeyAsync_AGrantNobodyNarrowed_StoresEveryPermissionTheMailSurfacePublishes()
+    public async Task ProvisionApiKeyAsync_ANarrowingNobodyWrote_StoresNoNarrowing()
     {
         // Arrange
         var harness = new AdministrationHarness(MailFathomPermission.AdminCredentialsWrite);
@@ -270,7 +275,8 @@ public sealed class UserCredentialAdministrationTests
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(MailFathomPermission.PublishedFor(ProtectedSurface.Mail), harness.WrittenGrant);
+        Assert.True(harness.GrantWasWritten);
+        Assert.Null(harness.WrittenGrant);
     }
 
     /// <summary>A narrowed grant is stored in the published order rather than in whichever order it was written in.</summary>
@@ -579,15 +585,19 @@ public sealed class UserCredentialAdministrationTests
             ActedAt,
             ActedAt);
 
+        var userGrant = ScopedGrant.Of([(MailFathomPermission.MailRead, AssignmentScope.User(User))]);
+
         harness.Credentials.ReadForUserAsync(User, Arg.Any<CancellationToken>()).Returns([held]);
+        harness.Grants.ReadGrantOfAsync(User, Arg.Any<CancellationToken>()).Returns(userGrant);
 
         // Act
-        var credentials = await harness.Administration.ReadCredentialsAsync(
+        var listing = await harness.Administration.ReadCredentialsAsync(
             User,
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal([held], credentials);
+        Assert.Equal([held], listing.Credentials);
+        Assert.Same(userGrant, listing.UserGrant);
     }
 
     /// <summary>
@@ -699,7 +709,7 @@ public sealed class UserCredentialAdministrationTests
                 Arg.Any<UserCredentialMethod>(),
                 Arg.Any<UserCredentialLookup>(),
                 Arg.Any<string>(),
-                Arg.Any<IReadOnlyList<MailFathomPermission>>(),
+                Arg.Any<IReadOnlyList<MailFathomPermission>?>(),
                 Arg.Any<CancellationToken>())
             .Returns(UserCredentialWriteOutcome.Written);
         harness.Credentials.ReadForUserAsync(User, Arg.Any<CancellationToken>())
@@ -823,6 +833,9 @@ public sealed class UserCredentialAdministrationTests
 
             this.Auditor = Substitute.For<IUserCredentialAuditor>();
 
+            this.Grants = Substitute.For<IGrantStore>();
+            this.Grants.ReadGrantOfAsync(Arg.Any<UserId>(), Arg.Any<CancellationToken>()).Returns(ScopedGrant.None);
+
             this.Administration = new UserCredentialAdministration(
                 new AccessAuthorization(principals),
                 this.Credentials,
@@ -830,6 +843,7 @@ public sealed class UserCredentialAdministrationTests
                 new StatedApiKeyMinter(),
                 new StatedPublicKeyReader(),
                 this.Auditor,
+                new UserGrantResolver(this.Grants, new UserGrantCache()),
                 new FakeTimeProvider(ActedAt));
         }
 
@@ -841,8 +855,13 @@ public sealed class UserCredentialAdministrationTests
 
         internal IUserCredentialAuditor Auditor { get; }
 
-        /// <summary>Gets the grant the store was handed, which is what a test asserting a resolved grant reads.</summary>
+        internal IGrantStore Grants { get; }
+
+        /// <summary>Gets the narrowing the store was handed, which is what a test asserting a resolved narrowing reads.</summary>
         internal IReadOnlyList<MailFathomPermission>? WrittenGrant { get; private set; }
+
+        /// <summary>Gets whether the store was handed a narrowing at all, which tells a written <see langword="null" /> from no write.</summary>
+        internal bool GrantWasWritten { get; private set; }
 
         internal void AnswerCreateWith(UserCredentialWriteOutcome outcome) => this.Credentials.CreateAsync(
                 Arg.Any<Guid>(),
@@ -850,7 +869,11 @@ public sealed class UserCredentialAdministrationTests
                 Arg.Any<UserCredentialMethod>(),
                 Arg.Any<UserCredentialLookup>(),
                 Arg.Any<string>(),
-                Arg.Do<IReadOnlyList<MailFathomPermission>>(grant => this.WrittenGrant = grant),
+                Arg.Do<IReadOnlyList<MailFathomPermission>?>(grant =>
+                {
+                    this.WrittenGrant = grant;
+                    this.GrantWasWritten = true;
+                }),
                 Arg.Any<CancellationToken>())
             .Returns(outcome);
 

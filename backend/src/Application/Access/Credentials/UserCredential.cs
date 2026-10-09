@@ -11,7 +11,7 @@ namespace MailFathom.Application.Access.Credentials;
 /// <param name="User">The user a request authenticated by this credential acts for.</param>
 /// <param name="Method">How the credential is presented, and therefore what <paramref name="Lookup" /> holds.</param>
 /// <param name="Lookup">The value a presented credential is resolved by.</param>
-/// <param name="Permissions">What a request this credential admits may do, in the published order.</param>
+/// <param name="Permissions">The names the credential narrows its user's grant to, in the published order, or <see langword="null" /> where it names none and holds what its user holds.</param>
 /// <param name="Enabled">Whether the credential currently authenticates anything.</param>
 /// <param name="Version">How many times the record has been written, counting the act that provisioned it.</param>
 /// <param name="CreatedAt">When the credential was provisioned.</param>
@@ -45,7 +45,7 @@ public sealed record UserCredential(
     UserId User,
     UserCredentialMethod Method,
     UserCredentialLookup Lookup,
-    IReadOnlyList<MailFathomPermission> Permissions,
+    IReadOnlyList<MailFathomPermission>? Permissions,
     bool Enabled,
     long Version,
     DateTimeOffset CreatedAt,
@@ -63,4 +63,22 @@ public sealed record UserCredential(
     /// would go on authenticating unseen.
     /// </remarks>
     public const int MaximumListedPerUser = 100;
+
+    /// <summary>Reports what a request this credential admits holds under its user's current grant.</summary>
+    /// <param name="userGrant">What the credential's user holds.</param>
+    /// <returns>The mail permissions both the user holds and the credential keeps, in the published order.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="userGrant" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// The same intersection a request is answered with, before a token's scopes narrow it further: the user's grant
+    /// kept to the mail half and then to the credential's names. A listed name the user does not hold yields nothing,
+    /// which is why an operator is shown both this and <see cref="Permissions" /> rather than either alone.
+    /// </remarks>
+    public IReadOnlyList<MailFathomPermission> HeldUnder(ScopedGrant userGrant)
+    {
+        ArgumentNullException.ThrowIfNull(userGrant);
+
+        var narrowed = userGrant.NarrowedTo(this.Permissions ?? MailFathomPermission.PublishedFor(ProtectedSurface.Mail));
+
+        return [.. MailFathomPermission.PublishedFor(ProtectedSurface.Mail).Where(narrowed.Permissions.Contains)];
+    }
 }
