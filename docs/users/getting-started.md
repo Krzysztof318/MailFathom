@@ -333,11 +333,12 @@ announced with a startup warning, because an unauthenticated endpoint serves you
 mapped OAuth subject, a client's public key, and [a user's own username and password](../operations/mcp-endpoint.md#passwords)
 — browser origins, serving your own domain over TLS, client certificates, and the rate limits that apply out of the box.
 
-**A credential reaches the whole surface until its provisioning narrows it.** The command above named no `--permission`,
-so the key it minted may do everything the MCP surface publishes — read the local mailbox copy, ask questions of it, and
-read, record, amend, and erase the contact books its user reads. That is deliberate: nothing has to be granted before a
-first deployment works. Naming `--permission` once per name states a narrower grant, and `mfctl credential list` reads
-back what each credential holds —
+**A credential reaches what its user's roles grant until its provisioning narrows it.** The command above named no
+`--permission`, so the key it minted keeps every name the MCP surface publishes, and may do whatever of that its user's
+roles grant — with the seeded `Mail user` role, all of it: read the local mailbox copy, ask questions of it, and read,
+record, amend, and erase the contact books its user reads. A user no role is assigned to holds nothing, whichever
+credential they present. Naming `--permission` once per name keeps less, and `mfctl credential list` reads back what
+each credential names —
 [what a credential may do](../operations/mcp-endpoint.md#what-a-credential-may-do) has the names and the rules.
 
 A narrowed grant is enforced on the tools themselves: a client connecting with that credential is listed only the tools

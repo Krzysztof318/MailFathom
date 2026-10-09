@@ -18,8 +18,8 @@ always offered to a caller granted them and refuse the call where the account be
 configuration, because whether a
 particular mailbox can send is a question about that account rather than about the deployment.
 
-Which of the twenty-one *you* are offered is a second question, and its answer is the grant on the credential you connected
-with. A tool that grant does not permit is absent from the listing, and calling it anyway is answered as though no such
+Which of the twenty-one *you* are offered is a second question, and its answer is what your roles grant, kept to what the
+credential you connected with names. A tool that grant does not permit is absent from the listing, and calling it anyway is answered as though no such
 tool existed — nothing names the permission that was missing, so a shorter tool list than this page describes is a
 question for whoever configured the deployment:
 [what a credential may do](../operations/mcp-endpoint.md#what-a-credential-may-do). A credential provisioned with no
