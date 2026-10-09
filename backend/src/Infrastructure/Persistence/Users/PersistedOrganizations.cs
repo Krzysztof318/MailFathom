@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access.Grants;
 using MailFathom.Application.Access.Organizations;
 using MailFathom.Application.Paging;
 using MailFathom.CodeCoverage;
@@ -28,7 +29,8 @@ namespace MailFathom.Infrastructure.Persistence.Users;
 /// </para>
 /// </remarks>
 [RequiresIntegrationCoverage]
-internal sealed class PersistedOrganizations(MailFathomDbContext dbContext) : IOrganizationStore
+internal sealed class PersistedOrganizations(MailFathomDbContext dbContext, IGrantChangeAnnouncer grantChanges)
+    : IOrganizationStore
 {
     /// <inheritdoc />
     /// <remarks>
@@ -246,6 +248,9 @@ internal sealed class PersistedOrganizations(MailFathomDbContext dbContext) : IO
 
         await removal.CommitAsync(cancellationToken);
 
+        // Every assignment scoped to the organization went with it, which is a change to whoever held one.
+        await grantChanges.AnnounceAsync();
+
         return OrganizationWriteResult.Of(OrganizationWriteOutcome.Written);
     }
 
@@ -327,6 +332,8 @@ internal sealed class PersistedOrganizations(MailFathomDbContext dbContext) : IO
         {
             return OrganizationWriteResult.Of(OrganizationWriteOutcome.UnknownOrganization);
         }
+
+        await grantChanges.AnnounceAsync();
 
         return new OrganizationWriteResult(OrganizationWriteOutcome.Written, organizationId ?? Guid.Empty);
     }

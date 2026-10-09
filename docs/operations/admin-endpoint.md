@@ -1894,8 +1894,8 @@ into somebody's mail, and which kind is being provisioned is not a thing to gues
 Each method takes what only it needs — `--username` for a password, `--public-key-file` for a key pair, `--issuer` and
 `--subject` for a mapped subject — and the missing one is named rather than sent as nothing for the deployment to refuse.
 
-`--permission` is repeatable and records what the credential may do; naming none grants everything the mail surface
-publishes, and `--no-permissions` provisions one that authenticates and reaches no tool.
+`--permission` is repeatable and records what the credential keeps of its user's grant; naming none keeps everything the
+mail surface publishes, and `--no-permissions` provisions one that authenticates and reaches no tool.
 [What a credential may do](permissions.md) is the model behind those names.
 
 Every command takes `--user` and none of them needs it on a deployment holding one user: the command reads the roster,

@@ -11,7 +11,7 @@ namespace MailFathom.Host.Security.ApiKeys;
 /// <remarks>
 /// There is no key list here and no grant, unlike the configured scheme's options, and their absence is the method: the
 /// keys are rows in the deployment's own database rather than material an operator wrote into a section, and what each
-/// one grants is recorded beside the user it resolves. What is left for the scheme to carry is the surface, which
+/// one keeps of its user's grant is recorded beside it. What is left for the scheme to carry is the surface, which
 /// names the identity a success reports itself under — and which is what lets two surfaces register one handler.
 /// </remarks>
 internal sealed class UserApiKeyAuthenticationSchemeOptions : AuthenticationSchemeOptions

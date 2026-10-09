@@ -46,7 +46,7 @@ There are three kinds of principal, and none of them is a weaker version of anot
 
 | Kind | What it is | What it holds |
 | --- | --- | --- |
-| Caller | Somebody who presented a credential a configured entry admits, or — where the surface configures no entry at all — somebody who presented nothing | Whatever that entry's grant resolved to, and everything the surface publishes where there is no entry |
+| Caller | Somebody who presented a credential a configured entry admits, or — where the surface configures no entry at all — somebody who presented nothing | On a mail surface, what the user's roles grant kept to what the credential names, each permission at the scopes it was granted at; on the administrative surface, what the administrator was configured with |
 | Process identity | MailFathom itself, running work no caller requested | Nothing, by construction |
 | Signed capability | A ticket this deployment signed for one object | Nothing; the ticket is the authorization |
 
@@ -102,17 +102,22 @@ The host composes one `IAuthorizedPrincipalSource` per scope, which for a served
 - **A request an authentication scheme validated** becomes a caller, named by what this deployment authorized — the
   identifier of the user credential the presented value resolved to on a mail-serving surface, and on the
   administrative surface the `Name` of the configured administrator the key, public key, or token's issuer and subject
-  belongs to — whichever of its credentials was presented. The permissions travel as claims the scheme wrote when
-  the credential was judged, so nothing per request re-reads a configuration section or the credential's row.
+  belongs to — whichever of its credentials was presented. What the credential names travels as claims the scheme
+  wrote when it was judged, so nothing per request re-reads a configuration section or the credential's row. On a
+  mail-serving surface those claims are a narrowing rather than the grant: a step after authorization reads the user's
+  own grant through `UserGrantResolver`, which each replica remembers per user until a change to what users are granted
+  makes it forget, and the caller holds that grant kept to the names the claims carry. A request that step never reached
+  holds nothing.
 - **A scope with no request behind it** is the process's own identity. Work reached outside a request in this process is
   work no caller asked for.
 - **A route that verified a capability** states that principal onto its own scope before it reaches the use case. The
   download route is the one that does.
 
 **A request that authenticated nothing depends on what the surface it reached configures.** Where that surface
-configures no `Authentication` entry at all, the caller holds everything the surface publishes — there is no entry for a
-grant to hang on, which is the posture ADR 0012 settled and the startup record already states, so reporting no principal
-there would have a use case refuse every call on a deployment whose own record says it grants everything. Where the
+configures no `Authentication` entry at all, the caller acts for the user the deployment serves and holds what that
+user's roles grant on the surface's half — there is no credential to narrow it with, which is the posture ADR 0012
+settled and the startup record already states, so reporting no principal there would have a use case refuse every call
+on a deployment whose own record says it serves somebody. Where the
 surface does configure a credential, such a request is none of the three.
 
 **The download route is withheld from that grant on either posture.** The MCP surface serves it beside the protocol
@@ -161,8 +166,8 @@ user whether or not it carried one, which is why the method that produces the cl
 admitted to a surface with nowhere to put them, and what it authorized would be the deployment's own authority.
 
 **The client surface reaches the same adapter and is no third case.** It is the third surface a request can arrive on,
-and its grant is resolved exactly as the two above are — from the entry that admitted the caller, or from the whole of
-the mail half where it configures none. Its session route reports that grant rather than requiring anything of it, and
+and its grant is resolved exactly as the MCP surface's is — the user's roles, kept to what the credential names, or
+to the whole of the mail half where it configures none. Its session route reports that grant rather than requiring anything of it, and
 its mail-reading routes reach the use cases that already ask, under the permissions they already name:
 `GET /api/client/accounts` is published under `mailfathom.mail.read` and calls the same account reader an agent's
 `list_accounts` reaches.

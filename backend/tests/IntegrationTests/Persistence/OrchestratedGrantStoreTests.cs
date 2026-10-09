@@ -377,6 +377,68 @@ public sealed class OrchestratedGrantStoreTests(MailFathomOrchestrationFixture o
         }
     }
 
+    /// <summary>
+    /// A user's grant is the union of what their own assignments and their groups' assignments give, each name at the
+    /// scope of the assignment that gave it — so a name reached both ways is held at both scopes, and a group the user
+    /// does not belong to gives them nothing.
+    /// </summary>
+    [Fact]
+    public async Task ReadGrantOfAsync_AUserAssignedDirectlyAndThroughAGroup_HoldsTheUnionAtEachAssignmentsScope()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var user = Guid.CreateVersion7();
+        var bystander = Guid.CreateVersion7();
+        var mailRole = Guid.CreateVersion7();
+        var groupRole = Guid.CreateVersion7();
+        var group = Guid.CreateVersion7();
+        await ProvisionUserAsync(services, user, cancellationToken);
+        await ProvisionUserAsync(services, bystander, cancellationToken);
+
+        try
+        {
+            await CreateRoleAsync(services, mailRole, $"role-{mailRole:N}", cancellationToken);
+            await services.InScopeAsync(
+                (scope, token) => Store(scope).CreateRoleAsync(
+                    groupRole,
+                    $"role-{groupRole:N}",
+                    RolePermissions.Of([MailFathomPermission.MailRead, MailFathomPermission.AdminRead]),
+                    RecordedAt,
+                    token),
+                cancellationToken);
+            await services.InScopeAsync(
+                (scope, token) => Store(scope).CreateGroupAsync(group, $"group-{group:N}", organizationId: null, RecordedAt, token),
+                cancellationToken);
+            await services.InScopeAsync(
+                (scope, token) => Store(scope).AddGroupMemberAsync(group, UserId.Create(user), RecordedAt, token),
+                cancellationToken);
+            await AssignAsync(services, mailRole, AssignmentPrincipal.User(UserId.Create(user)), AssignmentScope.User(UserId.Create(user)), cancellationToken);
+            await AssignAsync(services, groupRole, AssignmentPrincipal.Group(group), AssignmentScope.Deployment, cancellationToken);
+
+            // Act
+            var held = await services.InScopeAsync((scope, token) => Store(scope).ReadGrantOfAsync(UserId.Create(user), token), cancellationToken);
+            var bystanderHeld = await services.InScopeAsync((scope, token) => Store(scope).ReadGrantOfAsync(UserId.Create(bystander), token), cancellationToken);
+
+            // Assert
+            Assert.Equal(
+                new HashSet<AssignmentScope> { AssignmentScope.User(UserId.Create(user)), AssignmentScope.Deployment },
+                held.ScopesOf(MailFathomPermission.MailRead));
+            Assert.Equal([AssignmentScope.Deployment], held.ScopesOf(MailFathomPermission.AdminRead));
+            Assert.Equal(2, held.Permissions.Count);
+            Assert.Empty(bystanderHeld.Permissions);
+        }
+        finally
+        {
+            await OrchestratedForeignUser.EraseAsync(services, user);
+            await OrchestratedForeignUser.EraseAsync(services, bystander);
+            await RevokeEveryAssignmentOfRoleAsync(services, groupRole);
+            await services.InScopeAsync((scope, token) => Store(scope).DeleteGroupAsync(group, token), CancellationToken.None);
+            await DeleteRoleAsync(services, mailRole);
+            await DeleteRoleAsync(services, groupRole);
+        }
+    }
+
     private static IGrantStore Store(IServiceProvider scope) => scope.GetRequiredService<IGrantStore>();
 
     private static string[] ListedNames(IReadOnlyList<Role> roles, string name)

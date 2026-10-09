@@ -29,10 +29,11 @@ namespace MailFathom.Host.Hosting.Warnings;
 /// </para>
 /// <para>
 /// The two mail-serving endpoints are reported differently, because their entries hold no grant to read back: what a
-/// caller there holds is recorded on the credential an administrator provisioned. Their lines state which method each
-/// entry accepts and where the grant behind it is kept, which is the part an operator cannot infer from the section.
-/// The one line they share with the administrative endpoint is the one about configuring no entry at all — a surface
-/// admitting everybody grants the whole of itself whichever axis it would otherwise have used.
+/// caller there holds is what its user's roles grant, kept to what the credential an administrator provisioned names.
+/// Their lines state which method each entry accepts and where the grant behind it is kept, which is the part an
+/// operator cannot infer from the section. The one line they share in shape with the administrative endpoint is the one
+/// about configuring no entry at all, and it differs in what it says: a caller there holds whatever of the surface the
+/// served user's roles grant, where the administrative endpoint grants the whole of itself.
 /// </para>
 /// <para>
 /// It records rather than warns, including for the surface that configures no entry at all. That posture is already a
@@ -172,9 +173,10 @@ internal sealed partial class TransportGrantStartupReport : IHostedService
     /// <summary>States which methods a mail-serving endpoint accepts, and where the grant behind each of them lives.</summary>
     /// <remarks>
     /// The line an operator needs here is a different one, because there is no written grant to read back: what an
-    /// admitted caller holds is recorded on the credential the administrative surface provisioned, per user and per
-    /// credential, so a report that printed a ceiling would be printing a number this section does not hold. What is
-    /// worth stating is which methods are open and where to go and read what each credential may do.
+    /// admitted caller holds is what its user's roles grant, kept to what its credential names, and both are records
+    /// that change while the process runs, so a report that printed a ceiling would be printing a number this section
+    /// does not hold. What is worth stating is which methods are open and where to go and read what each credential
+    /// names.
     /// <para>
     /// The no-entry line is this surface's own rather than the configured one's, because the two remedies differ: an
     /// entry added here carries no <c>Permissions</c> at all — the key is retired and a section carrying it is refused
@@ -287,9 +289,9 @@ internal sealed partial class TransportGrantStartupReport : IHostedService
 
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "The {EndpointName} endpoint entry {EntrySettingPath} accepts {AcceptedMethod}, and what each "
-            + "credential of that method grants is recorded beside the user it resolves rather than here. Read it "
-            + "with 'mfctl credential list'. {GrantEnforcement}")]
+        Message = "The {EndpointName} endpoint entry {EntrySettingPath} accepts {AcceptedMethod}, and each caller it "
+            + "admits holds what its user's roles grant, kept to the permissions its credential names. Read a "
+            + "credential's names with 'mfctl credential list'. {GrantEnforcement}")]
     private partial void LogUserFacingEntry(
         string endpointName,
         string entrySettingPath,
@@ -299,8 +301,8 @@ internal sealed partial class TransportGrantStartupReport : IHostedService
     [LoggerMessage(
         Level = LogLevel.Information,
         Message = "The {EndpointName} endpoint entry {EntrySettingPath} accepts {AcceptedMethod}, and each token holds "
-            + "whichever of its credential's recorded permissions its own scopes carry. Read the ceiling with "
-            + "'mfctl credential list'. {GrantEnforcement}")]
+            + "what its user's roles grant, kept to the permissions its credential names and then to those its own "
+            + "scopes carry. Read a credential's names with 'mfctl credential list'. {GrantEnforcement}")]
     private partial void LogUserFacingEntryNarrowedByTokenScopes(
         string endpointName,
         string entrySettingPath,
@@ -310,9 +312,10 @@ internal sealed partial class TransportGrantStartupReport : IHostedService
     [LoggerMessage(
         Level = LogLevel.Information,
         Message = "The {EndpointName} endpoint on {EndpointPath} configures no credential entry, so every caller it "
-            + "serves holds {GrantedPermissions} — everything this surface publishes. Add an entry under "
-            + "{AuthenticationSettingPath} naming a method this endpoint accepts, and provision each user's own grant "
-            + "with 'mfctl credential create'; an entry here carries no permissions of its own. {GrantEnforcement}")]
+            + "serves acts for the user this deployment serves and holds whatever of {GrantedPermissions} that user's "
+            + "roles grant. Add an entry under {AuthenticationSettingPath} naming a method this endpoint accepts, and "
+            + "provision each user's credentials with 'mfctl credential create'; an entry here carries no permissions "
+            + "of its own. {GrantEnforcement}")]
     private partial void LogUserFacingSurfaceGrantedWithoutAnyEntry(
         string endpointName,
         string endpointPath,

@@ -44,12 +44,12 @@ public sealed class AuthorizedPrincipal
         AuthorizedPrincipalKind kind,
         string identity,
         UserId? user,
-        IReadOnlySet<MailFathomPermission> permissions)
+        ScopedGrant grant)
     {
         this.Kind = kind;
         this.Identity = identity;
         this.User = user;
-        this.Permissions = permissions;
+        this.Grant = grant;
     }
 
     /// <summary>Gets the principal work no caller requested runs under.</summary>
@@ -58,7 +58,7 @@ public sealed class AuthorizedPrincipal
         AuthorizedPrincipalKind.ProcessIdentity,
         ProcessIdentityName,
         user: null,
-        new HashSet<MailFathomPermission>());
+        ScopedGrant.None);
 
     /// <summary>Gets which of the three things this principal is.</summary>
     public AuthorizedPrincipalKind Kind { get; }
@@ -99,8 +99,11 @@ public sealed class AuthorizedPrincipal
     /// </remarks>
     public UserId? User { get; }
 
-    /// <summary>Gets the permissions this principal holds, which is empty for every kind but a caller.</summary>
-    public IReadOnlySet<MailFathomPermission> Permissions { get; }
+    /// <summary>Gets what this principal holds, each permission with the scopes it is held at, which is empty for every kind but a caller.</summary>
+    public ScopedGrant Grant { get; }
+
+    /// <summary>Gets the permissions this principal holds at any scope, which is empty for every kind but a caller.</summary>
+    public IReadOnlySet<MailFathomPermission> Permissions => this.Grant.Permissions;
 
     /// <summary>Describes a caller the transport admitted that acts for no user's mail.</summary>
     /// <param name="identity">What the transport admitted the caller as, in the forms <see cref="Identity" /> describes.</param>
@@ -122,7 +125,16 @@ public sealed class AuthorizedPrincipal
     public static AuthorizedPrincipal Caller(
         string identity,
         IEnumerable<MailFathomPermission> grantedPermissions) =>
-        AdmittedCaller(user: null, identity, grantedPermissions);
+        Caller(identity, AtDeployment(grantedPermissions));
+
+    /// <summary>Describes a caller the transport admitted that acts for no user's mail, holding each permission at the scopes it was granted at.</summary>
+    /// <param name="identity">What the transport admitted the caller as, in the forms <see cref="Identity" /> describes.</param>
+    /// <param name="grant">What the caller holds, each permission with the scopes it is held at.</param>
+    /// <returns>The principal the use cases the caller reaches are consulted with.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="identity" /> or <paramref name="grant" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="identity" /> is empty or white space.</exception>
+    public static AuthorizedPrincipal Caller(string identity, ScopedGrant grant) =>
+        AdmittedCaller(user: null, identity, grant);
 
     /// <summary>Describes a caller the transport admitted that acts for one user's mail.</summary>
     /// <param name="user">The user whose mail the caller was admitted to act on.</param>
@@ -139,7 +151,17 @@ public sealed class AuthorizedPrincipal
     public static AuthorizedPrincipal CallerActingFor(
         UserId user,
         string identity,
-        IEnumerable<MailFathomPermission> grantedPermissions)
+        IEnumerable<MailFathomPermission> grantedPermissions) =>
+        CallerActingFor(user, identity, AtDeployment(grantedPermissions));
+
+    /// <summary>Describes a caller the transport admitted that acts for one user's mail, holding each permission at the scopes it was granted at.</summary>
+    /// <param name="user">The user whose mail the caller was admitted to act on.</param>
+    /// <param name="identity">What the transport admitted the caller as, in the forms <see cref="Identity" /> describes.</param>
+    /// <param name="grant">What the caller holds: the user's grant, narrowed by whatever admitted the caller.</param>
+    /// <returns>The principal the use cases the caller reaches are consulted with.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="identity" /> or <paramref name="grant" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="identity" /> is empty or white space, or when <paramref name="user" /> names nobody.</exception>
+    public static AuthorizedPrincipal CallerActingFor(UserId user, string identity, ScopedGrant grant)
     {
         if (!user.IsSpecified)
         {
@@ -148,7 +170,7 @@ public sealed class AuthorizedPrincipal
                 nameof(user));
         }
 
-        return AdmittedCaller(user, identity, grantedPermissions);
+        return AdmittedCaller(user, identity, grant);
     }
 
     /// <summary>Describes the principal a verified signature produced.</summary>
@@ -180,27 +202,41 @@ public sealed class AuthorizedPrincipal
             AuthorizedPrincipalKind.SignedCapability,
             authorizedObject,
             user,
-            new HashSet<MailFathomPermission>());
+            ScopedGrant.None);
     }
 
-    private static AuthorizedPrincipal AdmittedCaller(
-        UserId? user,
-        string identity,
-        IEnumerable<MailFathomPermission> grantedPermissions)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(identity);
-        ArgumentNullException.ThrowIfNull(grantedPermissions);
-
-        return new AuthorizedPrincipal(
-            AuthorizedPrincipalKind.Caller,
-            identity,
-            user,
-            grantedPermissions.Where(permission => permission.IsSpecified).ToHashSet());
-    }
-
-    /// <summary>Reports whether this principal was granted one named capability.</summary>
+    /// <summary>Reports whether this principal was granted one named capability, over the whole deployment where the capability reads a scope at all.</summary>
     /// <param name="permission">The capability being asked about.</param>
     /// <returns><see langword="true" /> when the principal holds it.</returns>
-    /// <remarks>Asks the grant alone. That a kind other than a caller never holds one is a property of how a principal is composed rather than a case decided here.</remarks>
-    public bool Holds(MailFathomPermission permission) => this.Permissions.Contains(permission);
+    /// <remarks>
+    /// <para>
+    /// Asks the grant alone. That a kind other than a caller never holds one is a property of how a principal is
+    /// composed rather than a case decided here.
+    /// </para>
+    /// <para>
+    /// A mail permission is held at whichever scope it was granted, because its scope is never read: it reaches its
+    /// holder's own mail and nothing else. An administrative permission is held for this question only over the whole
+    /// deployment, because the question names no target and an operation naming none is the deployment's. A check that
+    /// does name a target asks <see cref="ScopedGrant.ScopesOf" /> of <see cref="Grant" /> instead, so a grant held over
+    /// one organization admits nothing until an operation asks about something inside it.
+    /// </para>
+    /// </remarks>
+    public bool Holds(MailFathomPermission permission) => permission.Surface == ProtectedSurface.Mail
+        ? this.Permissions.Contains(permission)
+        : this.Grant.ScopesOf(permission).Contains(AssignmentScope.Deployment);
+
+    private static ScopedGrant AtDeployment(IEnumerable<MailFathomPermission> grantedPermissions)
+    {
+        ArgumentNullException.ThrowIfNull(grantedPermissions);
+
+        return ScopedGrant.AtDeployment(grantedPermissions);
+    }
+
+    private static AuthorizedPrincipal AdmittedCaller(UserId? user, string identity, ScopedGrant grant)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(identity);
+        ArgumentNullException.ThrowIfNull(grant);
+
+        return new AuthorizedPrincipal(AuthorizedPrincipalKind.Caller, identity, user, grant);
+    }
 }

@@ -7,6 +7,7 @@ using MailFathom.AI;
 using MailFathom.AI.Chat;
 using MailFathom.AI.Providers;
 using MailFathom.Application.Access;
+using MailFathom.Application.Access.Grants;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Configuration;
@@ -1309,6 +1310,7 @@ internal static class HostComposition
             provider.GetRequiredService<ConfigurationChangeAnnouncements>(),
             provider.GetRequiredService<ServedUsers>(),
             provider.GetRequiredService<MailAccountSettingsReconciliation>(),
+            provider.GetRequiredService<UserGrantCache>(),
             provider.GetService<RootSettingsReloader>,
             provider.GetRequiredService<TimeProvider>(),
             provider.GetRequiredService<ILogger<ConfigurationConvergenceWorker>>()));
@@ -1774,6 +1776,10 @@ internal static class HostComposition
     /// </remarks>
     private static void AddConfigurationChangeAnnouncements(WebApplicationBuilder builder, SignalBackplaneOptions backplaneSettings)
     {
+        // A change to what users are granted rides the same announcement, because a grant is computed from records
+        // about users and a replica hearing it forgets its grants in the pass that reads those records again.
+        builder.Services.AddSingleton<IGrantChangeAnnouncer, GrantChangeAnnouncements>();
+
         if (!backplaneSettings.IsConfigured)
         {
             builder.Services.AddSingleton(static provider => new ConfigurationChangeAnnouncements(

@@ -4,6 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Threading.Channels;
+using MailFathom.Application.Access.Grants;
 using MailFathom.Host.Configuration.RootSettings;
 using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.Signals;
@@ -26,6 +27,11 @@ namespace MailFathom.Host.Hosting.Workers;
 /// is conditional on the version each one read.
 /// </para>
 /// <para>
+/// The grants this replica computed are forgotten on the same occasions, before anything is read, so a change to a
+/// role, an assignment, a group, or an organization reaches a request here within the same bound as a change to a
+/// setting. Forgetting cannot fail, which is why it is not one of the readings below.
+/// </para>
+/// <para>
 /// A reading that fails is reported and made again on the next interval, and never ends the worker. A database briefly
 /// out of reach says nothing about whether a change is waiting, and every failure beneath this leaves the version in
 /// force where it was.
@@ -43,6 +49,7 @@ internal sealed partial class ConfigurationConvergenceWorker : BackgroundService
     private readonly ConfigurationChangeAnnouncements announcements;
     private readonly ServedUsers users;
     private readonly MailAccountSettingsReconciliation accountSettings;
+    private readonly UserGrantCache grants;
     private readonly Func<RootSettingsReloader?> rootSettings;
     private readonly TimeProvider timeProvider;
     private readonly ILogger<ConfigurationConvergenceWorker> logger;
@@ -51,6 +58,7 @@ internal sealed partial class ConfigurationConvergenceWorker : BackgroundService
     /// <param name="announcements">What another replica's change is heard through.</param>
     /// <param name="users">Brings the users this replica holds up to their records.</param>
     /// <param name="accountSettings">Brings the settings columns of an account an older build wrote up to its document.</param>
+    /// <param name="grants">The grants this replica computed, forgotten whenever the worker wakes.</param>
     /// <param name="rootSettings">Resolves what brings the persisted layer up to the deployment's document, answering <see langword="null" /> where the host composed no persisted layer.</param>
     /// <param name="timeProvider">What the interval is measured by.</param>
     /// <param name="logger">Records a reading that failed.</param>
@@ -59,6 +67,7 @@ internal sealed partial class ConfigurationConvergenceWorker : BackgroundService
         ConfigurationChangeAnnouncements announcements,
         ServedUsers users,
         MailAccountSettingsReconciliation accountSettings,
+        UserGrantCache grants,
         Func<RootSettingsReloader?> rootSettings,
         TimeProvider timeProvider,
         ILogger<ConfigurationConvergenceWorker> logger)
@@ -66,6 +75,7 @@ internal sealed partial class ConfigurationConvergenceWorker : BackgroundService
         ArgumentNullException.ThrowIfNull(announcements);
         ArgumentNullException.ThrowIfNull(users);
         ArgumentNullException.ThrowIfNull(accountSettings);
+        ArgumentNullException.ThrowIfNull(grants);
         ArgumentNullException.ThrowIfNull(rootSettings);
         ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(logger);
@@ -73,6 +83,7 @@ internal sealed partial class ConfigurationConvergenceWorker : BackgroundService
         this.announcements = announcements;
         this.users = users;
         this.accountSettings = accountSettings;
+        this.grants = grants;
         this.rootSettings = rootSettings;
         this.timeProvider = timeProvider;
         this.logger = logger;
@@ -94,6 +105,8 @@ internal sealed partial class ConfigurationConvergenceWorker : BackgroundService
             listening = listening || await this.announcements.ListenAsync(() => this.announced.Writer.TryWrite(true));
 
             await this.WaitForAnnouncementOrIntervalAsync(stoppingToken);
+
+            this.grants.Forget();
 
             if (persistedSettings is not null)
             {

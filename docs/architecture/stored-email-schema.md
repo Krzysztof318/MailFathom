@@ -698,8 +698,8 @@ Five tables hold what a user's grant is computed from under
 [ADR 0012](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0012-authorization-model-named-permissions-and-where-they-are-enforced.md):
 a role is a name and an explicit list of permissions, a group is a set of users, and an assignment gives one role to
 one user or one group at one scope. They are rows rather than settings so a change to any of them is the same on every
-replica from the moment it commits. Nothing reads them to admit a caller yet; what a caller is granted is still
-decided by the credential they present.
+replica from the moment it commits. A caller on a mail surface holds what they grant its user, kept to what its
+credential names — [how a caller's grant is computed](../operations/permissions.md#how-a-callers-grant-is-computed).
 
 `roles` holds one row per role: `Id`, a version 7 identifier; `Name`, at most 128 characters and unique across the
 deployment under `ix_roles_name`, compared exactly; and `CreatedAt`. `role_permissions` holds the role's list, one row

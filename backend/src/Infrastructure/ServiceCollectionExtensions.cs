@@ -626,6 +626,11 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IOrganizationStore, PersistedOrganizations>();
         // The roles, groups, and assignments a user's grant is computed from. Scoped for the same reason.
         services.AddScoped<IGrantStore, PersistedGrants>();
+        // What a user holds, computed from those records. The resolver is scoped because the store it reads through is;
+        // what it computed is kept in a singleton, because a grant is a fact about the user rather than about the request,
+        // and forgotten by whatever IGrantChangeAnnouncer the composition root registers.
+        services.AddScoped<UserGrantResolver>();
+        services.AddSingleton<UserGrantCache>();
         // What a password becomes when it is stored and what a presented one is judged against. A singleton because it
         // holds no state at all: every parameter a verification needs travels inside the record it is verifying.
         services.AddSingleton<IPasswordHasher, Pbkdf2PasswordHasher>();

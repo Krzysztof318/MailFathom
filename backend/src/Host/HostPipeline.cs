@@ -177,6 +177,9 @@ internal static class HostPipeline
             app.UseAuthorization();
         }
 
+        // Behind authorization, which established the caller, and ahead of every route that asks what it holds.
+        app.UseCallerGrantResolution();
+
         // Behind authorization, which is what establishes whom a caller acts for, and ahead of every endpoint, whose
         // parameters are resolved from the scope this prepares with that user's accounts.
         app.Use(ActingUserMailSettings.PrepareAsync);

@@ -28,7 +28,7 @@ namespace MailFathom.Infrastructure.Persistence.Grants;
 /// </para>
 /// </remarks>
 [RequiresIntegrationCoverage]
-internal sealed class PersistedGrants(MailFathomDbContext dbContext) : IGrantStore
+internal sealed class PersistedGrants(MailFathomDbContext dbContext, IGrantChangeAnnouncer changes) : IGrantStore
 {
     /// <inheritdoc />
     public async Task<AdministrativeListingPage<Role>> ReadRolesAsync(
@@ -147,7 +147,7 @@ internal sealed class PersistedGrants(MailFathomDbContext dbContext) : IGrantSto
 
         await replacement.CommitAsync(cancellationToken);
 
-        return GrantWriteResult.Of(GrantWriteOutcome.Written);
+        return await this.AnnouncedAsync(GrantWriteResult.Of(GrantWriteOutcome.Written));
     }
 
     /// <inheritdoc />
@@ -372,7 +372,7 @@ internal sealed class PersistedGrants(MailFathomDbContext dbContext) : IGrantSto
 
         await joining.CommitAsync(cancellationToken);
 
-        return GrantWriteResult.Of(GrantWriteOutcome.Written);
+        return await this.AnnouncedAsync(GrantWriteResult.Of(GrantWriteOutcome.Written));
     }
 
     /// <inheritdoc />
@@ -387,7 +387,7 @@ internal sealed class PersistedGrants(MailFathomDbContext dbContext) : IGrantSto
             .Where(member => member.GroupId == groupId && member.UserId == userId)
             .ExecuteDeleteAsync(cancellationToken);
 
-        return GrantWriteResult.Of(GrantWriteOutcome.Written);
+        return await this.AnnouncedAsync(GrantWriteResult.Of(GrantWriteOutcome.Written));
     }
 
     /// <inheritdoc />
@@ -456,7 +456,8 @@ internal sealed class PersistedGrants(MailFathomDbContext dbContext) : IGrantSto
                  """,
                 cancellationToken);
 
-            return GrantWriteResult.Of(written == 1 ? GrantWriteOutcome.Written : GrantWriteOutcome.AlreadyAssigned);
+            return await this.AnnouncedAsync(
+                GrantWriteResult.Of(written == 1 ? GrantWriteOutcome.Written : GrantWriteOutcome.AlreadyAssigned));
         }
         catch (PostgresException violation) when (violation.SqlState == PostgresErrorCodes.ForeignKeyViolation)
         {
@@ -475,7 +476,41 @@ internal sealed class PersistedGrants(MailFathomDbContext dbContext) : IGrantSto
             .Where(assignment => assignment.Id == assignmentId)
             .ExecuteDeleteAsync(cancellationToken);
 
-        return GrantWriteResult.Of(removed == 1 ? GrantWriteOutcome.Written : GrantWriteOutcome.UnknownAssignment);
+        return await this.AnnouncedAsync(
+            GrantWriteResult.Of(removed == 1 ? GrantWriteOutcome.Written : GrantWriteOutcome.UnknownAssignment));
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// One statement over the user's own assignments and their groups' assignments, joined to the names each role
+    /// lists. A name listed through several assignments at one scope comes back once, and what makes the result a
+    /// union rather than a list is <see cref="ScopedGrant.Of" />, which also drops a stored name this build does not
+    /// publish. Nothing pages it, because what it returns is bounded by the published set times the scopes the user
+    /// was given rather than by anything a request names.
+    /// </remarks>
+    public async Task<ScopedGrant> ReadGrantOfAsync(UserId user, CancellationToken cancellationToken)
+    {
+        var userId = RequireUser(user);
+
+        var groupsOfUser = dbContext.UserGroupMembers
+            .Where(member => member.UserId == userId)
+            .Select(member => member.GroupId);
+
+        var held = await dbContext.RoleAssignments
+            .AsNoTracking()
+            .Where(assignment => assignment.PrincipalUserId == userId
+                || (assignment.PrincipalGroupId != null && groupsOfUser.Contains(assignment.PrincipalGroupId.Value)))
+            .Join(
+                dbContext.RolePermissions,
+                assignment => assignment.RoleId,
+                listed => listed.RoleId,
+                (assignment, listed) => new { listed.Permission, assignment.ScopeOrganizationId, assignment.ScopeUserId })
+            .Distinct()
+            .ToArrayAsync(cancellationToken);
+
+        return ScopedGrant.Of(held.Select(row => (
+            MailFathomPermission.TryParse(row.Permission, out var permission) ? permission : default,
+            ScopeOf(row.ScopeOrganizationId, row.ScopeUserId))));
     }
 
     /// <summary>Names what an assignment named that does not exist, from the foreign key that refused it.</summary>
@@ -511,19 +546,40 @@ internal sealed class PersistedGrants(MailFathomDbContext dbContext) : IGrantSto
             ? AssignmentPrincipal.User(UserId.Create(principalUser))
             : AssignmentPrincipal.Group(assignment.PrincipalGroupId.GetValueOrDefault());
 
-        var scope = (assignment.ScopeOrganizationId, assignment.ScopeUserId) switch
-        {
-            ({ } organization, _) => AssignmentScope.Organization(organization),
-            (_, { } scopeUser) => AssignmentScope.User(UserId.Create(scopeUser)),
-            _ => AssignmentScope.Deployment,
-        };
-
-        return new RoleAssignment(assignment.Id, assignment.RoleId, principal, scope, assignment.AssignedAt);
+        return new RoleAssignment(
+            assignment.Id,
+            assignment.RoleId,
+            principal,
+            ScopeOf(assignment.ScopeOrganizationId, assignment.ScopeUserId),
+            assignment.AssignedAt);
     }
+
+    /// <summary>Reads the scope an assignment's two scope columns name.</summary>
+    /// <param name="organizationId">The organization column.</param>
+    /// <param name="userId">The user column.</param>
+    /// <returns>The organization or the user named, or the deployment where neither is.</returns>
+    internal static AssignmentScope ScopeOf(Guid? organizationId, Guid? userId) => (organizationId, userId) switch
+    {
+        ({ } organization, _) => AssignmentScope.Organization(organization),
+        (_, { } scopeUser) => AssignmentScope.User(UserId.Create(scopeUser)),
+        _ => AssignmentScope.Deployment,
+    };
 
     private static Guid RequireUser(UserId user) => user.IsSpecified
         ? user.Value
         : throw new ArgumentException("A membership names a user.", nameof(user));
+
+    /// <summary>Announces a write that may have changed somebody's grant, once it committed.</summary>
+    /// <remarks>Only a write that went through is announced: a refused one changed nothing for anybody to forget.</remarks>
+    private async Task<GrantWriteResult> AnnouncedAsync(GrantWriteResult result)
+    {
+        if (result.Outcome == GrantWriteOutcome.Written)
+        {
+            await changes.AnnounceAsync();
+        }
+
+        return result;
+    }
 
     private async Task InsertPermissionsAsync(
         Guid roleId,

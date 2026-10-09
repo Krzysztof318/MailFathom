@@ -2,6 +2,8 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access.Grants;
+using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.RootSettings;
 using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.Hosting.Workers;
@@ -9,6 +11,7 @@ using MailFathom.Host.Signals;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Persistence.Settings;
 using MailFathom.Infrastructure.Persistence.Users;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using StackExchange.Redis;
@@ -123,6 +126,55 @@ public sealed class ConfigurationConvergenceWorkerTests
         Assert.Contains(logger.Messages, message => message.Contains("could not compare", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// A change to a role, an assignment, a group, or an organization another replica committed is announced, and the
+    /// grants this replica computed are forgotten before the interval elapses, which the clock that never moves proves.
+    /// </summary>
+    [Fact]
+    public async Task ExecuteAsync_AnotherReplicaAnnouncesAChange_ForgetsTheGrantsThisReplicaComputed()
+    {
+        // Arrange
+        var backplane = new InMemoryBackplane();
+        var grants = CacheRememberingAGrant();
+        var (documents, firstReading) = UsersSignallingTheirFirstReading();
+        using var worker = Worker(
+            () => Task.FromResult(backplane.Connect()),
+            rootSettings: null,
+            documents,
+            new FakeTimeProvider(),
+            grants: grants);
+
+        await worker.StartAsync(CancellationToken.None);
+        await backplane.FirstSubscription.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+
+        // Act
+        await AnnouncerOver(backplane).AnnounceAsync();
+        await firstReading.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+
+        // Assert
+        await worker.StopAsync(CancellationToken.None);
+        Assert.False(grants.TryRecall(SyntheticUser.Deployment, out _));
+    }
+
+    /// <summary>A replica that hears no announcement still forgets the grants it computed once the interval elapses, which is the bound on how long a revoked permission outlives its revocation.</summary>
+    [Fact]
+    public async Task ExecuteAsync_NoAnnouncementReachesTheReplica_ForgetsTheGrantsItComputedOnTheInterval()
+    {
+        // Arrange
+        var clock = new FakeTimeProvider();
+        var grants = CacheRememberingAGrant();
+        var (documents, firstReading) = UsersSignallingTheirFirstReading();
+        using var worker = Worker(connect: null, rootSettings: null, documents, clock, grants: grants);
+
+        // Act
+        await worker.StartAsync(CancellationToken.None);
+        await SynchronizationTestHost.AdvanceUntilAsync(clock, firstReading, ConfigurationConvergenceWorker.Interval, DeadlockGuard);
+
+        // Assert
+        await worker.StopAsync(CancellationToken.None);
+        Assert.False(grants.TryRecall(SyntheticUser.Deployment, out _));
+    }
+
     private static RootSettingsConfigurationProvider LoadedFrom(InMemoryRootSettingsRow row)
     {
         var provider = new RootSettingsConfigurationProvider(new RootSettingsDocument(row.Json, row.Version));
@@ -157,12 +209,40 @@ public sealed class ConfigurationConvergenceWorkerTests
     private static ConfigurationChangeAnnouncements AnnouncerOver(InMemoryBackplane backplane) =>
         new(() => Task.FromResult(backplane.Connect()), new RecordingLogger<ConfigurationChangeAnnouncements>());
 
+    /// <summary>A cache that remembers one user's grant, so a test can tell whether the worker forgot it.</summary>
+    private static UserGrantCache CacheRememberingAGrant()
+    {
+        var grants = new UserGrantCache();
+
+        grants.Remember(SyntheticUser.Deployment, ScopedGrant.AtDeployment([MailFathomPermission.MailRead]), grants.Generation);
+
+        return grants;
+    }
+
+    /// <summary>A roster with no users whose first reading completes the task returned beside it.</summary>
+    private static (IUserSettingsDocumentReader Documents, Task FirstReading) UsersSignallingTheirFirstReading()
+    {
+        var firstReading = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var documents = Substitute.For<IUserSettingsDocumentReader>();
+
+        documents.ReadVersionsAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                firstReading.TrySetResult();
+
+                return Task.FromResult<IReadOnlyList<UserSettingsDocumentVersion>>([]);
+            });
+
+        return (documents, firstReading.Task);
+    }
+
     private static ConfigurationConvergenceWorker Worker(
         Func<Task<ISubscriber>>? connect,
         RootSettingsReloader? rootSettings,
         IUserSettingsDocumentReader documents,
         TimeProvider clock,
-        RecordingLogger<ConfigurationConvergenceWorker>? logger = null)
+        RecordingLogger<ConfigurationConvergenceWorker>? logger = null,
+        UserGrantCache? grants = null)
     {
         return new ConfigurationConvergenceWorker(
             new ConfigurationChangeAnnouncements(connect, new RecordingLogger<ConfigurationChangeAnnouncements>()),
@@ -171,6 +251,7 @@ public sealed class ConfigurationConvergenceWorkerTests
                 ServedMailAccountReaders.HoldingNothing(),
                 MailAccountRecordScopes.Resolving(new InMemoryMailAccountRecordStore()),
                 new RecordingLogger<MailAccountSettingsReconciliation>()),
+            grants ?? new UserGrantCache(),
             () => rootSettings,
             clock,
             logger ?? new RecordingLogger<ConfigurationConvergenceWorker>());

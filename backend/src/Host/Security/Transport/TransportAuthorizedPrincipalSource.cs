@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Access;
+using MailFathom.Application.Access.Grants;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Mcp;
@@ -24,9 +25,9 @@ namespace MailFathom.Host.Security.Transport;
 /// <list type="bullet">
 /// <item>
 /// <description>
-/// A request an authentication scheme validated is a caller, named by what this deployment configured and holding the
-/// grant its entry resolved to. The claims were written when the credential was judged, so nothing here re-reads a
-/// configuration section and nothing learns which scheme was involved.
+/// A request an authentication scheme validated is a caller, named by what this deployment configured or recorded and
+/// holding what <see cref="HeldOnAMailSurface" /> or the administrator's entry says. The credential's claims were
+/// written when it was judged, so nothing here learns which scheme was involved.
 /// </description>
 /// </item>
 /// <item>
@@ -45,10 +46,21 @@ namespace MailFathom.Host.Security.Transport;
 /// </item>
 /// </list>
 /// <para>
-/// A request that authenticated nothing is a caller only where the surface it reached configures no credential at all,
-/// and that caller holds everything the surface publishes — ADR 0012 decided that posture and the startup report states
-/// it, so a use case refusing there would refuse on a deployment whose own record says it grants everything. Where the
-/// surface does configure a credential, a request that authenticated nothing is none of the three.
+/// <b>On the two mail-serving surfaces a caller holds what its user holds</b>, computed by
+/// <see cref="UserGrantResolver" /> from the roles assigned to the user directly and through their groups, narrowed to
+/// the mail half and then to whatever the credential admitting it named — its own list, and under
+/// <c>PermissionsFromTokenScopes</c> a token's scopes as well, which the scheme already applied to that list. Reading
+/// the user's grant is a database read where nothing is remembered, and this type answers synchronously, so
+/// <see cref="ResolveGrantAsync" /> reads it once per request ahead of every route and attaches it to the request. A
+/// request it was never read for is answered as one whose user holds nothing, so a pipeline that skipped the read
+/// refuses rather than admits.
+/// </para>
+/// <para>
+/// A request that authenticated nothing is a caller only where the surface it reached configures no credential at all.
+/// On a mail-serving surface that caller acts for the user the deployment serves and holds what that user holds, with
+/// no credential to narrow it; on the administrative surface it holds everything that surface publishes, which the
+/// startup report states. Where the surface does configure a credential, a request that authenticated nothing is none
+/// of the three.
 /// </para>
 /// <para>
 /// A path the attachment download route serves is withheld from that grant on both postures, before either surface is
@@ -65,18 +77,18 @@ namespace MailFathom.Host.Security.Transport;
 /// that decides it rather than what the request carried.
 /// </para>
 /// <para>
-/// One credential answers that question for itself. A username and password are a record of one user's own, so a
+/// One credential answers that question for itself. A credential recorded for a user is that user's own, so a
 /// principal carrying <see cref="TransportCallerUser" />'s claim acts for the user the credential named rather than
-/// for whoever the deployment serves. Every other credential is something the deployment configured or an
-/// authorization server issued and names nobody, so the surface decides as above and the user comes from the startup
-/// gate. The two are read apart rather than merged, because widening a credential that does name a user to the
-/// deployment's user would be the one mistake this distinction exists to prevent.
+/// for whoever the deployment serves. Every other credential names nobody, so the surface decides as above and the
+/// user comes from the startup gate. The two are read apart rather than merged, because widening a credential that
+/// does name a user to the deployment's user would be the one mistake this distinction exists to prevent.
 /// </para>
 /// </remarks>
 internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalSource
 {
     private readonly IHttpContextAccessor httpContextAccessor;
     private readonly IDeploymentUserSource deploymentUser;
+    private readonly UserGrantResolver grants;
     private readonly McpEndpointOptions mcpEndpointSettings;
     private readonly AdminEndpointOptions adminEndpointSettings;
     private readonly ClientEndpointOptions clientEndpointSettings;
@@ -84,26 +96,30 @@ internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalS
     /// <summary>Initializes the adapter over the request being served, if there is one.</summary>
     /// <param name="httpContextAccessor">Reports the request this scope belongs to, or nothing outside one.</param>
     /// <param name="deploymentUser">Names the user a caller on a mail-serving surface is admitted to act for.</param>
+    /// <param name="grants">Computes what a user holds.</param>
     /// <param name="mcpEndpointSettings">The MCP endpoint settings startup was composed from.</param>
     /// <param name="adminEndpointSettings">The administrative endpoint settings startup was composed from.</param>
     /// <param name="clientEndpointSettings">The client endpoint settings startup was composed from.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
-    /// <remarks>The settings are the startup snapshot the schemes were registered from, which is the same one the startup report states the resolved grant out of; reading a reloaded value here would answer for a posture no scheme was composed against.</remarks>
+    /// <remarks>The settings are the startup snapshot the schemes were registered from, which is the same one the startup report states the posture out of; reading a reloaded value here would answer for a posture no scheme was composed against.</remarks>
     public TransportAuthorizedPrincipalSource(
         IHttpContextAccessor httpContextAccessor,
         IDeploymentUserSource deploymentUser,
+        UserGrantResolver grants,
         IOptions<McpEndpointOptions> mcpEndpointSettings,
         IOptions<AdminEndpointOptions> adminEndpointSettings,
         IOptions<ClientEndpointOptions> clientEndpointSettings)
     {
         ArgumentNullException.ThrowIfNull(httpContextAccessor);
         ArgumentNullException.ThrowIfNull(deploymentUser);
+        ArgumentNullException.ThrowIfNull(grants);
         ArgumentNullException.ThrowIfNull(mcpEndpointSettings);
         ArgumentNullException.ThrowIfNull(adminEndpointSettings);
         ArgumentNullException.ThrowIfNull(clientEndpointSettings);
 
         this.httpContextAccessor = httpContextAccessor;
         this.deploymentUser = deploymentUser;
+        this.grants = grants;
         this.mcpEndpointSettings = mcpEndpointSettings.Value;
         this.adminEndpointSettings = adminEndpointSettings.Value;
         this.clientEndpointSettings = clientEndpointSettings.Value;
@@ -123,6 +139,53 @@ internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalS
         this.Current = principal;
     }
 
+    /// <summary>Reads what the user the request acts for holds, and attaches it to the request.</summary>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>A task that completes once the grant is attached, or at once where the request acts for no user.</returns>
+    /// <remarks>
+    /// Attached to the request rather than kept on this instance, because a request may be served from more than one
+    /// scope — the MCP server runs a tool call in a scope of its own — and every scope answers from the request.
+    /// Where the user cannot be named — the deployment serves several and the credential named none — nothing is read
+    /// and <see cref="Current" /> raises the same refusal it raised before, which the route reports as unattributable.
+    /// </remarks>
+    internal async Task ResolveGrantAsync(CancellationToken cancellationToken)
+    {
+        if (this.httpContextAccessor.HttpContext is not { } context)
+        {
+            return;
+        }
+
+        UserId? user;
+
+        try
+        {
+            user = this.UserActedForBy(context);
+        }
+        catch (DeploymentUserUnresolvedException)
+        {
+            return;
+        }
+
+        if (user is { } served)
+        {
+            TransportGrant.Attach(context, await this.grants.ResolveAsync(served, cancellationToken));
+        }
+    }
+
+    /// <summary>Reports what a caller on a mail-serving surface holds: its user's grant, narrowed to the mail half and to what admitted it.</summary>
+    /// <param name="userGrant">What the user holds, or <see langword="null" /> where it was never read for this request.</param>
+    /// <param name="narrowing">The names the credential admitting the caller keeps, already narrowed by a token's scopes where the entry says so.</param>
+    /// <returns>The grant the caller holds.</returns>
+    /// <remarks>
+    /// The surface's half is a narrowing of its own: a role may list administrative names beside mail ones, because the
+    /// person administering an organization also reads their own mail, and a mail-serving surface reads only the half it
+    /// guards. Every narrowing keeps names and leaves the scope each one was assigned at alone.
+    /// </remarks>
+    internal static ScopedGrant HeldOnAMailSurface(ScopedGrant? userGrant, IEnumerable<MailFathomPermission> narrowing) =>
+        (userGrant ?? ScopedGrant.None)
+            .NarrowedTo(MailFathomPermission.PublishedFor(ProtectedSurface.Mail))
+            .NarrowedTo(narrowing);
+
     private AuthorizedPrincipal? FromTransport()
     {
         if (this.httpContextAccessor.HttpContext is not { } context)
@@ -131,14 +194,35 @@ internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalS
         }
 
         var path = context.Request.Path;
+        var userGrant = TransportGrant.AttachedTo(context);
 
         return TransportCallerIdentity.NameOf(context.User) is { } identity
             ? this.AdmittedCallerOn(
                 path,
                 identity,
                 TransportGrant.PermissionsCarriedBy(context.User),
-                TransportCallerUser.CarriedBy(context.User))
-            : this.UnnarrowedCallerOn(path);
+                TransportCallerUser.CarriedBy(context.User),
+                userGrant)
+            : this.UnnarrowedCallerOn(path, userGrant);
+    }
+
+    /// <summary>Names the user a request acts for, where it reached a mail-serving surface under a caller.</summary>
+    /// <remarks>It decides by the same rules <see cref="FromTransport" /> answers by, so the grant read for a request is the grant of the user its principal acts for.</remarks>
+    private UserId? UserActedForBy(HttpContext context)
+    {
+        var path = context.Request.Path;
+
+        if (!ServesOneUsersMail(path) || ReachedOnlyUnderACapability(path))
+        {
+            return null;
+        }
+
+        if (TransportCallerIdentity.NameOf(context.User) is not null)
+        {
+            return TransportCallerUser.CarriedBy(context.User) ?? this.deploymentUser.User;
+        }
+
+        return this.RequiresAuthentication(path) ? null : this.deploymentUser.User;
     }
 
     /// <summary>Describes a caller a scheme validated, acting for the user its credential named or the one the surface it reached serves.</summary>
@@ -147,83 +231,77 @@ internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalS
     /// a user: the one their credential named where it named one, and otherwise the one this deployment serves. The
     /// administrative surface answers for the deployment, so a caller admitted there acts for no user and is refused
     /// by every use case scoped to one — which is what makes the deployment administrator a principal rather than a
-    /// grant, and why a credential naming a user does not turn one into a user's caller there. A path neither
-    /// surface serves is neither, and a caller cannot reach one: the routes this host maps all belong to a surface.
+    /// grant, and why a credential naming a user does not turn one into a user's caller there. An administrator holds
+    /// what its configured entry granted, over the whole deployment. A path neither surface serves is neither, and a
+    /// caller cannot reach one: the routes this host maps all belong to a surface.
     /// </remarks>
     private AuthorizedPrincipal AdmittedCallerOn(
         PathString path,
         string identity,
-        IEnumerable<MailFathomPermission> grantedPermissions,
-        UserId? credentialUser) =>
+        IEnumerable<MailFathomPermission> narrowing,
+        UserId? credentialUser,
+        ScopedGrant? userGrant) =>
         ServesOneUsersMail(path)
             ? AuthorizedPrincipal.CallerActingFor(
                 credentialUser ?? this.deploymentUser.User,
                 identity,
-                grantedPermissions)
-            : AuthorizedPrincipal.Caller(identity, grantedPermissions);
+                HeldOnAMailSurface(userGrant, narrowing))
+            : AuthorizedPrincipal.Caller(identity, narrowing);
 
     /// <summary>Reports whether a surface answers one person about their own mail rather than answering for the deployment.</summary>
     private static bool ServesOneUsersMail(PathString path) =>
         TransportSurface.Client.Serves(path) || TransportSurface.Mcp.Serves(path);
 
-    /// <summary>Describes the caller a surface admits where it configures no credential for one to be told apart by.</summary>
-    /// <remarks>
-    /// There is no entry for a grant to hang on, so the grant is the surface's whole half. The two prefixed surfaces are
-    /// asked first because theirs are the narrower paths, and a surface that does configure a credential answers
-    /// nothing here: a request that reached it without authenticating was admitted by nothing.
-    /// </remarks>
-    private AuthorizedPrincipal? UnnarrowedCallerOn(PathString path)
+    /// <summary>Reports whether the surface serving a path admits only a caller that authenticated.</summary>
+    /// <remarks>The two prefixed surfaces are asked first because theirs are the narrower paths.</remarks>
+    private bool RequiresAuthentication(PathString path)
     {
-        if (ReachedOnlyUnderACapability(path))
-        {
-            return null;
-        }
-
         if (TransportSurface.Admin.Serves(path))
         {
-            return this.adminEndpointSettings.RequiresAuthentication
-                ? null
-                : this.WholeSurfaceCaller(TransportSurface.Admin, path);
+            return this.adminEndpointSettings.RequiresAuthentication;
         }
 
         if (TransportSurface.Client.Serves(path))
         {
-            return this.clientEndpointSettings.RequiresAuthentication
-                ? null
-                : this.WholeSurfaceCaller(TransportSurface.Client, path);
+            return this.clientEndpointSettings.RequiresAuthentication;
         }
 
-        if (TransportSurface.Mcp.Serves(path))
+        return !TransportSurface.Mcp.Serves(path) || this.mcpEndpointSettings.RequiresAuthentication;
+    }
+
+    /// <summary>Describes the caller a surface admits where it configures no credential for one to be told apart by.</summary>
+    /// <remarks>
+    /// There is no credential for a narrowing to hang on, so the caller holds the surface's whole half of what it would
+    /// otherwise be narrowed from. A surface that does configure a credential answers nothing here: a request that
+    /// reached it without authenticating was admitted by nothing.
+    /// </remarks>
+    private AuthorizedPrincipal? UnnarrowedCallerOn(PathString path, ScopedGrant? userGrant)
+    {
+        if (ReachedOnlyUnderACapability(path) || this.RequiresAuthentication(path))
         {
-            return this.mcpEndpointSettings.RequiresAuthentication
-                ? null
-                : this.WholeSurfaceCaller(TransportSurface.Mcp, path);
+            return null;
         }
 
-        return null;
+        var surface = TransportSurface.Admin.Serves(path) ? TransportSurface.Admin
+            : TransportSurface.Client.Serves(path) ? TransportSurface.Client
+            : TransportSurface.Mcp;
+
+        return this.AdmittedCallerOn(
+            path,
+            TransportCallerIdentity.AnonymousCaller,
+            MailFathomPermission.PublishedFor(surface.GrantedSurface),
+            credentialUser: null,
+            userGrant);
     }
 
     /// <summary>Reports whether a route admitting a signed capability and nothing else serves the path.</summary>
     /// <remarks>
     /// The MCP surface serves the attachment download route beside the protocol route, so the grant above would reach it
-    /// on a deployment configuring no MCP credential and answer a caller holding the surface's whole half. That is a
+    /// on a deployment configuring no MCP credential and answer a caller holding what the served user holds. That is a
     /// second and weaker way into the route than the signature it verifies for itself, and it would hold on one posture
     /// only. The route states its own principal through <see cref="Assume" /> once the capability is redeemed, so the
     /// transport answers nothing for it on either posture and the ticket remains the only thing that authorizes it.
     /// </remarks>
     private static bool ReachedOnlyUnderACapability(PathString path) =>
         path.StartsWithSegments(McpAttachmentDownloadEndpoint.RoutePrefix);
-
-    /// <summary>Describes the caller a surface configuring no credential admits, acting for whoever that surface serves.</summary>
-    /// <remarks>
-    /// This is the unauthenticated posture, and the user reaches it by the same rule as an authenticated caller rather
-    /// than by one written for it: the surface decides. A deployment that authenticates nobody therefore constructs the
-    /// same user principal for every request on the two mail-serving surfaces, which is exactly what an installation
-    /// serving one person expects, and the startup gate is what guarantees there is one user for that to mean.
-    /// </remarks>
-    private AuthorizedPrincipal WholeSurfaceCaller(TransportSurface surface, PathString path) => this.AdmittedCallerOn(
-        path,
-        TransportCallerIdentity.AnonymousCaller,
-        MailFathomPermission.PublishedFor(surface.GrantedSurface),
-        credentialUser: null);
 }
