@@ -108,8 +108,9 @@ accepted here and never asked for: a refused request carries the bearer challeng
 `WWW-Authenticate: Basic`, because a browser answers that challenge with a dialog and then attaches what was typed to
 every request it sends the origin, a cross-site form post included. A password a browser was prompted for on another
 surface sharing the origin — the MCP endpoint's, on the port every surface uses by default — can still arrive that way,
-so a password on a request whose `Sec-Fetch-Site` says another site's page made it (`cross-site` or `same-site`) is
-refused here before it is read. `mfctl login --mode password` composes the header itself and sends no such header. The entries are this
+so a password on a request a browser page made is refused here before it is read: one carrying an `Origin` header,
+which a browser sends on a cross-origin request over HTTP and HTTPS alike, or a `Sec-Fetch-Site` of `cross-site` or
+`same-site`. `mfctl login --mode password` composes the header itself and sends neither. The entries are this
 endpoint's own: a method accepted on the MCP endpoint is not thereby accepted here, even where both name one
 authorization server.
 

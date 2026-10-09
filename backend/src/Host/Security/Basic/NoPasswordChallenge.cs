@@ -23,7 +23,7 @@ namespace MailFathom.Host.Security.Basic;
 /// Every administrative route carries it as well, for a reason of its own: a browser keeps a password it was prompted
 /// for and attaches it to whatever request it next sends that origin, so the administrative surface never prompts for
 /// one. Its only client, <c>mfctl</c>, never reads a challenge. A password a browser was prompted for elsewhere on the
-/// origin can still arrive, and the Basic scheme refuses it on this surface when another site's page sent it.
+/// origin can still arrive, and the Basic scheme refuses it on this surface when a browser page sent it.
 /// </para>
 /// </remarks>
 internal sealed class NoPasswordChallenge

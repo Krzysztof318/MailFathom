@@ -153,26 +153,28 @@ public sealed class BasicAuthenticationHandlerTests
 
     /// <summary>
     /// A browser prompted for a password on another surface of the origin attaches it to a form post another site's
-    /// page makes, so on the administrative surface such a request is refused before the password is read. The client
-    /// surface is the control: the same request there reaches the store, which is what says the refusal is the
-    /// administrative surface's rather than a header every surface turns away.
+    /// page makes, so on the administrative surface such a request is refused before the password is read — by its
+    /// Fetch Metadata on a secure origin, and by its <c>Origin</c> on a clear-text one, where a browser sends no Fetch
+    /// Metadata. The client surface is the control: the same request there reaches the store, which is what says the
+    /// refusal is the administrative surface's rather than a header every surface turns away.
     /// </summary>
     [Theory]
-    [InlineData("cross-site")]
-    [InlineData("same-site")]
-    public async Task AuthenticateAsync_APasswordAnotherSitesPageSentToTheAdministrativeEndpoint_IsRefusedUnread(string site)
+    [InlineData("Sec-Fetch-Site", "cross-site")]
+    [InlineData("Sec-Fetch-Site", "same-site")]
+    [InlineData("Origin", "http://pages.example")]
+    public async Task AuthenticateAsync_APasswordABrowserPageSentToTheAdministrativeEndpoint_IsRefusedUnread(string header, string value)
     {
         // Arrange
         using var administrative = new HandlerHarness { Surface = TransportSurface.Admin };
         administrative.HoldsTheUsersCredential();
         var administrativeRequest = new DefaultHttpContext();
-        administrativeRequest.Request.Headers["Sec-Fetch-Site"] = site;
+        administrativeRequest.Request.Headers[header] = value;
         var administrativeHandler = await administrative.InitializeAsync(BasicHeader("user", Password), https: true, administrativeRequest);
 
         using var client = new HandlerHarness { Surface = TransportSurface.Client };
         client.HoldsTheUsersCredential();
         var clientRequest = new DefaultHttpContext();
-        clientRequest.Request.Headers["Sec-Fetch-Site"] = site;
+        clientRequest.Request.Headers[header] = value;
         var clientHandler = await client.InitializeAsync(BasicHeader("user", Password), https: true, clientRequest);
 
         // Act

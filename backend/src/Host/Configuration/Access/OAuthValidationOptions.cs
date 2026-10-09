@@ -267,5 +267,5 @@ internal sealed class OAuthValidationOptions
 
     /// <summary>Names where a grant taken from the token's own scopes is turned on.</summary>
     private const string ScopeGrantRemedy =
-        "Write it as a '--permission' of the 'mfctl credential create' that provisions the user's credential, or set '" + nameof(UserFacingAuthenticationOptions.PermissionsFromTokenScopes) + "' on this entry to take the grant from the token instead.";
+        "Grant it through a role assigned to the user and keep it on the '--permission' list of the 'mfctl credential create' that provisions the user's credential, which narrows rather than grants, or set '" + nameof(UserFacingAuthenticationOptions.PermissionsFromTokenScopes) + "' on this entry to take the grant from the token's scopes instead.";
 }

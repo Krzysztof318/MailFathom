@@ -85,16 +85,19 @@ internal sealed class BasicAuthenticationHandler : AuthenticationHandler<BasicAu
         this.declaredProxyNetworks = reverseProxy.NamesAProxy ? reverseProxy.ToTrustedProxyNetworks() : [];
     }
 
-    /// <summary>Reports whether a browser says another site's page made this request.</summary>
+    /// <summary>Reports whether a browser says a page made this request.</summary>
     /// <remarks>
     /// A browser holding a password it was prompted for on any path of this origin — the MCP endpoint's challenge, on
     /// the port every surface shares by default — attaches it to every later request to the origin, a cross-site form
-    /// post included, and the administrative surface checks no origin of its own. The Fetch Metadata header is what a
-    /// browser states that with, and <c>mfctl</c> sends none, so a password arriving with it from another site is one
-    /// nobody chose to present here. Asked before the store is, so such a request spends no attempt.
+    /// post included, and the administrative surface checks no origin of its own. <c>mfctl</c>, its only client, sends
+    /// neither header read here, so a password arriving with one is one nobody chose to present here. The Fetch
+    /// Metadata header reaches only a secure origin, so <c>Origin</c> is read beside it: a browser sends that on a
+    /// cross-origin request whatever the scheme, which is what keeps a deployment serving this port in clear text
+    /// covered. Asked before the store is, so such a request spends no attempt.
     /// </remarks>
-    private static bool AnotherSiteMade(HttpRequest request) =>
-        request.Headers["Sec-Fetch-Site"].Any(site => site is "cross-site" or "same-site");
+    private static bool ABrowserPageMade(HttpRequest request) =>
+        request.Headers.Origin.Count > 0
+        || request.Headers["Sec-Fetch-Site"].Any(site => site is "cross-site" or "same-site");
 
     /// <inheritdoc />
     /// <remarks>
@@ -107,9 +110,9 @@ internal sealed class BasicAuthenticationHandler : AuthenticationHandler<BasicAu
     /// </remarks>
     protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
     {
-        if (this.Options.Surface == TransportSurface.Admin && AnotherSiteMade(this.Request))
+        if (this.Options.Surface == TransportSurface.Admin && ABrowserPageMade(this.Request))
         {
-            return AuthenticateResult.Fail("A password is not accepted on the administrative endpoint from a request another site made.");
+            return AuthenticateResult.Fail("A password is not accepted on the administrative endpoint from a request a browser page made.");
         }
 
         var result = await this.authenticator.AuthenticateAsync(

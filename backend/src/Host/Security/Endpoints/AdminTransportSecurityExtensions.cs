@@ -104,7 +104,7 @@ internal static class AdminTransportSecurityExtensions
     /// credential is one the client sets deliberately — a bearer token, or a password <c>mfctl</c> sends in a Basic
     /// header of its own composing. No administrative route asks a browser for a password, which
     /// <see cref="NoPasswordChallenge" /> holds why, and one a browser holds from another surface is refused here when
-    /// another site's page sends it.
+    /// a browser page sends it.
     /// </remarks>
     private static void ConfigureCorsPolicy(CorsPolicyBuilder policy, BrowserOriginPolicy originPolicy)
     {
