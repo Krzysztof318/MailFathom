@@ -22,6 +22,7 @@ using MailFathom.Infrastructure.Persistence.Enrichment.Configurations;
 using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Exports.Configurations;
 using MailFathom.Infrastructure.Persistence.Folders.Configurations;
+using MailFathom.Infrastructure.Persistence.Grants.Configurations;
 using MailFathom.Infrastructure.Persistence.Jobs.Configurations;
 using MailFathom.Infrastructure.Persistence.Mutations.Configurations;
 using MailFathom.Infrastructure.Persistence.Notifications.Configurations;
@@ -84,6 +85,16 @@ internal sealed class MailFathomDbContext : DbContext
 
     internal DbSet<UserCredentialEntity> UserCredentials =>
         this.Set<UserCredentialEntity>();
+
+    internal DbSet<RoleEntity> Roles => this.Set<RoleEntity>();
+
+    internal DbSet<RolePermissionEntity> RolePermissions => this.Set<RolePermissionEntity>();
+
+    internal DbSet<UserGroupEntity> UserGroups => this.Set<UserGroupEntity>();
+
+    internal DbSet<UserGroupMemberEntity> UserGroupMembers => this.Set<UserGroupMemberEntity>();
+
+    internal DbSet<RoleAssignmentEntity> RoleAssignments => this.Set<RoleAssignmentEntity>();
 
     internal DbSet<ClientPreferencesEntity> ClientPreferences => this.Set<ClientPreferencesEntity>();
 
@@ -267,6 +278,11 @@ internal sealed class MailFathomDbContext : DbContext
         modelBuilder.ApplyConfiguration(new MailAccountAssignmentConfiguration());
         modelBuilder.ApplyConfiguration(new StoredSecretConfiguration());
         modelBuilder.ApplyConfiguration(new UserCredentialConfiguration());
+        modelBuilder.ApplyConfiguration(new RoleConfiguration());
+        modelBuilder.ApplyConfiguration(new RolePermissionConfiguration());
+        modelBuilder.ApplyConfiguration(new UserGroupConfiguration());
+        modelBuilder.ApplyConfiguration(new UserGroupMemberConfiguration());
+        modelBuilder.ApplyConfiguration(new RoleAssignmentConfiguration());
         modelBuilder.ApplyConfiguration(new ClientPreferencesConfiguration());
         modelBuilder.ApplyConfiguration(new StoredFileConfiguration());
         modelBuilder.ApplyConfiguration(new SpentClientAssertionConfiguration());

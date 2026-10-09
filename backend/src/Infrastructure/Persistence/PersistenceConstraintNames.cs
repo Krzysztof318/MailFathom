@@ -678,6 +678,45 @@ internal static class PersistenceConstraintNames
     /// <remarks>Stated because the store reads it: a write that violates it is a short name another organization signs in under, which an operator acts on rather than a provider failure.</remarks>
     internal const string OrganizationShortNameUniqueIndexName = "ix_organizations_short_name";
 
+    /// <summary>The index that keeps one name to one role across the deployment.</summary>
+    /// <remarks>Stated because the store reads it: a write that violates it is a name another role carries, which an operator acts on rather than a provider failure.</remarks>
+    internal const string RoleNameUniqueIndexName = "ix_roles_name";
+
+    /// <summary>The index that keeps one name to one group across the deployment.</summary>
+    /// <remarks>Stated for the reason <see cref="RoleNameUniqueIndexName" /> is.</remarks>
+    internal const string UserGroupNameUniqueIndexName = "ix_user_groups_name";
+
+    /// <summary>The index that keeps one role given once to one principal at one scope.</summary>
+    /// <remarks>
+    /// Nulls are not distinct, because every row leaves three of the four principal and scope columns null and an
+    /// index treating each null as distinct would admit the same assignment twice — the deployment scope, which sets
+    /// neither scope column, above all. It leads with the role, so it is also what the count refusing a role's deletion
+    /// reads.
+    /// </remarks>
+    internal const string RoleAssignmentUniqueIndexName = "ix_role_assignments_role_principal_scope";
+
+    /// <summary>The foreign key that refuses an assignment naming a role that does not exist.</summary>
+    /// <remarks>Stated because the store reads it: the violation it raises is the outcome naming the role.</remarks>
+    internal const string RoleAssignmentRoleForeignKeyName = "fk_role_assignments_roles";
+
+    /// <summary>The foreign key that refuses an assignment given to a user who does not exist, and ends it with the user.</summary>
+    internal const string RoleAssignmentPrincipalUserForeignKeyName = "fk_role_assignments_principal_user";
+
+    /// <summary>The foreign key that refuses an assignment given to a group that does not exist, and ends it with the group.</summary>
+    internal const string RoleAssignmentPrincipalGroupForeignKeyName = "fk_role_assignments_principal_group";
+
+    /// <summary>The foreign key that refuses an assignment reaching an organization that does not exist, and ends it with the organization.</summary>
+    internal const string RoleAssignmentScopeOrganizationForeignKeyName = "fk_role_assignments_scope_organization";
+
+    /// <summary>The foreign key that refuses an assignment reaching a user who does not exist, and ends it with the user.</summary>
+    internal const string RoleAssignmentScopeUserForeignKeyName = "fk_role_assignments_scope_user";
+
+    /// <summary>The constraint that gives every assignment exactly one principal.</summary>
+    internal const string RoleAssignmentPrincipalCheckConstraintName = "ck_role_assignments_one_principal";
+
+    /// <summary>The constraint that gives every assignment at most one scope, neither meaning the deployment.</summary>
+    internal const string RoleAssignmentScopeCheckConstraintName = "ck_role_assignments_at_most_one_scope";
+
     /// <summary>The index that keeps one credential lookup to one user within its method and its organization.</summary>
     /// <remarks>
     /// Stated rather than left to convention because the store reads it: an insert that violates it is a lookup another

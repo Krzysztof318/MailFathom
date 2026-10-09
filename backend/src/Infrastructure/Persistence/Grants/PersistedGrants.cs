@@ -1,0 +1,542 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+// Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
+
+using MailFathom.Application.Access.Grants;
+using MailFathom.Application.Paging;
+using MailFathom.CodeCoverage;
+using MailFathom.Domain.Access;
+using MailFathom.Infrastructure.Persistence.Entities;
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
+
+namespace MailFathom.Infrastructure.Persistence.Grants;
+
+/// <summary>Keeps the roles, groups, and role assignments a user's grant is computed from.</summary>
+/// <remarks>
+/// <para>
+/// Every write is a single statement or one short transaction executed against the database, for the reason
+/// <see cref="Users.PersistedOrganizations" /> gives. Each refusal is decided by a constraint at the moment of the
+/// write — a name's unique index, the assignment's unique index, a foreign key naming what does not exist — and a
+/// read afterwards only says which one it was.
+/// </para>
+/// <para>
+/// A deletion that is refused while something still stands on the row locks the row before it counts, and the count
+/// and the delete commit together. An assignment or a membership being written beside it checks its foreign key,
+/// which waits on that lock, so the number a refusal names is the number that refused it and a deletion that goes
+/// ahead leaves the concurrent write to meet a missing row rather than to dangle.
+/// </para>
+/// </remarks>
+[RequiresIntegrationCoverage]
+internal sealed class PersistedGrants(MailFathomDbContext dbContext) : IGrantStore
+{
+    /// <inheritdoc />
+    public async Task<AdministrativeListingPage<Role>> ReadRolesAsync(
+        AdministrativeListingQuery query,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        var roles = dbContext.Roles.AsNoTracking();
+
+        if (query.After is { } after)
+        {
+            roles = roles.Where(role => role.Id > after);
+        }
+
+        var page = query.PageOf(
+            await roles
+                .OrderBy(role => role.Id)
+                .Take(query.PageSize + 1)
+                .Select(role => new { role.Id, role.Name, role.CreatedAt })
+                .ToArrayAsync(cancellationToken),
+            role => role.Id);
+
+        var roleIds = page.Entries.Select(role => role.Id).ToArray();
+
+        var listed = (await dbContext.RolePermissions
+                .AsNoTracking()
+                .Where(permission => roleIds.Contains(permission.RoleId))
+                .Select(permission => new { permission.RoleId, permission.Permission })
+                .ToArrayAsync(cancellationToken))
+            .ToLookup(permission => permission.RoleId, permission => permission.Permission);
+
+        return new AdministrativeListingPage<Role>(
+            [.. page.Entries.Select(role => new Role(role.Id, role.Name, RolePermissions.Read(listed[role.Id]), role.CreatedAt))],
+            page.ContinuesAfter);
+    }
+
+    /// <inheritdoc />
+    public async Task<GrantWriteResult> CreateRoleAsync(
+        Guid roleId,
+        string name,
+        RolePermissions permissions,
+        DateTimeOffset createdAt,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentNullException.ThrowIfNull(permissions);
+
+        await using var creation = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+        // The identifier is freshly minted, so the name's index is the one constraint a loser can meet.
+        var written = await dbContext.Database.ExecuteSqlAsync(
+            $"""
+             INSERT INTO roles ("Id", "Name", "CreatedAt")
+             VALUES ({roleId}, {name}, {createdAt})
+             ON CONFLICT DO NOTHING
+             """,
+            cancellationToken);
+
+        if (written != 1)
+        {
+            return GrantWriteResult.Of(GrantWriteOutcome.NameTaken);
+        }
+
+        await this.InsertPermissionsAsync(roleId, permissions, cancellationToken);
+
+        await creation.CommitAsync(cancellationToken);
+
+        return GrantWriteResult.Of(GrantWriteOutcome.Written);
+    }
+
+    /// <inheritdoc />
+    public async Task<GrantWriteResult> RenameRoleAsync(Guid roleId, string name, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+
+        try
+        {
+            var written = await dbContext.Roles
+                .Where(role => role.Id == roleId)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(role => role.Name, name), cancellationToken);
+
+            return GrantWriteResult.Of(written == 1 ? GrantWriteOutcome.Written : GrantWriteOutcome.UnknownRole);
+        }
+        catch (PostgresException violation) when (violation.SqlState == PostgresErrorCodes.UniqueViolation)
+        {
+            return GrantWriteResult.Of(GrantWriteOutcome.NameTaken);
+        }
+    }
+
+    /// <inheritdoc />
+    /// <remarks>The role row is locked first, so two replacements of one list commit one after the other and the list is always exactly one writer's.</remarks>
+    public async Task<GrantWriteResult> ReplaceRolePermissionsAsync(
+        Guid roleId,
+        RolePermissions permissions,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(permissions);
+
+        await using var replacement = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+        await dbContext.Database.ExecuteSqlAsync(
+            $"""SELECT 1 FROM roles WHERE "Id" = {roleId} FOR UPDATE""",
+            cancellationToken);
+
+        if (!await dbContext.Roles.AnyAsync(role => role.Id == roleId, cancellationToken))
+        {
+            return GrantWriteResult.Of(GrantWriteOutcome.UnknownRole);
+        }
+
+        await dbContext.RolePermissions
+            .Where(permission => permission.RoleId == roleId)
+            .ExecuteDeleteAsync(cancellationToken);
+
+        await this.InsertPermissionsAsync(roleId, permissions, cancellationToken);
+
+        await replacement.CommitAsync(cancellationToken);
+
+        return GrantWriteResult.Of(GrantWriteOutcome.Written);
+    }
+
+    /// <inheritdoc />
+    public async Task<GrantWriteResult> DeleteRoleAsync(Guid roleId, CancellationToken cancellationToken)
+    {
+        await using var removal = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+        await dbContext.Database.ExecuteSqlAsync(
+            $"""SELECT 1 FROM roles WHERE "Id" = {roleId} FOR UPDATE""",
+            cancellationToken);
+
+        if (!await dbContext.Roles.AnyAsync(role => role.Id == roleId, cancellationToken))
+        {
+            return GrantWriteResult.Of(GrantWriteOutcome.UnknownRole);
+        }
+
+        var standing = await dbContext.RoleAssignments
+            .CountAsync(assignment => assignment.RoleId == roleId, cancellationToken);
+
+        if (standing > 0)
+        {
+            return new GrantWriteResult(GrantWriteOutcome.StillAssigned, standing);
+        }
+
+        await dbContext.Roles.Where(role => role.Id == roleId).ExecuteDeleteAsync(cancellationToken);
+
+        await removal.CommitAsync(cancellationToken);
+
+        return GrantWriteResult.Of(GrantWriteOutcome.Written);
+    }
+
+    /// <inheritdoc />
+    public async Task<AdministrativeListingPage<UserGroup>> ReadGroupsAsync(
+        AdministrativeListingQuery query,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        var groups = dbContext.UserGroups.AsNoTracking();
+
+        if (query.After is { } after)
+        {
+            groups = groups.Where(group => group.Id > after);
+        }
+
+        var stored = await groups
+            .OrderBy(group => group.Id)
+            .Take(query.PageSize + 1)
+            .Select(group => new UserGroup(
+                group.Id,
+                group.Name,
+                group.OrganizationId,
+                dbContext.UserGroupMembers.Count(member => member.GroupId == group.Id),
+                group.CreatedAt))
+            .ToArrayAsync(cancellationToken);
+
+        return query.PageOf(stored, group => group.Id);
+    }
+
+    /// <inheritdoc />
+    public async Task<AdministrativeListingPage<UserId>> ReadGroupMembersAsync(
+        Guid groupId,
+        AdministrativeListingQuery query,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        var members = dbContext.UserGroupMembers.AsNoTracking().Where(member => member.GroupId == groupId);
+
+        if (query.After is { } after)
+        {
+            members = members.Where(member => member.UserId > after);
+        }
+
+        var page = query.PageOf(
+            await members
+                .OrderBy(member => member.UserId)
+                .Take(query.PageSize + 1)
+                .Select(member => member.UserId)
+                .ToArrayAsync(cancellationToken),
+            userId => userId);
+
+        return new AdministrativeListingPage<UserId>([.. page.Entries.Select(UserId.Create)], page.ContinuesAfter);
+    }
+
+    /// <inheritdoc />
+    public async Task<GrantWriteResult> CreateGroupAsync(
+        Guid groupId,
+        string name,
+        Guid? organizationId,
+        DateTimeOffset createdAt,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+
+        var inOrganization = organizationId is not null;
+        var organization = organizationId ?? Guid.Empty;
+
+        try
+        {
+            // A group in no organization stores a null rather than the empty identifier, which no organization carries
+            // and the foreign key would refuse.
+            var written = await dbContext.Database.ExecuteSqlAsync(
+                $"""
+                 INSERT INTO user_groups ("Id", "Name", "OrganizationId", "CreatedAt")
+                 VALUES ({groupId}, {name}, CASE WHEN {inOrganization} THEN {organization} END, {createdAt})
+                 ON CONFLICT DO NOTHING
+                 """,
+                cancellationToken);
+
+            return GrantWriteResult.Of(written == 1 ? GrantWriteOutcome.Written : GrantWriteOutcome.NameTaken);
+        }
+        catch (PostgresException violation) when (violation.SqlState == PostgresErrorCodes.ForeignKeyViolation)
+        {
+            return GrantWriteResult.Of(GrantWriteOutcome.UnknownOrganization);
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<GrantWriteResult> RenameGroupAsync(Guid groupId, string name, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+
+        try
+        {
+            var written = await dbContext.UserGroups
+                .Where(group => group.Id == groupId)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(group => group.Name, name), cancellationToken);
+
+            return GrantWriteResult.Of(written == 1 ? GrantWriteOutcome.Written : GrantWriteOutcome.UnknownGroup);
+        }
+        catch (PostgresException violation) when (violation.SqlState == PostgresErrorCodes.UniqueViolation)
+        {
+            return GrantWriteResult.Of(GrantWriteOutcome.NameTaken);
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<GrantWriteResult> DeleteGroupAsync(Guid groupId, CancellationToken cancellationToken)
+    {
+        await using var removal = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+        await dbContext.Database.ExecuteSqlAsync(
+            $"""SELECT 1 FROM user_groups WHERE "Id" = {groupId} FOR UPDATE""",
+            cancellationToken);
+
+        if (!await dbContext.UserGroups.AnyAsync(group => group.Id == groupId, cancellationToken))
+        {
+            return GrantWriteResult.Of(GrantWriteOutcome.UnknownGroup);
+        }
+
+        var standing = await dbContext.RoleAssignments
+            .CountAsync(assignment => assignment.PrincipalGroupId == groupId, cancellationToken);
+
+        if (standing > 0)
+        {
+            return new GrantWriteResult(GrantWriteOutcome.StillAssigned, standing);
+        }
+
+        await dbContext.UserGroups.Where(group => group.Id == groupId).ExecuteDeleteAsync(cancellationToken);
+
+        await removal.CommitAsync(cancellationToken);
+
+        return GrantWriteResult.Of(GrantWriteOutcome.Written);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The group and the user are both share-locked before their organizations are compared, which is the lock a move
+    /// of the user between organizations conflicts with — so the user cannot change organization between the comparison
+    /// and the insert, and a membership never lands in a group of an organization its member has just left.
+    /// </remarks>
+    public async Task<GrantWriteResult> AddGroupMemberAsync(
+        Guid groupId,
+        UserId user,
+        DateTimeOffset addedAt,
+        CancellationToken cancellationToken)
+    {
+        var userId = RequireUser(user);
+
+        await using var joining = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+        await dbContext.Database.ExecuteSqlAsync(
+            $"""SELECT 1 FROM user_groups WHERE "Id" = {groupId} FOR SHARE""",
+            cancellationToken);
+        await dbContext.Database.ExecuteSqlAsync(
+            $"""SELECT 1 FROM settings_accounts WHERE "Id" = {userId} FOR SHARE""",
+            cancellationToken);
+
+        var group = await dbContext.UserGroups
+            .Where(candidate => candidate.Id == groupId)
+            .Select(candidate => new { candidate.OrganizationId })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (group is null)
+        {
+            return GrantWriteResult.Of(GrantWriteOutcome.UnknownGroup);
+        }
+
+        var member = await dbContext.UserAccounts
+            .Where(candidate => candidate.Id == userId)
+            .Select(candidate => new { candidate.OrganizationId })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (member is null)
+        {
+            return GrantWriteResult.Of(GrantWriteOutcome.UnknownUser);
+        }
+
+        if (!AdmitsMember(group.OrganizationId, member.OrganizationId))
+        {
+            return GrantWriteResult.Of(GrantWriteOutcome.OutsideGroupOrganization);
+        }
+
+        await dbContext.Database.ExecuteSqlAsync(
+            $"""
+             INSERT INTO user_group_members ("GroupId", "UserId", "AddedAt")
+             VALUES ({groupId}, {userId}, {addedAt})
+             ON CONFLICT DO NOTHING
+             """,
+            cancellationToken);
+
+        await joining.CommitAsync(cancellationToken);
+
+        return GrantWriteResult.Of(GrantWriteOutcome.Written);
+    }
+
+    /// <inheritdoc />
+    public async Task<GrantWriteResult> RemoveGroupMemberAsync(
+        Guid groupId,
+        UserId user,
+        CancellationToken cancellationToken)
+    {
+        var userId = RequireUser(user);
+
+        await dbContext.UserGroupMembers
+            .Where(member => member.GroupId == groupId && member.UserId == userId)
+            .ExecuteDeleteAsync(cancellationToken);
+
+        return GrantWriteResult.Of(GrantWriteOutcome.Written);
+    }
+
+    /// <inheritdoc />
+    public async Task<AdministrativeListingPage<RoleAssignment>> ReadAssignmentsAsync(
+        AdministrativeListingQuery query,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        var assignments = dbContext.RoleAssignments.AsNoTracking();
+
+        if (query.After is { } after)
+        {
+            assignments = assignments.Where(assignment => assignment.Id > after);
+        }
+
+        var page = query.PageOf(
+            await assignments
+                .OrderBy(assignment => assignment.Id)
+                .Take(query.PageSize + 1)
+                .ToArrayAsync(cancellationToken),
+            assignment => assignment.Id);
+
+        return new AdministrativeListingPage<RoleAssignment>(
+            [.. page.Entries.Select(AssignmentOf)],
+            page.ContinuesAfter);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The principal and the scope are written as a value with flags choosing its column rather than as nullable
+    /// parameters, so each unused column is a typed null the statement composes rather than an untyped one a driver
+    /// has to guess at.
+    /// </remarks>
+    public async Task<GrantWriteResult> AssignAsync(
+        Guid assignmentId,
+        Guid roleId,
+        AssignmentPrincipal principal,
+        AssignmentScope scope,
+        DateTimeOffset assignedAt,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(principal);
+        ArgumentNullException.ThrowIfNull(scope);
+
+        var principalId = principal.Id;
+        var toUser = principal.Kind == AssignmentPrincipalKind.User;
+        var scopeTarget = scope.Target;
+        var atOrganization = scope.Kind == AssignmentScopeKind.Organization;
+        var atUser = scope.Kind == AssignmentScopeKind.User;
+
+        try
+        {
+            // The identifier is freshly minted, so the assignment's own unique index is the one constraint a loser can meet.
+            var written = await dbContext.Database.ExecuteSqlAsync(
+                $"""
+                 INSERT INTO role_assignments
+                     ("Id", "RoleId", "PrincipalUserId", "PrincipalGroupId", "ScopeOrganizationId", "ScopeUserId", "AssignedAt")
+                 VALUES ({assignmentId}, {roleId},
+                         CASE WHEN {toUser} THEN {principalId} END,
+                         CASE WHEN NOT {toUser} THEN {principalId} END,
+                         CASE WHEN {atOrganization} THEN {scopeTarget} END,
+                         CASE WHEN {atUser} THEN {scopeTarget} END,
+                         {assignedAt})
+                 ON CONFLICT DO NOTHING
+                 """,
+                cancellationToken);
+
+            return GrantWriteResult.Of(written == 1 ? GrantWriteOutcome.Written : GrantWriteOutcome.AlreadyAssigned);
+        }
+        catch (PostgresException violation) when (violation.SqlState == PostgresErrorCodes.ForeignKeyViolation)
+        {
+            return GrantWriteResult.Of(
+                MissingReferenceOf(violation.ConstraintName)
+                ?? throw new InvalidOperationException(
+                    "An assignment was refused by a foreign key it does not declare.",
+                    violation));
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<GrantWriteResult> RevokeAsync(Guid assignmentId, CancellationToken cancellationToken)
+    {
+        var removed = await dbContext.RoleAssignments
+            .Where(assignment => assignment.Id == assignmentId)
+            .ExecuteDeleteAsync(cancellationToken);
+
+        return GrantWriteResult.Of(removed == 1 ? GrantWriteOutcome.Written : GrantWriteOutcome.UnknownAssignment);
+    }
+
+    /// <summary>Names what an assignment named that does not exist, from the foreign key that refused it.</summary>
+    /// <param name="constraintName">The constraint PostgreSQL reported.</param>
+    /// <returns>The outcome naming the missing role, group, user, or organization; <see langword="null" /> for a constraint no assignment declares, which is a defect the caller raises with the violation attached rather than an answer.</returns>
+    internal static GrantWriteOutcome? MissingReferenceOf(string? constraintName) => constraintName switch
+    {
+        PersistenceConstraintNames.RoleAssignmentRoleForeignKeyName => GrantWriteOutcome.UnknownRole,
+        PersistenceConstraintNames.RoleAssignmentPrincipalGroupForeignKeyName => GrantWriteOutcome.UnknownGroup,
+        PersistenceConstraintNames.RoleAssignmentPrincipalUserForeignKeyName
+            or PersistenceConstraintNames.RoleAssignmentScopeUserForeignKeyName => GrantWriteOutcome.UnknownUser,
+        PersistenceConstraintNames.RoleAssignmentScopeOrganizationForeignKeyName => GrantWriteOutcome.UnknownOrganization,
+        _ => null,
+    };
+
+    /// <summary>Decides whether a group may take a user as a member, by the organization each belongs to.</summary>
+    /// <param name="groupOrganization">The group's organization, or <see langword="null" /> for a group in none.</param>
+    /// <param name="memberOrganization">The user's organization, or <see langword="null" /> for somebody in none.</param>
+    /// <returns><see langword="true" /> when the group is in no organization, which is the deployment's and holds anybody, or when both name the same one.</returns>
+    internal static bool AdmitsMember(Guid? groupOrganization, Guid? memberOrganization) =>
+        groupOrganization is not { } organization || organization == memberOrganization;
+
+    /// <summary>Reads one stored assignment as the principal and the scope its columns name.</summary>
+    /// <param name="assignment">The stored row.</param>
+    /// <returns>The assignment.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="assignment" /> is <see langword="null" />.</exception>
+    /// <remarks>The check constraints guarantee exactly one principal column and at most one scope column, so the columns are read in that order without a second rule beside them.</remarks>
+    internal static RoleAssignment AssignmentOf(RoleAssignmentEntity assignment)
+    {
+        ArgumentNullException.ThrowIfNull(assignment);
+
+        var principal = assignment.PrincipalUserId is { } principalUser
+            ? AssignmentPrincipal.User(UserId.Create(principalUser))
+            : AssignmentPrincipal.Group(assignment.PrincipalGroupId.GetValueOrDefault());
+
+        var scope = (assignment.ScopeOrganizationId, assignment.ScopeUserId) switch
+        {
+            ({ } organization, _) => AssignmentScope.Organization(organization),
+            (_, { } scopeUser) => AssignmentScope.User(UserId.Create(scopeUser)),
+            _ => AssignmentScope.Deployment,
+        };
+
+        return new RoleAssignment(assignment.Id, assignment.RoleId, principal, scope, assignment.AssignedAt);
+    }
+
+    private static Guid RequireUser(UserId user) => user.IsSpecified
+        ? user.Value
+        : throw new ArgumentException("A membership names a user.", nameof(user));
+
+    private async Task InsertPermissionsAsync(
+        Guid roleId,
+        RolePermissions permissions,
+        CancellationToken cancellationToken)
+    {
+        string[] names = [.. permissions.Granted.Select(permission => permission.Name)];
+
+        await dbContext.Database.ExecuteSqlAsync(
+            $"""
+             INSERT INTO role_permissions ("RoleId", "Permission")
+             SELECT {roleId}, name FROM unnest({names}) AS name
+             """,
+            cancellationToken);
+    }
+}

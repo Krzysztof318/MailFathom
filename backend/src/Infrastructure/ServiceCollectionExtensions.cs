@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Access;
 using MailFathom.Application.Access.Credentials;
+using MailFathom.Application.Access.Grants;
 using MailFathom.Application.Access.Organizations;
 using MailFathom.Application.Access.Sessions;
 using MailFathom.Application.Accounts;
@@ -157,6 +158,7 @@ using MailFathom.Infrastructure.Persistence.Embeddings;
 using MailFathom.Infrastructure.Persistence.Enrichment;
 using MailFathom.Infrastructure.Persistence.Exports;
 using MailFathom.Infrastructure.Persistence.Folders;
+using MailFathom.Infrastructure.Persistence.Grants;
 using MailFathom.Infrastructure.Persistence.Jobs;
 using MailFathom.Infrastructure.Persistence.Mutations;
 using MailFathom.Infrastructure.Persistence.Notifications;
@@ -612,6 +614,8 @@ public static class ServiceCollectionExtensions
         // The organizations users are grouped into and the membership that scopes a password's login. Scoped for the
         // reason the credential store is: it writes through the request's own context.
         services.AddScoped<IOrganizationStore, PersistedOrganizations>();
+        // The roles, groups, and assignments a user's grant is computed from. Scoped for the same reason.
+        services.AddScoped<IGrantStore, PersistedGrants>();
         // What a password becomes when it is stored and what a presented one is judged against. A singleton because it
         // holds no state at all: every parameter a verification needs travels inside the record it is verifying.
         services.AddSingleton<IPasswordHasher, Pbkdf2PasswordHasher>();
