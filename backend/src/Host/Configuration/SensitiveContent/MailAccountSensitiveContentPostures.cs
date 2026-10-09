@@ -60,6 +60,9 @@ internal sealed class MailAccountSensitiveContentPostures : ISensitiveContentPos
     /// <summary>The answer about each account read within <see cref="Freshness" />, and the moment it was read.</summary>
     private readonly ConcurrentDictionary<MailAccountId, HeldPosture> byAccount = new();
 
+    /// <summary>The moment the latest reading of every account began; an answer whose read did not begin after it is read again rather than reused.</summary>
+    private long everyAccountReadFrom;
+
     /// <summary>Initializes the postures of a deployment, whether or not anybody's mail is scanned.</summary>
     /// <param name="deployment">The bound <c>SensitiveContent</c> section, which every posture is composed over.</param>
     /// <param name="catalogs">Every catalog the registered scanners declare.</param>
@@ -121,47 +124,54 @@ internal sealed class MailAccountSensitiveContentPostures : ISensitiveContentPos
 
     /// <inheritdoc />
     /// <remarks>
-    /// The reading also replaces every answer held about one account, because a rebuild walks with both: it decides
-    /// which rows are stale against this list and re-derives each through <see cref="ForAccountAsync" />. An answer held
-    /// from before an account's last commit would re-derive a row under the posture the list has just moved past, stamp
-    /// it with the stamp the walk is leaving behind, and let the cursor step over it. An account the list leaves out is
-    /// held at the deployment's posture, which is what reading it alone would answer.
+    /// The reading also retires every answer about one account read before it began, because a rebuild walks with
+    /// both: it decides which rows are stale against this list and re-derives each through
+    /// <see cref="ForAccountAsync" />. An answer held from before an account's last commit would re-derive a row under
+    /// the posture the list has just moved past, stamp it with the stamp the walk is leaving behind, and let the cursor
+    /// step over it — and so would a read of one account that began before the list's and lands after it. Each such
+    /// account is read again the first time the walk asks, so the cache still holds only the accounts this replica works
+    /// on.
     /// </remarks>
     public async Task<IReadOnlyList<MailAccountSensitiveContentPosture>> ReadAccountsBeyondDeploymentAsync(
         CancellationToken cancellationToken)
     {
-        var declarations = await this.servedAccounts.ReadAccountsRequestingScanningAsync(cancellationToken);
-        var postures = declarations.ToDictionary(
-            static declared => declared.Account,
-            declared => this.PostureOf(this.Compose(declared.Request)));
+        Interlocked.Exchange(ref this.everyAccountReadFrom, this.timeProvider.GetTimestamp());
 
-        this.HoldEveryAnswer(postures);
+        var declarations = await this.servedAccounts.ReadAccountsRequestingScanningAsync(cancellationToken);
 
         return
         [
-            .. postures
-                .Where(entry => !ReferenceEquals(entry.Value, this.Deployment))
-                .Select(static entry => new MailAccountSensitiveContentPosture(entry.Key, entry.Value))
+            .. declarations
+                .Select(declared => new MailAccountSensitiveContentPosture(declared.Account, this.PostureOf(this.Compose(declared.Request))))
+                .Where(account => !ReferenceEquals(account.Posture, this.Deployment))
                 .OrderBy(static account => account.Account.Value, StringComparer.Ordinal),
         ];
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// An answer is stamped with the moment its read began, and one held from a read that began later is kept over it:
+    /// two reads of one account can land in either order, and the later-landing one may have read the record from
+    /// before a commit the other already saw.
+    /// </remarks>
     public async Task<SensitiveContentPosture> ForAccountAsync(MailAccountId account, CancellationToken cancellationToken)
     {
         if (this.byAccount.TryGetValue(account, out var held)
+            && held.ReadAt > Interlocked.Read(ref this.everyAccountReadFrom)
             && this.timeProvider.GetElapsedTime(held.ReadAt) < Freshness)
         {
             return held.Posture;
         }
 
+        var readStartedAt = this.timeProvider.GetTimestamp();
         var request = await this.servedAccounts.ReadScanningRequestAsync(account, cancellationToken);
-        var posture = request is null ? this.Deployment : this.PostureOf(this.Compose(request));
+        var answer = new HeldPosture(request is null ? this.Deployment : this.PostureOf(this.Compose(request)), readStartedAt);
 
         this.LetGoOfExpiredAnswers();
-        this.byAccount[account] = new HeldPosture(posture, this.timeProvider.GetTimestamp());
 
-        return posture;
+        return this.byAccount
+            .AddOrUpdate(account, answer, (_, current) => current.ReadAt > readStartedAt ? current : answer)
+            .Posture;
     }
 
     /// <inheritdoc />
@@ -257,22 +267,6 @@ internal sealed class MailAccountSensitiveContentPostures : ISensitiveContentPos
     /// accounts than that within one interval sweeps on every miss, and a bounded cache with its own eviction is the
     /// upgrade if that ever shows up in a profile.
     /// </remarks>
-    /// <summary>Holds what one reading of every account answered, and the deployment's posture for every account it left out.</summary>
-    private void HoldEveryAnswer(Dictionary<MailAccountId, SensitiveContentPosture> postures)
-    {
-        var readAt = this.timeProvider.GetTimestamp();
-
-        foreach (var unlisted in this.byAccount.Keys.Where(account => !postures.ContainsKey(account)).ToArray())
-        {
-            this.byAccount[unlisted] = new HeldPosture(this.Deployment, readAt);
-        }
-
-        foreach (var (account, posture) in postures)
-        {
-            this.byAccount[account] = new HeldPosture(posture, readAt);
-        }
-    }
-
     private void LetGoOfExpiredAnswers()
     {
         if (this.byAccount.Count < HeldAccountsBeforeSweep)

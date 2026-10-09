@@ -262,6 +262,36 @@ public sealed class MailAccountAdministrationTests
         Assert.Equal(shared, Assert.Single(deployment.MailAccountRecords.Accounts));
     }
 
+    /// <summary>
+    /// An account is assigned to no more users than every read of who it reaches returns, so a question about its mail
+    /// never silently leaves one of them out.
+    /// </summary>
+    [Fact]
+    public async Task AssignAsync_AnAccountAssignedToTheMostUsers_IsRefusedNamingTheCeilingAndAssignsNothing()
+    {
+        // Arrange
+        var shared = Mailbox("shared@example.test", "shared");
+        var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
+        deployment.Holding(Alex, EmptyRecord, version: 5);
+
+        foreach (var assignee in Enumerable.Range(1, MailAccountRecord.MaximumUsersAssigned)
+            .Select(index => UserId.Create(new Guid($"0197c0de-0000-4000-8000-{index:D12}"))))
+        {
+            deployment.MailAccountRecords.HoldUser(assignee, EmptyRecord, version: 1, shared);
+        }
+
+        // Act
+        var outcome = await deployment.MailAccounts.AssignAsync(shared.Id, Alex, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
+        Assert.Contains(
+            $"at most {MailAccountRecord.MaximumUsersAssigned} users",
+            Assert.Single(outcome.Messages),
+            StringComparison.Ordinal);
+        Assert.Empty(deployment.MailAccountRecords.DocumentOf(Alex)!.MailAccounts);
+    }
+
     /// <summary>An account in an organization is assigned only to its members, and the refusal names both sides — "none" among them — so the administrator knows which one to move.</summary>
     [Fact]
     public async Task AssignAsync_AnAccountOfAnOrganizationTheUserIsNotIn_IsRefusedNamingBothAndAssignsNothing()

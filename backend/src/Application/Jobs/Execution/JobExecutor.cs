@@ -101,13 +101,6 @@ public sealed class JobExecutor
         return await this.RunHandlerAsync(job, handler, startingTimestamp, stoppingToken);
     }
 
-    /// <summary>Runs the handler under the timeout and the renewal, and turns what happened into one outcome.</summary>
-    /// <remarks>
-    /// The order the outcomes are read in is the order of what they cost. Work that finished is completed whatever else
-    /// happened, because the effect is already there. A shutdown is read next, so a job stopped as the host went down is
-    /// released even where its timeout had already elapsed: releasing work that would have failed only runs it again,
-    /// while failing work a deployment interrupted records the operator's act against the job.
-    /// </remarks>
     /// <summary>Records an attempt whose handler could not be composed because what it reads failed to load first.</summary>
     /// <param name="job">The job this attempt holds.</param>
     /// <param name="failure">What preparing the attempt raised.</param>
@@ -140,6 +133,13 @@ public sealed class JobExecutor
             startingTimestamp);
     }
 
+    /// <summary>Runs the handler under the timeout and the renewal, and turns what happened into one outcome.</summary>
+    /// <remarks>
+    /// The order the outcomes are read in is the order of what they cost. Work that finished is completed whatever else
+    /// happened, because the effect is already there. A shutdown is read next, so a job stopped as the host went down is
+    /// released even where its timeout had already elapsed: releasing work that would have failed only runs it again,
+    /// while failing work a deployment interrupted records the operator's act against the job.
+    /// </remarks>
     [SuppressMessage(
         "Reliability",
         "CA2025:Ensure tasks using IDisposable instances complete before the instances are disposed",

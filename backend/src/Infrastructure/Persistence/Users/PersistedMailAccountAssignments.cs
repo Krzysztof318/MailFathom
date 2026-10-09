@@ -25,9 +25,6 @@ internal sealed class PersistedMailAccountAssignments(
     Func<NpgsqlDataSource> dataSource,
     DatabaseCommandTimeout commandTimeout) : IMailAccountAssignments
 {
-    /// <summary>The most users one account is read as assigned to, which is the most users one deployment serves.</summary>
-    internal const int MaximumUsersPerAccount = 256;
-
     private const string SelectAccountsAssignedTo =
         """
         SELECT "MailAccountId" FROM mail_account_assignments WHERE "UserId" = @user
@@ -79,7 +76,7 @@ internal sealed class PersistedMailAccountAssignments(
         await using var connection = await dataSource().OpenConnectionAsync(cancellationToken);
         await using var command = new NpgsqlCommand(SelectUsersAssignedTo, connection);
         command.Parameters.AddWithValue("account", accountId);
-        command.Parameters.AddWithValue("limit", MaximumUsersPerAccount);
+        command.Parameters.AddWithValue("limit", MailAccountRecord.MaximumUsersAssigned);
 
         var users = await this.ReadIdentifiersAsync(command, cancellationToken);
 

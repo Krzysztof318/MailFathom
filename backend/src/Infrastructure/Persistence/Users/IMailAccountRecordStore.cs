@@ -56,12 +56,13 @@ public interface IMailAccountRecordStore
         MailAccountQueryableSettings settings,
         CancellationToken cancellationToken);
 
-    /// <summary>Assigns an account to one more user, where the two belong to the same organization or both to none.</summary>
+    /// <summary>Assigns an account to one more user, where the two belong to the same organization or both to none and the account is assigned to fewer than <see cref="MailAccountRecord.MaximumUsersAssigned" /> users.</summary>
     /// <param name="accountId">The account.</param>
     /// <param name="user">The user it is assigned to.</param>
     /// <param name="expectedUserVersion">The version of that user's record the assignment was judged against.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>What the write did, carrying both organizations where they differ.</returns>
+    /// <remarks>The account's row is held for the rest of the transaction before its users are counted, so two assignments of one account count one after the other and neither takes it past the bound.</remarks>
     Task<MailAccountWrite> AssignAsync(
         Guid accountId,
         UserId user,
@@ -174,6 +175,9 @@ public enum MailAccountWriteResult
 
     /// <summary>The account and the user belong to different organizations, counting none as one, so the assignment was refused.</summary>
     OrganizationsDiffer = 5,
+
+    /// <summary>The account is already assigned to <see cref="MailAccountRecord.MaximumUsersAssigned" /> users, so the assignment was refused.</summary>
+    AssignedToMostUsers = 6,
 }
 
 /// <summary>What ending one assignment did.</summary>

@@ -228,7 +228,9 @@ internal sealed class MailAccountAdministration(
     /// name one of their accounts already carries is refused rather than served under a name that no longer tells two
     /// apart — a judgement the other assignees' sets are unaffected by. An assignment across two organizations is
     /// refused naming both, counting none as one of them, and is decided by the store under both rows' locks rather
-    /// than here, because a move of either side may land between a read here and the write.
+    /// than here, because a move of either side may land between a read here and the write. An account already
+    /// assigned to <see cref="MailAccountRecord.MaximumUsersAssigned" /> users is refused, here and again by the store
+    /// under the account's lock, because every read of who the account reaches stops there.
     /// </remarks>
     internal async Task<UserRecordWriteOutcome?> AssignAsync(
         Guid accountId,
@@ -253,6 +255,11 @@ internal sealed class MailAccountAdministration(
                 "The account is already assigned to this user, so nothing was written.");
         }
 
+        if (holding.Users.Count >= MailAccountRecord.MaximumUsersAssigned)
+        {
+            return AssignedToMostUsers(account.Version);
+        }
+
         var judgement = await this.JudgeAsync(account, account.Document, [user], actingUser: null, cancellationToken);
 
         if (judgement.Refusals.Count > 0)
@@ -272,6 +279,7 @@ internal sealed class MailAccountAdministration(
                 account.Version,
                 "The account is already assigned to this user, so nothing was written."),
             MailAccountWriteResult.OrganizationsDiffer => StraddlesOrganizations(account.Version, write.Straddled!),
+            MailAccountWriteResult.AssignedToMostUsers => AssignedToMostUsers(account.Version),
             _ => Superseded(record.Version, await this.VersionOfAsync(record, cancellationToken), "user record"),
         };
     }
@@ -645,6 +653,12 @@ internal sealed class MailAccountAdministration(
                 + "organization, and one in none only to a user in none, so nothing was written. Move the account or the "
                 + "user first.",
             ]);
+
+    private static UserRecordWriteOutcome AssignedToMostUsers(long version) =>
+        UserRecordWriteOutcome.Refused(
+            MailFathomErrorCode.ConfigurationCandidateInvalid,
+            version,
+            [$"A mail account is assigned to at most {MailAccountRecord.MaximumUsersAssigned} users, and this one already is, so nothing was written."]);
 
     private static string OrganizationNamed(Guid? organizationId) =>
         organizationId is { } named ? $"organization '{named:D}'" : "no organization";

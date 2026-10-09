@@ -54,7 +54,7 @@ internal sealed class ServedUsers(
     /// <summary>How many users the deployment holds, read no further than two, or nothing before the startup gate has read it.</summary>
     private DeploymentUserCount? count;
 
-    /// <summary>The user an erasure is deciding about, who is served nothing until it ends.</summary>
+    /// <summary>How many erasures are deciding about each user; a user is served nothing while their count is above zero.</summary>
     private readonly Dictionary<UserId, int> withheld = [];
 
     /// <inheritdoc />

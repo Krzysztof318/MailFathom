@@ -357,7 +357,7 @@ internal sealed class PersistedOrganizations(MailFathomDbContext dbContext) : IO
 
     /// <inheritdoc />
     /// <remarks>
-    /// The account row is locked before its users are counted, against the shared lock an assignment of it takes, so
+    /// The account row is locked before its users are counted, against the lock an assignment of it takes, so
     /// an assignment either committed first and is counted or waits for this move and then reads the account's new
     /// organization. A move of one of its users concurrently with this one cannot let both through: each compares the
     /// other's side as it stood, and while the two agree before either move, a move of one side alone always leaves them

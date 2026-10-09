@@ -314,11 +314,11 @@ public sealed class MailAccountSensitiveContentPosturesTests : IDisposable
 
     /// <summary>
     /// A rebuild decides which rows are stale from the reading of every account and re-derives each through the answer
-    /// about one, so that reading replaces an answer held from before the account's last commit rather than leaving the
+    /// about one, so that reading retires an answer held from before the account's last commit rather than leaving the
     /// walk to stamp rows under the posture it has just moved past.
     /// </summary>
     [Fact]
-    public async Task ReadAccountsBeyondDeploymentAsync_AnAnswerHeldFromBeforeACommit_IsReplacedByWhatTheReadingFound()
+    public async Task ReadAccountsBeyondDeploymentAsync_AnAnswerHeldFromBeforeACommit_IsReadAgainBeforeTheWalkUsesIt()
     {
         // Arrange
         this.Recording(SyntheticUser.Deployment, Work, null);
@@ -332,7 +332,36 @@ public sealed class MailAccountSensitiveContentPosturesTests : IDisposable
 
         // Assert
         Assert.Same(Assert.Single(beyond).Posture, held);
-        await this.servedAccounts.Received(1).ReadScanningRequestAsync(Work, Arg.Any<CancellationToken>());
+        await this.servedAccounts.Received(2).ReadScanningRequestAsync(Work, Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// A read of one account that began before the rebuild read every account, and lands after it, is not reused: it
+    /// may hold the posture from before a commit the rebuild's list already shows, and the walk re-deriving under it
+    /// would stamp rows the cursor then steps over.
+    /// </summary>
+    [Fact]
+    public async Task ForAccountAsync_AReadThatBeganBeforeTheRebuildsReading_IsReadAgainRatherThanReused()
+    {
+        // Arrange
+        this.Recording(SyntheticUser.Deployment, Work, null);
+        var beforeTheCommit = this.records[Work].Request;
+        var postures = this.PosturesOver(new SensitiveContentOptions());
+        var lateRead = new TaskCompletionSource<MailAccountScanningRequest?>();
+        this.servedAccounts.ReadScanningRequestAsync(Work, Arg.Any<CancellationToken>()).Returns(lateRead.Task);
+        var startedBeforeTheCommit = postures.ForAccountAsync(Work, TestContext.Current.CancellationToken);
+        this.Recording(SyntheticUser.Deployment, Work, scanning => scanning.Secrets.Enabled = true);
+        var beyond = await postures.ReadAccountsBeyondDeploymentAsync(TestContext.Current.CancellationToken);
+        lateRead.SetResult(beforeTheCommit);
+        await startedBeforeTheCommit;
+        this.servedAccounts.ReadScanningRequestAsync(Work, Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult<MailAccountScanningRequest?>(this.records[Work].Request));
+
+        // Act
+        var walked = await postures.ForAccountAsync(Work, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Same(Assert.Single(beyond).Posture, walked);
     }
 
     /// <summary>One mailbox's write leaves every other mailbox's posture exactly where it was.</summary>
