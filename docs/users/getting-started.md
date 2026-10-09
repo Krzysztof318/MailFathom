@@ -281,14 +281,16 @@ are several is refused rather than guessed at.
 **What the person may do is a role, and recording them assigns none.** A user no role is assigned to reaches no tool,
 whichever credential they later present, so give the person the seeded `Mail user` role at their own scope.
 This build has no `mfctl` command that assigns a role — [#2314](https://github.com/Krzysztof318/MailFathom/issues/2314)
-owns that — so the assignment is one statement against the deployment's database, here for every user it holds:
+owns that — so the assignment is one statement against the deployment's database, here for every user it holds and
+safe to run again after recording another:
 
 ```sql
 INSERT INTO role_assignments ("Id", "RoleId", "PrincipalUserId", "ScopeUserId", "AssignedAt")
 SELECT uuidv7(), r."Id", u."Id", u."Id", now()
 FROM settings_accounts u
 CROSS JOIN roles r
-WHERE r."Name" = 'Mail user';
+WHERE r."Name" = 'Mail user'
+ON CONFLICT DO NOTHING;
 ```
 
 [How a caller's grant is computed](../operations/permissions.md#how-a-callers-grant-is-computed) is what that role
