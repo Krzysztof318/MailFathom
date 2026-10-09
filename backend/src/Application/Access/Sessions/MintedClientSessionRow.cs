@@ -10,8 +10,8 @@ namespace MailFathom.Application.Access.Sessions;
 /// <param name="ExpiresAt">When presenting the token stops working, in UTC.</param>
 /// <remarks>
 /// It carries no grant, because the two writers establish one differently and neither lets the caller state it: a mint
-/// takes the grant the exchange resolved, and a renewal takes the one the row it removes was holding. A shape carrying
-/// a grant would let a renewal be asked to write a wider one than the session it replaces.
+/// takes the narrowing the exchange's credential applied, and a renewal takes the one the row it removes was holding. A
+/// shape carrying one would let a renewal be asked to write a wider narrowing than the session it replaces.
 /// </remarks>
 public sealed record MintedClientSessionRow(
     string Identifier,

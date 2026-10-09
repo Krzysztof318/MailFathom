@@ -308,7 +308,7 @@ Nothing else about the server is configured here: MailFathom finds the discovery
 from the issuer, and takes the key set address out of it.
 
 What each admitted token may do is what the user's roles grant, kept to what the credential step 6 wrote names —
-`--permission` there, once per name, or none to record every name the MCP surface publishes that day. To let the scopes you
+`--permission` there, once per name, or none to narrow nothing, so tokens hold whatever the user's roles grant. To let the scopes you
 created in step 2 narrow that grant
 per session as well, add `"PermissionsFromTokenScopes": true` on this entry:
 

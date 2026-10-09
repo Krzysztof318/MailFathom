@@ -94,25 +94,31 @@ public sealed class PersistedUserCredentialsTests
         Assert.False(listable);
     }
 
-    /// <summary>
-    /// A row naming nothing is read back as naming nothing for an administrator, and admitted kept to every mail name
-    /// this build publishes — which takes nothing from its user's grant, so the user's roles alone decide.
-    /// </summary>
+    /// <summary>A row naming nothing is read back as naming nothing, which is what an administrator is shown.</summary>
     [Fact]
-    public void Narrowing_ARowNamingNothing_IsReportedAsNoneAndAdmitsTheWholeMailHalf()
+    public void NarrowingOf_ARowNamingNothing_IsReportedAsNone()
     {
         // Act
         var reported = PersistedUserCredentials.NarrowingOf(null);
-        var admitted = PersistedUserCredentials.NarrowingAdmittedBy(null);
 
         // Assert
         Assert.Null(reported);
+    }
+
+    /// <summary>A row naming nothing is admitted kept to every mail name this build publishes, which takes nothing from its user's grant.</summary>
+    [Fact]
+    public void NarrowingAdmittedBy_ARowNamingNothing_AdmitsTheWholeMailHalf()
+    {
+        // Act
+        var admitted = PersistedUserCredentials.NarrowingAdmittedBy(null);
+
+        // Assert
         Assert.Equal(MailFathomPermission.PublishedFor(ProtectedSurface.Mail), admitted);
     }
 
     /// <summary>A row naming some keeps them in the published order, drops a name this build no longer publishes, and keeps the empty list empty.</summary>
     [Fact]
-    public void Narrowing_ARowNamingSome_KeepsThePublishedNamesInThePublishedOrder()
+    public void NarrowingAdmittedBy_ARowNamingSome_KeepsThePublishedNamesInThePublishedOrder()
     {
         // Act
         var named = PersistedUserCredentials.NarrowingAdmittedBy(

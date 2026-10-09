@@ -2058,7 +2058,7 @@ off a label the caller did not list, a removal takes named labels off, and clear
 message carried. Every one of those is reversible, which is a separate fact the annotation does not answer. A credential
 granting
 `mailfathom.mail.flags.write` is what puts it in the listing, and a credential provisioned with no permission named
-keeps it like every other name this surface published that day, wherever its user's roles grant it.
+narrows nothing, so it is listed wherever its user's roles grant it.
 
 **Verify with a credential provisioned with no permission named, or read what it was granted first.** A listing narrows to
 the caller's grant as well as to the deployment, so a credential granted less than the whole surface is served fewer
