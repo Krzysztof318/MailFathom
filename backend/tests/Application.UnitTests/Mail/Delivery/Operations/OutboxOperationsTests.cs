@@ -6,7 +6,6 @@ using MailFathom.Application.Access;
 using MailFathom.Application.Mail.Delivery;
 using MailFathom.Application.Mail.Delivery.Operations;
 using MailFathom.Domain.Access;
-using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.TestSupport;
 using NSubstitute;
@@ -195,7 +194,7 @@ public sealed class OutboxOperationsTests
         return new OutgoingEmailRecord
         {
             Id = Send,
-            AccountId = MailAccountId.Create("0198f0aa-0000-7000-8000-00000000f0bb"),
+            AccountId = AccessAuthorizations.ScopedAccount,
             Requester = OutgoingEmailRequester.Command("send-1"),
             Principal = null,
             Recipients = [],

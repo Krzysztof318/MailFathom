@@ -29,7 +29,7 @@ public sealed class OrchestratedAdministrativeTargetsTests(MailFathomOrchestrati
     private static readonly DateTimeOffset RecordedAt = new(2026, 10, 9, 8, 0, 0, TimeSpan.Zero);
 
     [Fact]
-    public async Task PlaceMailAccountAsync_AnAccountInAnOrganization_IsCoveredByItsOrganizationAndByItsOneAssigneeUntilASecondIsAssigned()
+    public async Task PlaceMailAccountsAsync_AnAccountInAnOrganization_IsCoveredByItsOrganizationAndByItsOneAssigneeUntilASecondIsAssigned()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -66,6 +66,54 @@ public sealed class OrchestratedAdministrativeTargetsTests(MailFathomOrchestrati
             await RemoveAccountAsync(services, account);
             await OrchestratedForeignUser.EraseAsync(services, holder);
             await OrchestratedForeignUser.EraseAsync(services, colleague);
+            await services.InScopeAsync(
+                (scope, token) => scope.GetRequiredService<IOrganizationStore>().DeleteAsync(organization, token),
+                CancellationToken.None);
+        }
+    }
+
+    /// <summary>Several accounts are placed by one statement, each with its own organization and assignees, and one the deployment does not hold is answered as placed nowhere.</summary>
+    [Fact]
+    public async Task PlaceMailAccountsAsync_SeveralAccountsInOneRead_PlacesEachOnItsOwnRows()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var holder = Guid.CreateVersion7();
+        var organization = Guid.CreateVersion7();
+        var heldAlone = Guid.CreateVersion7();
+        var assignedToNobody = Guid.CreateVersion7();
+        var unknown = MailAccountId.Create(Guid.CreateVersion7().ToString("D"));
+        await OrchestratedForeignUser.ProvisionAsync(services, holder, cancellationToken);
+
+        try
+        {
+            await CreateOrganizationAsync(services, organization, cancellationToken);
+            await RecordAccountAsync(services, heldAlone, organization, cancellationToken);
+            await RecordAccountAsync(services, assignedToNobody, organization, cancellationToken);
+            await AssignAsync(services, heldAlone, holder, cancellationToken);
+            var heldAloneId = MailAccountId.Create(heldAlone.ToString("D"));
+            var assignedToNobodyId = MailAccountId.Create(assignedToNobody.ToString("D"));
+
+            // Act
+            var placements = await services.InScopeAsync(
+                (scope, token) => scope.GetRequiredService<IAdministrativeTargets>().PlaceMailAccountsAsync(
+                    [heldAloneId, assignedToNobodyId, unknown],
+                    token),
+                cancellationToken);
+
+            // Assert
+            Assert.Equal(UserId.Create(holder), placements[heldAloneId].SoleUser);
+            Assert.Equal(organization, placements[heldAloneId].Organization);
+            Assert.Null(placements[assignedToNobodyId].SoleUser);
+            Assert.Equal(organization, placements[assignedToNobodyId].Organization);
+            Assert.Same(AdministrativeTarget.Unplaced, placements[unknown]);
+        }
+        finally
+        {
+            await RemoveAccountAsync(services, heldAlone);
+            await RemoveAccountAsync(services, assignedToNobody);
+            await OrchestratedForeignUser.EraseAsync(services, holder);
             await services.InScopeAsync(
                 (scope, token) => scope.GetRequiredService<IOrganizationStore>().DeleteAsync(organization, token),
                 CancellationToken.None);
@@ -167,14 +215,18 @@ public sealed class OrchestratedAdministrativeTargetsTests(MailFathomOrchestrati
             },
             cancellationToken);
 
-    private static Task<AdministrativeTarget> PlaceAccountAsync(
+    private static async Task<AdministrativeTarget> PlaceAccountAsync(
         OrchestratedMailFathomServices services,
         Guid account,
-        CancellationToken cancellationToken) => services.InScopeAsync(
-            (scope, token) => scope.GetRequiredService<IAdministrativeTargets>().PlaceMailAccountAsync(
-                MailAccountId.Create(account.ToString("D")),
-                token),
+        CancellationToken cancellationToken)
+    {
+        var asked = MailAccountId.Create(account.ToString("D"));
+        var placements = await services.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<IAdministrativeTargets>().PlaceMailAccountsAsync([asked], token),
             cancellationToken);
+
+        return placements[asked];
+    }
 
     private static Task<int> RemoveAccountAsync(OrchestratedMailFathomServices services, Guid account) =>
         services.InScopeAsync(

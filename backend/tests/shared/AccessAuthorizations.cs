@@ -50,6 +50,9 @@ internal static class AccessAuthorizations
     /// <summary>Gets the user every mail account a scoped administrator is arranged over is assigned to alone, and the user a user-targeted read names.</summary>
     internal static UserId ScopedHolder { get; } = UserId.Create(new Guid("0198f0aa-0000-7000-8000-00000000f002"));
 
+    /// <summary>Gets the one mail account a scoped administrator is arranged over, which belongs to <see cref="ScopedOrganization" /> and is assigned to <see cref="ScopedHolder" /> alone.</summary>
+    internal static MailAccountId ScopedAccount { get; } = MailAccountId.Create("0198f0aa-0000-7000-8000-00000000f0aa");
+
     /// <summary>Gets one scope of each kind that covers the targets <see cref="ForAdministratorScopedAt" /> places: the deployment, <see cref="ScopedOrganization" />, and <see cref="ScopedHolder" />.</summary>
     internal static IReadOnlyList<AssignmentScope> ScopesCoveringTheirTarget { get; } =
     [
@@ -70,10 +73,11 @@ internal static class AccessAuthorizations
     /// <param name="grantedPermissions">The permissions that role carries.</param>
     /// <returns>The authorization a use case reached by that administrator consults.</returns>
     /// <remarks>
-    /// Every mail account is placed in <see cref="ScopedOrganization" /> and assigned to <see cref="ScopedHolder" />
-    /// alone, and every user is placed in <see cref="ScopedOrganization" />, so each scope in
-    /// <see cref="ScopesCoveringTheirTarget" /> reaches an account and <see cref="ScopedHolder" /> while each in
-    /// <see cref="ScopesOutsideTheirTarget" /> reaches neither.
+    /// <see cref="ScopedAccount" /> and <see cref="ScopedHolder" /> are placed in <see cref="ScopedOrganization" />, the
+    /// account assigned to the holder alone, so each scope in <see cref="ScopesCoveringTheirTarget" /> reaches both while
+    /// each in <see cref="ScopesOutsideTheirTarget" /> reaches neither. Every other account and user is placed nowhere,
+    /// which only the deployment covers, so an operation that checked a target other than the one it was asked about
+    /// is refused at every narrower scope rather than served.
     /// </remarks>
     internal static AccessAuthorization ForAdministratorScopedAt(
         AssignmentScope scope,
@@ -90,14 +94,22 @@ internal static class AccessAuthorizations
     internal static AccessAuthorization ForPrincipal(AuthorizedPrincipal? principal) =>
         new(new StatedPrincipalSource(principal));
 
-    /// <summary>Places every account in <see cref="ScopedOrganization" /> held by <see cref="ScopedHolder" /> alone, and every user in that organization.</summary>
+    /// <summary>Places <see cref="ScopedAccount" /> and <see cref="ScopedHolder" /> in <see cref="ScopedOrganization" />, and every other target nowhere.</summary>
     private sealed class ScopedOrganizationTargets : IAdministrativeTargets
     {
-        public Task<AdministrativeTarget> PlaceMailAccountAsync(MailAccountId account, CancellationToken cancellationToken) =>
-            Task.FromResult(AdministrativeTarget.MailAccount(ScopedOrganization, [ScopedHolder]));
+        public Task<IReadOnlyDictionary<MailAccountId, AdministrativeTarget>> PlaceMailAccountsAsync(
+            IReadOnlyCollection<MailAccountId> accounts,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyDictionary<MailAccountId, AdministrativeTarget>>(accounts.Distinct().ToDictionary(
+                account => account,
+                account => account == ScopedAccount
+                    ? AdministrativeTarget.MailAccount(ScopedOrganization, [ScopedHolder])
+                    : AdministrativeTarget.Unplaced));
 
         public Task<AdministrativeTarget> PlaceUserAsync(UserId user, CancellationToken cancellationToken) =>
-            Task.FromResult(AdministrativeTarget.User(user, ScopedOrganization));
+            Task.FromResult(user == ScopedHolder
+                ? AdministrativeTarget.User(user, ScopedOrganization)
+                : AdministrativeTarget.Unplaced);
     }
 
     /// <summary>Reports the one principal a test stated, for the whole of that test's unit of work.</summary>

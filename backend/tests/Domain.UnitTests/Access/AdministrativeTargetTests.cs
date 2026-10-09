@@ -99,11 +99,26 @@ public sealed class AdministrativeTargetTests
         Assert.True(target.IsCoveredBy(AssignmentScope.Organization(Organization)));
     }
 
+    /// <summary>A mail account in no organization is the deployment's alone, even to the one user it is assigned to.</summary>
+    [Fact]
+    public void IsCoveredBy_TheUserOfAnAccountInNoOrganizationAssignedToThemAlone_DoesNotCoverTheAccount()
+    {
+        // Arrange
+        var target = AdministrativeTarget.MailAccount(organization: null, [Person]);
+
+        // Act
+        var covered = target.IsCoveredBy(AssignmentScope.User(Person));
+
+        // Assert
+        Assert.False(covered);
+        Assert.True(target.IsCoveredBy(AssignmentScope.Deployment));
+    }
+
     [Fact]
     public void IsCoveredBy_AUserScope_DoesNotCoverAnAccountAssignedToNobody()
     {
         // Arrange
-        var target = AdministrativeTarget.MailAccount(organization: null, []);
+        var target = AdministrativeTarget.MailAccount(Organization, []);
 
         // Act
         var covered = target.IsCoveredBy(AssignmentScope.User(Person));

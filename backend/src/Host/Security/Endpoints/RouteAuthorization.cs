@@ -189,6 +189,11 @@ internal static class RouteAuthorization
         }
     }
 
+    private static bool PermitsAtTheTransport(AccessAuthorization authorization, RoutePermission published) =>
+        published.NamesTarget
+            ? authorization.PermitsAtAnyScope(published.Permission)
+            : authorization.Permits(published.Permission);
+
     /// <summary>Records the refusal beside the answer the caller receives, which is what makes a rate of them readable.</summary>
     /// <remarks>
     /// <para>
@@ -203,11 +208,6 @@ internal static class RouteAuthorization
     /// is a defect report rather than a wider grant, and a refusal nobody counted is the one nobody finds.
     /// </para>
     /// </remarks>
-    private static bool PermitsAtTheTransport(AccessAuthorization authorization, RoutePermission published) =>
-        published.NamesTarget
-            ? authorization.PermitsAtAnyScope(published.Permission)
-            : authorization.Permits(published.Permission);
-
     private static void RecordRefusal(
         HttpContext context,
         ProtectedSurface surface,

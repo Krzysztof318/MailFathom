@@ -123,7 +123,7 @@ public sealed class AccessAuthorizationsTests
     public async Task ForAdministratorScopedAt_TheScopesListed_CoverTheHolderAndTheirAccountsExactlyAsNamed()
     {
         // Arrange
-        var account = MailAccountId.Create("0198f0aa-0000-7000-8000-00000000f0aa");
+        var account = AccessAuthorizations.ScopedAccount;
         var cancellationToken = TestContext.Current.CancellationToken;
 
         // Act
@@ -140,5 +140,32 @@ public sealed class AccessAuthorizationsTests
         async Task<bool> ReachesBothAsync(AccessAuthorization authorization) =>
             await authorization.PermitsOverAsync(MailFathomPermission.AdminAuditRead, account, cancellationToken)
             && await authorization.PermitsOverAsync(MailFathomPermission.AdminAuditRead, AccessAuthorizations.ScopedHolder, cancellationToken);
+    }
+
+    /// <summary>
+    /// Only the arranged account and holder are placed, so a use case that checked some other target than the one it was
+    /// asked about is refused by every scope narrower than the deployment rather than served by the fake.
+    /// </summary>
+    [Fact]
+    public async Task ForAdministratorScopedAt_AnyOtherAccountOrUser_IsCoveredByTheDeploymentAlone()
+    {
+        // Arrange
+        var otherAccount = MailAccountId.Create("0198f0aa-0000-7000-8000-00000000f0ab");
+        var otherUser = UserId.Create(new Guid("0198f0aa-0000-7000-8000-00000000f0ac"));
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var narrower = AccessAuthorizations.ForAdministratorScopedAt(
+            AssignmentScope.Organization(AccessAuthorizations.ScopedOrganization),
+            MailFathomPermission.AdminAuditRead);
+        var deployment = AccessAuthorizations.ForAdministratorScopedAt(AssignmentScope.Deployment, MailFathomPermission.AdminAuditRead);
+
+        // Act
+        var narrowerReachesAccount = await narrower.PermitsOverAsync(MailFathomPermission.AdminAuditRead, otherAccount, cancellationToken);
+        var narrowerReachesUser = await narrower.PermitsOverAsync(MailFathomPermission.AdminAuditRead, otherUser, cancellationToken);
+        var deploymentReachesAccount = await deployment.PermitsOverAsync(MailFathomPermission.AdminAuditRead, otherAccount, cancellationToken);
+
+        // Assert
+        Assert.False(narrowerReachesAccount);
+        Assert.False(narrowerReachesUser);
+        Assert.True(deploymentReachesAccount);
     }
 }

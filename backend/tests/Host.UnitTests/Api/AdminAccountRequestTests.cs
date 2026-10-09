@@ -216,18 +216,18 @@ public sealed class AdminAccountRequestTests
     public async Task ResolveCoveredAsync_AnAccountTheCallersScopeCovers_ReadsTheIdentifier(AssignmentScope scope)
     {
         // Arrange
-        var accounts = CatalogServing(Work);
+        var accounts = CatalogServing(AccessAuthorizations.ScopedAccount);
 
         // Act
         var accountId = await AdminAccountRequest.ResolveCoveredAsync(
-            "work",
+            AccessAuthorizations.ScopedAccount.Value,
             MailFathomPermission.AdminAuditRead,
             accounts,
             AccessAuthorizations.ForAdministratorScopedAt(scope, MailFathomPermission.AdminAuditRead),
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(WorkIdentity, accountId);
+        Assert.Equal(AccessAuthorizations.ScopedAccount, accountId);
     }
 
     /// <summary>An account outside the caller's scope resolves to nothing, exactly as one the deployment does not serve, so the route answers it with the same refusal.</summary>
@@ -236,11 +236,11 @@ public sealed class AdminAccountRequestTests
     public async Task ResolveCoveredAsync_AnAccountOutsideTheCallersScope_ReadsNothing(AssignmentScope scope)
     {
         // Arrange
-        var accounts = CatalogServing(Work);
+        var accounts = CatalogServing(AccessAuthorizations.ScopedAccount);
 
         // Act
         var accountId = await AdminAccountRequest.ResolveCoveredAsync(
-            "work",
+            AccessAuthorizations.ScopedAccount.Value,
             MailFathomPermission.AdminAuditRead,
             accounts,
             AccessAuthorizations.ForAdministratorScopedAt(scope, MailFathomPermission.AdminAuditRead),

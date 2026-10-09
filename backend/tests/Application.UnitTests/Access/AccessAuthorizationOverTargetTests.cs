@@ -126,7 +126,7 @@ public sealed class AccessAuthorizationOverTargetTests
             TestContext.Current.CancellationToken);
 
         // Assert
-        await this.targets.DidNotReceive().PlaceMailAccountAsync(Arg.Any<MailAccountId>(), Arg.Any<CancellationToken>());
+        await this.targets.DidNotReceive().PlaceMailAccountsAsync(Arg.Any<IReadOnlyCollection<MailAccountId>>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -147,7 +147,7 @@ public sealed class AccessAuthorizationOverTargetTests
 
         // Assert
         Assert.False(permitted);
-        await this.targets.DidNotReceive().PlaceMailAccountAsync(Arg.Any<MailAccountId>(), Arg.Any<CancellationToken>());
+        await this.targets.DidNotReceive().PlaceMailAccountsAsync(Arg.Any<IReadOnlyCollection<MailAccountId>>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -213,6 +213,69 @@ public sealed class AccessAuthorizationOverTargetTests
         Assert.IsType<PrincipalNotAuthorizedException>(refusal);
     }
 
+    /// <summary>Several accounts are placed in one read, and only the ones the scope covers are answered.</summary>
+    [Fact]
+    public async Task CoveredMailAccountsAsync_AnOrganizationsAdministrator_KeepsTheAccountsInItFromOneRead()
+    {
+        // Arrange
+        var elsewhere = MailAccountId.Create("0198f0aa-0000-7000-8000-0000000000e6");
+        this.targets.PlaceMailAccountsAsync(Arg.Any<IReadOnlyCollection<MailAccountId>>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<MailAccountId, AdministrativeTarget>
+            {
+                [Account] = AdministrativeTarget.MailAccount(Organization, [Person]),
+                [elsewhere] = AdministrativeTarget.MailAccount(OtherOrganization, [Person]),
+            });
+        var authorization = this.AuthorizationFor(AssignmentScope.Organization(Organization));
+
+        // Act
+        var covered = await authorization.CoveredMailAccountsAsync(
+            MailFathomPermission.AdminAuditRead,
+            [Account, elsewhere],
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal([Account], covered);
+        await this.targets.Received(1).PlaceMailAccountsAsync(Arg.Any<IReadOnlyCollection<MailAccountId>>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CoveredMailAccountsAsync_TheDeploymentsAdministrator_KeepsEveryAccountWithoutPlacingAny()
+    {
+        // Arrange
+        var authorization = this.AuthorizationFor(AssignmentScope.Deployment);
+
+        // Act
+        var covered = await authorization.CoveredMailAccountsAsync(
+            MailFathomPermission.AdminAuditRead,
+            [Account],
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal([Account], covered);
+        await this.targets.DidNotReceive().PlaceMailAccountsAsync(Arg.Any<IReadOnlyCollection<MailAccountId>>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CoveredMailAccountsAsync_ACallerHoldingThePermissionNowhere_KeepsNoneWithoutPlacingAny()
+    {
+        // Arrange
+        var authorization = new AccessAuthorization(
+            StatedPrincipal(AuthorizedPrincipal.Caller(
+                "administrator",
+                ScopedGrant.Of([(MailFathomPermission.AdminRead, AssignmentScope.Deployment)]))),
+            this.targets);
+
+        // Act
+        var covered = await authorization.CoveredMailAccountsAsync(
+            MailFathomPermission.AdminAuditRead,
+            [Account],
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(covered);
+        await this.targets.DidNotReceive().PlaceMailAccountsAsync(Arg.Any<IReadOnlyCollection<MailAccountId>>(), Arg.Any<CancellationToken>());
+    }
+
     private static AuthorizedPrincipal ScopedAdministrator(AssignmentScope scope) =>
         AuthorizedPrincipal.Caller("administrator", ScopedGrant.Of([(MailFathomPermission.AdminAuditRead, scope)]));
 
@@ -228,5 +291,6 @@ public sealed class AccessAuthorizationOverTargetTests
         new(StatedPrincipal(ScopedAdministrator(scope)), this.targets);
 
     private void PlaceAccount(AdministrativeTarget placement) =>
-        this.targets.PlaceMailAccountAsync(Account, Arg.Any<CancellationToken>()).Returns(placement);
+        this.targets.PlaceMailAccountsAsync(Arg.Any<IReadOnlyCollection<MailAccountId>>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<MailAccountId, AdministrativeTarget> { [Account] = placement });
 }

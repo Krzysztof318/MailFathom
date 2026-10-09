@@ -23,11 +23,13 @@ namespace MailFathom.Application.Access;
 /// </remarks>
 public interface IAdministrativeTargets
 {
-    /// <summary>Places one mail account: the organization it belongs to and whether one user alone is assigned it.</summary>
-    /// <param name="account">The account.</param>
+    /// <summary>Places mail accounts in one read: the organization each belongs to and whether one user alone is assigned it.</summary>
+    /// <param name="accounts">The accounts, as many as one operation names — one, or the collected books of one user.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>Where the account sits, or <see cref="AdministrativeTarget.Unplaced" /> for one the deployment does not hold.</returns>
-    Task<AdministrativeTarget> PlaceMailAccountAsync(MailAccountId account, CancellationToken cancellationToken);
+    /// <returns>Where each account sits, keyed by every account asked about, with <see cref="AdministrativeTarget.Unplaced" /> for one the deployment does not hold.</returns>
+    Task<IReadOnlyDictionary<MailAccountId, AdministrativeTarget>> PlaceMailAccountsAsync(
+        IReadOnlyCollection<MailAccountId> accounts,
+        CancellationToken cancellationToken);
 
     /// <summary>Places one user: the organization they are a member of.</summary>
     /// <param name="user">The user.</param>

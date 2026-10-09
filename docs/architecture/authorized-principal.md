@@ -55,14 +55,15 @@ it. A principal that could be admitted by holding a permission would be reachabl
 permission to — so a use case that may run without a caller admits it **by name**, and never by a permission check.
 
 **An administrative permission is asked about *over what* as well as *what*.** `RequirePermission` asks for a name held
-over the whole deployment, which is the answer for an operation naming no target. An operation naming a user or a mail
-account asks `RequirePermissionOverAsync` with that target instead, and `AccessAuthorization` places it through
-`IAdministrativeTargets` — the organization it belongs to, and the one user it is wholly the concern of — read from the
-records per question so a move between organizations reaches the next check on every replica. A name held over the
-deployment answers without placing anything. A boundary that has to answer a target outside the caller's scope exactly as
-one that does not exist asks `PermitsOverAsync` first and takes the not-found path itself, which is how a refusal stops
-disclosing that the target exists elsewhere; `PermitsAtAnyScope` is the cheap question the transport asks of such a
-route, since it cannot place the target.
+over the whole deployment, and every administrative operation asks it — whether or not it names a target — except the
+reads published under `mailfathom.admin.audit.read`. Those ask `RequirePermissionOverAsync` with the user or the mail
+account they name, and `AccessAuthorization` places it through `IAdministrativeTargets` — the organization it belongs
+to, and the one user it is wholly the concern of — read from the records per question so a move between organizations
+reaches the next check on every replica. A name held over the deployment answers without placing anything, and a read
+across several mail accounts asks `CoveredMailAccountsAsync`, which places them in one read. A boundary that has to
+answer a target outside the caller's scope exactly as one that does not exist asks `PermitsOverAsync` first and takes
+the not-found path itself, which is how a refusal stops disclosing that the target exists elsewhere;
+`PermitsAtAnyScope` is the cheap question the transport asks of such a route, since it cannot place the target.
 
 **The user is a second axis, and it is not a permission.** A permission says which operations a caller may perform;
 the user says whose mail those operations run against, and no grant an operator writes can make one caller act for

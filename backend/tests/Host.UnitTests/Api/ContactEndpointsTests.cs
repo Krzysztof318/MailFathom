@@ -699,6 +699,54 @@ public sealed class ContactEndpointsTests
         Assert.Empty(this.directory.ReceivedCalls());
     }
 
+    /// <summary>A contact in the books of a user outside the caller's scope is answered as one those books do not hold, and the books are never read.</summary>
+    [Fact]
+    public async Task FindAsync_AUserOutsideTheCallersScope_AnswersNoContact()
+    {
+        // Arrange
+        var elsewhere = AccessAuthorizations.ForAdministratorScopedAt(
+            AccessAuthorizations.ScopesOutsideTheirTarget[0],
+            MailFathomPermission.AdminAuditRead);
+
+        // Act
+        var result = await ContactEndpoints.FindAsync(
+            Identity,
+            AccessAuthorizations.ScopedHolder.Value,
+            this.Book(),
+            this.Scopes(),
+            elsewhere,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var lookup = Assert.IsType<Ok<ContactLookupResponse>>(result.Result);
+        Assert.Null(lookup.Value!.Contact);
+        Assert.Empty(this.directory.ReceivedCalls());
+    }
+
+    /// <summary>An address in the books of a user outside the caller's scope is answered as one nobody holds, and the books are never read.</summary>
+    [Fact]
+    public async Task FindByAddressAsync_AUserOutsideTheCallersScope_AnswersNoContact()
+    {
+        // Arrange
+        var elsewhere = AccessAuthorizations.ForAdministratorScopedAt(
+            AccessAuthorizations.ScopesOutsideTheirTarget[1],
+            MailFathomPermission.AdminAuditRead);
+
+        // Act
+        var result = await ContactEndpoints.FindByAddressAsync(
+            AccessAuthorizations.ScopedHolder.Value,
+            "anna@example.test",
+            this.Book(),
+            this.Scopes(),
+            elsewhere,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var lookup = Assert.IsType<Ok<ContactLookupResponse>>(result.Result);
+        Assert.Null(lookup.Value!.Contact);
+        Assert.Empty(this.directory.ReceivedCalls());
+    }
+
     /// <summary>Exporting from the books of a user outside the caller's scope is refused as a user this deployment holds no record for.</summary>
     [Fact]
     public async Task ExportAsync_AUserOutsideTheCallersScope_IsRefusedAsAnUnknownUser()

@@ -12,10 +12,12 @@ using Npgsql;
 
 namespace MailFathom.Infrastructure.Persistence.Users;
 
-/// <summary>Places a user or a mail account from the records themselves, per question.</summary>
+/// <summary>Places a user or mail accounts from the records themselves, per question.</summary>
 /// <remarks>
-/// The account query reads at most two assignments, because what a scope asks of them is only whether exactly one user
-/// holds the account: a third row would change no answer and the relation's own bound already caps the rest.
+/// The account query places every account an operation names in one statement and reads at most two assignments per
+/// account, because what a scope asks of them is only whether exactly one user holds the account: a third row would
+/// change no answer. So a read across a user's collected books costs one round trip however many books there are, and
+/// what it returns is bounded by twice the accounts asked about.
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this reader.")]
 [RequiresIntegrationCoverage]
@@ -23,14 +25,18 @@ internal sealed class PersistedAdministrativeTargets(
     Func<NpgsqlDataSource> dataSource,
     DatabaseCommandTimeout commandTimeout) : IAdministrativeTargets
 {
-    private const string SelectMailAccountPlacement =
+    private const string SelectMailAccountPlacements =
         """
-        SELECT account."OrganizationId", assignment."UserId"
+        SELECT account."Id", account."OrganizationId", assignee."UserId"
         FROM settings_mail_accounts AS account
-        LEFT JOIN mail_account_assignments AS assignment ON assignment."MailAccountId" = account."Id"
-        WHERE account."Id" = @account
-        ORDER BY assignment."UserId"
-        LIMIT 2;
+        LEFT JOIN LATERAL (
+            SELECT assignment."UserId"
+            FROM mail_account_assignments AS assignment
+            WHERE assignment."MailAccountId" = account."Id"
+            ORDER BY assignment."UserId"
+            LIMIT 2
+        ) AS assignee ON TRUE
+        WHERE account."Id" = ANY(@accounts);
         """;
 
     private const string SelectUserPlacement =
@@ -38,36 +44,57 @@ internal sealed class PersistedAdministrativeTargets(
         SELECT "OrganizationId" FROM settings_accounts WHERE "Id" = @user;
         """;
 
-    public async Task<AdministrativeTarget> PlaceMailAccountAsync(
-        MailAccountId account,
+    public async Task<IReadOnlyDictionary<MailAccountId, AdministrativeTarget>> PlaceMailAccountsAsync(
+        IReadOnlyCollection<MailAccountId> accounts,
         CancellationToken cancellationToken)
     {
-        if (!Guid.TryParse(account.Value, out var accountId))
+        ArgumentNullException.ThrowIfNull(accounts);
+
+        var placements = accounts.Distinct().ToDictionary(account => account, _ => AdministrativeTarget.Unplaced);
+        var identities = placements.Keys
+            .Select(account => (Account: account, Parsed: Guid.TryParse(account.Value, out var identity) ? identity : (Guid?)null))
+            .Where(pair => pair.Parsed is not null)
+            .ToLookup(pair => pair.Parsed!.Value, pair => pair.Account);
+
+        if (identities.Count == 0)
         {
-            return AdministrativeTarget.Unplaced;
+            return placements;
         }
 
         await using var connection = await dataSource().OpenConnectionAsync(cancellationToken);
-        await using var command = new NpgsqlCommand(SelectMailAccountPlacement, connection);
+        await using var command = new NpgsqlCommand(SelectMailAccountPlacements, connection);
         command.CommandTimeout = (int)commandTimeout.Value.TotalSeconds;
-        command.Parameters.AddWithValue("account", accountId);
+        command.Parameters.AddWithValue("accounts", identities.Select(group => group.Key).ToArray());
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 
-        Guid? organization = null;
-        var assignedUsers = new List<UserId>();
+        var held = new Dictionary<Guid, (Guid? Organization, List<UserId> AssignedUsers)>();
 
         while (await reader.ReadAsync(cancellationToken))
         {
-            organization = reader.IsDBNull(0) ? null : reader.GetGuid(0);
+            var identity = reader.GetGuid(0);
 
-            if (!reader.IsDBNull(1))
+            if (!held.TryGetValue(identity, out var account))
             {
-                assignedUsers.Add(UserId.Create(reader.GetGuid(1)));
+                account = (reader.IsDBNull(1) ? null : reader.GetGuid(1), []);
+                held.Add(identity, account);
+            }
+
+            if (!reader.IsDBNull(2))
+            {
+                account.AssignedUsers.Add(UserId.Create(reader.GetGuid(2)));
             }
         }
 
-        return AdministrativeTarget.MailAccount(organization, assignedUsers);
+        foreach (var (identity, account) in held)
+        {
+            foreach (var asked in identities[identity])
+            {
+                placements[asked] = AdministrativeTarget.MailAccount(account.Organization, account.AssignedUsers);
+            }
+        }
+
+        return placements;
     }
 
     public async Task<AdministrativeTarget> PlaceUserAsync(UserId user, CancellationToken cancellationToken)

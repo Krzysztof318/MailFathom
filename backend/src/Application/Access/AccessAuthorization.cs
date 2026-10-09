@@ -31,11 +31,14 @@ namespace MailFathom.Application.Access;
 /// and a grant however broad still reaches the mail of the one user the work was admitted for.
 /// </para>
 /// <para>
-/// Two members report instead of refusing, for a boundary composing an answer per caller rather than performing an
-/// operation for one, and neither decides anything of its own. <see cref="Permits" /> answers exactly what
-/// <see cref="RequirePermission" /> would have refused, so the transport and the use case cannot come to disagree about
-/// what holding a permission means. <see cref="HoldsOnlyBelowDeployment" /> answers what such a refusal says on top of
-/// naming the permission: that the caller holds it, but only over an organization or a user.
+/// Some members report instead of refusing, for a boundary composing an answer per caller rather than performing an
+/// operation for one, and none decides anything of its own. Each <c>Permits</c> member answers exactly what its
+/// <c>Require</c> counterpart would have refused — <see cref="Permits" /> for <see cref="RequirePermission" />,
+/// <see cref="PermitsAtAnyScope" /> for <see cref="RequirePermissionAtAnyScope" />, and the <c>PermitsOverAsync</c>
+/// overloads and <see cref="CoveredMailAccountsAsync" /> for the <c>RequirePermissionOverAsync</c> overloads — so the
+/// transport and the use case cannot come to disagree about what holding a permission means.
+/// <see cref="HoldsOnlyBelowDeployment" /> answers what a refusal of an operation admitted only at the deployment
+/// scope says on top of naming the permission: that the caller holds it, but only over an organization or a user.
 /// </para>
 /// </remarks>
 public sealed class AccessAuthorization
@@ -221,7 +224,37 @@ public sealed class AccessAuthorization
         MailFathomPermission permission,
         MailAccountId account,
         CancellationToken cancellationToken) =>
-        this.PermitsOverAsync(permission, token => this.targets.PlaceMailAccountAsync(account, token), cancellationToken);
+        this.PermitsOverAsync(permission, token => this.PlaceMailAccountAsync(account, token), cancellationToken);
+
+    /// <summary>Answers which of several mail accounts the caller holds one named capability over, placing them in one read.</summary>
+    /// <param name="permission">The capability being asked about.</param>
+    /// <param name="accounts">The accounts the operation names.</param>
+    /// <param name="cancellationToken">Cancels placing the accounts.</param>
+    /// <returns>The accounts an admitted caller holds the capability over, in the order given; every one of them for a caller holding it over the deployment, and none for a caller holding it nowhere.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="accounts" /> is <see langword="null" />.</exception>
+    public async Task<IReadOnlyList<MailAccountId>> CoveredMailAccountsAsync(
+        MailFathomPermission permission,
+        IReadOnlyCollection<MailAccountId> accounts,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(accounts);
+
+        if (!this.PermitsAtAnyScope(permission) || accounts.Count == 0)
+        {
+            return [];
+        }
+
+        var caller = this.principals.Current!;
+
+        if (caller.Holds(permission))
+        {
+            return [.. accounts];
+        }
+
+        var placements = await this.targets.PlaceMailAccountsAsync(accounts, cancellationToken);
+
+        return [.. accounts.Where(account => caller.HoldsOver(permission, PlacementOf(placements, account)))];
+    }
 
     /// <summary>Answers whether the caller holds one named capability over one user, for a boundary that has to decide rather than refuse.</summary>
     /// <param name="permission">The capability being asked about.</param>
@@ -252,7 +285,7 @@ public sealed class AccessAuthorization
         CancellationToken cancellationToken) =>
         this.RequirePermissionOverAsync(
             permission,
-            token => this.targets.PlaceMailAccountAsync(account, token),
+            token => this.PlaceMailAccountAsync(account, token),
             cancellationToken);
 
     /// <summary>Requires that an admitted caller holding one named capability over one user is what reached this use case.</summary>
@@ -320,6 +353,15 @@ public sealed class AccessAuthorization
         return surfaces.Contains(first.Surface) || !surfaces.Contains(second.Surface) ? first : second;
     }
 
+    /// <summary>Reads one account's placement, answering an account the placement left out as one placed nowhere.</summary>
+    private static AdministrativeTarget PlacementOf(
+        IReadOnlyDictionary<MailAccountId, AdministrativeTarget> placements,
+        MailAccountId account) =>
+        placements.GetValueOrDefault(account) ?? AdministrativeTarget.Unplaced;
+
+    private async Task<AdministrativeTarget> PlaceMailAccountAsync(MailAccountId account, CancellationToken cancellationToken) =>
+        PlacementOf(await this.targets.PlaceMailAccountsAsync([account], cancellationToken), account);
+
     private async Task<bool> PermitsOverAsync(
         MailFathomPermission permission,
         Func<CancellationToken, Task<AdministrativeTarget>> place,
@@ -385,8 +427,11 @@ public sealed class AccessAuthorization
     {
         internal static UnplacedTargets Instance { get; } = new();
 
-        public Task<AdministrativeTarget> PlaceMailAccountAsync(MailAccountId account, CancellationToken cancellationToken) =>
-            Task.FromResult(AdministrativeTarget.Unplaced);
+        public Task<IReadOnlyDictionary<MailAccountId, AdministrativeTarget>> PlaceMailAccountsAsync(
+            IReadOnlyCollection<MailAccountId> accounts,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyDictionary<MailAccountId, AdministrativeTarget>>(
+                accounts.Distinct().ToDictionary(account => account, _ => AdministrativeTarget.Unplaced));
 
         public Task<AdministrativeTarget> PlaceUserAsync(UserId user, CancellationToken cancellationToken) =>
             Task.FromResult(AdministrativeTarget.Unplaced);

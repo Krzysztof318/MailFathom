@@ -23,7 +23,7 @@ namespace MailFathom.Application.UnitTests.Contacts;
 /// </remarks>
 public sealed class ContactBookAuditScopeTests
 {
-    private static readonly MailAccountId Account = MailAccountId.Create("0198f0aa-0000-7000-8000-00000000f0cc");
+    private static readonly MailAccountId Account = AccessAuthorizations.ScopedAccount;
 
     private static readonly ContactBookScope HoldersBooks = ContactBookScope.Of(AccessAuthorizations.ScopedHolder, [Account]);
 
@@ -75,11 +75,14 @@ public sealed class ContactBookAuditScopeTests
         // Arrange
         var targets = Substitute.For<IAdministrativeTargets>();
         targets.PlaceUserAsync(AccessAuthorizations.ScopedHolder, Arg.Any<CancellationToken>())
-            .Returns(AdministrativeTarget.User(AccessAuthorizations.ScopedHolder, organization: null));
-        targets.PlaceMailAccountAsync(Account, Arg.Any<CancellationToken>())
-            .Returns(AdministrativeTarget.MailAccount(
-                organization: null,
-                [AccessAuthorizations.ScopedHolder, UserId.Create(new Guid("0198f0aa-0000-7000-8000-00000000f0cd"))]));
+            .Returns(AdministrativeTarget.User(AccessAuthorizations.ScopedHolder, AccessAuthorizations.ScopedOrganization));
+        targets.PlaceMailAccountsAsync(Arg.Any<IReadOnlyCollection<MailAccountId>>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<MailAccountId, AdministrativeTarget>
+            {
+                [Account] = AdministrativeTarget.MailAccount(
+                    AccessAuthorizations.ScopedOrganization,
+                    [AccessAuthorizations.ScopedHolder, UserId.Create(new Guid("0198f0aa-0000-7000-8000-00000000f0cd"))]),
+            });
         var principals = Substitute.For<IAuthorizedPrincipalSource>();
         principals.Current.Returns(AuthorizedPrincipal.Caller(
             "test-administrator",

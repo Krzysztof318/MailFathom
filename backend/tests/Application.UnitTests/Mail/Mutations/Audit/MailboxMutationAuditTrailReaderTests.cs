@@ -16,7 +16,7 @@ namespace MailFathom.Application.UnitTests.Mail.Mutations.Audit;
 public sealed class MailboxMutationAuditTrailReaderTests
 {
     private static readonly MailAccountId Account =
-        MailAccountId.Create("work");
+        AccessAuthorizations.ScopedAccount;
 
     private readonly IMailboxMutationAuditEntryStore entries = Substitute.For<IMailboxMutationAuditEntryStore>();
 

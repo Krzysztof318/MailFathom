@@ -270,11 +270,13 @@ by its credential and its token the same way, and is admitted only while that le
 
 **A mail permission is held whatever scope gave it.** It reaches its holder's own mail, and which mail that is follows
 from the credential rather than from the grant — [what a permission does not decide](#what-a-permission-does-not-decide).
-**An administrative permission answers a question naming no target only at deployment scope**, so a caller granted
-`mailfathom.admin.read` over one organization alone is refused a check that names none. **A question naming a user or
-a mail account is answered at any scope covering it** — the deployment, the organization it belongs to, or the one user
-it is wholly the concern of — and [a grant held below the deployment](admin-endpoint.md#a-grant-held-below-the-deployment)
-names the routes that ask one and how a target outside the scope is answered.
+**An administrative permission is answered at deployment scope**, so a caller granted `mailfathom.admin.read` or
+`mailfathom.admin.operate` over one organization alone is refused every route those names publish, including one that
+names an account or a user in that organization. **The one exception is the reads `mailfathom.admin.audit.read`
+publishes**: each names a user or a mail account and is answered at any scope covering it — the deployment, the
+organization it belongs to, or the one user it is wholly the concern of — and [a grant held below the
+deployment](admin-endpoint.md#a-grant-held-below-the-deployment) names those routes and how a target outside the scope
+is answered.
 
 ### What only the deployment scope grants
 

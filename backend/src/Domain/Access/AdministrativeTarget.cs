@@ -13,9 +13,10 @@ namespace MailFathom.Domain.Access;
 /// both and what reaches mail another person reads is not one user's to do.
 /// </para>
 /// <para>
-/// Something in no organization and nobody's alone is covered by the deployment scope only, which is also what a target
-/// the deployment does not hold resolves to — so a target nobody can place is reached by nothing narrower than the
-/// deployment, and a lookup that found nothing never widens what a scope covers.
+/// A mail account in no organization is covered by the deployment scope alone, whoever it is assigned to, while a user
+/// in none is covered by the deployment and by a scope naming them. Something in no organization and nobody's alone is
+/// what a target the deployment does not hold resolves to — so a target nobody can place is reached by nothing narrower
+/// than the deployment, and a lookup that found nothing never widens what a scope covers.
 /// </para>
 /// </remarks>
 public sealed record AdministrativeTarget
@@ -53,17 +54,18 @@ public sealed record AdministrativeTarget
     /// <summary>Places a mail account.</summary>
     /// <param name="organization">The organization the account belongs to, or <see langword="null" /> for none.</param>
     /// <param name="assignedUsers">Every user the account is assigned to.</param>
-    /// <returns>The target, which is one user's alone only where exactly one user is assigned.</returns>
+    /// <returns>The target, which is one user's alone only where it belongs to an organization and exactly one user is assigned.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="assignedUsers" /> is <see langword="null" />.</exception>
     public static AdministrativeTarget MailAccount(Guid? organization, IReadOnlyCollection<UserId> assignedUsers)
     {
         ArgumentNullException.ThrowIfNull(assignedUsers);
 
+        var placed = NamedOrNone(organization);
         var distinctUsers = assignedUsers.Where(user => user.IsSpecified).Distinct().ToArray();
 
         return new AdministrativeTarget(
-            NamedOrNone(organization),
-            distinctUsers is [var soleUser] ? soleUser : null);
+            placed,
+            placed is not null && distinctUsers is [var soleUser] ? soleUser : null);
     }
 
     /// <summary>Reports whether one scope covers this target.</summary>

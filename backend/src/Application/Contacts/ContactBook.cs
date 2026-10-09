@@ -505,16 +505,11 @@ public sealed class ContactBook
             scope.User,
             cancellationToken);
 
-        var accounts = scope.Books.Select(book => book.Account).OfType<MailAccountId>().ToArray();
-        var covered = new List<MailAccountId>(accounts.Length);
-
-        foreach (var account in accounts)
-        {
-            if (await this.authorization.PermitsOverAsync(MailFathomPermission.AdminAuditRead, account, cancellationToken))
-            {
-                covered.Add(account);
-            }
-        }
+        MailAccountId[] accounts = [.. scope.Books.Select(book => book.Account).OfType<MailAccountId>()];
+        var covered = await this.authorization.CoveredMailAccountsAsync(
+            MailFathomPermission.AdminAuditRead,
+            accounts,
+            cancellationToken);
 
         return covered.Count == accounts.Length ? scope : ContactBookScope.Of(scope.User, covered);
     }

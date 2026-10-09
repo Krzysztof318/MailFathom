@@ -114,6 +114,30 @@ public sealed class RouteAuthorizationTests
         Assert.Equal("served", answer);
     }
 
+    /// <summary>
+    /// A route naming its target still refuses a caller holding the permission at no scope at all, by name: the operation
+    /// behind it answers an uncovered target as an empty or unknown one, which a caller granted nothing must not receive
+    /// in place of the refusal.
+    /// </summary>
+    [Fact]
+    public async Task RefuseUnpermittedAsync_ACallerWithoutItOnARouteNamingItsTarget_RefusesNamingThatPermission()
+    {
+        // Arrange
+        var reached = false;
+        var context = ContextFor(
+            RoutePermission.RequiringOverTarget(MailFathomPermission.AdminAuditRead),
+            AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminRead));
+
+        // Act
+        var answer = await RouteAuthorization.RefuseUnpermittedAsync(context, Reaching(() => reached = true), Surface);
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(answer);
+        Assert.Equal(StatusCodes.Status403Forbidden, refusal.StatusCode);
+        Assert.Contains(MailFathomPermission.AdminAuditRead.Name, refusal.ProblemDetails.Detail, StringComparison.Ordinal);
+        Assert.False(reached);
+    }
+
     /// <summary>A route naming no target is reached only with the permission held over the whole deployment.</summary>
     [Fact]
     public async Task RefuseUnpermittedAsync_AGrantBelowTheDeploymentOnARouteNamingNoTarget_Refuses()
