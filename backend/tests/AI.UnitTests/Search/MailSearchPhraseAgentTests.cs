@@ -108,7 +108,7 @@ public sealed class MailSearchPhraseAgentTests
         // Arrange
         using var provider = ScriptedTransport.Answering(Completion("""{\"criteria\": [\"key\"]}"""));
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
-        using var actingFor = egress.ActingForUser();
+        using var actingFor = egress.Guard.ActingFor(await egress.ReadUserPostureAsync(TestContext.Current.CancellationToken));
         var reader = provider.ReaderOver(egressGuard: egress.Guard);
         var phrase = new MailSearchPhrase(
             EmailSearchQueryText.Create($"the message with the key {Marker} in it"),

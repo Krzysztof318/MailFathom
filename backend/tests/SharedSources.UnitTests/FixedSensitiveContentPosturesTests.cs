@@ -26,7 +26,7 @@ public sealed class FixedSensitiveContentPosturesTests
     private readonly FakeTimeProvider timeProvider = new(new DateTimeOffset(2026, 8, 12, 9, 0, 0, TimeSpan.Zero));
 
     [Fact]
-    public void AcrossAccountsOf_OneAccountScanningAndOneScanningNothing_AnswersWithTheScanningOne()
+    public async Task AcrossAccountsOfAsync_OneAccountScanningAndOneScanningNothing_AnswersWithTheScanningOne()
     {
         // Arrange
         using var secrets = ScanningSensitiveContentEgress.Finding("AKIAEXAMPLEKEY", this.timeProvider);
@@ -38,7 +38,7 @@ public sealed class FixedSensitiveContentPosturesTests
             (Archive, SensitiveContentPosture.ScanningNothing));
 
         // Act
-        var strictest = postures.AcrossAccountsOf(SyntheticUser.Deployment);
+        var strictest = await postures.AcrossAccountsOfAsync(SyntheticUser.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Same(scanning, strictest);
@@ -49,7 +49,7 @@ public sealed class FixedSensitiveContentPosturesTests
     /// so it says so rather than answering with whichever of the two it met first.
     /// </summary>
     [Fact]
-    public void AcrossAccountsOf_TwoAccountsAskingForThingsNeitherCovers_SaysItCannotComposeTheUnion()
+    public async Task AcrossAccountsOfAsync_TwoAccountsAskingForThingsNeitherCovers_SaysItCannotComposeTheUnion()
     {
         // Arrange
         using var secrets = ScanningSensitiveContentEgress.Finding("AKIAEXAMPLEKEY", this.timeProvider);
@@ -64,8 +64,8 @@ public sealed class FixedSensitiveContentPosturesTests
             (Archive, personalData.Postures.ForAccount(FixedSensitiveContentPostures.SoleAccount)));
 
         // Act
-        var refusal = Assert.Throws<InvalidOperationException>(
-            () => postures.AcrossAccountsOf(SyntheticUser.Deployment));
+        var refusal = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => postures.AcrossAccountsOfAsync(SyntheticUser.Deployment, TestContext.Current.CancellationToken));
 
         // Assert
         Assert.Contains("this double cannot build", refusal.Message, StringComparison.Ordinal);
@@ -77,7 +77,7 @@ public sealed class FixedSensitiveContentPosturesTests
     /// posture — dropping the assignee narrowing would hand them a redacting posture nothing of theirs asked for.
     /// </summary>
     [Fact]
-    public void AcrossAccountsOf_AScannedAccountHeldByAnotherUser_IsNoCandidateForThisUsersRead()
+    public async Task AcrossAccountsOfAsync_AScannedAccountHeldByAnotherUser_IsNoCandidateForThisUsersRead()
     {
         // Arrange
         using var secrets = ScanningSensitiveContentEgress.Finding("AKIAEXAMPLEKEY", this.timeProvider);
@@ -89,8 +89,8 @@ public sealed class FixedSensitiveContentPosturesTests
             (Archive, SensitiveContentPosture.ScanningNothing, SyntheticUser.Deployment));
 
         // Act
-        var strictest = postures.AcrossAccountsOf(SyntheticUser.Deployment);
-        var theirs = postures.AcrossAccountsOf(SyntheticUser.Another);
+        var strictest = await postures.AcrossAccountsOfAsync(SyntheticUser.Deployment, TestContext.Current.CancellationToken);
+        var theirs = await postures.AcrossAccountsOfAsync(SyntheticUser.Another, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Same(SensitiveContentPosture.ScanningNothing, strictest);
@@ -103,7 +103,7 @@ public sealed class FixedSensitiveContentPosturesTests
     /// with the first would hand the suite a posture that may refuse less than the union does.
     /// </summary>
     [Fact]
-    public void AcrossAccountsOf_TwoAccountsThatBothScreen_SaysItCannotComposeTheUnion()
+    public async Task AcrossAccountsOfAsync_TwoAccountsThatBothScreen_SaysItCannotComposeTheUnion()
     {
         // Arrange
         using var mine = ScanningSensitiveContentEgress.Finding("AKIAEXAMPLEKEY", this.timeProvider);
@@ -115,8 +115,8 @@ public sealed class FixedSensitiveContentPosturesTests
             (Archive, theirs.Postures.ForAccount(FixedSensitiveContentPostures.SoleAccount)));
 
         // Act
-        var refusal = Assert.Throws<InvalidOperationException>(
-            () => postures.AcrossAccountsOf(SyntheticUser.Deployment));
+        var refusal = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => postures.AcrossAccountsOfAsync(SyntheticUser.Deployment, TestContext.Current.CancellationToken));
 
         // Assert
         Assert.Contains("this double cannot build", refusal.Message, StringComparison.Ordinal);

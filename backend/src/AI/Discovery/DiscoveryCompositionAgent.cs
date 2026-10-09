@@ -205,7 +205,7 @@ internal sealed class DiscoveryCompositionAgent : IDiscoveryResultComposer
         SensitiveContentEgressGuard egressGuard,
         CancellationToken cancellationToken)
     {
-        if (!egressGuard.IsActive)
+        if (!await egressGuard.IsActiveAsync(cancellationToken))
         {
             return
             [

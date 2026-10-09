@@ -113,7 +113,7 @@ public sealed class ReplyDraftAgentTests
         // Arrange
         using var provider = ScriptedTransport.Answering(Completion(Reply));
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
-        using var actingFor = egress.ActingForUser();
+        using var actingFor = egress.Guard.ActingFor(await egress.ReadUserPostureAsync(TestContext.Current.CancellationToken));
         var agent = provider.WriterOver(egressGuard: egress.Guard);
         var carryingASecret = Brief(
             text: $"a colleague pasted {Marker} into this thread",

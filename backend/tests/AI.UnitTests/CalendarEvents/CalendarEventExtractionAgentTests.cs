@@ -191,7 +191,7 @@ public sealed class CalendarEventExtractionAgentTests
         // Arrange
         using var provider = ScriptedTransport.Answering(Completion(OneEvent));
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
-        using var actingFor = egress.ActingForUser();
+        using var actingFor = egress.Guard.ActingFor(await egress.ReadUserPostureAsync(TestContext.Current.CancellationToken));
         var agent = provider.ExtractorOver(egressGuard: egress.Guard);
         var carryingASecret = new EnrichableEmail(
             StoredEmailId.Create(Guid.CreateVersion7()),
@@ -318,7 +318,7 @@ public sealed class CalendarEventExtractionAgentTests
         // Arrange
         using var provider = ScriptedTransport.Answering(Completion(OneEvent));
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
-        using var actingFor = egress.ActingForUser();
+        using var actingFor = egress.Guard.ActingFor(await egress.ReadUserPostureAsync(TestContext.Current.CancellationToken));
         var agent = provider.ExtractorOver(egressGuard: egress.Guard);
 
         // Act

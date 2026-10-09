@@ -243,7 +243,7 @@ public sealed class ClientContactRelationshipEndpointTests
         var scopeResolver = new MailboxScopeResolver(
             CatalogServing(MailAccountId.Create("work")),
             StubMailFolderParticipation.Nothing,
-            StubJunkMailFolderCatalog.None,
+            StubDeploymentMailFolders.None,
             StubMailFolderMappings.ResolvingNothing);
 
         return new ContactRelationshipReader(

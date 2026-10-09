@@ -135,6 +135,24 @@ public sealed class StaleDerivedDataStartupReportTests
         Assert.Contains("unavailable", message, StringComparison.Ordinal);
     }
 
+    /// <summary>Which accounts are scanned is a database read too, and a failure of it lets the host start exactly as one of the count does.</summary>
+    [Fact]
+    public async Task StartAsync_ThePosturesCouldNotBeRead_SaysSoAndLetsTheHostStart()
+    {
+        // Arrange
+        var postures = Substitute.For<ISensitiveContentPostures>();
+        postures
+            .IsActiveForAnyAccountAsync(Arg.Any<CancellationToken>())
+            .Returns<Task<bool>>(_ => throw new InvalidOperationException("The database is not answering."));
+        using var report = this.Report(rebuildStaleDerivedData: false, postures);
+
+        // Act
+        await report.StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Contains("unavailable", Assert.Single(this.logger.Messages), StringComparison.Ordinal);
+    }
+
     private void StoreCounts(int staleEmailCount, int staleAttachmentReadingCount = 0) =>
         this.store
             .CountStaleDerivedDataAsync(Arg.Any<CancellationToken>())
@@ -145,7 +163,7 @@ public sealed class StaleDerivedDataStartupReportTests
     /// The redaction behind the posture is never exercised, because the report reads whether anything is scanned at all
     /// and nothing else — so the detector list is empty rather than one this test would then have to keep meaningful.
     /// </remarks>
-    private ScannedDeployment Report(bool rebuildStaleDerivedData)
+    private ScannedDeployment Report(bool rebuildStaleDerivedData, ISensitiveContentPostures? readPostures = null)
     {
         var plan = SensitiveContentPlan.Create(
             SensitiveContentScanBounds.Default,
@@ -174,7 +192,7 @@ public sealed class StaleDerivedDataStartupReportTests
             new StaleDerivedDataStartupReport(
                 services.GetRequiredService<IServiceScopeFactory>(),
                 new SensitiveContentDerivationGuard(
-                    postures,
+                    readPostures ?? postures,
                     Substitute.For<ISensitiveContentDerivationTelemetry>(),
                     this.timeProvider),
                 Options.Create(settings),

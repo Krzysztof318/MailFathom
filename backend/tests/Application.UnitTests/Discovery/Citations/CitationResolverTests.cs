@@ -421,12 +421,17 @@ public sealed class CitationResolverTests
 
     private static MailboxScopeResolver ScopeResolverOver(
         ICallerMailAccountCatalog accountCatalog,
-        IReadOnlyList<EmailSummary> summaries) => new(
-        accountCatalog,
-        StubMailFolderParticipation.Mapping(
-            [.. summaries.Select(summary => new MailFolderIdentity(summary.Account, summary.FolderAlias))]),
-        StubJunkMailFolderCatalog.None,
-        StubMailFolderMappings.ResolvingNothing);
+        IReadOnlyList<EmailSummary> summaries)
+    {
+        var participation = StubMailFolderParticipation.Mapping(
+            [.. summaries.Select(summary => new MailFolderIdentity(summary.Account, summary.FolderAlias))]);
+
+        return new MailboxScopeResolver(
+            accountCatalog,
+            participation,
+            StubDeploymentMailFolders.Of(participation),
+            StubMailFolderMappings.ResolvingNothing);
+    }
 
     private static ICallerMailAccountCatalog CatalogServing(params MailAccountId[] servedAccountIds)
     {

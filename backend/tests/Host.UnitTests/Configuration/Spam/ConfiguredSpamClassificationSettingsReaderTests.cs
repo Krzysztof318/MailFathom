@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Folders;
 using MailFathom.Application.Spam;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
@@ -13,6 +14,7 @@ using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Secrets.Discovery;
 using MailFathom.TestSupport;
+using NSubstitute;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Configuration.Spam;
@@ -43,7 +45,7 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
 
     /// <summary>The bound on the ordering is the operator's, and it is what stops a wedged scanner stopping the index.</summary>
     [Fact]
-    public void ScopeInForce_AClassificationWaitConfigured_CarriesItToTheGate()
+    public async Task ReadScopeInForceAsync_AClassificationWaitConfigured_CarriesItToTheGate()
     {
         // Arrange
         var reader = ReaderFor(
@@ -52,7 +54,7 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
             AccountMapping("inbox", "Inbox"));
 
         // Act
-        var scope = reader.ScopeInForce;
+        var scope = await reader.ReadScopeInForceAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(TimeSpan.FromHours(2), scope.MaximumClassificationWait);
@@ -60,7 +62,7 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
 
     /// <summary>An operator who named no wait gets one anyway, because a wait of none would release every message.</summary>
     [Fact]
-    public void ScopeInForce_NoClassificationWaitConfigured_TakesTheDefaultWait()
+    public async Task ReadScopeInForceAsync_NoClassificationWaitConfigured_TakesTheDefaultWait()
     {
         // Arrange
         var reader = ReaderFor(
@@ -68,7 +70,7 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
             AccountMapping("inbox", "Inbox"));
 
         // Act
-        var scope = reader.ScopeInForce;
+        var scope = await reader.ReadScopeInForceAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(
@@ -120,7 +122,7 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
 
     /// <summary>A section reloaded while the process runs takes effect on the next classification rather than at the next restart.</summary>
     [Fact]
-    public void ScopeInForce_ASectionReloaded_IsReadAgainRatherThanCaptured()
+    public async Task ReadScopeInForceAsync_ASectionReloaded_IsReadAgainRatherThanCaptured()
     {
         // Arrange
         var options = new TestOptionsMonitor<SpamClassificationOptions>(new SpamClassificationOptions());
@@ -130,14 +132,15 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
                 SyntheticUser.Deployment,
                 new MailAccountSpamClassificationOptions { Enabled = true },
                 "primary",
-                AccountMapping("inbox", "Inbox"))));
+                AccountMapping("inbox", "Inbox"))),
+            StubDeploymentMailFolders.None);
 
         // Act
-        var beforeReload = reader.ScopeInForce;
+        var beforeReload = await reader.ReadScopeInForceAsync(TestContext.Current.CancellationToken);
 
         options.ReportReload(new SpamClassificationOptions { ClassificationWait = TimeSpan.FromHours(2) });
 
-        var afterReload = reader.ScopeInForce;
+        var afterReload = await reader.ReadScopeInForceAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(
@@ -198,7 +201,8 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
                     ScannerThreshold = 3.5,
                 },
                 "second-account",
-                AccountMapping("archive", "Archive"))));
+                AccountMapping("archive", "Archive"))),
+            StubDeploymentMailFolders.None);
 
         // Act
         var settings = reader.SettingsFor(SecondAccount);
@@ -220,7 +224,8 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
                 SyntheticUser.Another,
                 new MailAccountSpamClassificationOptions { Enabled = false },
                 "second-account",
-                AccountMapping("inbox", "Inbox"))));
+                AccountMapping("inbox", "Inbox"))),
+            StubDeploymentMailFolders.None);
 
         // Act
         var settings = reader.SettingsFor(SecondAccount);
@@ -231,7 +236,7 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
 
     /// <summary>The wait bounds how long the index may be held back, which is the process's cost rather than one user's choice.</summary>
     [Fact]
-    public void ScopeInForce_EveryUserReadFromTheirOwnDocument_StillTakesTheDeploymentsClassificationWait()
+    public async Task ReadScopeInForceAsync_EveryUserReadFromTheirOwnDocument_StillTakesTheDeploymentsClassificationWait()
     {
         // Arrange
         var reader = new ConfiguredSpamClassificationSettingsReader(
@@ -243,43 +248,44 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
                 SyntheticUser.Another,
                 new MailAccountSpamClassificationOptions { Enabled = true },
                 "second-account",
-                AccountMapping("inbox", "Inbox"))));
+                AccountMapping("inbox", "Inbox"))),
+            StubDeploymentMailFolders.None);
 
         // Act
-        var scope = reader.ScopeInForce;
+        var scope = await reader.ReadScopeInForceAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(TimeSpan.FromHours(3), scope.MaximumClassificationWait);
     }
 
-    /// <summary>The scope a walk narrows by is composed per account, so one mailbox's decision reaches a query spanning them.</summary>
+    /// <summary>
+    /// The scope a walk narrows by is read from the account records rather than from the roster: the accounts are the
+    /// ones whose folders the classifying set names, once each however many folders they map, and the folders are the
+    /// ones the classified set names.
+    /// </summary>
     [Fact]
-    public void ScopeInForce_TwoAccountsWithDifferentPostures_NamesOnlyTheClassifyingOne()
+    public async Task ReadScopeInForceAsync_TheFolderSetsTheRecordsAnswer_ComposesTheScopeFromThem()
     {
         // Arrange
+        var first = MailAccountId.Create("first-account");
+        var deploymentFolders = Substitute.For<IDeploymentMailFolders>();
+        deploymentFolders
+            .ReadAsync(MailFolderSelection.OfAccountsClassifyingSpam, Arg.Any<CancellationToken>())
+            .Returns([new MailFolderIdentity(first, MailFolderAlias.Create("ARCHIVE")), new MailFolderIdentity(first, MailFolderAlias.Create("INBOX"))]);
+        deploymentFolders
+            .ReadAsync(MailFolderSelection.ClassifiedForSpam, Arg.Any<CancellationToken>())
+            .Returns([new MailFolderIdentity(first, MailFolderAlias.Create("INBOX"))]);
         var reader = new ConfiguredSpamClassificationSettingsReader(
             new TestOptionsMonitor<SpamClassificationOptions>(new SpamClassificationOptions()),
-            RosterOf(
-                DocumentUser(
-                    SyntheticUser.Deployment,
-                    new MailAccountSpamClassificationOptions { Enabled = true, ScannedFolders = ["inbox"] },
-                    "first-account",
-                    AccountMapping("inbox", "Inbox"),
-                    AccountMapping("archive", "Archive")),
-                DocumentUser(
-                    SyntheticUser.Another,
-                    new MailAccountSpamClassificationOptions { Enabled = false },
-                    "second-account",
-                    AccountMapping("inbox", "Inbox"))));
+            new MailSynchronizationOptions(),
+            deploymentFolders);
 
         // Act
-        var scope = reader.ScopeInForce;
+        var scope = await reader.ReadScopeInForceAsync(TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal([MailAccountId.Create("first-account")], scope.ClassifyingAccounts);
-        Assert.Equal(
-            [new MailFolderIdentity(MailAccountId.Create("first-account"), MailFolderAlias.Create("INBOX"))],
-            scope.ClassifiedFolders);
+        Assert.Equal([first], scope.ClassifyingAccounts);
+        Assert.Equal([new MailFolderIdentity(first, MailFolderAlias.Create("INBOX"))], scope.ClassifiedFolders);
     }
 
     /// <summary>
@@ -303,33 +309,30 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
             new TestOptionsMonitor<SpamClassificationOptions>(new SpamClassificationOptions()),
             RosterOf(
                 DocumentUser(SyntheticUser.Deployment, shared, "shared-account", AccountMapping("inbox", "Inbox")),
-                DocumentUser(SyntheticUser.Another, shared, "shared-account", AccountMapping("inbox", "Inbox"))));
+                DocumentUser(SyntheticUser.Another, shared, "shared-account", AccountMapping("inbox", "Inbox"))),
+            StubDeploymentMailFolders.None);
 
         // Act
         var settings = reader.SettingsFor(MailAccountId.Create("shared-account"));
-        var scope = reader.ScopeInForce;
 
         // Assert
         Assert.True(settings.IsEnabled);
         Assert.True(settings.UsesScanner);
         Assert.Equal([MailFolderAlias.Create("INBOX")], settings.ScannedFolderAliases);
-        Assert.Equal([MailAccountId.Create("shared-account")], scope.ClassifyingAccounts);
-        Assert.Equal(
-            [new MailFolderIdentity(MailAccountId.Create("shared-account"), MailFolderAlias.Create("INBOX"))],
-            scope.ClassifiedFolders);
     }
 
-    /// <summary>Nothing classifies before the startup gate publishes the roster, which is the answer every path takes until it has.</summary>
+    /// <summary>Records naming no classifying account classify nothing, whatever the deployment's section says.</summary>
     [Fact]
-    public void ScopeInForce_ARosterThatHasNotSettled_ClassifiesNothing()
+    public async Task ReadScopeInForceAsync_RecordsNamingNoClassifyingAccount_ClassifiesNothing()
     {
         // Arrange
         var reader = new ConfiguredSpamClassificationSettingsReader(
             new TestOptionsMonitor<SpamClassificationOptions>(new SpamClassificationOptions { Enabled = true }),
-            new MailSynchronizationOptions());
+            new MailSynchronizationOptions(),
+            StubDeploymentMailFolders.None);
 
         // Act
-        var scope = reader.ScopeInForce;
+        var scope = await reader.ReadScopeInForceAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Empty(scope.ClassifyingAccounts);
@@ -349,7 +352,8 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
         params MailFolderMappingOptions[] folders) =>
         new(
             new TestOptionsMonitor<SpamClassificationOptions>(deployment),
-            RosterOf(DocumentUser(SyntheticUser.Deployment, record, "primary", folders)));
+            RosterOf(DocumentUser(SyntheticUser.Deployment, record, "primary", folders)),
+            StubDeploymentMailFolders.None);
 
     private static MailFolderMappingOptions AccountMapping(string alias, string specialUse) => new()
     {

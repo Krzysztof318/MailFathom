@@ -7,6 +7,7 @@ using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Administration;
 using MailFathom.Application.Folders;
 using MailFathom.CodeCoverage;
+using MailFathom.Domain.Folders;
 using MailFathom.Infrastructure.Persistence.Emails;
 using MailFathom.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -31,7 +32,7 @@ namespace MailFathom.Infrastructure.Persistence.Embeddings;
 internal sealed class EmbeddingWorkloadReader(
     MailFathomDbContext dbContext,
     EmailAttachmentTextBounds attachmentTextBounds,
-    IMailFolderParticipationReader folderParticipation)
+    IDeploymentMailFolders deploymentFolders)
     : IEmbeddingWorkloadReader
 {
     /// <inheritdoc />
@@ -54,11 +55,15 @@ internal sealed class EmbeddingWorkloadReader(
             .Select(candidate => (Guid?)candidate.Id)
             .SingleOrDefaultAsync(cancellationToken);
 
-        var awaitingAttachmentReading = this.IdsAwaitingAttachmentReading();
+        // Read once for every figure below, so the counts are taken against one admission rather than one each.
+        IReadOnlyList<MailFolderIdentity> attachmentReadingFolders = attachmentTextBounds.IsEnabled
+            ? await deploymentFolders.ReadAsync(MailFolderSelection.GeneratingEmbeddings, cancellationToken)
+            : [];
+        var awaitingAttachmentReading = this.IdsAwaitingAttachmentReading(attachmentReadingFolders);
 
-        var searchableEmailCount = await this.SearchableEmails().CountAsync(cancellationToken);
+        var searchableEmailCount = await this.SearchableEmails(attachmentReadingFolders).CountAsync(cancellationToken);
 
-        var outstandingEmailCount = await this.SearchableEmails()
+        var outstandingEmailCount = await this.SearchableEmails(attachmentReadingFolders)
             // Uncut is a body with text and no body passage of its own, rather than a message with no passage at all:
             // email_chunks also holds what an attachment yielded, so a message carrying only those and no body text
             // would otherwise be reported as outstanding on every run for ever, there being no body left to cut.
@@ -73,7 +78,7 @@ internal sealed class EmbeddingWorkloadReader(
                     || !chunk.Embeddings.Any(vector => vector.EmbeddingProfileId == profileId)))
             .CountAsync(cancellationToken);
 
-        var outstandingPassages = this.SearchableEmails()
+        var outstandingPassages = this.SearchableEmails(attachmentReadingFolders)
             .SelectMany(email => email.Chunks)
             .Where(chunk => profileId == null
                 || !chunk.Embeddings.Any(vector => vector.EmbeddingProfileId == profileId));
@@ -96,9 +101,9 @@ internal sealed class EmbeddingWorkloadReader(
     /// going to read, because a message counted as outstanding by a filter composed over this one has to be counted as
     /// searchable by it too, or the two aggregates describe different mail.
     /// </remarks>
-    private IQueryable<StoredEmailEntity> SearchableEmails()
+    private IQueryable<StoredEmailEntity> SearchableEmails(IReadOnlyList<MailFolderIdentity> attachmentReadingFolders)
     {
-        var awaitingAttachmentReading = this.IdsAwaitingAttachmentReading();
+        var awaitingAttachmentReading = this.IdsAwaitingAttachmentReading(attachmentReadingFolders);
 
         return dbContext.StoredEmails
             .AsNoTracking()
@@ -123,11 +128,12 @@ internal sealed class EmbeddingWorkloadReader(
     /// nothing — which is exactly what a deployment that reads no attachment participates in.
     /// </para>
     /// </remarks>
-    private IQueryable<Guid> IdsAwaitingAttachmentReading() => AccountScopedMailFolders.Admitting(
+    private IQueryable<Guid> IdsAwaitingAttachmentReading(IReadOnlyList<MailFolderIdentity> attachmentReadingFolders) =>
+        AccountScopedMailFolders.Admitting(
             dbContext.StoredEmails
                 .AsNoTracking()
                 .Where(StoredEmailTombstone.IsNotTombstoned)
                 .Where(email => email.AttachmentCount > 0 && email.AttachmentTextDerivedAt == null),
-            attachmentTextBounds.IsEnabled ? folderParticipation.FoldersGeneratingEmbeddings : [])
+            attachmentReadingFolders)
         .Select(email => email.Id);
 }

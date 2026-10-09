@@ -251,6 +251,12 @@ inside each user's document could not be.
 | `Document` | Every other setting the mailbox is read with, as one `jsonb` object carrying neither the address nor the name nor an identifier |
 | `Version` | The version a write is accepted against, a concurrency token the writer states for the reason `settings_accounts` states its own |
 | `CreatedAt`, `UpdatedAt` | When the account was created, and when its declaration last changed |
+| `HasReadableSettings` | Whether the document binds. An account whose document does not is answered as taking part in nothing by every question [below](#what-every-account-is-asked-about-at-once) |
+| `SynchronizationMode` | The mode the document asks for, `0` polling and `1` push |
+| `ClassifiesSpam` | Whether the document switches spam classification on for this mailbox |
+| `ScansFor` | The sensitive-content scanners the document switches on, as `integer[]`: `0` secrets, `1` personal data |
+| `ScreensOutgoingMailFor` | The scanners whose findings stop this mailbox's outgoing mail, in the same encoding |
+| `SettingsVersion` | The `Version` of the document the five columns above and the account's folder rows were read out of, `0` where nothing has read them yet |
 
 | Column of `mail_account_assignments` | What it records |
 |---|---|
@@ -267,6 +273,33 @@ erasure's decision rather than a cascade's, and ending the last assignment erase
 transaction. Ending an assignment that is not the last one leaves the mailbox and everything stored for it exactly
 where it was, and takes only what the departing user authored in it — their drafts and their recurring sends. Every account write moves the `Version` of each assigned user's `settings_accounts` row, which is the
 version a client composes its own changes against.
+
+### What every account is asked about at once
+
+Some questions are about every mailbox the deployment serves rather than one: which folders a tool may read, which are
+junk, which accounts classify spam and which of their folders that covers, whether any mailbox is scanned, and the
+strictest posture across one user's mailboxes. Those are answered by a query rather than by binding every account's
+document, so the settings they filter on are held relationally beside the document — the five columns above, and one row
+per mapped folder in `mail_account_folder_settings`. **The account write reads them out of the document it is
+committing**, binding it exactly as a mailbox run binds it, and writes them in the same transaction with
+`SettingsVersion` set to the version it committed. A row whose `SettingsVersion` differs from its `Version` is one a
+build older than these columns wrote the document of alone, or one the migration that added them filled. Every replica
+reads a hundred such rows again from their documents on each
+[convergence interval](../operations/database-schema.md#ordering-a-deployment), in identifier order, writing them only
+where the account still stands at the version it read and stepping over one whose reading fails. So the columns trail
+such a write by one interval while no more than a hundred rows trail, and a larger backlog drains at that rate.
+
+| Column of `mail_account_folder_settings` | What it records |
+|---|---|
+| `MailAccountId` | The account, a foreign key onto `settings_mail_accounts` (`fk_mail_account_folder_settings_settings_mail_accounts`) with `ON DELETE CASCADE` |
+| `Alias` | The folder's alias, trimmed and upper-cased as every alias is compared, at most 128 characters |
+| `SpecialUse` | The role the mapping names, `0` inbox through `9` outbox in `MailFolderSpecialUse`'s order, or null where it names a path |
+| `IsSynchronized`, `IsVisibleToTools`, `GeneratesEmbeddings` | The folder's three participation switches, each true where the document leaves it unset |
+| `IsClassifiedForSpam` | Whether the account's classification covers the folder: the folders it names, or its inbox where it names none. Read together with `ClassifiesSpam`, so a folder is classified only where the account classifies at all |
+
+The primary key is `(MailAccountId, Alias)`. A document mapping no folder has one row, the inbox, which is the folder a
+mailbox run reads it as mapping. An account is **served** where it holds an address, `HasReadableSettings` is true, and
+somebody is assigned it; every one of these questions is asked over the served accounts alone.
 
 `stored_secrets` holds the material a user document or a mail account refers to through `database:<uuid>`. The document carries only
 the reference; a database reader therefore sees no mailbox password in the JSONB record. The material is sealed under

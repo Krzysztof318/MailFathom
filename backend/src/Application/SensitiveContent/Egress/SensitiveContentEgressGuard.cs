@@ -40,7 +40,7 @@ namespace MailFathom.Application.SensitiveContent.Egress;
 /// <para>
 /// <b>Whose mail is being published is settled before any of it is.</b> A deployment serves several mailboxes and each
 /// of them has a posture of its own, so the use case names what it resolved once — with <see cref="ActingFor(MailAccountId)" />
-/// where it is acting on one account, and with <see cref="ActingFor(UserId)" /> where it reads across every account
+/// where it is acting on one account, and with <see cref="ActingFor(UserSensitiveContentPosture)" /> where it reads across every account
 /// one user is assigned — and every value guarded anywhere inside that flow is read under the posture that names.
 /// Guarding outside such a scope while this deployment scans anything is a defect rather than a permissive default, and
 /// says so.
@@ -101,7 +101,9 @@ public sealed class SensitiveContentEgressGuard
         this.timeProvider = timeProvider;
     }
 
-    /// <summary>Gets whether anything is scanned for on this flow.</summary>
+    /// <summary>Reads whether anything is scanned for on this flow.</summary>
+    /// <param name="cancellationToken">Cancels the read a flow acting for nothing makes.</param>
+    /// <returns><see langword="true" /> when the mail in scope, or anything at all where nothing is in scope, is scanned.</returns>
     /// <remarks>
     /// What this flow is acting for where it has said, and anything at all where it has not. Read by a consumer
     /// deciding whether work only a scan makes necessary is worth doing — never as permission to hand text on
@@ -109,7 +111,8 @@ public sealed class SensitiveContentEgressGuard
     /// this is that one answer, so a reader serving a mailbox nothing scans does exactly what it did before this
     /// feature existed however much the deployment scans elsewhere.
     /// </remarks>
-    public bool IsActive => this.PostureInScope()?.IsActive ?? this.postures.IsActiveForAnyAccount;
+    public async Task<bool> IsActiveAsync(CancellationToken cancellationToken) =>
+        this.PostureInScope()?.IsActive ?? await this.postures.IsActiveForAnyAccountAsync(cancellationToken);
 
     /// <summary>States that everything guarded on this flow from here on comes out of one account.</summary>
     /// <param name="account">The account the use case is acting on, whose posture every value is read under.</param>
@@ -120,11 +123,26 @@ public sealed class SensitiveContentEgressGuard
     /// of and by nothing another of that user's mailboxes asked for.
     /// </remarks>
     public IDisposable ActingFor(MailAccountId account) =>
-        this.Enter(new MailInScope(User: null, account));
+        this.Enter(new MailInScope(User: null, account, this.postures.ForAccount(account)));
+
+    /// <summary>Reads what a read spanning every account of one user is scanned under, for that read to act for.</summary>
+    /// <param name="user">The user the use case resolved.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The posture, which <see cref="ActingFor(UserSensitiveContentPosture)" /> enters.</returns>
+    /// <remarks>
+    /// Read apart from entering the scope, because the scope is set on the flow that enters it, and an asynchronous
+    /// method sets anything it sets on a flow of its own that ends when it returns. So a use case reads the posture and
+    /// then enters it, in that order, on its own flow.
+    /// </remarks>
+    public async Task<UserSensitiveContentPosture> ReadPostureAcrossAccountsOfAsync(
+        UserId user,
+        CancellationToken cancellationToken) =>
+        new(user, await this.postures.AcrossAccountsOfAsync(user, cancellationToken));
 
     /// <summary>States whose mail everything guarded on this flow from here on belongs to.</summary>
-    /// <param name="user">The user the use case resolved, across whose accounts every value is read.</param>
+    /// <param name="posture">The user the use case resolved and what their mail is read under, read by <see cref="ReadPostureAcrossAccountsOfAsync" />.</param>
     /// <returns>The scope, which restores whatever the flow was acting for when it is disposed.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="posture" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// <para>
     /// Opened by the use case, immediately after it has established whose mail it may read and before it reads any.
@@ -134,7 +152,8 @@ public sealed class SensitiveContentEgressGuard
     /// <para>
     /// The posture is the strictest over the accounts they are assigned, because such a read hands out mail from
     /// whichever of them matched and the account is no longer in hand where the value is guarded. A use case that does
-    /// hold one account names it instead.
+    /// hold one account names it instead. It is read from the account records once, before the scope is entered, and
+    /// every value guarded inside the scope is judged by that one reading.
     /// </para>
     /// <para>
     /// Entering one twice for the same user is an ordinary nesting rather than a mistake: a reader that assembles a
@@ -146,7 +165,12 @@ public sealed class SensitiveContentEgressGuard
     /// <c>BeginScope</c> is: what a caller does with it is dispose it at the end of the method that opened it.
     /// </para>
     /// </remarks>
-    public IDisposable ActingFor(UserId user) => this.Enter(new MailInScope(user, Account: null));
+    public IDisposable ActingFor(UserSensitiveContentPosture posture)
+    {
+        ArgumentNullException.ThrowIfNull(posture);
+
+        return this.Enter(new MailInScope(posture.User, Account: null, posture.Posture));
+    }
 
     /// <summary>Opens the report of one guarded operation, and reports every text guarded inside it as part of it.</summary>
     /// <param name="egressPoint">Where the texts this operation guards are going.</param>
@@ -160,14 +184,15 @@ public sealed class SensitiveContentEgressGuard
     /// </para>
     /// <para>
     /// A flow nothing scans opens nothing, so an opt-in nobody took stays as free here as every other path through this
-    /// guard.
+    /// guard. Neither does a flow that has not said whose mail it is acting for: everything guarded on it is refused
+    /// wherever anything is scanned, so there is no operation to report, and the refusal is what reports it.
     /// </para>
     /// </remarks>
     public EgressOperation BeginGuardedOperation(
         SensitiveContentEgressPoint egressPoint,
         CancellationToken cancellationToken)
     {
-        if (!this.IsActive)
+        if (this.PostureInScope() is not { IsActive: true })
         {
             return EgressOperation.Inert;
         }
@@ -199,9 +224,7 @@ public sealed class SensitiveContentEgressGuard
     {
         ArgumentNullException.ThrowIfNull(text);
 
-        return this.ActiveRedactor() is { } active
-            ? this.RedactAsync(active, egressPoint, text, cancellationToken)
-            : Task.FromResult(text);
+        return this.GuardCoreAsync(egressPoint, text, cancellationToken);
     }
 
     /// <summary>Guards one text and reports what the analyzed ceiling kept out of it.</summary>
@@ -224,9 +247,7 @@ public sealed class SensitiveContentEgressGuard
     {
         ArgumentNullException.ThrowIfNull(text);
 
-        return this.ActiveRedactor() is { } active
-            ? this.RedactReportingOmissionAsync(active, egressPoint, text, cancellationToken)
-            : Task.FromResult(new GuardedText(text, OmittedCharacterCount: 0));
+        return this.GuardWithOmissionCoreAsync(egressPoint, text, cancellationToken);
     }
 
     /// <summary>Guards a text that a message need not carry at all.</summary>
@@ -245,7 +266,7 @@ public sealed class SensitiveContentEgressGuard
         string? text,
         CancellationToken cancellationToken)
     {
-        if (text is null || this.ActiveRedactor() is not { } active)
+        if (text is null || await this.ActiveRedactorAsync(cancellationToken) is not { } active)
         {
             return text;
         }
@@ -273,10 +294,32 @@ public sealed class SensitiveContentEgressGuard
     {
         ArgumentNullException.ThrowIfNull(texts);
 
-        return texts.Count > 0 && this.ActiveRedactor() is { } active
-            ? this.RedactAllAsync(active, egressPoint, texts, cancellationToken)
-            : Task.FromResult(texts);
+        return texts.Count > 0 ? this.GuardAllCoreAsync(egressPoint, texts, cancellationToken) : Task.FromResult(texts);
     }
+
+    private async Task<string> GuardCoreAsync(
+        SensitiveContentEgressPoint egressPoint,
+        string text,
+        CancellationToken cancellationToken) =>
+        await this.ActiveRedactorAsync(cancellationToken) is { } active
+            ? await this.RedactAsync(active, egressPoint, text, cancellationToken)
+            : text;
+
+    private async Task<GuardedText> GuardWithOmissionCoreAsync(
+        SensitiveContentEgressPoint egressPoint,
+        string text,
+        CancellationToken cancellationToken) =>
+        await this.ActiveRedactorAsync(cancellationToken) is { } active
+            ? await this.RedactReportingOmissionAsync(active, egressPoint, text, cancellationToken)
+            : new GuardedText(text, OmittedCharacterCount: 0);
+
+    private async Task<IReadOnlyList<string>> GuardAllCoreAsync(
+        SensitiveContentEgressPoint egressPoint,
+        IReadOnlyList<string> texts,
+        CancellationToken cancellationToken) =>
+        await this.ActiveRedactorAsync(cancellationToken) is { } active
+            ? await this.RedactAllAsync(active, egressPoint, texts, cancellationToken)
+            : texts;
 
     private async Task<IReadOnlyList<string>> RedactAllAsync(
         SensitiveContentRedactor active,
@@ -352,12 +395,7 @@ public sealed class SensitiveContentEgressGuard
     /// One account is read under its own posture and a user's whole mail under the strictest over their accounts,
     /// which is the difference the two scopes exist to state.
     /// </remarks>
-    private SensitiveContentPosture? PostureInScope() => this.actingFor.Value switch
-    {
-        { Account: { } account } => this.postures.ForAccount(account),
-        { User: { } user } => this.postures.AcrossAccountsOf(user),
-        _ => null,
-    };
+    private SensitiveContentPosture? PostureInScope() => this.actingFor.Value?.Posture;
 
     /// <summary>Finds the redaction the mail this flow is acting for is read under, if any is.</summary>
     /// <remarks>
@@ -367,14 +405,14 @@ public sealed class SensitiveContentEgressGuard
     /// there is no posture to get wrong, so such a path costs nothing and stays as free as it was before any of this
     /// existed.
     /// </remarks>
-    private SensitiveContentRedactor? ActiveRedactor()
+    private async Task<SensitiveContentRedactor?> ActiveRedactorAsync(CancellationToken cancellationToken)
     {
         if (this.PostureInScope() is { } posture)
         {
             return posture.Redactor;
         }
 
-        return this.postures.IsActiveForAnyAccount
+        return await this.postures.IsActiveForAnyAccountAsync(cancellationToken)
             ? throw new InvalidOperationException(
                 "Text reached the sensitive-content egress guard on a flow acting for nobody's mail, so there is no "
                 + "scanning posture to read. Every use case that publishes mail states the account or the user it "
@@ -395,7 +433,8 @@ public sealed class SensitiveContentEgressGuard
     /// <summary>What the mail guarded on this flow belongs to.</summary>
     /// <param name="User">The user the use case resolved, which is what a guarded operation is reported against.</param>
     /// <param name="Account">The one account the flow is acting on, or <see langword="null" /> where it reads across the user's own.</param>
-    private readonly record struct MailInScope(UserId? User, MailAccountId? Account);
+    /// <param name="Posture">What the mail in scope is read under, read once before the scope was entered.</param>
+    private readonly record struct MailInScope(UserId? User, MailAccountId? Account, SensitiveContentPosture Posture);
 
     /// <summary>Keeps one scope current for as long as the use case that resolved it is reading that mail.</summary>
     /// <remarks>

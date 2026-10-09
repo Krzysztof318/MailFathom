@@ -437,6 +437,66 @@ public sealed class MailboxSynchronizerTests
         Assert.Equal([DerivedWorkAdmission.AwaitingClassification], gateTelemetry.Admissions);
     }
 
+    /// <summary>
+    /// The terms every arriving message is admitted under are read from the account records once per run rather than
+    /// once per message, so a batch of arrivals costs one read of the junk folders however many messages it holds.
+    /// </summary>
+    [Fact]
+    public async Task SynchronizeAsync_SeveralMessagesInOneRun_ReadsTheAdmissionTermsOnce()
+    {
+        // Arrange
+        var accountId = MailAccountId.Create("primary");
+        var uidValidity = ImapUidValidity.Create(5);
+        var first = EmailOccurrenceId.Create(accountId, InboxFolder.Id, uidValidity, ImapUid.Create(10));
+        var second = EmailOccurrenceId.Create(accountId, InboxFolder.Id, uidValidity, ImapUid.Create(11));
+        var checkpointStore = CreateCheckpointStoreAt(accountId, uidValidity);
+        var metadataRepository = Substitute.For<IEmailMetadataRepository>();
+        var sessionScopeFactory = Substitute.For<IPersistenceSessionFactory>();
+        var persistenceSession = Substitute.For<IPersistenceSession>();
+        var sessionFactory = Substitute.For<IMailboxSessionFactory>();
+        var session = Substitute.For<IMailboxSession>();
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 7, 24, 12, 0, 0, TimeSpan.Zero));
+        var options = new MailboxSynchronizationOptions { MaxMetadataBatchSize = 25, MaxRawMimeBytes = 1024 };
+        var gateTelemetry = new RecordingDerivedWorkGateTelemetry();
+        var deploymentFolders = Substitute.For<IDeploymentMailFolders>();
+        deploymentFolders.ReadAsync(Arg.Any<MailFolderSelection>(), Arg.Any<CancellationToken>()).Returns([]);
+        var synchronizer = CreateSynchronizer(
+            sessionFactory,
+            checkpointStore,
+            sessionScopeFactory,
+            metadataRepository,
+            contentStore: ContentStores.Substituted(),
+            clock,
+            options,
+            classificationSettings: ClassifyingTheInbox(),
+            deploymentFolders: deploymentFolders,
+            gateTelemetry: gateTelemetry);
+
+        sessionScopeFactory.BeginSessionAsync(CancellationToken.None).Returns(persistenceSession);
+        sessionFactory.OpenReadOnlyAsync(accountId, InboxFolder, Arg.Any<MailTransportSecurityPolicy>(), CancellationToken.None).Returns(session);
+        session.GetUidValidityAsync(CancellationToken.None).Returns(uidValidity);
+        session.GetEmailBatchAfterAsync(null, 25, MailSynchronizationWindow.Unbounded, CancellationToken.None).Returns(new RemoteEmailMetadataBatch(
+            [
+                new RemoteEmailMetadata(first, "message-1@example.test", "Subject", null, 128, IsRemotelySeen: false),
+                new RemoteEmailMetadata(second, "message-2@example.test", "Subject", null, 128, IsRemotelySeen: false),
+            ],
+            ImapUid.Create(11),
+            HasMore: false));
+        StubRetrievedContent(session, options, first, payloadLength: 3);
+        StubRetrievedContent(session, options, second, payloadLength: 3);
+        metadataRepository
+            .UpsertMetadataAsync(persistenceSession, Arg.Any<RemoteEmailMetadata>(), Arg.Any<ExtractedEmailMetadata?>(), StoredEmailContentAvailability.Available, CancellationToken.None)
+            .Returns(_ => StoredEmailId.Create(Guid.CreateVersion7()));
+
+        // Act
+        var result = await synchronizer.SynchronizeAsync(accountId, InboxMapping, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(2, result.StoredEmailCount);
+        Assert.Equal(2, gateTelemetry.Admissions.Count);
+        await deploymentFolders.Received(1).ReadAsync(MailFolderSelection.Junk, Arg.Any<CancellationToken>());
+    }
+
     /// <summary>A message committed with its content is asked to be classified, once the transaction that stored it has ended.</summary>
     /// <remarks>
     /// The trigger is the whole of what makes classification continuous rather than something an operator asks for. It
@@ -3142,7 +3202,7 @@ public sealed class MailboxSynchronizerTests
         RawMimeMemoryBudget? rawMimeMemoryBudget = null,
         StoredContentCeiling? storedContentCeiling = null,
         SpamClassificationSettings? classificationSettings = null,
-        IJunkMailFolderCatalog? junkFolders = null,
+        IDeploymentMailFolders? deploymentFolders = null,
         IDerivedWorkGateTelemetry? gateTelemetry = null,
         IMailSynchronizationPhaseTelemetry? phaseTelemetry = null,
         IJobStore? jobStore = null,
@@ -3195,7 +3255,7 @@ public sealed class MailboxSynchronizerTests
                 new StubSpamClassificationSettingsReader(
                     classificationSettings ?? SpamClassificationSettings.Disabled,
                     ClassifiedAccount),
-                junkFolders ?? StubJunkMailFolderCatalog.None,
+                deploymentFolders ?? StubDeploymentMailFolders.None,
                 timeProvider),
             gateTelemetry ?? new RecordingDerivedWorkGateTelemetry(),
             phaseTelemetry ?? new RecordingMailSynchronizationPhaseTelemetry(),

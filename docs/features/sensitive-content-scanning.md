@@ -116,6 +116,14 @@ user is assigned. That only ever redacts more than the message's own account ask
 every path that does hold one account — the outgoing screen, the attachment download, and the passes that derive from
 one mailbox's own mail — is judged by that mailbox alone.
 
+**What a read spans is read from the database once, before the read begins.** Which scanners each account switches on
+and which screen its outgoing mail are held in columns of the account's record, written with its settings in one
+transaction, so the strictest posture across one user's accounts is one query over the distinct answers those accounts
+gave rather than a walk of every account's settings. The read is judged by that answer from its first value to its
+last. The same columns answer the deployment-wide questions — whether any served mailbox is scanned at all, and whether
+any runs a given scanner, which is what [the readiness check on the analyzer](#the-analyzer-is-deployed-only-when-the-switch-is-on) asks before
+it reaches the analyzer — and each of those is asked where it is needed rather than held between requests.
+
 ## The guarded egress points
 
 Every place text leaves this deployment goes through one guard, and the guard is told which place it is. There are

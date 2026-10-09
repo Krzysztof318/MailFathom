@@ -9,6 +9,7 @@ using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Folders;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
 using MailFathom.Infrastructure.Observability;
 using MailFathom.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -31,9 +32,12 @@ internal sealed class EmailChunkWriter(
     EmailChunkingRules rules,
     EmbeddingInputBound inputBound,
     EmailEmbeddingTelemetry telemetry,
-    IMailFolderParticipationReader folderParticipation,
+    IDeploymentMailFolders deploymentFolders,
     TimeProvider timeProvider)
 {
+    /// <summary>The folders whose passages are cut, read once for the work unit this writer belongs to rather than once per message.</summary>
+    private IReadOnlyList<MailFolderIdentity>? foldersGeneratingEmbeddings;
+
     /// <summary>Saves the passages the extraction already stored for one message yields, reading that message as it goes.</summary>
     /// <param name="dbContext">The context whose transaction this write joins.</param>
     /// <param name="storedEmailId">The message to cut.</param>
@@ -302,7 +306,10 @@ internal sealed class EmailChunkWriter(
         StoredEmailEntity storedEmail,
         CancellationToken cancellationToken)
     {
-        var admitted = folderParticipation.FoldersGeneratingEmbeddings;
+        var admitted = this.foldersGeneratingEmbeddings ??= await deploymentFolders.ReadAsync(
+            MailFolderSelection.GeneratingEmbeddings,
+            cancellationToken);
+
         if (admitted.Count == 0)
         {
             return false;

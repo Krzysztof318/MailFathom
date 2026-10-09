@@ -122,9 +122,10 @@ public sealed class MailTimelineBrowser
 
         using var read = this.readTelemetry.BeginRead(MailboxReadOperation.ListMailboxTimeline, cancellationToken);
 
-        using var actingFor = this.egressGuard.ActingFor(this.scopeResolver.User);
+        using var actingFor = this.egressGuard.ActingFor(
+            await this.egressGuard.ReadPostureAcrossAccountsOfAsync(this.scopeResolver.User, cancellationToken));
 
-        var sortedList = this.SortedList(request);
+        var sortedList = await this.SortedListAsync(request, cancellationToken);
         var pageSize = MailboxQueryPageSize.FromRequested(request.PageSize);
         var pageDirection = DefinedPageDirection(request.PageDirection);
         var boundary = ContinuationBoundary(request.Cursor, sortedList, pageDirection);
@@ -305,7 +306,7 @@ public sealed class MailTimelineBrowser
         IReadOnlyDictionary<EmailThreadId, int> threadSizes,
         CancellationToken cancellationToken)
     {
-        if (!this.egressGuard.IsActive)
+        if (!await this.egressGuard.IsActiveAsync(cancellationToken))
         {
             return
             [
@@ -387,7 +388,7 @@ public sealed class MailTimelineBrowser
 
         return await this.threadReader.ReadMessageCountsAsync(
             conversations,
-            this.scopeResolver.ReadableScope([], [], JunkMailInclusion.Included),
+            await this.scopeResolver.ReadableScopeAsync([], [], JunkMailInclusion.Included, cancellationToken),
             cancellationToken);
     }
 
@@ -402,11 +403,12 @@ public sealed class MailTimelineBrowser
         enrichments.TryGetValue(email.StoredEmailId, out var enrichment) ? enrichment : null;
 
     /// <summary>Validates what the request asked for and restricts the list to the accounts its user owns.</summary>
-    private EmailTimelineFilter SortedList(BrowseTimelineRequest request) => EmailTimelineFilter.Create(
-        this.scopeResolver.ReadableScope(
+    private async Task<EmailTimelineFilter> SortedListAsync(BrowseTimelineRequest request, CancellationToken cancellationToken) => EmailTimelineFilter.Create(
+        await this.scopeResolver.ReadableScopeAsync(
             request.Accounts,
             request.Folders,
-            request.IncludeJunkMail ? JunkMailInclusion.Included : JunkMailInclusion.Excluded),
+            request.IncludeJunkMail ? JunkMailInclusion.Included : JunkMailInclusion.Excluded,
+            cancellationToken),
         senderAddress: null,
         recipientAddress: null,
         subjectFragment: null,

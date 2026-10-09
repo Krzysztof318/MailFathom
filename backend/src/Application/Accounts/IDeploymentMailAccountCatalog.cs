@@ -45,4 +45,19 @@ public interface IDeploymentMailAccountCatalog
     /// operator may switch synchronization off and remove every account while a local copy still exists.
     /// </remarks>
     IReadOnlyList<ServedMailAccount> ServedAccounts { get; }
+
+    /// <summary>Reads every account this deployment serves from the account records, deduplicated and ordered.</summary>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>
+    /// The accounts in identifier order. It is the set <see cref="ServedAccounts" /> describes only once the roster has
+    /// republished every account's last write, because that one is what this process composed and this is what the
+    /// records hold now.
+    /// </returns>
+    /// <remarks>
+    /// The shape a reader of the whole set takes — the status an operator reads, the schedule that evaluates rules
+    /// against every account — because it answers from the records themselves rather than from what this process
+    /// composed, so a deployment's account count is a question of how large the answer is rather than of what every
+    /// replica must hold.
+    /// </remarks>
+    Task<IReadOnlyList<ServedMailAccount>> ReadServedAccountsAsync(CancellationToken cancellationToken);
 }

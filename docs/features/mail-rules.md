@@ -69,8 +69,10 @@ matches it.
 An account is named exactly by the identifier the deployment generated for it, which `mfctl account list` reports,
 and the comparison is case-sensitive. **An account no served user is assigned is refused by a configuration write and
 by a reload**, naming the rule and the identifier: a rule scoped to a mistyped account would otherwise reach no mail and
-say nothing about why. The judgement is made against the users this deployment serves rather than against a
-configuration key, so a rule naming a mailbox nobody is assigned yet is refused until somebody is, and a reload that refuses keeps the rule set it last accepted.
+say nothing about why. The judgement is made against the account records in the database rather than against a
+configuration key — every account that holds an address, whose settings bind, and that somebody is assigned — so a rule
+naming a mailbox nobody is assigned yet is refused until somebody is, the same answer every replica gives whatever
+roster it last read, and a reload that refuses keeps the rule set it last accepted.
 
 **A start reports it instead of refusing.** A mailbox can stop being served after the rule naming it was accepted —
 its user is erased, its account is erased, or its assignment ends — and a start refusing then could be undone only

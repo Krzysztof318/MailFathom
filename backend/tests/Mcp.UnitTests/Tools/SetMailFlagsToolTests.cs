@@ -386,12 +386,14 @@ public sealed class SetMailFlagsToolTests
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ => new CommittingSession());
 
+        var participation = StubMailFolderParticipation.Mapping(new MailFolderIdentity(Account, Inbox));
+
         return new SetMailFlagsTool(new MailFlagChangeRecorder(
             authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailFlagsWrite),
             new MailboxScopeResolver(
                 accountCatalog,
-                StubMailFolderParticipation.Mapping(new MailFolderIdentity(Account, Inbox)),
-                StubJunkMailFolderCatalog.None,
+                participation,
+                StubDeploymentMailFolders.Of(participation),
                 StubMailFolderMappings.ResolvingNothing),
             targets,
             new MailboxChangeSubmission(

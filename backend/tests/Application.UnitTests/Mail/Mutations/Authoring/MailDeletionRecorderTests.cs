@@ -393,16 +393,18 @@ public sealed class MailDeletionRecorderTests
         var sessions = Substitute.For<IPersistenceSessionFactory>();
         sessions.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ => new CommittingSession());
 
+        var participation = StubMailFolderParticipation
+            .Mapping(
+                new MailFolderIdentity(Account, Trash),
+                new MailFolderIdentity(Account, MailFolderAlias.Create("INBOX")))
+            .Hiding(new MailFolderIdentity(Account, Withheld));
+
         return new MailDeletionRecorder(
             callerAuthorization,
             new MailboxScopeResolver(
                 accountCatalog,
-                StubMailFolderParticipation
-                    .Mapping(
-                        new MailFolderIdentity(Account, Trash),
-                        new MailFolderIdentity(Account, MailFolderAlias.Create("INBOX")))
-                    .Hiding(new MailFolderIdentity(Account, Withheld)),
-                StubJunkMailFolderCatalog.None,
+                participation,
+                StubDeploymentMailFolders.Of(participation),
                 StubMailFolderMappings.ResolvingNothing),
             targets,
             this.dispositions,

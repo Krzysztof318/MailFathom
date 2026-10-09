@@ -69,9 +69,10 @@ public sealed class MailThreadStateBrowser
     {
         this.authorization.RequirePermission(MailFathomPermission.MailRead);
 
-        using var actingFor = this.egressGuard.ActingFor(this.scopeResolver.User);
+        using var actingFor = this.egressGuard.ActingFor(
+            await this.egressGuard.ReadPostureAcrossAccountsOfAsync(this.scopeResolver.User, cancellationToken));
 
-        var scope = this.scopeResolver.ReadableScope([], [], JunkMailInclusion.Included);
+        var scope = await this.scopeResolver.ReadableScopeAsync([], [], JunkMailInclusion.Included, cancellationToken);
 
         if (scope.AccountIds.Count is 0)
         {
@@ -91,7 +92,7 @@ public sealed class MailThreadStateBrowser
     /// </remarks>
     private async Task<EmailThreadState> GuardedAsync(EmailThreadState state, CancellationToken cancellationToken)
     {
-        if (!this.egressGuard.IsActive || state.Entries.Count is 0)
+        if (!await this.egressGuard.IsActiveAsync(cancellationToken) || state.Entries.Count is 0)
         {
             return state;
         }

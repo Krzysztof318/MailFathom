@@ -22,7 +22,7 @@ namespace MailFathom.Application.Contacts.Correspondence;
 /// </para>
 /// <para>
 /// It answers through the visibility the caller already has. The scope is
-/// <see cref="MailboxScopeResolver.ReadableScope" />'s, unchanged — the accounts the signed-in user is assigned, the
+/// <see cref="MailboxScopeResolver.ReadableScopeAsync" />'s, unchanged — the accounts the signed-in user is assigned, the
 /// folders a mapping admits, no junk — so a message this caller may not see is outside the query rather than filtered
 /// out of its result, and no list here carries a withheld entry for somebody to notice. Junk is left out by the same
 /// default every listing takes: what an opened contact answers is what this person and the reader have been doing, and
@@ -98,9 +98,10 @@ public sealed class ContactCorrespondenceReader
 
         using var read = this.readTelemetry.BeginRead(MailboxReadOperation.CorrelateContactMail, cancellationToken);
 
-        using var actingFor = this.egressGuard.ActingFor(this.scopeResolver.User);
+        using var actingFor = this.egressGuard.ActingFor(
+            await this.egressGuard.ReadPostureAcrossAccountsOfAsync(this.scopeResolver.User, cancellationToken));
 
-        var scope = this.scopeResolver.ReadableScope([], [], JunkMailInclusion.Excluded);
+        var scope = await this.scopeResolver.ReadableScopeAsync([], [], JunkMailInclusion.Excluded, cancellationToken);
 
         // A caller assigned no account is answered before either index is reached, for the reason every mail read
         // leaves early on one: the scope admits no row, so both queries would return nothing more expensively.
@@ -149,7 +150,7 @@ public sealed class ContactCorrespondenceReader
         IReadOnlyList<CorrespondingDocument> documents,
         CancellationToken cancellationToken)
     {
-        if (!this.egressGuard.IsActive)
+        if (!await this.egressGuard.IsActiveAsync(cancellationToken))
         {
             return new ContactCorrespondence(threads, documents);
         }

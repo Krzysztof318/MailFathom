@@ -34,17 +34,22 @@ internal static class OrchestratedMailboxScope
         OrchestratedMailFathomServices services,
         IReadOnlyList<string> folderAliases,
         CancellationToken cancellationToken) => services.AsCallerInScopeAsync(
-        (scope, _) => Task.FromResult(Readable(scope, folderAliases)),
+        (scope, token) => ReadableAsync(scope, folderAliases, token),
         [],
         cancellationToken);
 
     /// <summary>Resolves the same scope inside a service scope a test already opened.</summary>
     /// <param name="scope">The service scope the read runs in.</param>
     /// <param name="folderAliases">The aliases the read names, or none for every folder this deployment maps.</param>
+    /// <param name="cancellationToken">Cancels the resolution.</param>
     /// <returns>The scope.</returns>
-    internal static MailboxScope Readable(IServiceProvider scope, IReadOnlyList<string> folderAliases) =>
-        scope.GetRequiredService<MailboxScopeResolver>().ReadableScope(
+    internal static Task<MailboxScope> ReadableAsync(
+        IServiceProvider scope,
+        IReadOnlyList<string> folderAliases,
+        CancellationToken cancellationToken) =>
+        scope.GetRequiredService<MailboxScopeResolver>().ReadableScopeAsync(
             [],
             [.. folderAliases.Select(alias => MailFolderReference.ToAlias(MailFolderAlias.Create(alias)))],
-            JunkMailInclusion.Excluded);
+            JunkMailInclusion.Excluded,
+            cancellationToken);
 }

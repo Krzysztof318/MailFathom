@@ -246,7 +246,7 @@ public sealed class ListAccountsToolTests
                 new MailboxScopeResolver(
                     catalog,
                     StubMailFolderParticipation.Nothing,
-                    StubJunkMailFolderCatalog.None,
+                    StubDeploymentMailFolders.None,
                     StubMailFolderMappings.ResolvingNothing),
                 Substitute.For<IMailboxReadTelemetry>(),
                 AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead)),

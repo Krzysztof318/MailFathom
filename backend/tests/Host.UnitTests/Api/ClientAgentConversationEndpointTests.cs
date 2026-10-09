@@ -526,7 +526,7 @@ public sealed class ClientAgentConversationEndpointTests
                 AccessAuthorizations.ForUserGranted(SyntheticUser.Deployment, MailFathomPermission.MailAsk),
                 SyntheticServedAccount.Of("primary")),
             StubMailFolderParticipation.Nothing,
-            StubJunkMailFolderCatalog.None,
+            StubDeploymentMailFolders.None,
             StubMailFolderMappings.Nothing.Resolver);
 
     private AgentConversationControls Controls() =>

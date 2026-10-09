@@ -376,7 +376,7 @@ public sealed class ClientMailSearchEndpointTests
             new MailboxScopeResolver(
                 catalog,
                 StubMailFolderParticipation.Nothing,
-                StubJunkMailFolderCatalog.None,
+                StubDeploymentMailFolders.None,
                 StubMailFolderMappings.ResolvingNothing),
             EmailSearchSnippetBounds.Default,
             SensitiveContentEgressGuards.Inactive(),

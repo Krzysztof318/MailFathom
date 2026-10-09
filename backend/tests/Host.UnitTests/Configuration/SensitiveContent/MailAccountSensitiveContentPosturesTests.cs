@@ -10,7 +10,9 @@ using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.SensitiveContent;
 using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.UnitTests.TestDoubles;
+using MailFathom.Infrastructure.Persistence.Users.AccountSettings;
 using MailFathom.TestSupport;
+using NSubstitute;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Configuration.SensitiveContent;
@@ -127,7 +129,7 @@ public sealed class MailAccountSensitiveContentPosturesTests : IDisposable
     /// unapplied, on the path that decides what a search hand-out is redacted by.
     /// </summary>
     [Fact]
-    public void AcrossAccountsOf_AUserAssignedTwoAccountsAskingDifferentThings_ReadsTheUnionOfThem()
+    public async Task AcrossAccountsOfAsync_AUserAssignedTwoAccountsAskingDifferentThings_ReadsTheUnionOfThem()
     {
         // Arrange
         var deployment = new SensitiveContentOptions();
@@ -151,7 +153,7 @@ public sealed class MailAccountSensitiveContentPosturesTests : IDisposable
             (SyntheticUser.Deployment, Archive, screeningPersonalData));
 
         // Act
-        var posture = postures.AcrossAccountsOf(SyntheticUser.Deployment);
+        var posture = await postures.AcrossAccountsOfAsync(SyntheticUser.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(
@@ -253,7 +255,7 @@ public sealed class MailAccountSensitiveContentPosturesTests : IDisposable
     /// nobody's mail reaches is not one this deployment is unhealthy without.
     /// </summary>
     [Fact]
-    public void RunsForAnyAccount_OneAccountThatAskedForAScannerTheDeploymentLeftOff_ReportsThatItRuns()
+    public async Task RunsForAnyAccountAsync_OneAccountThatAskedForAScannerTheDeploymentLeftOff_ReportsThatItRuns()
     {
         // Arrange
         var deployment = new SensitiveContentOptions();
@@ -265,14 +267,119 @@ public sealed class MailAccountSensitiveContentPosturesTests : IDisposable
             (SyntheticUser.Another, Archive, scanning => scanning.Pii.Enabled = true));
 
         // Act, Assert
-        Assert.True(postures.RunsForAnyAccount(SensitiveContentScannerKind.Pii));
-        Assert.False(postures.RunsForAnyAccount(SensitiveContentScannerKind.Secrets));
-        Assert.True(postures.IsActiveForAnyAccount);
+        Assert.True(await postures.RunsForAnyAccountAsync(SensitiveContentScannerKind.Pii, TestContext.Current.CancellationToken));
+        Assert.False(await postures.RunsForAnyAccountAsync(SensitiveContentScannerKind.Secrets, TestContext.Current.CancellationToken));
+        Assert.True(await postures.IsActiveForAnyAccountAsync(TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// The three answers about more than one account are read from the account records rather than from the roster, so
+    /// a replica whose roster names nobody still answers for every account the records hold.
+    /// </summary>
+    [Fact]
+    public async Task IsActiveForAnyAccountAsync_ARecordAskingForAScannerBesideARosterNamingNobody_ReportsActive()
+    {
+        // Arrange
+        var postures = this.PosturesReading(
+            new SensitiveContentOptions(),
+            ServedMailAccountReaders.Holding(),
+            new MailAccountScanningRequest([SensitiveContentScannerKind.Secrets], []));
+
+        // Act
+        var isActive = await postures.IsActiveForAnyAccountAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(isActive);
+        Assert.False(postures.ForAccount(Work).IsActive);
+    }
+
+    /// <summary>The control for the answer above: records asking for nothing leave a deployment that switched nothing on inactive.</summary>
+    [Fact]
+    public async Task IsActiveForAnyAccountAsync_RecordsAskingForNothing_ReportsInactive()
+    {
+        // Arrange
+        var postures = this.PosturesReading(
+            new SensitiveContentOptions(),
+            ServedMailAccountReaders.Holding(),
+            new MailAccountScanningRequest([], []));
+
+        // Act
+        var isActive = await postures.IsActiveForAnyAccountAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(isActive);
+    }
+
+    /// <summary>
+    /// A read spanning one person's mail asks the records about that person's accounts alone, and takes the strictest
+    /// of the answers they gave — a scanner one of them switched on and screening another asked for, both at once.
+    /// </summary>
+    [Fact]
+    public async Task AcrossAccountsOfAsync_TheAnswersTheUsersRecordsGave_ComposesTheStrictestOfThem()
+    {
+        // Arrange
+        var deployment = new SensitiveContentOptions();
+        deployment.PersonalDataAnalyzer.Endpoint = AnalyzerAddress;
+        var reader = ServedMailAccountReaders.Holding();
+        reader.ReadScanningRequestsAsync(SyntheticUser.Deployment, Arg.Any<CancellationToken>()).Returns(
+        [
+            new MailAccountScanningRequest([SensitiveContentScannerKind.Secrets], []),
+            new MailAccountScanningRequest([SensitiveContentScannerKind.Pii], [SensitiveContentScannerKind.Pii]),
+        ]);
+        var postures = this.PosturesOver(deployment, new ServedUsers(), reader);
+
+        // Act
+        var posture = await postures.AcrossAccountsOfAsync(SyntheticUser.Deployment, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal([SensitiveContentScannerKind.Secrets, SensitiveContentScannerKind.Pii], posture.Scanners);
+        Assert.Equal(
+            SensitiveContentScannerKind.Pii,
+            posture.Screening.StoppedBy(FindingIn("PersonName", "person")));
+    }
+
+    /// <summary>A user whose records asked for nothing reads the deployment's own posture, as a user assigned nothing does.</summary>
+    [Fact]
+    public async Task AcrossAccountsOfAsync_AUserWhoseRecordsAskedForNothing_ReadsTheDeploymentsOwnPosture()
+    {
+        // Arrange
+        var deployment = new SensitiveContentOptions();
+        deployment.Secrets.Enabled = true;
+        var postures = this.PosturesReading(deployment, ServedMailAccountReaders.Holding());
+
+        // Act
+        var posture = await postures.AcrossAccountsOfAsync(SyntheticUser.Another, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal([SensitiveContentScannerKind.Secrets], posture.Scanners);
+    }
+
+    /// <summary>Whether a scanner runs anywhere is asked of every served account's records, which no one user's roster holds.</summary>
+    [Fact]
+    public async Task RunsForAnyAccountAsync_AScannerOnlyARecordAskedFor_ReportsThatItRunsAndAsksAboutEveryAccount()
+    {
+        // Arrange
+        var deployment = new SensitiveContentOptions();
+        deployment.PersonalDataAnalyzer.Endpoint = AnalyzerAddress;
+        var reader = ServedMailAccountReaders.Holding();
+        var postures = this.PosturesReading(
+            deployment,
+            reader,
+            new MailAccountScanningRequest([SensitiveContentScannerKind.Pii], []));
+
+        // Act
+        var runsPersonalData = await postures.RunsForAnyAccountAsync(SensitiveContentScannerKind.Pii, TestContext.Current.CancellationToken);
+        var runsSecrets = await postures.RunsForAnyAccountAsync(SensitiveContentScannerKind.Secrets, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(runsPersonalData);
+        Assert.False(runsSecrets);
+        await reader.Received(2).ReadScanningRequestsAsync(null, Arg.Any<CancellationToken>());
     }
 
     /// <summary>An opt-in nobody took costs nothing: no plan is composed, no detector is constructed, and no permit is held.</summary>
     [Fact]
-    public void ForAccount_ADeploymentNobodyIsScannedFor_ConstructsNoDetectorAtAll()
+    public async Task ForAccount_ADeploymentNobodyIsScannedFor_ConstructsNoDetectorAtAll()
     {
         // Arrange
         var postures = this.PosturesOver(
@@ -284,7 +391,7 @@ public sealed class MailAccountSensitiveContentPosturesTests : IDisposable
 
         // Assert
         Assert.Same(SensitiveContentPosture.ScanningNothing, posture);
-        Assert.False(postures.IsActiveForAnyAccount);
+        Assert.False(await postures.IsActiveForAnyAccountAsync(TestContext.Current.CancellationToken));
         Assert.Equal(0, this.detectorResolutions);
     }
 
@@ -374,6 +481,7 @@ public sealed class MailAccountSensitiveContentPosturesTests : IDisposable
         // Arrange
         var deployment = new SensitiveContentOptions();
         var servedUsers = new ServedUsers();
+        var servedAccounts = ServedMailAccountReaders.HoldingNothing();
 
         // Act, Assert
         Assert.Throws<ArgumentNullException>(() => new MailAccountSensitiveContentPostures(
@@ -382,41 +490,55 @@ public sealed class MailAccountSensitiveContentPosturesTests : IDisposable
             this.Detectors,
             TimeProvider.System,
             this.permits,
-            servedUsers));
+            servedUsers,
+            servedAccounts));
         Assert.Throws<ArgumentNullException>(() => new MailAccountSensitiveContentPostures(
             deployment,
             null!,
             this.Detectors,
             TimeProvider.System,
             this.permits,
-            servedUsers));
+            servedUsers,
+            servedAccounts));
         Assert.Throws<ArgumentNullException>(() => new MailAccountSensitiveContentPostures(
             deployment,
             [],
             null!,
             TimeProvider.System,
             this.permits,
-            servedUsers));
+            servedUsers,
+            servedAccounts));
         Assert.Throws<ArgumentNullException>(() => new MailAccountSensitiveContentPostures(
             deployment,
             [],
             this.Detectors,
             null!,
             this.permits,
-            servedUsers));
+            servedUsers,
+            servedAccounts));
         Assert.Throws<ArgumentNullException>(() => new MailAccountSensitiveContentPostures(
             deployment,
             [],
             this.Detectors,
             TimeProvider.System,
             null!,
-            servedUsers));
+            servedUsers,
+            servedAccounts));
         Assert.Throws<ArgumentNullException>(() => new MailAccountSensitiveContentPostures(
             deployment,
             [],
             this.Detectors,
             TimeProvider.System,
             this.permits,
+            null!,
+            servedAccounts));
+        Assert.Throws<ArgumentNullException>(() => new MailAccountSensitiveContentPostures(
+            deployment,
+            [],
+            this.Detectors,
+            TimeProvider.System,
+            this.permits,
+            servedUsers,
             null!));
     }
 
@@ -454,7 +576,17 @@ public sealed class MailAccountSensitiveContentPosturesTests : IDisposable
         return declared;
     }
 
-    /// <summary>Composes the postures of a deployment whose roster is settled and names exactly these mailboxes.</summary>
+    /// <summary>Builds what one account's record answers about scanning, as the account records are read into.</summary>
+    private static MailAccountScanningRequest RequestOf(MailAccountId account, Action<MailAccountSensitiveContentOptions>? asking)
+    {
+        var declared = Account(account, asking).SensitiveContent;
+
+        return new MailAccountScanningRequest(
+            [.. Enum.GetValues<SensitiveContentScannerKind>().Where(scanner => declared.For(scanner).Enabled is true)],
+            declared.ScreenedScanners);
+    }
+
+    /// <summary>Composes the postures of a deployment whose roster is settled and whose records both name exactly these mailboxes.</summary>
     private MailAccountSensitiveContentPostures PosturesOver(
         SensitiveContentOptions deployment,
         params (UserId User, MailAccountId Account, Action<MailAccountSensitiveContentOptions>? Asking)[] accounts)
@@ -470,19 +602,47 @@ public sealed class MailAccountSensitiveContentPosturesTests : IDisposable
                     [.. assigned.Select(entry => (entry.Account, entry.Asking))])),
         ]);
 
-        return this.PosturesOver(deployment, servedUsers);
+        var servedAccounts = ServedMailAccountReaders.Holding();
+        servedAccounts
+            .ReadScanningRequestsAsync(Arg.Any<UserId?>(), Arg.Any<CancellationToken>())
+            .Returns(call => Task.FromResult<IReadOnlyList<MailAccountScanningRequest>>(
+            [
+                .. accounts
+                    .Where(entry => call.Arg<UserId?>() is not { } user || entry.User == user)
+                    .Select(entry => RequestOf(entry.Account, entry.Asking)),
+            ]));
+
+        return this.PosturesOver(deployment, servedUsers, servedAccounts);
     }
 
     /// <summary>Composes the postures over a roster the test drives itself, which is how a later write is exercised.</summary>
     private MailAccountSensitiveContentPostures PosturesOver(
         SensitiveContentOptions deployment,
-        ServedUsers servedUsers) => new(
+        ServedUsers servedUsers) =>
+        this.PosturesOver(deployment, servedUsers, ServedMailAccountReaders.HoldingNothing());
+
+    /// <summary>Composes the postures of a deployment whose roster names nobody and whose records gave these answers.</summary>
+    private MailAccountSensitiveContentPostures PosturesReading(
+        SensitiveContentOptions deployment,
+        IServedMailAccountReader servedAccounts,
+        params MailAccountScanningRequest[] requests)
+    {
+        servedAccounts.ReadScanningRequestsAsync(Arg.Any<UserId?>(), Arg.Any<CancellationToken>()).Returns(requests);
+
+        return this.PosturesOver(deployment, new ServedUsers(), servedAccounts);
+    }
+
+    private MailAccountSensitiveContentPostures PosturesOver(
+        SensitiveContentOptions deployment,
+        ServedUsers servedUsers,
+        IServedMailAccountReader servedAccounts) => new(
         deployment,
         [SecretsCatalog, PersonalDataCatalog],
         this.Detectors,
         TimeProvider.System,
         this.permits,
-        servedUsers);
+        servedUsers,
+        servedAccounts);
 
     /// <summary>
     /// Stands in for the detectors the composition root registered, and counts how often they were asked for. Resolving

@@ -13,7 +13,6 @@ using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
-using MailFathom.Application.Folders;
 using MailFathom.Application.Mail.Delivery.Addressing;
 using MailFathom.Application.Mail.Delivery.Authoring;
 using MailFathom.Application.Mail.Delivery.Composition;
@@ -1054,7 +1053,7 @@ public sealed class StoredEmailResponseAuthoringTests
         IEmailContentRenderer? renderer = null,
         IEmailAttachmentContentReader? attachmentContentReader = null,
         IEmailContentRepairRequestStore? repairRequestStore = null,
-        IMailFolderParticipationReader? folderParticipation = null,
+        StubMailFolderParticipation? folderParticipation = null,
         IOutgoingSenderIdentityReader? senderIdentities = null,
         IContactDirectory? contacts = null,
         OutgoingEmailBounds? bounds = null,
@@ -1067,6 +1066,9 @@ public sealed class StoredEmailResponseAuthoringTests
         // instance in production.
         var callerAuthorization = authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead);
 
+        var participation = folderParticipation ?? StubMailFolderParticipation.Mapping(
+            new MailFolderIdentity(answered.Account, answered.FolderAlias));
+
         return new StoredEmailResponseAuthoring(
             summaryReader ?? SummaryReaderReturning(answered),
             contentStore ?? ContentStoreReturning(IntactContent()),
@@ -1075,9 +1077,8 @@ public sealed class StoredEmailResponseAuthoringTests
             repairRequestStore ?? new RecordingEmailContentRepairRequestStore(),
             new MailboxScopeResolver(
                 AssignedMailAccountCatalogs.For(callerAuthorization, SyntheticServedAccount.Of(answered.Account)),
-                folderParticipation ?? StubMailFolderParticipation.Mapping(
-                    new MailFolderIdentity(answered.Account, answered.FolderAlias)),
-                StubJunkMailFolderCatalog.None,
+                participation,
+                StubDeploymentMailFolders.Of(participation),
                 StubMailFolderMappings.ResolvingNothing),
             senderIdentities ?? SenderIdentitiesFor(answered.Account),
             new NamedRecipientResolver(

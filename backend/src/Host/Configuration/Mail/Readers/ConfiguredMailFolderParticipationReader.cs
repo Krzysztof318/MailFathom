@@ -13,22 +13,6 @@ internal sealed class ConfiguredMailFolderParticipationReader(MailSynchronizatio
     : IMailFolderParticipationReader
 {
     /// <inheritdoc />
-    public IReadOnlyList<MailFolderIdentity> FoldersMapped =>
-        [.. ConfiguredMailFolders.Of(settings).Select(static folder => folder.Identity)];
-
-    /// <inheritdoc />
-    public IReadOnlyList<MailFolderIdentity> FoldersSynchronized =>
-        [.. ConfiguredMailFolders.Of(settings).Where(static folder => folder.Participation.IsSynchronized).Select(static folder => folder.Identity)];
-
-    /// <inheritdoc />
-    public IReadOnlyList<MailFolderIdentity> FoldersVisibleToTools =>
-        [.. ConfiguredMailFolders.Of(settings).Where(static folder => folder.Participation.IsVisibleToTools).Select(static folder => folder.Identity)];
-
-    /// <inheritdoc />
-    public IReadOnlyList<MailFolderIdentity> FoldersGeneratingEmbeddings =>
-        [.. ConfiguredMailFolders.Of(settings).Where(static folder => folder.Participation.GeneratesEmbeddings).Select(static folder => folder.Identity)];
-
-    /// <inheritdoc />
     public MailFolderParticipation GetParticipation(MailAccountId accountId, MailFolderAlias folderAlias) =>
         ConfiguredMailFolders.Of(settings)
             .FirstOrDefault(folder => folder.Identity.AccountId == accountId && folder.Identity.Alias == folderAlias)

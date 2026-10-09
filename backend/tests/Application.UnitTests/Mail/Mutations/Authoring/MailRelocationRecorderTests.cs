@@ -425,19 +425,21 @@ public sealed class MailRelocationRecorderTests
         var sessions = Substitute.For<IPersistenceSessionFactory>();
         sessions.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ => new CommittingSession());
 
+        var participation = StubMailFolderParticipation
+            .Mapping(
+                new MailFolderIdentity(Account, Inbox),
+                new MailFolderIdentity(Account, Archive),
+                new MailFolderIdentity(Account, Drafts),
+                new MailFolderIdentity(Account, Trash),
+                new MailFolderIdentity(Account, Projects))
+            .Hiding(new MailFolderIdentity(Account, Withheld));
+
         return new MailRelocationRecorder(
             callerAuthorization,
             new MailboxScopeResolver(
                 accountCatalog,
-                StubMailFolderParticipation
-                    .Mapping(
-                        new MailFolderIdentity(Account, Inbox),
-                        new MailFolderIdentity(Account, Archive),
-                        new MailFolderIdentity(Account, Drafts),
-                        new MailFolderIdentity(Account, Trash),
-                        new MailFolderIdentity(Account, Projects))
-                    .Hiding(new MailFolderIdentity(Account, Withheld)),
-                StubJunkMailFolderCatalog.None,
+                participation,
+                StubDeploymentMailFolders.Of(participation),
                 StubMailFolderMappings.ResolvingNothing),
             targets,
             this.mappings.Resolver,

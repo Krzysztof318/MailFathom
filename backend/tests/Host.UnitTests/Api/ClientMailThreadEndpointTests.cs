@@ -597,6 +597,9 @@ public sealed class ClientMailThreadEndpointTests
                     containsUnexpandedTnefPart: false),
                 []))));
 
+        var participation = StubMailFolderParticipation.Mapping(
+            new MailFolderIdentity(MailAccountId.Create("work"), MailFolderAlias.Create("INBOX")));
+
         return new EmailContentReader(
             this.summaryReader,
             this.threadReader,
@@ -605,9 +608,8 @@ public sealed class ClientMailThreadEndpointTests
             Substitute.For<IEmailContentRepairRequestStore>(),
             new MailboxScopeResolver(
                 catalog,
-                StubMailFolderParticipation.Mapping(
-                    new MailFolderIdentity(MailAccountId.Create("work"), MailFolderAlias.Create("INBOX"))),
-                StubJunkMailFolderCatalog.None,
+                participation,
+                StubDeploymentMailFolders.Of(participation),
                 StubMailFolderMappings.ResolvingNothing),
             Substitute.For<IAttachmentDownloadLinkIssuer>(),
             SensitiveContentEgressGuards.Inactive(),
@@ -640,7 +642,7 @@ public sealed class ClientMailThreadEndpointTests
             new MailboxScopeResolver(
                 catalog,
                 StubMailFolderParticipation.Nothing,
-                StubJunkMailFolderCatalog.None,
+                StubDeploymentMailFolders.None,
                 StubMailFolderMappings.ResolvingNothing),
             Substitute.For<IAttachmentDownloadLinkIssuer>(),
             SensitiveContentEgressGuards.Inactive(),
@@ -677,7 +679,7 @@ public sealed class ClientMailThreadEndpointTests
             new MailboxScopeResolver(
                 catalog,
                 StubMailFolderParticipation.Nothing,
-                StubJunkMailFolderCatalog.None,
+                StubDeploymentMailFolders.None,
                 StubMailFolderMappings.ResolvingNothing),
             SensitiveContentEgressGuards.Inactive(),
             readTelemetry,

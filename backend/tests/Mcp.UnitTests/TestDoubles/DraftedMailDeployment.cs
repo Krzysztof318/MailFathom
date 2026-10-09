@@ -268,7 +268,7 @@ internal sealed class DraftedMailDeployment
             new MailboxScopeResolver(
                 catalog,
                 StubMailFolderParticipation.Nothing,
-                StubJunkMailFolderCatalog.None,
+                StubDeploymentMailFolders.None,
                 StubMailFolderMappings.ResolvingNothing),
             Substitute.For<IOutgoingSenderIdentityReader>(),
             new NamedRecipientResolver(Substitute.For<IContactDirectory>(), ContactBookOwnerships.For(authorization)),

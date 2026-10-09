@@ -319,9 +319,9 @@ public sealed class OrchestratedMailOwnershipTests(MailFathomOrchestrationFixtur
     private static Task<IReadOnlyList<EmailSummary>> ReadAssignedCallerPageAsync(
         OrchestratedMailFathomServices services,
         CancellationToken cancellationToken) => services.AsCallerInScopeAsync(
-            (scope, token) => scope.GetRequiredService<IStoredEmailTimelineReader>().ReadPageAsync(
+            async (scope, token) => await scope.GetRequiredService<IStoredEmailTimelineReader>().ReadPageAsync(
                 EmailTimelineFilter.Create(
-                    OrchestratedMailboxScope.Readable(scope, [FolderAlias]),
+                    await OrchestratedMailboxScope.ReadableAsync(scope, [FolderAlias], token),
                     senderAddress: null,
                     recipientAddress: null,
                     subjectFragment: null,

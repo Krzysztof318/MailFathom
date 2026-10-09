@@ -27,7 +27,7 @@ public sealed class SensitiveContentEgressGuardsTests
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.False(guard.IsActive);
+        Assert.False(await guard.IsActiveAsync(TestContext.Current.CancellationToken));
         Assert.Equal($"the key is {Marker}", guarded);
     }
 

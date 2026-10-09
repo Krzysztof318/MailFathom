@@ -4,6 +4,8 @@
 
 using MailFathom.Domain.Folders;
 using MailFathom.Host.Configuration.Mail;
+using MailFathom.Host.Configuration.UserSettings;
+using MailFathom.Infrastructure.Persistence.Users;
 
 namespace MailFathom.Host.Configuration.Rules;
 
@@ -29,20 +31,22 @@ namespace MailFathom.Host.Configuration.Rules;
 /// </remarks>
 internal static class DeclaredMailAccounts
 {
-    /// <summary>Reads the declared accounts from a bound synchronization configuration.</summary>
-    /// <param name="settings">The synchronization configuration a reload published, or the one currently in force.</param>
-    /// <returns>The accounts, in the order they are declared.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="settings" /> is <see langword="null" />.</exception>
+    /// <summary>Reads the declared accounts from the account records this deployment serves.</summary>
+    /// <param name="records">The served records, as <see cref="Infrastructure.Persistence.Users.AccountSettings.IServedMailAccountReader.ReadServedRecordsAsync" /> reads them.</param>
+    /// <returns>The accounts whose document binds, in the order the records are given.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="records" /> is <see langword="null" />.</exception>
     /// <remarks>
-    /// The declarations come off the roster the snapshot carries rather than out of a section, because a user's
-    /// mailboxes are their own record and no configuration source states one. A reload runs behind the startup gate
-    /// that establishes the roster, so it is settled by the time this is asked.
+    /// What a reload of the rule set and a write of the configuration judge a rule's mailboxes against, because a user's
+    /// mailboxes are their own record and no configuration source states one. A record whose document does not bind
+    /// declares nothing, so a rule naming it is refused exactly as one naming a mailbox no record holds.
     /// </remarks>
-    public static IReadOnlyCollection<DeclaredMailAccount> ReadFrom(MailSynchronizationOptions settings)
+    public static IReadOnlyCollection<DeclaredMailAccount> ReadFrom(IEnumerable<MailAccountRecord> records)
     {
-        ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(records);
 
-        return ReadFrom(settings.DeclaredAccounts);
+        return ReadFrom(records
+            .Select(MailAccountQueryableSettingsReading.TryBind)
+            .OfType<MailSynchronizationAccountOptions>());
     }
 
     /// <summary>Reads the declared accounts from one bound set of mailbox declarations.</summary>

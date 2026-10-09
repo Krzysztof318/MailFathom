@@ -668,6 +668,10 @@ internal static class PersistenceConstraintNames
     internal const string MailAccountAssignmentAccountForeignKeyName =
         "fk_mail_account_assignments_settings_mail_accounts";
 
+    /// <summary>The foreign key that ends an account's folder rows with the account.</summary>
+    internal const string MailAccountFolderSettingsAccountForeignKeyName =
+        "fk_mail_account_folder_settings_settings_mail_accounts";
+
     /// <summary>The index a count of one organization's members is answered from.</summary>
     internal const string UserAccountOrganizationIndexName = "ix_settings_accounts_organization";
 

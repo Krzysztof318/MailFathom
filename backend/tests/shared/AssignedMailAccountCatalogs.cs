@@ -71,5 +71,8 @@ internal static class AssignedMailAccountCatalogs
         public bool SynchronizationEnabled => true;
 
         public IReadOnlyList<ServedMailAccount> ServedAccounts { get; } = servedAccounts;
+
+        public Task<IReadOnlyList<ServedMailAccount>> ReadServedAccountsAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(this.ServedAccounts);
     }
 }

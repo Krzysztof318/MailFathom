@@ -147,9 +147,10 @@ public sealed class MailSearchBrowser
 
         using var read = this.readTelemetry.BeginRead(MailboxReadOperation.SearchMailbox, cancellationToken);
 
-        using var actingFor = this.egressGuard.ActingFor(this.scopeResolver.User);
+        using var actingFor = this.egressGuard.ActingFor(
+            await this.egressGuard.ReadPostureAcrossAccountsOfAsync(this.scopeResolver.User, cancellationToken));
 
-        var rankedList = this.RankedList(request);
+        var rankedList = await this.RankedListAsync(request, cancellationToken);
         var pageSize = EmailSearchResultLimit.FromRequested(request.PageSize);
         var boundary = ContinuationBoundary(request.Cursor, rankedList);
 
@@ -315,11 +316,12 @@ public sealed class MailSearchBrowser
     }
 
     /// <summary>Validates what the request asked for and restricts the search to the accounts its user owns.</summary>
-    private RankedSearchList RankedList(BrowseSearchRequest request) => RankedSearchList.Create(
-        this.scopeResolver.ReadableScope(
+    private async Task<RankedSearchList> RankedListAsync(BrowseSearchRequest request, CancellationToken cancellationToken) => RankedSearchList.Create(
+        await this.scopeResolver.ReadableScopeAsync(
             request.Accounts,
             request.Folders,
-            request.IncludeJunkMail ? JunkMailInclusion.Included : JunkMailInclusion.Excluded),
+            request.IncludeJunkMail ? JunkMailInclusion.Included : JunkMailInclusion.Excluded,
+            cancellationToken),
         request.QueryText,
         request.SenderAddress,
         request.RecipientAddress,
@@ -345,7 +347,7 @@ public sealed class MailSearchBrowser
         RankedSearchRanking ranking,
         CancellationToken cancellationToken)
     {
-        if (!this.egressGuard.IsActive)
+        if (!await this.egressGuard.IsActiveAsync(cancellationToken))
         {
             return
             [

@@ -448,7 +448,7 @@ public sealed class MailAccountFreshnessReaderTests
                 new MailboxScopeResolver(
                     catalog,
                     StubMailFolderParticipation.Nothing,
-                    StubJunkMailFolderCatalog.None,
+                    StubDeploymentMailFolders.None,
                     StubMailFolderMappings.ResolvingNothing),
                 new RecordingMailboxReadTelemetry(),
                 authorization),

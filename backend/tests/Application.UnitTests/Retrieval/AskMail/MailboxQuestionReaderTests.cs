@@ -818,7 +818,7 @@ public sealed class MailboxQuestionReaderTests
             new MailboxScopeResolver(
                 CatalogServing(MailAccountId.Create(ServedAccountId)),
                 StubMailFolderParticipation.Nothing,
-                StubJunkMailFolderCatalog.None,
+                StubDeploymentMailFolders.None,
                 StubMailFolderMappings.ResolvingNothing),
             spendLedger ?? LedgerAdmitting(),
             bounds ?? MailAnswerBounds.Default,

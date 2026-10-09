@@ -26,6 +26,7 @@
     <Compile Include="..\shared\RecordingClientSignalChannel.cs" Link="RecordingClientSignalChannel.cs" />
     <Compile Include="..\shared\SyntheticServedAccount.cs" Link="SyntheticServedAccount.cs" />
     <Compile Include="..\shared\StubMailFolderParticipation.cs" Link="StubMailFolderParticipation.cs" />
+    <Compile Include="..\shared\StubDeploymentMailFolders.cs" Link="StubDeploymentMailFolders.cs" />
     <Compile Include="..\shared\StubJunkMailFolderCatalog.cs" Link="StubJunkMailFolderCatalog.cs" />
     <Compile Include="..\shared\StubMailFolderMappings.cs" Link="StubMailFolderMappings.cs" />
     <!-- Every boundary holding a guarded egress point asserts the same three states of the guard, so the three are

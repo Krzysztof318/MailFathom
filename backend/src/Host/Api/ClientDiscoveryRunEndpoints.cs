@@ -156,7 +156,7 @@ internal static class ClientDiscoveryRunEndpoints
         MailQuestion question;
         try
         {
-            question = QuestionOf(request, scopeResolver, userClock);
+            question = await QuestionOfAsync(request, scopeResolver, userClock, cancellationToken);
         }
         catch (MailAccountNotAccessibleException)
         {
@@ -309,17 +309,19 @@ internal static class ClientDiscoveryRunEndpoints
     }
 
     /// <summary>Reads the question and the mail it may be answered from, refusing anything the request got wrong.</summary>
-    private static MailQuestion QuestionOf(
+    private static async Task<MailQuestion> QuestionOfAsync(
         ClientDiscoveryRunRequest? request,
         MailboxScopeResolver scopeResolver,
-        UserClock userClock)
+        UserClock userClock,
+        CancellationToken cancellationToken)
     {
         var text = MailQuestionText.Create(request?.Question);
 
-        var scope = scopeResolver.ReadableScope(
+        var scope = await scopeResolver.ReadableScopeAsync(
             Selectors(request?.Accounts),
             Folders(request?.Folders),
-            JunkMailInclusion.Excluded);
+            JunkMailInclusion.Excluded,
+            cancellationToken);
 
         return new MailQuestion(text, NarrowedTo(scope, request), userClock.Now());
     }

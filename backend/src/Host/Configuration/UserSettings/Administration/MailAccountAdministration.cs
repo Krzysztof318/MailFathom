@@ -199,7 +199,10 @@ internal sealed class MailAccountAdministration(
             return UserRecordWriteOutcome.Refused(MailFathomErrorCode.ConfigurationCandidateInvalid, standing.Version, judgement.Refusals);
         }
 
-        var write = await accounts.SaveAsync(candidate, cancellationToken);
+        var write = await accounts.SaveAsync(
+            candidate,
+            MailAccountQueryableSettingsReading.Of(candidate),
+            cancellationToken);
 
         return write.Result switch
         {
@@ -746,7 +749,12 @@ internal sealed class MailAccountAdministration(
             return (null, UserRecordWriteOutcome.Refused(MailFathomErrorCode.ConfigurationCandidateInvalid, record.Version, judgement.Refusals));
         }
 
-        var write = await accounts.CreateAsync(record.User, record.Version, candidate, cancellationToken);
+        var write = await accounts.CreateAsync(
+            record.User,
+            record.Version,
+            candidate,
+            MailAccountQueryableSettingsReading.Of(candidate),
+            cancellationToken);
 
         if (write.Result != MailAccountWriteResult.Committed)
         {
@@ -826,7 +834,10 @@ internal sealed class MailAccountAdministration(
             return UserRecordWriteOutcome.Refused(MailFathomErrorCode.ConfigurationCandidateInvalid, record.Version, judgement.Refusals);
         }
 
-        var write = await accounts.SaveAsync(candidate, cancellationToken);
+        var write = await accounts.SaveAsync(
+            candidate,
+            MailAccountQueryableSettingsReading.Of(candidate),
+            cancellationToken);
         var version = await this.VersionOfAsync(record, cancellationToken);
 
         return write.Result switch

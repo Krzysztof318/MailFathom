@@ -28,7 +28,13 @@ namespace MailFathom.Application.Emails.Threads;
 public sealed class EmailThreadContexts
 {
     private readonly IEmailThreadReader threadReader;
-    private readonly MailboxScope readableScope;
+    private readonly MailboxScopeResolver scopeResolver;
+
+    /// <summary>The scope every conversation of this read is assembled from, resolved by the first one assembled.</summary>
+    private MailboxScope? readableScope;
+
+    /// <summary>What every conversation of this read is guarded under, read by the first one assembled.</summary>
+    private UserSensitiveContentPosture? actingPosture;
     private readonly UserId actingUser;
     private readonly SensitiveContentEgressGuard egressGuard;
     private readonly Dictionary<EmailThreadId, AssembledThread> assembled = [];
@@ -39,7 +45,7 @@ public sealed class EmailThreadContexts
     /// <param name="egressGuard">Scans the subjects before any of them becomes a caller's.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     /// <remarks>
-    /// The scope is resolved once, here, rather than per conversation: it is configuration rather than a caller's
+    /// The scope is resolved once, by the first conversation assembled, rather than per conversation: it is configuration rather than a caller's
     /// filter, and one read of several emails must not be able to see two answers to the same question. Junk mail is
     /// included, because a conversation is threaded across the folders it reached and a reply that landed in junk is
     /// part of the exchange the caller is reading rather than a listing they asked for.
@@ -54,7 +60,7 @@ public sealed class EmailThreadContexts
         ArgumentNullException.ThrowIfNull(egressGuard);
 
         this.threadReader = threadReader;
-        this.readableScope = scopeResolver.ReadableScope([], [], JunkMailInclusion.Included);
+        this.scopeResolver = scopeResolver;
         this.actingUser = scopeResolver.User;
         this.egressGuard = egressGuard;
     }
@@ -70,7 +76,17 @@ public sealed class EmailThreadContexts
             return already;
         }
 
-        using var actingFor = this.egressGuard.ActingFor(this.actingUser);
+        this.actingPosture ??= await this.egressGuard.ReadPostureAcrossAccountsOfAsync(
+            this.actingUser,
+            cancellationToken);
+
+        using var actingFor = this.egressGuard.ActingFor(this.actingPosture);
+
+        this.readableScope ??= await this.scopeResolver.ReadableScopeAsync(
+            [],
+            [],
+            JunkMailInclusion.Included,
+            cancellationToken);
 
         var read = await this.threadReader.ReadEmailsAsync(threadId, this.readableScope, cancellationToken);
         var wasCutShort = read.Count > IEmailThreadReader.MaximumAssembledEmails;
@@ -135,7 +151,7 @@ public sealed class EmailThreadContexts
         ThreadedEmailSummary[] emails,
         CancellationToken cancellationToken)
     {
-        if (!this.egressGuard.IsActive)
+        if (!await this.egressGuard.IsActiveAsync(cancellationToken))
         {
             return emails;
         }

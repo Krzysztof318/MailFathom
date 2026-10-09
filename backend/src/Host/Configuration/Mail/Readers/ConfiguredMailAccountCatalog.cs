@@ -6,16 +6,18 @@ using MailFathom.Application.Accounts;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Host.Configuration.UserSettings;
+using MailFathom.Infrastructure.Persistence.Users.AccountSettings;
 
 namespace MailFathom.Host.Configuration.Mail.Readers;
 
 /// <summary>Publishes the accounts this deployment serves, and which of them each user is assigned.</summary>
 /// <remarks>
 /// <para>
-/// Both answers come from the roster, because the roster is what the start establishes against the database: a user's
-/// composed record carries the accounts assigned to them, so the deployment's set is the union of those and the
-/// assignment relation is which record an account appeared in. Reading them from one place is what stops the two from
-/// disagreeing about an account an administrator has just assigned or unassigned.
+/// The served set <see cref="ReadServedAccountsAsync" /> reads comes from the account records. The assignment answers
+/// and <see cref="ServedAccounts" /> come from the roster until #2321 moves them: a user's composed record carries the
+/// accounts assigned to them, so that set is the union of those and the assignment relation is which record an account
+/// appeared in. The two agree once the roster has republished the last write, and until then they can disagree about an
+/// account an administrator has just assigned, unassigned, or changed.
 /// </para>
 /// <para>
 /// One account appears once in the deployment's set however many users are assigned it. That is the whole of one
@@ -25,7 +27,8 @@ namespace MailFathom.Host.Configuration.Mail.Readers;
 /// </remarks>
 internal sealed class ConfiguredMailAccountCatalog(
     MailSynchronizationOptions settings,
-    ServedUsers servedUsers) : IDeploymentMailAccountCatalog, IMailAccountAssignments
+    ServedUsers servedUsers,
+    IServedMailAccountReader servedAccountReader) : IDeploymentMailAccountCatalog, IMailAccountAssignments
 {
     /// <inheritdoc />
     public bool SynchronizationEnabled => settings.Enabled;
@@ -64,6 +67,24 @@ internal sealed class ConfiguredMailAccountCatalog(
 
     /// <inheritdoc />
     /// <remarks>
+    /// An account whose display name is unusable is omitted here for the reason it is omitted above, and the order is
+    /// the same ordinal order of the identifiers.
+    /// </remarks>
+    public async Task<IReadOnlyList<ServedMailAccount>> ReadServedAccountsAsync(CancellationToken cancellationToken)
+    {
+        var served = await servedAccountReader.ReadServedAsync(cancellationToken);
+
+        return
+        [
+            .. served
+                .Select(static account => TryCreateServedAccount(account))
+                .OfType<ServedMailAccount>()
+                .OrderBy(static account => account.Id.Value, StringComparer.Ordinal),
+        ];
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
     /// A user this roster does not hold is assigned nothing, which is the same answer as a user holding a record that
     /// declares no account. Both are served nothing rather than served everything, and neither is told apart here:
     /// what a caller acting for a user the roster never established reads is decided by the resolution, which turns an
@@ -95,6 +116,21 @@ internal sealed class ConfiguredMailAccountCatalog(
             .Distinct()
             .OrderBy(static user => user.Value),
     ];
+
+    private static ServedMailAccount? TryCreateServedAccount(ServedMailAccountRow account)
+    {
+        try
+        {
+            return new ServedMailAccount(
+                MailAccountId.Create(account.Id.ToString("D")),
+                MailAccountDisplayName.Create(account.DisplayName),
+                account.SynchronizationMode);
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
+    }
 
     /// <summary>Every mail account declared by any user's record, an account assigned to several appearing once per assignment.</summary>
     private IEnumerable<MailSynchronizationAccountOptions> DeclaredAccounts() =>

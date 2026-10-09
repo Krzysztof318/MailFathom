@@ -908,7 +908,7 @@ public sealed class MailboxSearchReaderTests
         new MailboxScopeResolver(
             accountCatalog ?? CatalogServing(EveryAccountTheSyntheticIndexUses),
             StubMailFolderParticipation.Nothing,
-            StubJunkMailFolderCatalog.None,
+            StubDeploymentMailFolders.None,
             StubMailFolderMappings.ResolvingNothing),
         snippetBounds ?? EmailSearchSnippetBounds.Default,
         egressGuard ?? SensitiveContentEgressGuards.Inactive(),

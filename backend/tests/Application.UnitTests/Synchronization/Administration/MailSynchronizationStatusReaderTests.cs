@@ -353,14 +353,14 @@ public sealed class MailSynchronizationStatusReaderTests
 
         var accounts = Substitute.For<IDeploymentMailAccountCatalog>();
         accounts.SynchronizationEnabled.Returns(enabled);
-        accounts.ServedAccounts.Returns(servedAccounts);
+        accounts.ReadServedAccountsAsync(Arg.Any<CancellationToken>()).Returns(servedAccounts);
 
         var progressReader = Substitute.For<IMailFolderSynchronizationProgressReader>();
         progressReader.ReadAsync(Arg.Any<CancellationToken>()).Returns(progress ?? []);
 
         return new MailSynchronizationStatusReader(
             accounts,
-            participation ?? StubMailFolderParticipation.Mapping(Inbox, Archive),
+            StubDeploymentMailFolders.Of(participation ?? StubMailFolderParticipation.Mapping(Inbox, Archive)),
             ledger,
             progressReader,
             attachmentCoverage ?? new InMemoryAttachmentDerivationCoverageReader(),

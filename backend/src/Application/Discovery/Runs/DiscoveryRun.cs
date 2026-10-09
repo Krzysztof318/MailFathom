@@ -143,7 +143,8 @@ public sealed class DiscoveryRun
         // authorization rather than from the scope, which names nobody where the caller owns no served account — a run
         // whose question would then leave under the deployment's floor instead of under this user's posture.
         var user = this.authorization.RequireUser();
-        using var actingFor = this.egressGuard.ActingFor(user);
+        using var actingFor = this.egressGuard.ActingFor(
+            await this.egressGuard.ReadPostureAcrossAccountsOfAsync(user, cancellationToken));
 
         return await AnswerAsync(
             question,

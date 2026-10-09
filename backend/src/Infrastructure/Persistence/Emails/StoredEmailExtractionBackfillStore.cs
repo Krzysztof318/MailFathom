@@ -29,6 +29,9 @@ internal sealed class StoredEmailExtractionBackfillStore(
     StoredEmailExtractionBackfillOptions options)
     : IStoredEmailExtractionBackfillStore
 {
+    /// <summary>The admission terms read for the batch committing in one session, so a batch reads them once rather than per message.</summary>
+    private (IPersistenceSession Session, DerivedWorkAdmissionTerms Terms)? batchTerms;
+
     /// <summary>Gets what every account's mail is re-derived towards while a rebuild is switched on, and nothing otherwise.</summary>
     /// <remarks>
     /// Both halves are required: an operator who asked for a rebuild on a deployment that scans nobody has asked for
@@ -44,7 +47,9 @@ internal sealed class StoredEmailExtractionBackfillStore(
     /// </para>
     /// </remarks>
     private IReadOnlyList<MailAccountSensitiveContentPosture> RebuiltTowards =>
-        field ??= options.RebuildsStaleDerivedData && derivationGuard.IsActive ? derivationGuard.Current : [];
+        field ??= options.RebuildsStaleDerivedData && derivationGuard.Current.Any(account => account.Posture.IsActive)
+            ? derivationGuard.Current
+            : [];
 
     /// <summary>Gets what mail whose account the roster no longer names is re-derived towards, and nothing where no rebuild runs.</summary>
     /// <remarks>
@@ -161,7 +166,7 @@ internal sealed class StoredEmailExtractionBackfillStore(
         // asked here rather than folded into the batch query for the reason the gate was: an email whose passages this
         // walk withholds still needs its extraction applied, so the answer decides one of the two writes rather than
         // whether the email is reached at all.
-        if (await this.IsReadyForTheCutAsync(sessionContext, storedEmailId, cancellationToken))
+        if (await this.IsReadyForTheCutAsync(session, sessionContext, storedEmailId, cancellationToken))
         {
             await chunkWriter.SaveAsync(sessionContext, storedEmail, metadata.Text, cancellationToken);
         }
@@ -497,16 +502,24 @@ internal sealed class StoredEmailExtractionBackfillStore(
     /// classifier rather than replaced here.
     /// </para>
     /// <para>
-    /// It costs one indexed read of the row this write is already holding, whether or not the deployment classifies
-    /// anything.
+    /// It costs one indexed read of the row this write is already holding per message, and one read of the admission
+    /// terms per batch: every message of a batch is applied in one session, and a retried batch is a new session that
+    /// reads them again.
     /// </para>
     /// </remarks>
     private async Task<bool> IsReadyForTheCutAsync(
+        IPersistenceSession session,
         MailFathomDbContext sessionContext,
         StoredEmailId storedEmailId,
         CancellationToken cancellationToken)
     {
-        var terms = derivedWorkGate.ReadTerms();
+        if (this.batchTerms is not { } read || !ReferenceEquals(read.Session, session))
+        {
+            read = (session, await derivedWorkGate.ReadTermsAsync(cancellationToken));
+            this.batchTerms = read;
+        }
+
+        var terms = read.Terms;
         // Written inline rather than through MailAwaitingRelocation's and MailAwaitingRuleEvaluation's expressions,
         // because both are one branch of a larger predicate here: the two orderings hold a first cut back together, and
         // a re-cut answers past both of them.

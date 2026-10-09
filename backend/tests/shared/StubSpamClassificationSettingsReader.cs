@@ -55,12 +55,13 @@ internal sealed class StubSpamClassificationSettingsReader : ISpamClassification
     public static StubSpamClassificationSettingsReader Disabled { get; } = new(SpamClassificationSettings.Disabled);
 
     /// <inheritdoc />
-    public SpamClassificationScope ScopeInForce => this.settings.IsEnabled
-        ? SpamClassificationScope.Create(
-            this.accounts,
-            this.accounts.SelectMany(account => this.settings.ScannedFolderAliases
-                .Select(alias => new MailFolderIdentity(account, alias))))
-        : SpamClassificationScope.None;
+    public Task<SpamClassificationScope> ReadScopeInForceAsync(CancellationToken cancellationToken) =>
+        Task.FromResult(this.settings.IsEnabled
+            ? SpamClassificationScope.Create(
+                this.accounts,
+                this.accounts.SelectMany(account => this.settings.ScannedFolderAliases
+                    .Select(alias => new MailFolderIdentity(account, alias))))
+            : SpamClassificationScope.None);
 
     /// <inheritdoc />
     /// <remarks>

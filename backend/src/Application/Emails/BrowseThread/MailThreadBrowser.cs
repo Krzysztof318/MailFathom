@@ -129,7 +129,8 @@ public sealed class MailThreadBrowser
 
         using var read = this.readTelemetry.BeginRead(MailboxReadOperation.ReadEmailThread, cancellationToken);
 
-        using var actingFor = this.egressGuard.ActingFor(this.scopeResolver.User);
+        using var actingFor = this.egressGuard.ActingFor(
+            await this.egressGuard.ReadPostureAcrossAccountsOfAsync(this.scopeResolver.User, cancellationToken));
 
         var pageSize = MailboxQueryPageSize.FromRequested(request.PageSize);
         var fingerprint = EmailThreadCursor.FingerprintOf(request.ThreadId);
@@ -138,7 +139,7 @@ public sealed class MailThreadBrowser
         // The junk folder takes part, unlike in a listing: a reply that landed in junk is part of the exchange somebody
         // is reading rather than mail they asked to be shown. Neither an account nor a folder narrows the read, because
         // a conversation is read by membership and the folder a caller opened it from would cut it.
-        var scope = this.scopeResolver.ReadableScope([], [], JunkMailInclusion.Included);
+        var scope = await this.scopeResolver.ReadableScopeAsync([], [], JunkMailInclusion.Included, cancellationToken);
 
         // Every value has been validated by this point, so a deployment serving this user no account answers the same
         // refusals a deployment serving several does, and only then reports that it holds no such conversation.
@@ -327,7 +328,7 @@ public sealed class MailThreadBrowser
     {
         var named = participants.Take(BrowsedThread.MaximumNamedParticipants).ToArray();
 
-        if (!this.egressGuard.IsActive)
+        if (!await this.egressGuard.IsActiveAsync(cancellationToken))
         {
             return (messages, named);
         }

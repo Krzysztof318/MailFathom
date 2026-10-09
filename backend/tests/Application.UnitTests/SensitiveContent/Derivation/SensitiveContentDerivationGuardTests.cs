@@ -101,7 +101,7 @@ public sealed class SensitiveContentDerivationGuardTests
 
     /// <summary>A row's stamp is what makes a later configuration change answerable rather than silent.</summary>
     [Fact]
-    public void Stamp_ASwitchedOnScanner_NamesTheConfigurationARowIsWrittenUnder()
+    public async Task Stamp_ASwitchedOnScanner_NamesTheConfigurationARowIsWrittenUnder()
     {
         // Arrange
         using var derivation = ScanningSensitiveContentDerivation.Finding(Marker, this.timeProvider);
@@ -110,7 +110,7 @@ public sealed class SensitiveContentDerivationGuardTests
         var stamp = derivation.Guard.StampFor(ScanningSensitiveContentDerivation.Account);
 
         // Assert
-        Assert.True(derivation.Guard.IsActive);
+        Assert.True(await derivation.Guard.IsActiveAsync(TestContext.Current.CancellationToken));
         Assert.NotNull(stamp);
         Assert.Equal(SensitiveContentDerivationStamp.Length, stamp.Value.Value.Length);
     }
@@ -129,7 +129,7 @@ public sealed class SensitiveContentDerivationGuardTests
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.False(guard.IsActive);
+        Assert.False(await guard.IsActiveAsync(TestContext.Current.CancellationToken));
         Assert.Null(guard.StampFor(ScanningSensitiveContentDerivation.Account));
         Assert.Equal($"the key is {Marker}", stored);
     }
@@ -201,7 +201,7 @@ public sealed class SensitiveContentDerivationGuardTests
 
     /// <summary>A stamp on a row promises the text beside it went through a redaction, so neither travels alone.</summary>
     [Fact]
-    public void StampFor_AnAccountNothingScans_IsAbsentBesideTheRedactionThatIsAbsentToo()
+    public async Task StampFor_AnAccountNothingScans_IsAbsentBesideTheRedactionThatIsAbsentToo()
     {
         // Arrange
         var guard = ScanningSensitiveContentDerivation.Inactive();
@@ -211,7 +211,7 @@ public sealed class SensitiveContentDerivationGuardTests
 
         // Assert
         Assert.Null(stamp);
-        Assert.False(guard.IsActive);
+        Assert.False(await guard.IsActiveAsync(TestContext.Current.CancellationToken));
         Assert.Empty(guard.Current);
     }
 

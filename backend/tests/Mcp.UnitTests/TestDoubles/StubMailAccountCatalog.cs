@@ -28,6 +28,10 @@ internal sealed class StubMailAccountCatalog(params string[] servedAccountIds)
     public IReadOnlyList<ServedMailAccount> AssignedAccounts => this.ServedAccounts;
 
     /// <inheritdoc />
+    public Task<IReadOnlyList<ServedMailAccount>> ReadServedAccountsAsync(CancellationToken cancellationToken) =>
+        Task.FromResult(this.ServedAccounts);
+
+    /// <inheritdoc />
     /// <remarks>
     /// The caller this stub acts for, which is the deployment's own user unless a test states another. No account
     /// carries one any more — a mailbox is assigned rather than owned — so it is stated here rather than derived.

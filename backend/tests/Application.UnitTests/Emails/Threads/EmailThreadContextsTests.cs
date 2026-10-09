@@ -5,7 +5,10 @@
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Threads;
+using MailFathom.Application.Folders;
+using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Egress;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -185,6 +188,43 @@ public sealed class EmailThreadContextsTests
         Assert.Equal(1, threadReader.ReadCount);
     }
 
+    /// <summary>
+    /// One read of several conversations sees one answer to what is readable and what it is scanned under, so the scope
+    /// and the posture are each read once however many conversations it assembles.
+    /// </summary>
+    [Fact]
+    public async Task AssembleAsync_SeveralConversations_ReadsTheScopeAndThePostureOnce()
+    {
+        // Arrange
+        var other = EmailThreadId.Create(new Guid("33333333-3333-3333-3333-333333333333"));
+        var threadReader = new StubEmailThreadReader(
+            (Thread, Message(1, Inbox, "2026-08-16T09:00:00Z")),
+            (other, Message(2, Inbox, "2026-08-16T10:00:00Z")));
+        var deploymentFolders = Substitute.For<IDeploymentMailFolders>();
+        deploymentFolders
+            .ReadAsync(Arg.Any<MailFolderSelection>(), Arg.Any<IReadOnlyCollection<MailAccountId>>(), Arg.Any<CancellationToken>())
+            .Returns([new MailFolderIdentity(Account, Inbox)]);
+        var postures = Substitute.For<ISensitiveContentPostures>();
+        postures
+            .AcrossAccountsOfAsync(Arg.Any<UserId>(), Arg.Any<CancellationToken>())
+            .Returns(SensitiveContentPosture.ScanningNothing);
+        var contexts = ContextsOver(
+            threadReader,
+            new SensitiveContentEgressGuard(postures, new RecordingSensitiveContentEgressTelemetry(), TimeProvider.System),
+            deploymentFolders);
+
+        // Act
+        await contexts.AssembleAsync(Thread, TestContext.Current.CancellationToken);
+        await contexts.AssembleAsync(other, TestContext.Current.CancellationToken);
+
+        // Assert
+        await deploymentFolders.Received(1).ReadAsync(
+            MailFolderSelection.VisibleToTools,
+            Arg.Any<IReadOnlyCollection<MailAccountId>>(),
+            Arg.Any<CancellationToken>());
+        await postures.Received(1).AcrossAccountsOfAsync(Arg.Any<UserId>(), Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task ContextForAsync_EmailInNoConversation_PublishesNothingAboutOne()
     {
@@ -285,19 +325,22 @@ public sealed class EmailThreadContextsTests
 
     private static EmailThreadContexts ContextsOver(
         StubEmailThreadReader threadReader,
-        SensitiveContentEgressGuard? egressGuard = null)
+        SensitiveContentEgressGuard? egressGuard = null,
+        IDeploymentMailFolders? deploymentFolders = null)
     {
         var accountCatalog = Substitute.For<ICallerMailAccountCatalog>();
         accountCatalog.AssignedAccounts.Returns([SyntheticServedAccount.Of(Account)]);
+
+        var participation = StubMailFolderParticipation
+            .Mapping(new MailFolderIdentity(Account, Inbox))
+            .Hiding(new MailFolderIdentity(Account, Withheld));
 
         return new EmailThreadContexts(
             threadReader,
             new MailboxScopeResolver(
                 accountCatalog,
-                StubMailFolderParticipation
-                    .Mapping(new MailFolderIdentity(Account, Inbox))
-                    .Hiding(new MailFolderIdentity(Account, Withheld)),
-                StubJunkMailFolderCatalog.None,
+                participation,
+                deploymentFolders ?? StubDeploymentMailFolders.Of(participation),
                 StubMailFolderMappings.ResolvingNothing),
             egressGuard ?? SensitiveContentEgressGuards.Inactive());
     }

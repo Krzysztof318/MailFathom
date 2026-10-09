@@ -320,7 +320,7 @@ public sealed class ScopedMailKnowledgeRetrievalTests
     {
         // Arrange
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
-        using var actingFor = egress.ActingForUser();
+        using var actingFor = egress.Guard.ActingFor(await egress.ReadUserPostureAsync(TestContext.Current.CancellationToken));
         var knowledgeSearch = new RecordingEmailKnowledgeSearch().Returning(
             Query,
             KnowledgePassages.Create($"sign in with {Marker} today", subject: $"re: {Marker}"));
@@ -355,7 +355,7 @@ public sealed class ScopedMailKnowledgeRetrievalTests
     {
         // Arrange
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
-        using var actingFor = egress.ActingForUser();
+        using var actingFor = egress.Guard.ActingFor(await egress.ReadUserPostureAsync(TestContext.Current.CancellationToken));
         var knowledgeSearch = new RecordingEmailKnowledgeSearch().Returning(
             Query,
             KnowledgePassages.Create(
@@ -394,7 +394,7 @@ public sealed class ScopedMailKnowledgeRetrievalTests
     {
         // Arrange
         using var egress = ScanningSensitiveContentEgress.Unavailable(TimeProvider.System);
-        using var actingFor = egress.ActingForUser();
+        using var actingFor = egress.Guard.ActingFor(await egress.ReadUserPostureAsync(TestContext.Current.CancellationToken));
         var knowledgeSearch = new RecordingEmailKnowledgeSearch().Returning(
             Query,
             KnowledgePassages.Create("an ordinary extract"));
@@ -416,7 +416,7 @@ public sealed class ScopedMailKnowledgeRetrievalTests
     {
         // Arrange
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
-        using var actingFor = egress.ActingForUser();
+        using var actingFor = egress.Guard.ActingFor(await egress.ReadUserPostureAsync(TestContext.Current.CancellationToken));
         var knowledgeSearch = new RecordingEmailKnowledgeSearch().Returning(
             Query,
             KnowledgePassages.Create($"sign in with {Marker} today"));

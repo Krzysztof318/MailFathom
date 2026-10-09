@@ -156,7 +156,7 @@ public sealed class ClientMailCleanedBodyEndpointTests
         var scopeResolver = new MailboxScopeResolver(
             Substitute.For<ICallerMailAccountCatalog>(),
             StubMailFolderParticipation.Nothing,
-            StubJunkMailFolderCatalog.None,
+            StubDeploymentMailFolders.None,
             StubMailFolderMappings.ResolvingNothing);
 
         var content = new EmailContentReader(

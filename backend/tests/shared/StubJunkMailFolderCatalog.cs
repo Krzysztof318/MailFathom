@@ -10,8 +10,9 @@ namespace MailFathom.TestSupport;
 
 /// <summary>Answers which folders are junk from a fixed list, for tests that need a mailbox read to have one or none.</summary>
 /// <remarks>
-/// A hand-written double rather than a substitute, because both members have to agree: a test that stubbed the list and
-/// left the per-folder question answering <see langword="false" /> would exercise a catalog no configuration produces.
+/// A hand-written double rather than a substitute, because the list and the per-folder question have to agree: a test
+/// that stubbed the list and left the per-folder question answering <see langword="false" /> would exercise a catalog no
+/// configuration produces.
 /// </remarks>
 internal sealed class StubJunkMailFolderCatalog : IJunkMailFolderCatalog
 {
@@ -21,7 +22,7 @@ internal sealed class StubJunkMailFolderCatalog : IJunkMailFolderCatalog
     /// <summary>Gets a catalog for a deployment whose accounts map no junk folder.</summary>
     public static StubJunkMailFolderCatalog None { get; } = new([]);
 
-    /// <inheritdoc />
+    /// <summary>Gets the folders configuration maps to the junk role, which <see cref="StubDeploymentMailFolders" /> answers the junk set with.</summary>
     public IReadOnlyList<MailFolderIdentity> JunkFolders { get; }
 
     /// <summary>Builds a catalog naming the folders configuration maps to the junk role.</summary>

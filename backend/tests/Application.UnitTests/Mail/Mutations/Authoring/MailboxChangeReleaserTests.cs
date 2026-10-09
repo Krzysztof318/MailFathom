@@ -236,14 +236,16 @@ public sealed class MailboxChangeReleaserTests
         var sessions = Substitute.For<IPersistenceSessionFactory>();
         sessions.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ => CommittingSession());
 
+        var participation = StubMailFolderParticipation
+            .Mapping(new MailFolderIdentity(Account, Trash))
+            .Hiding(new MailFolderIdentity(Account, Withheld));
+
         return new MailboxChangeReleaser(
             callerAuthorization,
             new MailboxScopeResolver(
                 AssignedMailAccountCatalogs.For(callerAuthorization, SyntheticServedAccount.Of(Account)),
-                StubMailFolderParticipation
-                    .Mapping(new MailFolderIdentity(Account, Trash))
-                    .Hiding(new MailFolderIdentity(Account, Withheld)),
-                StubJunkMailFolderCatalog.None,
+                participation,
+                StubDeploymentMailFolders.Of(participation),
                 StubMailFolderMappings.ResolvingNothing),
             this.records,
             new OptimisticConcurrencyRetryPolicy(

@@ -3,35 +3,49 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Rules.Actions;
-using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.Rules;
-using MailFathom.Host.Configuration.UserSettings;
-using MailFathom.TestSupport;
+using MailFathom.Host.UnitTests.TestDoubles;
+using MailFathom.Infrastructure.Persistence.Users;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Configuration.Rules;
 
 /// <summary>Covers what a rule set is allowed to name and to ask for, read off the mailboxes a deployment serves.</summary>
 /// <remarks>
-/// There is one reading rather than two: every mailbox is a user's own record, so a start and a reload both ask this of
-/// bound declarations. The startup gate reads the roster it has just settled and a reload reads the roster the published
-/// snapshot carries, and a rule set one accepts is one the other accepts because the reading is the same.
+/// There is one reading rather than two: every mailbox is an account record, so a reload and a write both ask this of
+/// the declarations the served records bind to, and a claim inside one user's record is asked of that user's own
+/// declarations — a rule set one accepts is one the other accepts because the reading is the same.
 /// </remarks>
 public sealed class DeclaredMailAccountsTests
 {
+    private static readonly Guid Primary = new("0199a0c0-0000-7000-8000-00000000000a");
+
+    private static readonly Guid Work = new("0199a0c0-0000-7000-8000-00000000000b");
+
+    /// <summary>An account record names its mailbox by the identifier the deployment generated, which is what a rule is scoped to.</summary>
     [Fact]
-    public void ReadFrom_ARosterOfSeveralUsers_NamesEveryDeclaredAccountInDeclaredOrder()
+    public void ReadFrom_SeveralServedRecords_NamesEachUnderItsIdentifierInTheOrderGiven()
     {
         // Act
-        var accounts = DeclaredMailAccounts.ReadFrom(new MailSynchronizationOptions().WithServedUsers(
-        [
-            User(SyntheticUser.Deployment, Account("primary")),
-            User(SyntheticUser.Another, Account("work")),
-        ]));
+        var accounts = DeclaredMailAccounts.ReadFrom([Record(Work, "{}"), Record(Primary, "{}")]);
 
         // Assert
-        Assert.Equal(["primary", "work"], Identifiers(accounts));
+        Assert.Equal([Work.ToString("D"), Primary.ToString("D")], Identifiers(accounts));
+    }
+
+    /// <summary>A document this process could not bind, or would refuse to serve, is an account nobody is served, so it declares nothing a rule may name.</summary>
+    [Theory]
+    [InlineData("""{"NoSuchSetting":true}""")]
+    [InlineData("[]")]
+    [InlineData("""{"Port":0}""")]
+    public void ReadFrom_ARecordWhoseDocumentDoesNotBind_DeclaresNothing(string document)
+    {
+        // Act
+        var accounts = DeclaredMailAccounts.ReadFrom([Record(Primary, "{}"), Record(Work, document)]);
+
+        // Assert
+        Assert.Equal([Primary.ToString("D")], Identifiers(accounts));
     }
 
     /// <summary>A blank identifier is the record's own defect, so it is dropped rather than reported here under the wrong document.</summary>
@@ -49,7 +63,7 @@ public sealed class DeclaredMailAccountsTests
     public void ReadFrom_ADeploymentServingNobody_NamesNothing()
     {
         // Act
-        var accounts = DeclaredMailAccounts.ReadFrom(new MailSynchronizationOptions());
+        var accounts = DeclaredMailAccounts.ReadFrom(Array.Empty<MailAccountRecord>());
 
         // Assert
         Assert.Empty(accounts);
@@ -127,25 +141,26 @@ public sealed class DeclaredMailAccountsTests
     }
 
     /// <summary>
-    /// One user's own declarations are read exactly as the whole roster's are, which is what a claim inside their record
-    /// is judged by: a scanned folder or a junk destination resolves within their own accounts and nowhere else.
+    /// A record is read as the declaration its document binds to, which is what a claim inside one user's record is
+    /// judged by as well: a rule set the records accept is one that user's own declarations accept.
     /// </summary>
     [Fact]
-    public void ReadFrom_OneUsersOwnDeclarations_AnswersAsTheWholeRosterIsRead()
+    public void ReadFrom_ARecord_AnswersAsTheDeclarationItsDocumentBindsTo()
     {
         // Arrange
-        var account = Account("  alex-work  ");
+        var account = Account(Primary.ToString("D"));
         account.Folders = [new MailFolderMappingOptions { Alias = "quarantine", RemotePath = "Quarantine" }];
         account.RuleActions = new MailRuleActionPermissionOptions { Delete = true };
+        var record = Record(
+            Primary,
+            """{"Folders":[{"Alias":"quarantine","RemotePath":"Quarantine"}],"RuleActions":{"Delete":true}}""");
 
         // Act
-        var fromUser = DeclaredMailAccounts.ReadFrom([account, Account("   ")]);
-        var fromRoster = DeclaredMailAccounts.ReadFrom(new MailSynchronizationOptions().WithServedUsers(
-            [User(SyntheticUser.Deployment, account, Account("   "))]));
+        var fromRecords = DeclaredMailAccounts.ReadFrom([record]);
+        var fromDeclarations = DeclaredMailAccounts.ReadFrom([account]);
 
         // Assert
-        Assert.Equal(Describe(fromRoster), Describe(fromUser));
-        Assert.Equal(["alex-work"], Identifiers(fromUser));
+        Assert.Equal(Describe(fromDeclarations), Describe(fromRecords));
     }
 
     [Fact]
@@ -157,19 +172,17 @@ public sealed class DeclaredMailAccountsTests
     }
 
     [Fact]
-    public void ReadFrom_NoSettings_Throws()
+    public void ReadFrom_NoRecords_Throws()
     {
         // Act, Assert
         Assert.Throws<ArgumentNullException>(
-            () => DeclaredMailAccounts.ReadFrom((MailSynchronizationOptions)null!));
+            () => DeclaredMailAccounts.ReadFrom((IEnumerable<MailAccountRecord>)null!));
     }
 
     private static MailSynchronizationAccountOptions Account(string accountId) => new() { AccountId = accountId };
 
-    private static ServedUser User(
-        UserId user,
-        params MailSynchronizationAccountOptions[] mailAccounts) =>
-        new(user, $"user-{user.Value:D}", mailAccounts);
+    private static MailAccountRecord Record(Guid accountId, string document) =>
+        new(accountId, "alex@example.test", "Alex at work", ServableMailAccountDocuments.Completing(document), Version: 1);
 
     private static IReadOnlyList<string> Identifiers(IEnumerable<DeclaredMailAccount> accounts) =>
         [.. accounts.Select(account => account.AccountId)];

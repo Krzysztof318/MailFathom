@@ -64,8 +64,8 @@ public sealed class OrchestratedEmailVectorSearchTests(MailFathomOrchestrationFi
         // a read model resolves is the accounts the caller is assigned, and work no caller requested is assigned none.
         // The grant is empty because this reader is a store rather than a published use case.
         var rankings = await services.AsCallerInScopeAsync(
-            (scope, token) => scope.GetRequiredService<IEmailVectorSearchIndexReader>().ReadNearestCandidatesAsync(
-                SelectionOf(scope, binding),
+            async (scope, token) => await scope.GetRequiredService<IEmailVectorSearchIndexReader>().ReadNearestCandidatesAsync(
+                await ReadSelectionAsync(scope, binding, token),
                 profile,
                 QueryVector(),
                 limit: 50,
@@ -103,9 +103,12 @@ public sealed class OrchestratedEmailVectorSearchTests(MailFathomOrchestrationFi
         return EmbeddingVector.Create(components);
     }
 
-    private static MailboxEmailSelection SelectionOf(IServiceProvider scope, MailFolderResolution binding) =>
+    private static async Task<MailboxEmailSelection> ReadSelectionAsync(
+        IServiceProvider scope,
+        MailFolderResolution binding,
+        CancellationToken cancellationToken) =>
         MailboxEmailSelection.Create(
-        OrchestratedMailboxScope.Readable(scope, [binding.Alias.Value]),
+        await OrchestratedMailboxScope.ReadableAsync(scope, [binding.Alias.Value], cancellationToken),
         senderAddress: null,
         recipientAddress: null,
         subjectFragment: null,

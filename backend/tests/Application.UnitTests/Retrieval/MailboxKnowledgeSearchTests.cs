@@ -604,7 +604,7 @@ public sealed class MailboxKnowledgeSearchTests
             new MailboxScopeResolver(
                 CatalogServing(EveryServedAccount),
                 StubMailFolderParticipation.Nothing,
-                StubJunkMailFolderCatalog.None,
+                StubDeploymentMailFolders.None,
                 StubMailFolderMappings.ResolvingNothing),
             EmailSearchSnippetBounds.Default,
             egressGuard ?? SensitiveContentEgressGuards.Inactive(),

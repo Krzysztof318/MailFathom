@@ -21,6 +21,11 @@ namespace MailFathom.Host.Hosting.Workers;
 /// trip wherever its announcement arrives.
 /// </para>
 /// <para>
+/// The same interval reads again the settings columns of an account a build older than them wrote the document of alone.
+/// That is a write to the shared rows rather than to this replica, and every replica makes it, which is safe because it
+/// is conditional on the version each one read.
+/// </para>
+/// <para>
 /// A reading that fails is reported and made again on the next interval, and never ends the worker. A database briefly
 /// out of reach says nothing about whether a change is waiting, and every failure beneath this leaves the version in
 /// force where it was.
@@ -29,7 +34,7 @@ namespace MailFathom.Host.Hosting.Workers;
 internal sealed partial class ConfigurationConvergenceWorker : BackgroundService
 {
     /// <summary>The longest a replica serves settings or a roster without comparing them against what PostgreSQL holds.</summary>
-    /// <remarks>A constant rather than a setting, because it is the bound the documentation promises an operator about how long a change takes to reach every replica. What it costs is one statement over the users' versions and one read of the deployment's document per replica per interval.</remarks>
+    /// <remarks>A constant rather than a setting, because it is the bound the documentation promises an operator about how long a change takes to reach every replica. What it costs is one statement over the users' versions, one read of the deployment's document, and one read of the accounts whose settings columns trail their document per replica per interval — plus a short write transaction for each of up to <see cref="MailAccountSettingsReconciliation.MaximumAccountsPerReading" /> such accounts, which is nothing once a rolling upgrade has finished.</remarks>
     internal static readonly TimeSpan Interval = TimeSpan.FromSeconds(30);
 
     private readonly Channel<bool> announced = Channel.CreateBounded<bool>(
@@ -37,6 +42,7 @@ internal sealed partial class ConfigurationConvergenceWorker : BackgroundService
 
     private readonly ConfigurationChangeAnnouncements announcements;
     private readonly ServedUsersConvergence users;
+    private readonly MailAccountSettingsReconciliation accountSettings;
     private readonly Func<RootSettingsReloader?> rootSettings;
     private readonly TimeProvider timeProvider;
     private readonly ILogger<ConfigurationConvergenceWorker> logger;
@@ -44,6 +50,7 @@ internal sealed partial class ConfigurationConvergenceWorker : BackgroundService
     /// <summary>Initializes the worker over the readings it runs.</summary>
     /// <param name="announcements">What another replica's change is heard through.</param>
     /// <param name="users">Brings the roster up to the users' records.</param>
+    /// <param name="accountSettings">Brings the settings columns of an account an older build wrote up to its document.</param>
     /// <param name="rootSettings">Resolves what brings the persisted layer up to the deployment's document, answering <see langword="null" /> where the host composed no persisted layer.</param>
     /// <param name="timeProvider">What the interval is measured by.</param>
     /// <param name="logger">Records a reading that failed.</param>
@@ -51,18 +58,21 @@ internal sealed partial class ConfigurationConvergenceWorker : BackgroundService
     public ConfigurationConvergenceWorker(
         ConfigurationChangeAnnouncements announcements,
         ServedUsersConvergence users,
+        MailAccountSettingsReconciliation accountSettings,
         Func<RootSettingsReloader?> rootSettings,
         TimeProvider timeProvider,
         ILogger<ConfigurationConvergenceWorker> logger)
     {
         ArgumentNullException.ThrowIfNull(announcements);
         ArgumentNullException.ThrowIfNull(users);
+        ArgumentNullException.ThrowIfNull(accountSettings);
         ArgumentNullException.ThrowIfNull(rootSettings);
         ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(logger);
 
         this.announcements = announcements;
         this.users = users;
+        this.accountSettings = accountSettings;
         this.rootSettings = rootSettings;
         this.timeProvider = timeProvider;
         this.logger = logger;
@@ -87,10 +97,11 @@ internal sealed partial class ConfigurationConvergenceWorker : BackgroundService
 
             if (persistedSettings is not null)
             {
-                await this.ReadInIsolationAsync(persistedSettings.ReloadAsync, stoppingToken);
+                await this.RunInIsolationAsync(persistedSettings.ReloadAsync, this.LogReadingFailed, stoppingToken);
             }
 
-            await this.ReadInIsolationAsync(this.users.ConvergeAsync, stoppingToken);
+            await this.RunInIsolationAsync(this.users.ConvergeAsync, this.LogReadingFailed, stoppingToken);
+            await this.RunInIsolationAsync(this.accountSettings.ReconcileAsync, this.LogReconciliationFailed, stoppingToken);
         }
     }
 
@@ -107,9 +118,12 @@ internal sealed partial class ConfigurationConvergenceWorker : BackgroundService
         stoppingToken.ThrowIfCancellationRequested();
     }
 
-    /// <summary>Runs one reading, so that one failing leaves the other to run and the worker to go on.</summary>
+    /// <summary>Runs one reading, so that one failing leaves the others to run and the worker to go on.</summary>
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A reading that failed leaves the version in force where it was and is made again on the next interval; ending the worker over it would leave the replica never catching up again.")]
-    private async Task ReadInIsolationAsync(Func<CancellationToken, Task> reading, CancellationToken stoppingToken)
+    private async Task RunInIsolationAsync(
+        Func<CancellationToken, Task> reading,
+        Action<TimeSpan, Exception> report,
+        CancellationToken stoppingToken)
     {
         try
         {
@@ -121,7 +135,7 @@ internal sealed partial class ConfigurationConvergenceWorker : BackgroundService
         }
         catch (Exception exception)
         {
-            this.LogReadingFailed(Interval, exception);
+            report(Interval, exception);
         }
     }
 
@@ -129,4 +143,9 @@ internal sealed partial class ConfigurationConvergenceWorker : BackgroundService
         Level = LogLevel.Warning,
         Message = "This replica could not compare what it serves against the persisted configuration and the users' records, and reads them again in {Interval}; what it bound stays in force.")]
     private partial void LogReadingFailed(TimeSpan interval, Exception exception);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "This replica could not read the accounts whose settings columns trail their document, and reads them again in {Interval}; every question asked of all accounts at once goes on answering from what those columns hold.")]
+    private partial void LogReconciliationFailed(TimeSpan interval, Exception exception);
 }

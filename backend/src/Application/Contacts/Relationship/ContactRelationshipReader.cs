@@ -95,7 +95,8 @@ public sealed class ContactRelationshipReader
 
         this.authorization.RequirePermission(MailFathomPermission.MailAsk);
 
-        using var actingFor = this.egressGuard.ActingFor(this.scopeResolver.User);
+        using var actingFor = this.egressGuard.ActingFor(
+            await this.egressGuard.ReadPostureAcrossAccountsOfAsync(this.scopeResolver.User, cancellationToken));
 
         var correspondence = await this.correspondenceReader.ReadAsync(contact, cancellationToken);
 
@@ -120,7 +121,7 @@ public sealed class ContactRelationshipReader
         ContactRelationship card,
         CancellationToken cancellationToken)
     {
-        if (!this.egressGuard.IsActive)
+        if (!await this.egressGuard.IsActiveAsync(cancellationToken))
         {
             return card;
         }

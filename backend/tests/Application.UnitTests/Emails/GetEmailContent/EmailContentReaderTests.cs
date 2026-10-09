@@ -19,7 +19,6 @@ using MailFathom.Application.Emails.GetEmailContent;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Emails.Threads;
-using MailFathom.Application.Folders;
 using MailFathom.Application.Observability;
 using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Derivation;
@@ -1956,7 +1955,7 @@ public sealed class EmailContentReaderTests
         ICallerMailAccountCatalog? accountCatalog = null,
         IAttachmentDownloadLinkIssuer? linkIssuer = null,
         EmailContentReadOptions? readOptions = null,
-        IMailFolderParticipationReader? folderParticipation = null,
+        StubMailFolderParticipation? folderParticipation = null,
         SensitiveContentEgressGuard? egressGuard = null,
         IMailboxReadTelemetry? readTelemetry = null,
         AccessAuthorization? authorization = null,
@@ -1966,11 +1965,9 @@ public sealed class EmailContentReaderTests
         contentStore ?? ContentStoreReturning(IntactContent()),
         renderer,
         repairRequestStore ?? new RecordingEmailContentRepairRequestStore(),
-        new MailboxScopeResolver(
+        ScopeResolverOver(
             accountCatalog ?? CatalogServing(MailAccountId.Create(summary?.Account.Value ?? SyntheticEmailSummaries.DefaultAccountId)),
-            folderParticipation ?? MappingFoldersOf(summary is null ? [] : [summary]),
-            StubJunkMailFolderCatalog.None,
-            StubMailFolderMappings.ResolvingNothing),
+            folderParticipation ?? MappingFoldersOf(summary is null ? [] : [summary])),
         linkIssuer ?? new RecordingAttachmentDownloadLinkIssuer(),
         egressGuard ?? SensitiveContentEgressGuards.Inactive(),
         readOptions ?? new EmailContentReadOptions(),
@@ -1994,16 +1991,22 @@ public sealed class EmailContentReaderTests
         contentStore ?? ContentStoreReturning(IntactContent()),
         renderer,
         repairRequestStore ?? new RecordingEmailContentRepairRequestStore(),
-        new MailboxScopeResolver(
+        ScopeResolverOver(
             accountCatalog ?? CatalogServing(MailAccountId.Create(SyntheticEmailSummaries.DefaultAccountId)),
-            MappingFoldersOf(summaries),
-            StubJunkMailFolderCatalog.None,
-            StubMailFolderMappings.ResolvingNothing),
+            MappingFoldersOf(summaries)),
         linkIssuer ?? new RecordingAttachmentDownloadLinkIssuer(),
         egressGuard ?? SensitiveContentEgressGuards.Inactive(),
         readOptions ?? new EmailContentReadOptions(),
         readTelemetry ?? new RecordingMailboxReadTelemetry(),
         authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead));
+
+    private static MailboxScopeResolver ScopeResolverOver(
+        ICallerMailAccountCatalog accountCatalog,
+        StubMailFolderParticipation participation) => new(
+        accountCatalog,
+        participation,
+        StubDeploymentMailFolders.Of(participation),
+        StubMailFolderMappings.ResolvingNothing);
 
     /// <summary>Maps the folders these emails were stored from, which is what a deployment holding them has configured.</summary>
     /// <remarks>

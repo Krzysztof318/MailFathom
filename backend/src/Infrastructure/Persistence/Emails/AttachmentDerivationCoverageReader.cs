@@ -22,7 +22,7 @@ namespace MailFathom.Infrastructure.Persistence.Emails;
 [RequiresIntegrationCoverage]
 internal sealed class AttachmentDerivationCoverageReader(
     MailFathomDbContext dbContext,
-    IMailFolderParticipationReader folderParticipation,
+    IDeploymentMailFolders deploymentFolders,
     DerivedWorkGate derivedWorkGate)
     : IAttachmentDerivationCoverageReader
 {
@@ -40,7 +40,7 @@ internal sealed class AttachmentDerivationCoverageReader(
     {
         // One snapshot for every aggregate below, exactly as the walk reads it: a second reading taken between them
         // could put a message in the denominator of one figure and out of the numerator of the next.
-        var terms = derivedWorkGate.ReadTerms();
+        var terms = await derivedWorkGate.ReadTermsAsync(cancellationToken);
 
         var scoped = dbContext.StoredEmails.AsNoTracking();
 
@@ -53,7 +53,7 @@ internal sealed class AttachmentDerivationCoverageReader(
 
         var reachable = StoredEmailAttachmentTextStore.ReachableEverywhere(
             scoped,
-            folderParticipation.FoldersGeneratingEmbeddings,
+            await deploymentFolders.ReadAsync(MailFolderSelection.GeneratingEmbeddings, cancellationToken),
             terms);
 
         var messages = await reachable

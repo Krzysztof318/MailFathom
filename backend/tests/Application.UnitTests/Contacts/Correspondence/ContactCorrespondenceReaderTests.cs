@@ -224,7 +224,7 @@ public sealed class ContactCorrespondenceReaderTests
         new MailboxScopeResolver(
             accountCatalog ?? CatalogServing(TheAccount),
             StubMailFolderParticipation.Nothing,
-            StubJunkMailFolderCatalog.None,
+            StubDeploymentMailFolders.None,
             StubMailFolderMappings.ResolvingNothing),
         egressGuard ?? SensitiveContentEgressGuards.Inactive(),
         readTelemetry ?? new RecordingMailboxReadTelemetry(),

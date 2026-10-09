@@ -207,7 +207,7 @@ public sealed class ThreadStateAgentTests
         // Arrange
         using var provider = ScriptedTransport.Answering(Completion(Statements));
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
-        using var actingFor = egress.ActingForUser();
+        using var actingFor = egress.Guard.ActingFor(await egress.ReadUserPostureAsync(TestContext.Current.CancellationToken));
         var agent = provider.DeriverOver(egressGuard: egress.Guard);
         var carryingASecret = Derivable() with
         {

@@ -15,17 +15,15 @@ namespace MailFathom.Application.Folders;
 /// provider filed as junk is in the junk folder because the provider put it there.
 /// </para>
 /// <para>
-/// Two paths need the answer in two shapes, for the reason
-/// <see cref="IMailFolderParticipationReader" /> gives about its own two: a mailbox read narrows a table and needs the
-/// whole set as a value it can put into a predicate, while classification holds one occurrence and asks about that
-/// occurrence's folder. Both answers come from the same configuration, so neither can drift from the other.
+/// This is the answer about one folder, for classification, which holds one occurrence and asks about that
+/// occurrence's folder. A mailbox read narrows a table and needs the whole set as a value it can put into a predicate,
+/// which <see cref="IDeploymentMailFolders" /> answers as <see cref="MailFolderSelection.Junk" /> from the account
+/// records. This answer reads the roster until #2321 moves it, so the two agree only once the roster has republished
+/// the account's last write.
 /// </para>
 /// </remarks>
 public interface IJunkMailFolderCatalog
 {
-    /// <summary>Gets every account's junk folder, empty when no account maps one.</summary>
-    IReadOnlyList<MailFolderIdentity> JunkFolders { get; }
-
     /// <summary>Reports whether one folder is the junk folder of its account.</summary>
     /// <param name="accountId">The account the folder belongs to.</param>
     /// <param name="folderAlias">MailFathom's own name for the folder.</param>

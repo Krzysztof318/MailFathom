@@ -30,7 +30,7 @@ namespace MailFathom.Infrastructure.Persistence.Emails;
 internal sealed class StoredEmailAttachmentTextStore(
     MailFathomDbContext dbContext,
     EmailChunkWriter chunkWriter,
-    IMailFolderParticipationReader folderParticipation,
+    IDeploymentMailFolders deploymentFolders,
     DerivedWorkGate derivedWorkGate,
     TimeProvider timeProvider)
     : IStoredEmailAttachmentTextStore
@@ -54,12 +54,12 @@ internal sealed class StoredEmailAttachmentTextStore(
         // One snapshot for both halves, exactly as the cut reads it: the predicate narrows the batch and the answer
         // below names which of the gate's decisions admitted each row, so a second reading taken microseconds later
         // could let the query select a row the answer then reported as still waiting.
-        var terms = derivedWorkGate.ReadTerms();
+        var terms = await derivedWorkGate.ReadTermsAsync(cancellationToken);
 
         var candidates = await Selecting(
                 dbContext.StoredEmails.AsNoTracking(),
                 mailboxAccountId,
-                folderParticipation.FoldersGeneratingEmbeddings,
+                await deploymentFolders.ReadAsync(MailFolderSelection.GeneratingEmbeddings, [account], cancellationToken),
                 terms)
             .Where(email => after == null || email.Id > after)
             .OrderBy(email => email.Id)

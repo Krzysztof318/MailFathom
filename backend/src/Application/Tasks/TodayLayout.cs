@@ -140,7 +140,8 @@ public sealed class TodayLayout
         // Established around the one call that leaves this deployment, and against the person rather than an account,
         // because a task and an event are held per person and a line on either may have been read out of any mailbox
         // they are assigned.
-        using var actingFor = this.egressGuard.ActingFor(user);
+        using var actingFor = this.egressGuard.ActingFor(
+            await this.egressGuard.ReadPostureAcrossAccountsOfAsync(user, cancellationToken));
 
         return await this.planner.SuggestAsync(
             new DayLayoutQuestion(

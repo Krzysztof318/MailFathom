@@ -72,26 +72,6 @@ internal sealed class RetrievalDatabase : IAsyncDisposable
         this.timeProvider = timeProvider;
     }
 
-    /// <summary>Gets the mail every ranking reads: the corpus account's inbox, resolved as a deployment resolves a readable scope.</summary>
-    public static MailboxEmailSelection Selection { get; } = MailboxEmailSelection.Create(
-        new MailboxScopeResolver(
-                AssignedMailAccountCatalogs.For(
-                    AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead),
-                    SyntheticServedAccount.Of(CorpusKnowledgeSearch.Account)),
-                StubMailFolderParticipation.Mapping(Folder),
-                StubJunkMailFolderCatalog.None,
-                StubMailFolderMappings.ResolvingNothing)
-            .ReadableScope([], [MailFolderReference.ToAlias(CorpusKnowledgeSearch.Inbox)], JunkMailInclusion.Excluded),
-        senderAddress: null,
-        recipientAddress: null,
-        subjectFragment: null,
-        receivedOnOrAfter: null,
-        receivedBefore: null,
-        isRemotelySeen: null,
-        isRemotelyFlagged: null,
-        keyword: null,
-        hasAttachments: null);
-
     private static MailFolderIdentity Folder => new(CorpusKnowledgeSearch.Account, CorpusKnowledgeSearch.Inbox);
 
     /// <summary>Creates a database on the server, brings it to the deployment's schema, and stores the mailbox in it.</summary>
@@ -233,9 +213,10 @@ internal sealed class RetrievalDatabase : IAsyncDisposable
         CancellationToken cancellationToken)
     {
         await using var context = this.NewContext();
+        var selection = await ReadSelectionAsync(cancellationToken);
 
         return await new StoredEmailSearchIndexReader(context, PostgresTextSearchConfiguration.Default)
-            .ReadRankedCandidatesAsync(Selection, queryText, limit, cancellationToken);
+            .ReadRankedCandidatesAsync(selection, queryText, limit, cancellationToken);
     }
 
     /// <summary>Ranks the mailbox by pgvector's distance to a query's vector, as a deployment's semantic search ranks it.</summary>
@@ -251,9 +232,10 @@ internal sealed class RetrievalDatabase : IAsyncDisposable
         CancellationToken cancellationToken)
     {
         await using var context = this.NewContext();
+        var selection = await ReadSelectionAsync(cancellationToken);
 
         return await new EmailVectorSearchIndexReader(context)
-            .ReadNearestCandidatesAsync(Selection, profile, queryVector, limit, cancellationToken);
+            .ReadNearestCandidatesAsync(selection, profile, queryVector, limit, cancellationToken);
     }
 
     /// <summary>Drops the database and closes the pool that reached it.</summary>
@@ -284,6 +266,36 @@ internal sealed class RetrievalDatabase : IAsyncDisposable
 
         await using var command = new NpgsqlCommand(statement, connection);
         await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>Reads the mail every ranking reads: the corpus account's inbox, resolved as a deployment resolves a readable scope.</summary>
+    private static async Task<MailboxEmailSelection> ReadSelectionAsync(CancellationToken cancellationToken)
+    {
+        var participation = StubMailFolderParticipation.Mapping(Folder);
+        var scope = await new MailboxScopeResolver(
+                AssignedMailAccountCatalogs.For(
+                    AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead),
+                    SyntheticServedAccount.Of(CorpusKnowledgeSearch.Account)),
+                participation,
+                StubDeploymentMailFolders.Of(participation),
+                StubMailFolderMappings.ResolvingNothing)
+            .ReadableScopeAsync(
+                [],
+                [MailFolderReference.ToAlias(CorpusKnowledgeSearch.Inbox)],
+                JunkMailInclusion.Excluded,
+                cancellationToken);
+
+        return MailboxEmailSelection.Create(
+            scope,
+            senderAddress: null,
+            recipientAddress: null,
+            subjectFragment: null,
+            receivedOnOrAfter: null,
+            receivedBefore: null,
+            isRemotelySeen: null,
+            isRemotelyFlagged: null,
+            keyword: null,
+            hasAttachments: null);
     }
 
     private static async Task<ExtractedEmailMetadata> ExtractedAsync(
@@ -329,7 +341,7 @@ internal sealed class RetrievalDatabase : IAsyncDisposable
             EmailChunkingRules.Current,
             EmbeddingInputBound.Default,
             new EmailEmbeddingTelemetry(),
-            StubMailFolderParticipation.Mapping(Folder),
+            StubDeploymentMailFolders.Of(StubMailFolderParticipation.Mapping(Folder)),
             this.timeProvider);
 
         foreach (var (message, position) in mailbox.Select(static (message, position) => (message, position)))

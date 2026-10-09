@@ -151,7 +151,7 @@ internal sealed class ProviderChatModelClient : IChatModelClient
         IReadOnlyList<ChatMessage> conversation,
         CancellationToken cancellationToken)
     {
-        if (!this.egressGuard.IsActive)
+        if (!await this.egressGuard.IsActiveAsync(cancellationToken))
         {
             return conversation;
         }

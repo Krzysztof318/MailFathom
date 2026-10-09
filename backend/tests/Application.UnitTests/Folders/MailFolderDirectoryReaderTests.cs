@@ -510,7 +510,7 @@ public sealed class MailFolderDirectoryReaderTests
         var scopeResolver = new MailboxScopeResolver(
             catalog,
             StubMailFolderParticipation.Nothing,
-            StubJunkMailFolderCatalog.None,
+            StubDeploymentMailFolders.None,
             mappings.Resolver);
 
         return new MailFolderDirectoryReader(
