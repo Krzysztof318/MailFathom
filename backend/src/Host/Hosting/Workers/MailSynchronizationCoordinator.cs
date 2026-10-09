@@ -165,13 +165,14 @@ internal sealed partial class MailSynchronizationCoordinator : BackgroundService
         await waitCancellation.CancelAsync();
     }
 
-    /// <summary>Runs one supervision pass, leaving every supervisor as it was when the account records cannot be read.</summary>
+    /// <summary>Runs one supervision pass, stopping no supervisor for an account the pass did not get to read.</summary>
     /// <remarks>
-    /// A pass that cannot read is reported and made again on the next wake, and never ends the coordinator: a database
-    /// briefly out of reach says nothing about which accounts are served, so nothing is started and nothing is stopped
-    /// on the strength of a read that did not complete.
+    /// A pass whose read fails part-way is reported and made again on the next wake, and never ends the coordinator. What
+    /// the pages it did read decided stands — an account found there was started, or replaced where its version moved —
+    /// but an account missing from a walk that did not finish was not read rather than removed, so no supervisor is
+    /// stopped on the strength of it.
     /// </remarks>
-    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A pass that could not read the account records leaves every supervisor as it was and is made again on the next wake; ending the coordinator over it would stop every account's synchronization on this replica.")]
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A pass whose read failed stops no supervisor for an account it did not read and is made again on the next wake; ending the coordinator over it would stop every account's synchronization on this replica.")]
     private async Task SuperviseServedAccountsAsync(
         MailSynchronizationOptions settingsSnapshot,
         MailSynchronizationOptions startupSettings,
@@ -304,6 +305,7 @@ internal sealed partial class MailSynchronizationCoordinator : BackgroundService
         var accountScheduling = CancellationTokenSource.CreateLinkedTokenSource(schedulingToken, hold.Lost);
         var task = this.SuperviseWhileHeldAsync(
             account,
+            settingsSnapshot,
             hold,
             accountRunSlots,
             accountScheduling.Token,
@@ -328,6 +330,7 @@ internal sealed partial class MailSynchronizationCoordinator : BackgroundService
     /// </remarks>
     private async Task SuperviseWhileHeldAsync(
         MailAccountId account,
+        MailSynchronizationOptions settingsSnapshot,
         WorkLeaseHold hold,
         SemaphoreSlim accountRunSlots,
         CancellationToken schedulingToken,
@@ -340,7 +343,7 @@ internal sealed partial class MailSynchronizationCoordinator : BackgroundService
 
         try
         {
-            await this.StartSupervisor(account, accountRunSlots, schedulingToken, heldWorkUnits.Token);
+            await this.StartSupervisor(account, settingsSnapshot, accountRunSlots, schedulingToken, heldWorkUnits.Token);
         }
         finally
         {
@@ -353,6 +356,7 @@ internal sealed partial class MailSynchronizationCoordinator : BackgroundService
 
     private Task StartSupervisor(
         MailAccountId account,
+        MailSynchronizationOptions settingsSnapshot,
         SemaphoreSlim accountRunSlots,
         CancellationToken schedulingToken,
         CancellationToken workUnitToken)
@@ -368,6 +372,7 @@ internal sealed partial class MailSynchronizationCoordinator : BackgroundService
         var supervisor = new AccountSynchronizationSupervisor(
             account,
             this.scopeFactory,
+            settingsSnapshot,
             this.accounts,
             accountRunSlots,
             pushNotifications,
@@ -375,7 +380,8 @@ internal sealed partial class MailSynchronizationCoordinator : BackgroundService
             this.runLedger,
             this.runSignal,
             this.signals,
-            this.loggerFactory.CreateLogger<AccountSynchronizationSupervisor>());
+            this.loggerFactory.CreateLogger<AccountSynchronizationSupervisor>(),
+            this.timeProvider);
 
         return supervisor.RunAsync(schedulingToken, workUnitToken);
     }
@@ -441,7 +447,7 @@ internal sealed partial class MailSynchronizationCoordinator : BackgroundService
     /// <summary>Records a pass that could not read the account records, which leaves every supervisor as it was.</summary>
     [LoggerMessage(
         Level = LogLevel.Warning,
-        Message = "The mail accounts this replica supervises could not be read, so every supervisor was left as it was; the accounts are read again on the next pass, within {Interval}.")]
+        Message = "The mail accounts this replica supervises could not be read to the end, so no supervisor was stopped for an account the pass did not reach; the accounts are read again on the next pass, within {Interval}.")]
     private partial void LogSupervisionPassFailed(Exception exception, TimeSpan interval);
 
     /// <summary>Records that shutdown ran out of patience, because a run cut short is what the next start has to resume.</summary>

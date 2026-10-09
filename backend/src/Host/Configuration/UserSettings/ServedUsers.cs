@@ -297,8 +297,10 @@ internal sealed class ServedUsers : IDeploymentUserSource
     /// <exception cref="ArgumentException">Thrown when the user is unspecified.</exception>
     /// <remarks>
     /// <para>
-    /// An erasure has to stop this process serving the user <em>before</em> it deletes anything, so no request composed
-    /// against the roster acts for them while the deletion runs; the synchronization of the accounts only they are
+    /// An erasure has to stop this process serving the user <em>before</em> it deletes anything, so no request acts for
+    /// them while the deletion runs: every reader of the assignment relation is answered through
+    /// <see cref="WithholdingMailAccountAssignments" />, which gives a withheld user no mailbox although their rows are
+    /// still there to be deleted. The synchronization of the accounts only they are
     /// assigned is stopped beside this, by withholding those accounts from the coordinator. But an erasure can still be
     /// refused, and a person nothing erased must go on being served rather than disappear until the next convergence
     /// reading.
@@ -345,6 +347,17 @@ internal sealed class ServedUsers : IDeploymentUserSource
         this.SignalReload();
 
         return new Withholding(this, user, withheldRoster, withheldVersion);
+    }
+
+    /// <summary>Gets whether an erasure is deciding about this user right now.</summary>
+    /// <param name="user">The user asked about.</param>
+    /// <returns><see langword="true" /> from the moment the user is withheld until the withholding is restored or the deletion commits.</returns>
+    internal bool IsWithheld(UserId user)
+    {
+        lock (this.mutex)
+        {
+            return this.withheldUser == user;
+        }
     }
 
     /// <summary>Puts a withheld user back exactly as they were published, in the place they were read in.</summary>

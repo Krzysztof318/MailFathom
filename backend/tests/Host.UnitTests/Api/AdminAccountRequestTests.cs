@@ -139,8 +139,8 @@ public sealed class AdminAccountRequestTests
 
         // Act
         var filter = await AdminAccountRequest.ResolveFilterAsync(null, accounts, TestContext.Current.CancellationToken);
-        var accountId = filter.Account;
-        var refusal = filter.Refusal;
+        var accountId = (filter as AdminAccountRequest.AccountFilter.Narrowed)?.Account;
+        var refusal = (filter as AdminAccountRequest.AccountFilter.Refused)?.Refusal;
 
         // Assert
         Assert.Null(accountId);
@@ -156,8 +156,8 @@ public sealed class AdminAccountRequestTests
 
         // Act
         var filter = await AdminAccountRequest.ResolveFilterAsync("  work  ", accounts, TestContext.Current.CancellationToken);
-        var accountId = filter.Account;
-        var refusal = filter.Refusal;
+        var accountId = (filter as AdminAccountRequest.AccountFilter.Narrowed)?.Account;
+        var refusal = (filter as AdminAccountRequest.AccountFilter.Refused)?.Refusal;
 
         // Assert
         Assert.Equal(WorkIdentity, accountId);
@@ -175,8 +175,8 @@ public sealed class AdminAccountRequestTests
 
         // Act
         var filter = await AdminAccountRequest.ResolveFilterAsync(account, accounts, TestContext.Current.CancellationToken);
-        var accountId = filter.Account;
-        var refusal = filter.Refusal;
+        var accountId = (filter as AdminAccountRequest.AccountFilter.Narrowed)?.Account;
+        var refusal = (filter as AdminAccountRequest.AccountFilter.Refused)?.Refusal;
 
         // Assert
         Assert.NotNull(refusal);
@@ -196,8 +196,8 @@ public sealed class AdminAccountRequestTests
 
         // Act
         var filter = await AdminAccountRequest.ResolveFilterAsync("  archive  ", accounts, TestContext.Current.CancellationToken);
-        var accountId = filter.Account;
-        var refusal = filter.Refusal;
+        var accountId = (filter as AdminAccountRequest.AccountFilter.Narrowed)?.Account;
+        var refusal = (filter as AdminAccountRequest.AccountFilter.Refused)?.Refusal;
 
         // Assert
         Assert.NotNull(refusal);

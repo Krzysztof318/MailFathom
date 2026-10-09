@@ -101,12 +101,12 @@ internal static class JobDeadLetterEndpoints
 
         var filter = await AdminAccountRequest.ResolveFilterAsync(account, accounts, cancellationToken);
 
-        if (filter.Refusal is { } refusal)
+        if (filter is AdminAccountRequest.AccountFilter.Refused(var refusal))
         {
             return refusal;
         }
 
-        var servedAccount = filter.Account;
+        var servedAccount = (filter as AdminAccountRequest.AccountFilter.Narrowed)?.Account;
 
         JobType? jobType = null;
 

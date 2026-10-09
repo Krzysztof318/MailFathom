@@ -5,6 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using MailFathom.Application.Accounts;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.Hosting.Workers;
@@ -25,9 +26,10 @@ namespace MailFathom.Host.Configuration.Mail;
 /// replica supervises it.
 /// </para>
 /// <para>
-/// A user whose own record does not bind is left out of the run rather than failing it, for the reason a start leaves
-/// such a user unserved: the convergence reports the record, and an account nobody else is assigned is then no longer
-/// one this run can find, which ends its supervision until the record is corrected.
+/// A user whose own record does not bind, or whose record the reader refuses for what it holds, is left out of the run
+/// rather than failing it, for the reason a start leaves such a user unserved: the convergence reports the record, and
+/// an account nobody else is assigned is then no longer one this run can find, so its runs wait out their backoff until
+/// the record is corrected. A database that declines the read fails the run instead.
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this source.")]
@@ -93,7 +95,7 @@ internal sealed class PersistedMailSynchronizationAccounts(
 
         foreach (var user in users)
         {
-            if (await documents.ReadAsync(user, cancellationToken) is { } document)
+            if (await this.ReadRecordAsync(user, cancellationToken) is { } document)
             {
                 records.Add(document);
             }
@@ -132,6 +134,24 @@ internal sealed class PersistedMailSynchronizationAccounts(
         announcements.GetChangeToken(),
         withheldAccounts.GetChangeToken(),
     ]);
+
+    /// <summary>Reads one assigned user's record, leaving out one the reader refused for what it holds.</summary>
+    /// <remarks>
+    /// A refusal carrying no inner failure is the record's own — a document past the octets one is bound from, or more
+    /// accounts than one user is served with — and is left out like a record that does not bind. One with an inner
+    /// failure is the database declining the read, which fails the run so it is backed off and read again.
+    /// </remarks>
+    private async Task<UserSettingsDocument?> ReadRecordAsync(UserId user, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await documents.ReadAsync(user, cancellationToken);
+        }
+        catch (UserSettingsUnreadableException refused) when (refused.InnerException is null)
+        {
+            return null;
+        }
+    }
 
     private ServedUser? Compose(UserSettingsDocument document) =>
         composition.Compose(document, UserRecordArrival.AlreadyHeld).Record is { } record

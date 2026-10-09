@@ -100,8 +100,8 @@ public sealed class PersistedMailSynchronizationAccountsTests
         // Arrange
         var harness = new SourceHarness();
         harness.Assignments.Assigning(Alex, Account(AlexWork), Account(AlexHome)).Assigning(Morgan, Account(MorganWork));
-        harness.Holding(Record(Alex, version: 3, Mailbox(AlexWork, "alex@work.test"), Mailbox(AlexHome, "alex@home.test")));
-        harness.Holding(Record(Morgan, version: 7, Mailbox(MorganWork, "morgan@work.test")));
+        harness.Holding(HeldRecord(Alex, version: 3, Mailbox(AlexWork, "alex@work.test"), Mailbox(AlexHome, "alex@home.test")));
+        harness.Holding(HeldRecord(Morgan, version: 7, Mailbox(MorganWork, "morgan@work.test")));
 
         // Act
         var runSettings = await harness.Source.ReadRunSettingsAsync(
@@ -128,7 +128,7 @@ public sealed class PersistedMailSynchronizationAccountsTests
         // Arrange
         var harness = new SourceHarness();
         harness.Assignments.Assigning(Alex, Account(AlexWork));
-        harness.Holding(Record(Alex, version: 3, Mailbox(AlexWork, "alex@work.test")));
+        harness.Holding(HeldRecord(Alex, version: 3, Mailbox(AlexWork, "alex@work.test")));
         var previous = await harness.Source.ReadRunSettingsAsync(
             Account(AlexWork),
             previous: null,
@@ -139,7 +139,7 @@ public sealed class PersistedMailSynchronizationAccountsTests
             Account(AlexWork),
             previous,
             TestContext.Current.CancellationToken);
-        harness.Holding(Record(Alex, version: 4, Mailbox(AlexWork, "alex@work.test")));
+        harness.Holding(HeldRecord(Alex, version: 4, Mailbox(AlexWork, "alex@work.test")));
         var changed = await harness.Source.ReadRunSettingsAsync(
             Account(AlexWork),
             unchanged,
@@ -152,14 +152,63 @@ public sealed class PersistedMailSynchronizationAccountsTests
         Assert.NotSame(previous, changed);
     }
 
-    /// <summary>An account erased since the last run is assigned to nobody, so its run finds nothing and its supervision ends.</summary>
+    /// <summary>
+    /// A co-assigned user whose record the reader refuses for what it holds is left out of the run, so one oversized
+    /// record does not stop a mailbox shared with users whose records are fine.
+    /// </summary>
+    [Fact]
+    public async Task ReadRunSettingsAsync_ACoAssignedUsersRecordRefused_LeavesThatUserOut()
+    {
+        // Arrange
+        var harness = new SourceHarness();
+        harness.Assignments.Assigning(Alex, Account(AlexWork)).Assigning(Morgan, Account(AlexWork));
+        harness.Holding(HeldRecord(Alex, version: 3, Mailbox(AlexWork, "alex@work.test")));
+        harness.Documents.ReadAsync(Morgan, Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<UserSettingsDocument?>(
+                new UserSettingsUnreadableException("The record of user morgan is past the octets one is bound from.")));
+
+        // Act
+        var runSettings = await harness.Source.ReadRunSettingsAsync(
+            Account(AlexWork),
+            previous: null,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotNull(runSettings);
+        Assert.Equal([Alex], runSettings.ServedUsers!.Select(served => served.User));
+    }
+
+    /// <summary>A database that declines the read fails the run, so it is backed off rather than run without a user.</summary>
+    [Fact]
+    public async Task ReadRunSettingsAsync_TheDatabaseDecliningTheRead_FailsTheRun()
+    {
+        // Arrange
+        var harness = new SourceHarness();
+        harness.Assignments.Assigning(Alex, Account(AlexWork));
+        harness.Documents.ReadAsync(Alex, Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<UserSettingsDocument?>(
+                new UserSettingsUnreadableException(
+                    "The database could not be reached.",
+                    new InvalidOperationException("connection refused"))));
+
+        // Act
+        var failure = await Record.ExceptionAsync(() => harness.Source.ReadRunSettingsAsync(
+            Account(AlexWork),
+            previous: null,
+            TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.IsType<UserSettingsUnreadableException>(failure);
+    }
+
+    /// <summary>An account erased since the last run is assigned to nobody, so its run finds nothing to run.</summary>
     [Fact]
     public async Task ReadRunSettingsAsync_AnAccountAssignedToNobody_AnswersNone()
     {
         // Arrange
         var harness = new SourceHarness();
         harness.Assignments.Assigning(Alex, Account(AlexHome));
-        harness.Holding(Record(Alex, version: 3, Mailbox(AlexHome, "alex@home.test")));
+        harness.Holding(HeldRecord(Alex, version: 3, Mailbox(AlexHome, "alex@home.test")));
 
         // Act
         var runSettings = await harness.Source.ReadRunSettingsAsync(
@@ -178,7 +227,7 @@ public sealed class PersistedMailSynchronizationAccountsTests
         // Arrange
         var harness = new SourceHarness();
         harness.Assignments.Assigning(Alex, Account(AlexWork));
-        harness.Holding(Record(Alex, version: 3, Mailbox(AlexWork, "alex@work.test")));
+        harness.Holding(HeldRecord(Alex, version: 3, Mailbox(AlexWork, "alex@work.test")));
         using var withholding = harness.Withheld.Withhold([Account(AlexWork)]);
 
         // Act
@@ -232,7 +281,7 @@ public sealed class PersistedMailSynchronizationAccountsTests
               """,
             Version: 1);
 
-    private static UserSettingsDocument Record(UserId user, long version, params MailAccountRecord[] accounts) =>
+    private static UserSettingsDocument HeldRecord(UserId user, long version, params MailAccountRecord[] accounts) =>
         new(user, $"user-{user.Value:D}", "{}", version) { MailAccounts = accounts };
 
     /// <summary>The source over records and assignments a test states.</summary>

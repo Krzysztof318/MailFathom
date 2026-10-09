@@ -676,9 +676,11 @@ public static class ServiceCollectionExtensions
         // Who reaches which mailbox, read from the relation per question rather than out of a composed roster. A
         // singleton over the pool for the reason the reader above is one: a signal raised outside any request asks it
         // as well as a request and a work unit.
-        services.AddSingleton<IMailAccountAssignments>(provider => new PersistedMailAccountAssignments(
+        services.AddSingleton(provider => new PersistedMailAccountAssignments(
             () => provider.GetRequiredService<NpgsqlDataSource>(),
             provider.GetRequiredService<DatabaseCommandTimeout>()));
+        services.AddSingleton<IMailAccountAssignments>(provider =>
+            provider.GetRequiredService<PersistedMailAccountAssignments>());
         // What one person set about their own client, which is beside the record above rather than in it: this is a
         // preference about the client and that document is configuration. Scoped because both the read and the upsert
         // are ordinary statements on the request's own context, and registered unconditionally because it is a store

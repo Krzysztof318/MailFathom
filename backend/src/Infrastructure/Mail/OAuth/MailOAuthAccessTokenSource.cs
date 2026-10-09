@@ -142,9 +142,9 @@ internal sealed class MailOAuthAccessTokenSource : IMailAccessTokenSource
     /// </remarks>
     /// <summary>Names the account in full, so a stored credential records whose account it belongs to.</summary>
     /// <remarks>
-    /// The user comes from the account this deployment serves under that identifier rather than from a read of the
-    /// account table or from a sole user the deployment may not have: a configured mailbox names no user of its own,
-    /// and which user declared it is exactly what the catalog resolved when it published the account.
+    /// The account is confirmed as still served by a read of its own record, and the identifier that record carries is
+    /// the one the credential is stored under. It names no user: an account is the mailbox itself, and which users reach
+    /// it is the assignment relation rather than part of whose credential this is.
     /// </remarks>
     /// <exception cref="InvalidOperationException">Thrown when no served account carries the identifier, which is an account withdrawn between the run being scheduled and its token being requested.</exception>
     private async Task<MailAccountId> AccountIdentityOfAsync(

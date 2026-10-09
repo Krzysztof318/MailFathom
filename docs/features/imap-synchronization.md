@@ -55,14 +55,20 @@ and each one comes back with the version its record stands at. A pass starts a s
 has none, replaces the supervisor of an account whose record moved to another version, and stops the supervisor of an
 account the pass no longer read — and touches nothing else, so a change to one person's mailbox interrupts that
 mailbox's schedule and no other. A reload of the `MailSynchronization` section itself is deployment-wide, so it
-replaces every supervisor together. Each replacement begins with a new schedule and failure backoff. A pass that cannot
-read the records leaves every supervisor as it was and is made again on the next wake.
+replaces every supervisor together. Each replacement begins with a new schedule and failure backoff. A pass whose read
+fails part-way is reported and made again on the next wake: what the pages it did read decided stands, and no
+supervisor is stopped for an account the pass did not get to, because an account missing from an unfinished walk was
+not read rather than removed.
 
 Each run reads what it runs against when it begins: the deployment's bound settings carrying its own account and the
 other accounts of every user it is assigned to, because what a run derives from an account's neighbours — the mail
 domains and addresses that are that person's own — is read across them. That is a handful of records rather than the
-deployment, and finding the account among them is one lookup. An account the run no longer finds — removed, assigned to
-nobody, or withheld by an erasure — ends its supervisor.
+deployment, and finding the account among them is one lookup. A user whose record does not bind, or whose record the
+reader refuses for what it holds — a document past the octets one is bound from, more accounts than one user is served
+with — is left out of the run rather than failing it. A run whose read fails, or that no longer finds its account,
+does not start, and is counted as a failed run and backed off like one rather than ending its supervisor: whether the
+account is still served is the pass's to decide, and the pass stops the supervisor of an account it no longer reads —
+removed, assigned to nobody, or withheld by an erasure.
 
 Replacing a supervisor cancels its scheduling token and not the work-unit token. A run already writing content and its
 checkpoint therefore finishes against the immutable settings it began with; only work still waiting to start is

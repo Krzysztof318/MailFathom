@@ -26,25 +26,25 @@ namespace MailFathom.Host.Signals;
 internal sealed partial class SignalRClientSignalChannel : IClientSignalChannel
 {
     private readonly IHubContext<ClientSignalHub> hub;
-    private readonly IServiceScopeFactory scopes;
+    private readonly IMailAccountAssignments assignments;
     private readonly ILogger<SignalRClientSignalChannel> logger;
 
     /// <summary>Initializes the channel over the hub it publishes through.</summary>
     /// <param name="hub">Addresses one user's connections by their group.</param>
-    /// <param name="scopes">Opens the scope the assignment relation is read in, which a singleton cannot hold.</param>
+    /// <param name="assignments">Answers who is assigned the mailbox a signal names, read when the signal is delivered.</param>
     /// <param name="logger">Records a signal that could not be delivered, in kinds and counts rather than in anything about mail.</param>
     /// <exception cref="ArgumentNullException">Thrown when a required collaborator is <see langword="null" />.</exception>
     public SignalRClientSignalChannel(
         IHubContext<ClientSignalHub> hub,
-        IServiceScopeFactory scopes,
+        IMailAccountAssignments assignments,
         ILogger<SignalRClientSignalChannel> logger)
     {
         ArgumentNullException.ThrowIfNull(hub);
-        ArgumentNullException.ThrowIfNull(scopes);
+        ArgumentNullException.ThrowIfNull(assignments);
         ArgumentNullException.ThrowIfNull(logger);
 
         this.hub = hub;
-        this.scopes = scopes;
+        this.assignments = assignments;
         this.logger = logger;
     }
 
@@ -96,11 +96,7 @@ internal sealed partial class SignalRClientSignalChannel : IClientSignalChannel
             return [];
         }
 
-        await using var scope = this.scopes.CreateAsyncScope();
-
-        return await scope.ServiceProvider
-            .GetRequiredService<IMailAccountAssignments>()
-            .ReadUsersAssignedToAsync(account, cancellationToken);
+        return await this.assignments.ReadUsersAssignedToAsync(account, cancellationToken);
     }
 
     [LoggerMessage(

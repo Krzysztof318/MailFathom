@@ -1115,6 +1115,13 @@ internal static class HostComposition
                 : PostgresTextSearchConfiguration.Create(configuredTextSearchConfiguration),
             answeringBudget);
 
+        // After the relation it wraps, for the reason the retrieval below is registered after it: the container resolves
+        // the last registration of a service type. Every reader of who reaches which mailbox goes through the roster's
+        // withholding, so a user an erasure is deciding about reaches nothing while their rows still exist.
+        builder.Services.AddSingleton<IMailAccountAssignments>(provider => new WithholdingMailAccountAssignments(
+            provider.GetRequiredService<PersistedMailAccountAssignments>(),
+            provider.GetRequiredService<ServedUsers>()));
+
         // After the retrieval it wraps, because the container resolves the last registration of a service type and the one
         // this decorates is added by the call above. An instance that declared no chat endpoint, or left the pass off,
         // registers nothing here and retrieves the fused ranking exactly as it did.

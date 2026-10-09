@@ -18,7 +18,7 @@ namespace MailFathom.Application.Folders;
 /// This is the answer about one folder, for classification, which holds one occurrence and asks about that
 /// occurrence's folder. A mailbox read narrows a table and needs the whole set as a value it can put into a predicate,
 /// which <see cref="IDeploymentMailFolders" /> answers as <see cref="MailFolderSelection.Junk" /> from the account
-/// records. This answer reads the roster until #2321 moves it, so the two agree only once the roster has republished
+/// records. This answer reads the roster until #2330 moves it, so the two agree only once the roster has republished
 /// the account's last write.
 /// </para>
 /// </remarks>

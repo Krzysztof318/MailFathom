@@ -78,7 +78,7 @@ internal static class AdminAccountRequest
     /// <param name="account">The account filter the request carried, absent for every account.</param>
     /// <param name="accounts">Reports the accounts this deployment serves.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The account to narrow to — none for every account — or what the caller is told when the filter is present and names no served account.</returns>
+    /// <returns>Every account, the account to narrow to, or what the caller is told when the filter is present and names no served account.</returns>
     /// <remarks>
     /// An absent filter is every account rather than a refusal, which is why this is a form of its own: a present filter
     /// is held to the same two questions as a required account, and only the absent case differs.
@@ -90,21 +90,35 @@ internal static class AdminAccountRequest
     {
         if (account is null)
         {
-            return new AccountFilter(Account: null, Refusal: null);
+            return new AccountFilter.Everything();
         }
 
         if (await ResolveAsync(account, accounts, cancellationToken) is not { } servedAccount)
         {
-            return new AccountFilter(
-                Account: null,
+            return new AccountFilter.Refused(
                 string.IsNullOrWhiteSpace(account) ? MissingFilter() : Unknown(MailAccountId.Create(account).Value));
         }
 
-        return new AccountFilter(servedAccount, Refusal: null);
+        return new AccountFilter.Narrowed(servedAccount);
     }
 
-    /// <summary>What an optional account filter resolved to.</summary>
-    /// <param name="Account">The account to narrow to, or <see langword="null" /> for every account.</param>
-    /// <param name="Refusal">What the caller is told when the filter named no served account, or <see langword="null" /> when the reading may go ahead.</param>
-    internal sealed record AccountFilter(MailAccountId? Account, ProblemHttpResult? Refusal);
+    /// <summary>What an optional account filter resolved to: every account, one account, or a refusal.</summary>
+    /// <remarks>Three cases rather than two nullable values, so an account exists only where the filter narrowed to one and a refused filter can never be read as every account.</remarks>
+    internal abstract record AccountFilter
+    {
+        private AccountFilter()
+        {
+        }
+
+        /// <summary>No filter was given, so the reading covers every account.</summary>
+        internal sealed record Everything : AccountFilter;
+
+        /// <summary>The filter named a served account, which the reading is narrowed to.</summary>
+        /// <param name="Account">The account to narrow to.</param>
+        internal sealed record Narrowed(MailAccountId Account) : AccountFilter;
+
+        /// <summary>The filter named no served account, so the reading does not go ahead.</summary>
+        /// <param name="Refusal">What the caller is told.</param>
+        internal sealed record Refused(ProblemHttpResult Refusal) : AccountFilter;
+    }
 }

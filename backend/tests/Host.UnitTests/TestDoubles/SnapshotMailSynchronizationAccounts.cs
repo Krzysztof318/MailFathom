@@ -28,6 +28,9 @@ internal sealed class SnapshotMailSynchronizationAccounts(ISettingsSnapshot<Mail
     private readonly ConditionalWeakTable<MailSynchronizationAccountOptions, StrongBox<long>> versions = new();
     private long issuedVersions;
 
+    /// <summary>Gets or sets what every read of a run's settings fails with, or nothing to let it read.</summary>
+    internal Exception? ReadFailure { get; set; }
+
     /// <inheritdoc />
     public async IAsyncEnumerable<SupervisedMailAccount> ReadSupervisedAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken)
@@ -51,6 +54,11 @@ internal sealed class SnapshotMailSynchronizationAccounts(ISettingsSnapshot<Mail
         MailSynchronizationOptions? previous,
         CancellationToken cancellationToken)
     {
+        if (this.ReadFailure is { } failure)
+        {
+            return Task.FromException<MailSynchronizationOptions?>(failure);
+        }
+
         var current = settings.Current;
 
         return Task.FromResult(current.FindConfiguredAccount(account) is null ? null : current);

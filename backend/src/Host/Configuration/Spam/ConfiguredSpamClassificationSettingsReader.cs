@@ -45,7 +45,7 @@ internal sealed class ConfiguredSpamClassificationSettingsReader(
     /// <para>
     /// Read from the settings each account's document was read into when it was written, which are composed by the same
     /// <see cref="Compose" /> that <see cref="SettingsFor(MailAccountId)" /> answers with. That one reads the roster until
-    /// #2321 moves it, so the walk that narrows a table and the arrival that asks about one message agree about which
+    /// #2330 moves it, so the walk that narrows a table and the arrival that asks about one message agree about which
     /// mail is classified only once the roster has republished the account's last write.
     /// </para>
     /// <para>

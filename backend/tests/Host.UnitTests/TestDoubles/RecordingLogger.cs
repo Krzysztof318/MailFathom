@@ -21,6 +21,7 @@ internal sealed class RecordingLogger<TCategory> : ILogger<TCategory>
 {
     private readonly Lock recordedMessages = new();
     private readonly List<string> messages = [];
+    private readonly List<(string Fragment, TaskCompletionSource Written)> awaited = [];
 
     public IReadOnlyList<string> Messages
     {
@@ -30,6 +31,25 @@ internal sealed class RecordingLogger<TCategory> : ILogger<TCategory>
             {
                 return [.. this.messages];
             }
+        }
+    }
+
+    /// <summary>Completes once a message containing the fragment has been written, including one written already.</summary>
+    /// <param name="fragment">The text the awaited message contains.</param>
+    /// <returns>A task completing when such a message exists.</returns>
+    public Task WaitForMessageAsync(string fragment)
+    {
+        lock (this.recordedMessages)
+        {
+            if (this.messages.Any(message => message.Contains(fragment, StringComparison.Ordinal)))
+            {
+                return Task.CompletedTask;
+            }
+
+            var written = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            this.awaited.Add((fragment, written));
+
+            return written.Task;
         }
     }
 
@@ -47,9 +67,17 @@ internal sealed class RecordingLogger<TCategory> : ILogger<TCategory>
     {
         ArgumentNullException.ThrowIfNull(formatter);
 
+        var message = formatter(state, exception);
+
         lock (this.recordedMessages)
         {
-            this.messages.Add(formatter(state, exception));
+            this.messages.Add(message);
+
+            foreach (var match in this.awaited.Where(waiter => message.Contains(waiter.Fragment, StringComparison.Ordinal)).ToArray())
+            {
+                this.awaited.Remove(match);
+                match.Written.TrySetResult();
+            }
         }
     }
 }

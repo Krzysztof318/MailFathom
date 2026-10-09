@@ -9,7 +9,6 @@ using MailFathom.Domain.Folders;
 using MailFathom.Host.Signals;
 using MailFathom.TestSupport;
 using Microsoft.AspNetCore.SignalR;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
@@ -140,13 +139,9 @@ public sealed class SignalRClientSignalChannelTests
         var hub = Substitute.For<IHubContext<ClientSignalHub>>();
         hub.Clients.Returns(clients);
 
-        var services = new ServiceCollection();
-        services.AddSingleton(assignments
-            ?? new StubMailAccountAssignments().Assigning(SyntheticUser.Deployment, Account));
-
         return new SignalRClientSignalChannel(
             hub,
-            services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
+            assignments ?? new StubMailAccountAssignments().Assigning(SyntheticUser.Deployment, Account),
             NullLogger<SignalRClientSignalChannel>.Instance);
     }
 }

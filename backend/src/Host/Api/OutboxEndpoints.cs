@@ -114,12 +114,12 @@ internal static class OutboxEndpoints
 
         var filter = await AdminAccountRequest.ResolveFilterAsync(account, accounts, cancellationToken);
 
-        if (filter.Refusal is { } refusal)
+        if (filter is AdminAccountRequest.AccountFilter.Refused(var refusal))
         {
             return refusal;
         }
 
-        var servedAccount = filter.Account;
+        var servedAccount = (filter as AdminAccountRequest.AccountFilter.Narrowed)?.Account;
 
         var summary = await outbox.ReadSummaryAsync(servedAccount, cancellationToken);
 
@@ -154,12 +154,12 @@ internal static class OutboxEndpoints
 
         var filter = await AdminAccountRequest.ResolveFilterAsync(account, accounts, cancellationToken);
 
-        if (filter.Refusal is { } refusal)
+        if (filter is AdminAccountRequest.AccountFilter.Refused(var refusal))
         {
             return refusal;
         }
 
-        var servedAccount = filter.Account;
+        var servedAccount = (filter as AdminAccountRequest.AccountFilter.Narrowed)?.Account;
 
         OutgoingEmailStage? namedStage = null;
 

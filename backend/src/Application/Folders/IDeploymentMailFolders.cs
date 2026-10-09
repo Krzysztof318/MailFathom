@@ -18,7 +18,7 @@ namespace MailFathom.Application.Folders;
 /// <para>
 /// Every set is read from the account records themselves rather than from what any one process holds in memory, so the
 /// number of accounts a deployment serves is a question of how large the answer is rather than of what every replica
-/// must keep. The per-folder answers read the roster until #2321 moves them, so the two agree only once the roster has
+/// must keep. The per-folder answers read the roster until #2330 moves them, so the two agree only once the roster has
 /// republished the account's last write — within one convergence interval of its commit on every replica but the one
 /// that wrote it.
 /// </para>
