@@ -51,7 +51,7 @@ internal sealed class MailOAuthAccessTokenSource : IMailAccessTokenSource
     /// <param name="transportFactory">Opens the transport a token request is sent over, one per exchange.</param>
     /// <param name="settingsProvider">Resolves one account's endpoint and secrets per request.</param>
     /// <param name="refreshTokenStore">Holds the refresh token MailFathom stores, and receives the one a rotation issues.</param>
-    /// <param name="accountCatalog">Names the user each served account belongs to, which the stored credential is recorded under.</param>
+    /// <param name="accountCatalog">Confirms the account is still served, and supplies the identifier its stored credential is recorded under.</param>
     /// <param name="tokenCache">Holds the issued tokens across scopes and serializes the requests that replace them.</param>
     /// <param name="operationExecutor">Applies the authorization-server resilience budget.</param>
     /// <param name="timeProvider">Supplies the instant an expiry is measured from.</param>

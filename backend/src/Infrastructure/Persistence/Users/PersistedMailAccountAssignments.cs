@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Accounts;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Access;
@@ -16,13 +17,11 @@ namespace MailFathom.Infrastructure.Persistence.Users;
 /// A singleton over the pool rather than a scoped context, for the reason the served-account reader is one: what asks is
 /// as often a signal raised outside any request as a work unit or a request, and each answer is one short statement over
 /// an index that joins no transaction. The pool arrives behind a delegate because the signal channel is composed before
-/// startup has composed the connection string the pool is built from. Public so the host can resolve it by its own type
-/// beneath the withholding it answers an erasure through, which is the relation as the host's readers see it.
+/// startup has composed the connection string the pool is built from.
 /// </remarks>
-/// <param name="dataSource">Reaches the pool on first use.</param>
-/// <param name="commandTimeout">The deployment's configured command timeout, which nothing puts onto the pool itself.</param>
+[SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this reader.")]
 [RequiresIntegrationCoverage]
-public sealed class PersistedMailAccountAssignments(
+internal sealed class PersistedMailAccountAssignments(
     Func<NpgsqlDataSource> dataSource,
     DatabaseCommandTimeout commandTimeout) : IMailAccountAssignments
 {

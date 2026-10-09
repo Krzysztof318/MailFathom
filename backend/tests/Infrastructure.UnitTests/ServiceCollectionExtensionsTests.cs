@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text;
+using MailFathom.Application.Accounts;
 using MailFathom.Application.Discovery.Planning;
 using MailFathom.Application.Discovery.Runs;
 using MailFathom.Application.Discovery.Streaming;
@@ -27,6 +28,7 @@ using MailFathom.Domain.Emails.Authorship;
 using MailFathom.Domain.Folders;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Persistence.Connections;
+using MailFathom.Infrastructure.Persistence.Users;
 using MailFathom.Infrastructure.Secrets.Resolution;
 using MailFathom.Infrastructure.SensitiveContent.PersonalData;
 using MailFathom.Infrastructure.UnitTests.TestDoubles;
@@ -187,6 +189,37 @@ public sealed class ServiceCollectionExtensionsTests : IDisposable
             services,
             descriptor => descriptor.ServiceType == typeof(MailboxSearchReader)
                 && descriptor.Lifetime == ServiceLifetime.Scoped);
+    }
+
+    /// <summary>
+    /// What the host lays over the assignment relation is what every reader of it is handed, laid over the stored
+    /// relation rather than registered beside it, so no reader can reach the rows past the host's answer.
+    /// </summary>
+    [Fact]
+    public void AddInfrastructure_WithAnAnswerForTheAssignments_HandsEveryReaderTheAnswerOverTheStoredRelation()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddSingleton(new DatabaseCommandTimeout(TimeSpan.FromSeconds(30)));
+        var answer = Substitute.For<IMailAccountAssignments>();
+        IMailAccountAssignments? answeredOver = null;
+
+        // Act
+        services.AddInfrastructure(
+            _ => new PostgresConnectionSettings("Host=localhost;Database=mailfathom", null, null),
+            PostgresTextSearchConfiguration.Default,
+            MailAnsweringBudget.Default,
+            (_, stored) =>
+            {
+                answeredOver = stored;
+                return answer;
+            });
+        using var provider = services.BuildServiceProvider();
+        var resolved = provider.GetRequiredService<IMailAccountAssignments>();
+
+        // Assert
+        Assert.Same(answer, resolved);
+        Assert.IsType<PersistedMailAccountAssignments>(answeredOver);
     }
 
     /// <summary>
