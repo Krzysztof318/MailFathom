@@ -320,8 +320,8 @@ per session as well, add `"PermissionsFromTokenScopes": true` on this entry:
 }
 ```
 
-A token then holds the published names its scopes carry *and* its credential records, so the authorization server
-decides per session within the bound the provisioning fixed. On this surface that is a bound rather than a statement,
+A token then holds the published names its scopes carry *and* its credential names *and* its user's roles grant, so the
+authorization server decides per session within the bound the provisioning and the roles fixed. On this surface that is a bound rather than a statement,
 for the reason [step 2](#2-register-mailfathom-as-a-resource-in-the-provider) gives: a token admitted without a mail
 permission is listed fewer tools and is answered about the rest as though they did not exist. The setting sits on the
 entry rather than inside the `OAuth` block, and it is written on no other method, since none of the other three carries
