@@ -29,13 +29,13 @@ public sealed class AdminAccountRequestTests
 
     /// <summary>The ordinary case: a name this deployment serves resolves to its identifier.</summary>
     [Fact]
-    public void Resolve_AnAccountTheDeploymentServes_ReadsTheIdentifier()
+    public async Task ResolveAsync_AnAccountTheDeploymentServes_ReadsTheIdentifier()
     {
         // Arrange
         var accounts = CatalogServing(Work);
 
         // Act
-        var accountId = AdminAccountRequest.Resolve("work", accounts);
+        var accountId = await AdminAccountRequest.ResolveAsync("work", accounts, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(WorkIdentity, accountId);
@@ -43,13 +43,13 @@ public sealed class AdminAccountRequestTests
 
     /// <summary>Whitespace around the name is not part of it, so a padded name reaches the same account.</summary>
     [Fact]
-    public void Resolve_AnAccountNamedWithSurroundingWhitespace_ReadsTheSameIdentifier()
+    public async Task ResolveAsync_AnAccountNamedWithSurroundingWhitespace_ReadsTheSameIdentifier()
     {
         // Arrange
         var accounts = CatalogServing(Work);
 
         // Act
-        var accountId = AdminAccountRequest.Resolve("  work  ", accounts);
+        var accountId = await AdminAccountRequest.ResolveAsync("  work  ", accounts, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(WorkIdentity, accountId);
@@ -60,13 +60,13 @@ public sealed class AdminAccountRequestTests
     [InlineData(null)]
     [InlineData("")]
     [InlineData("   ")]
-    public void Resolve_NoAccountNamed_ReadsNothing(string? account)
+    public async Task ResolveAsync_NoAccountNamed_ReadsNothing(string? account)
     {
         // Arrange
         var accounts = CatalogServing(Work);
 
         // Act
-        var accountId = AdminAccountRequest.Resolve(account, accounts);
+        var accountId = await AdminAccountRequest.ResolveAsync(account, accounts, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Null(accountId);
@@ -74,13 +74,13 @@ public sealed class AdminAccountRequestTests
 
     /// <summary>A name this deployment does not configure resolves to nothing, exactly as an absent one does.</summary>
     [Fact]
-    public void Resolve_AnAccountTheDeploymentDoesNotServe_ReadsNothing()
+    public async Task ResolveAsync_AnAccountTheDeploymentDoesNotServe_ReadsNothing()
     {
         // Arrange
         var accounts = CatalogServing(Work);
 
         // Act
-        var accountId = AdminAccountRequest.Resolve("archive", accounts);
+        var accountId = await AdminAccountRequest.ResolveAsync("archive", accounts, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Null(accountId);
@@ -132,32 +132,34 @@ public sealed class AdminAccountRequestTests
 
     /// <summary>An absent filter narrows nothing, which is the reading a caller asked for rather than a mistake.</summary>
     [Fact]
-    public void TryResolveFilter_NoFilter_ReadsEveryAccount()
+    public async Task ResolveFilterAsync_NoFilter_ReadsEveryAccount()
     {
         // Arrange
         var accounts = CatalogServing(Work);
 
         // Act
-        var admitted = AdminAccountRequest.TryResolveFilter(null, accounts, out var accountId, out var refusal);
+        var filter = await AdminAccountRequest.ResolveFilterAsync(null, accounts, TestContext.Current.CancellationToken);
+        var accountId = (filter as AdminAccountRequest.AccountFilter.Narrowed)?.Account;
+        var refusal = (filter as AdminAccountRequest.AccountFilter.Refused)?.Refusal;
 
         // Assert
-        Assert.True(admitted);
         Assert.Null(accountId);
         Assert.Null(refusal);
     }
 
     /// <summary>A filter naming a served account narrows the reading to it.</summary>
     [Fact]
-    public void TryResolveFilter_AnAccountTheDeploymentServes_NarrowsToIt()
+    public async Task ResolveFilterAsync_AnAccountTheDeploymentServes_NarrowsToIt()
     {
         // Arrange
         var accounts = CatalogServing(Work);
 
         // Act
-        var admitted = AdminAccountRequest.TryResolveFilter("  work  ", accounts, out var accountId, out var refusal);
+        var filter = await AdminAccountRequest.ResolveFilterAsync("  work  ", accounts, TestContext.Current.CancellationToken);
+        var accountId = (filter as AdminAccountRequest.AccountFilter.Narrowed)?.Account;
+        var refusal = (filter as AdminAccountRequest.AccountFilter.Refused)?.Refusal;
 
         // Assert
-        Assert.True(admitted);
         Assert.Equal(WorkIdentity, accountId);
         Assert.Null(refusal);
     }
@@ -166,16 +168,18 @@ public sealed class AdminAccountRequestTests
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
-    public void TryResolveFilter_AnEmptyFilter_SaysToLeaveItOut(string account)
+    public async Task ResolveFilterAsync_AnEmptyFilter_SaysToLeaveItOut(string account)
     {
         // Arrange
         var accounts = CatalogServing(Work);
 
         // Act
-        var admitted = AdminAccountRequest.TryResolveFilter(account, accounts, out var accountId, out var refusal);
+        var filter = await AdminAccountRequest.ResolveFilterAsync(account, accounts, TestContext.Current.CancellationToken);
+        var accountId = (filter as AdminAccountRequest.AccountFilter.Narrowed)?.Account;
+        var refusal = (filter as AdminAccountRequest.AccountFilter.Refused)?.Refusal;
 
         // Assert
-        Assert.False(admitted);
+        Assert.NotNull(refusal);
         Assert.Null(accountId);
         Assert.Equal(StatusCodes.Status400BadRequest, refusal!.StatusCode);
         Assert.Equal(
@@ -185,16 +189,18 @@ public sealed class AdminAccountRequestTests
 
     /// <summary>A filter naming an account nobody configured is refused in the same sentence a required one is.</summary>
     [Fact]
-    public void TryResolveFilter_AnAccountTheDeploymentDoesNotServe_NamesItBack()
+    public async Task ResolveFilterAsync_AnAccountTheDeploymentDoesNotServe_NamesItBack()
     {
         // Arrange
         var accounts = CatalogServing(Work);
 
         // Act
-        var admitted = AdminAccountRequest.TryResolveFilter("  archive  ", accounts, out var accountId, out var refusal);
+        var filter = await AdminAccountRequest.ResolveFilterAsync("  archive  ", accounts, TestContext.Current.CancellationToken);
+        var accountId = (filter as AdminAccountRequest.AccountFilter.Narrowed)?.Account;
+        var refusal = (filter as AdminAccountRequest.AccountFilter.Refused)?.Refusal;
 
         // Assert
-        Assert.False(admitted);
+        Assert.NotNull(refusal);
         Assert.Null(accountId);
         Assert.Equal("This deployment configures no mail account named 'archive'.", Detail(refusal!));
     }
@@ -204,13 +210,17 @@ public sealed class AdminAccountRequestTests
     private static IDeploymentMailAccountCatalog CatalogServing(params MailAccountId[] accounts)
     {
         var catalog = Substitute.For<IDeploymentMailAccountCatalog>();
-        catalog.ServedAccounts.Returns(
+        IReadOnlyList<ServedMailAccount> served =
         [
             .. accounts.Select(account => new ServedMailAccount(
                 account,
                 MailAccountDisplayName.Create(account.Value),
                 MailSynchronizationMode.Polling)),
-        ]);
+        ];
+
+        catalog.ReadServedAccountsAsync(Arg.Any<IReadOnlyCollection<MailAccountId>>(), Arg.Any<CancellationToken>())
+            .Returns(call => (IReadOnlyList<ServedMailAccount>)
+                [.. served.Where(account => call.ArgAt<IReadOnlyCollection<MailAccountId>>(0).Contains(account.Id))]);
 
         return catalog;
     }

@@ -93,7 +93,7 @@ public sealed class AttachmentDerivationSpendGate
         AttachmentDerivationPeriod? strictestUser = null;
         AttachmentDerivationPeriod? deployment = null;
 
-        foreach (var user in this.assignments.UsersAssignedTo(account))
+        foreach (var user in await this.assignments.ReadUsersAssignedToAsync(account, cancellationToken))
         {
             var consumed = await this.ledger.ReadConsumedAsync(periodStart, derivationStep, user, cancellationToken);
 
@@ -146,7 +146,7 @@ public sealed class AttachmentDerivationSpendGate
     /// was already too late to be useful.
     /// </para>
     /// </remarks>
-    public Task RecordAccountSpendAsync(
+    public async Task RecordAccountSpendAsync(
         IPersistenceSession session,
         AttachmentDerivationStep derivationStep,
         MailAccountId account,
@@ -156,11 +156,13 @@ public sealed class AttachmentDerivationSpendGate
         ArgumentNullException.ThrowIfNull(session);
         ArgumentOutOfRangeException.ThrowIfNegative(unitCount);
 
-        return this.ledger.RecordSpendAsync(
+        var assignedUsers = await this.assignments.ReadUsersAssignedToAsync(account, cancellationToken);
+
+        await this.ledger.RecordSpendAsync(
             session,
             this.CurrentPeriodStart(),
             derivationStep,
-            this.assignments.UsersAssignedTo(account),
+            assignedUsers,
             unitCount,
             cancellationToken);
     }

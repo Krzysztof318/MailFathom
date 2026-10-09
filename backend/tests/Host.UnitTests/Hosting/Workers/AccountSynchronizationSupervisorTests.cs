@@ -960,9 +960,13 @@ public sealed class AccountSynchronizationSupervisorTests
             message => message.Contains("finished in", StringComparison.Ordinal));
     }
 
-    /// <summary>An account a reload removes is withdrawn work, not a failure, so its supervisor ends instead of connecting again.</summary>
+    /// <summary>
+    /// An account its run no longer finds opens no connection, and the supervisor waits rather than ending: whether the
+    /// account is still served is the coordinator's to decide, and a supervisor that ended at once would be started
+    /// again on the very next pass.
+    /// </summary>
     [Fact]
-    public async Task RunAsync_AccountLeavesConfiguration_EndsSupervisionOfIt()
+    public async Task RunAsync_AccountNoLongerInItsRecords_ConnectsNoMoreAndWaitsToBeStopped()
     {
         // Arrange
         var attemptedFolders = new List<string>();
@@ -980,12 +984,62 @@ public sealed class AccountSynchronizationSupervisorTests
         // Act
         await firstFolderAttempted.Task.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
         harness.Settings.Current = SynchronizationTestHost.CreateOptions(enabled: true);
-        await SynchronizationTestHost.AdvanceUntilAsync(harness.Clock, supervision, AdvanceStep, DeadlockGuard);
+        await SynchronizationTestHost.AdvanceUntilAsync(
+            harness.Clock,
+            harness.WaitForLogAsync("was not found in the records its run read"),
+            AdvanceStep,
+            DeadlockGuard);
+        var endedBeforeStopped = supervision.IsCompleted;
+        await harness.StopSchedulingAsync();
+        await supervision.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
 
         // Assert
+        Assert.False(endedBeforeStopped);
+        Assert.Equal(["INBOX"], attemptedFolders);
+    }
+
+    /// <summary>
+    /// A read of the records that fails is a run that could not start: it is backed off like a failed run and read
+    /// again, rather than ending supervision and having it restarted at once for as long as the cause lasts.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_RecordsUnreadable_BacksTheRunOffAndRunsOnceTheyReadAgain()
+    {
+        // Arrange
+        var attemptedFolders = new List<string>();
+        var firstFolderAttempted = new TaskCompletionSource();
+        var sessionFactory = CreateFailingSessionFactory(
+            attemptedFolders,
+            firstFolderAttempted,
+            expectedFolderCount: 1,
+            _ => new InvalidOperationException("connect failed"));
+        await using var harness = CreateHarness(
+            SynchronizationTestHost.CreateSingleAccountOptions(enabled: true, "INBOX"),
+            sessionFactory);
+        harness.Accounts.ReadFailure = new InvalidOperationException("the database is out of reach");
+        var supervision = harness.StartSupervision();
+
+        // Act
+        await SynchronizationTestHost.AdvanceUntilAsync(
+            harness.Clock,
+            harness.WaitForLogAsync("could not be read, so the run did not start"),
+            AdvanceStep,
+            DeadlockGuard);
+        var attemptedWhileUnreadable = attemptedFolders.Count;
+        harness.Accounts.ReadFailure = null;
+        await SynchronizationTestHost.AdvanceUntilAsync(
+            harness.Clock,
+            firstFolderAttempted.Task,
+            AdvanceStep,
+            DeadlockGuard);
+        await harness.StopSchedulingAsync();
+        await supervision.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(0, attemptedWhileUnreadable);
         Assert.Contains(
             harness.Logger.Messages,
-            message => message.Contains("Account primary is no longer configured", StringComparison.Ordinal));
+            message => message.Contains("has failed 1 runs in a row", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -1599,10 +1653,12 @@ public sealed class AccountSynchronizationSupervisorTests
             this.RunLedger = new MailSynchronizationRunLedger(clock);
             this.RunSignal = new MailAccountRunSignal();
             this.Signals = new ClientSignals([this.SignalChannel], this.SignalClock);
+            this.Accounts = new SnapshotMailSynchronizationAccounts(settings);
             this.supervisor = new AccountSynchronizationSupervisor(
                 account,
                 services.GetRequiredService<IServiceScopeFactory>(),
-                settings,
+                settings.Current,
+                this.Accounts,
                 this.accountRunSlots,
                 new AccountPushNotificationWatch(
                     account,
@@ -1613,8 +1669,12 @@ public sealed class AccountSynchronizationSupervisorTests
                 this.RunLedger,
                 this.RunSignal,
                 this.Signals,
-                this.Logger);
+                this.Logger,
+                clock);
         }
+
+        /// <summary>Gets the source each run's settings are read from, which a test can make refuse the read.</summary>
+        internal SnapshotMailSynchronizationAccounts Accounts { get; }
 
         /// <summary>Gets the instrument the run's restore stage reports through, which is how a test sees that stage run.</summary>
         internal IMailboxRestoreTelemetry RestoreTelemetry => this.services.GetRequiredService<IMailboxRestoreTelemetry>();
@@ -1646,6 +1706,9 @@ public sealed class AccountSynchronizationSupervisorTests
 
         /// <summary>Cancels scheduling the way host shutdown does, leaving the work-unit token live for the drain.</summary>
         internal Task StopSchedulingAsync() => this.scheduling.CancelAsync();
+
+        /// <summary>Completes once the supervisor has logged a message containing the fragment.</summary>
+        internal Task WaitForLogAsync(string fragment) => this.Logger.WaitForMessageAsync(fragment);
 
         /// <summary>Ends the drain the way a host that waited long enough does, interrupting the work still in flight.</summary>
         internal Task StopWorkUnitsAsync() => this.workUnits.CancelAsync();

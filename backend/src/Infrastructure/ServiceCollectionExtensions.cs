@@ -293,8 +293,13 @@ public static class ServiceCollectionExtensions
     /// <param name="currentConnectionSettings">Supplies where the PostgreSQL connection string and its password currently come from.</param>
     /// <param name="textSearchConfiguration">The validated PostgreSQL text search configuration the lexical index is built with.</param>
     /// <param name="answeringBudget">The validated ceilings one question about the mailbox is subject to.</param>
+    /// <param name="answerMailAccountAssignments">
+    /// Wraps the assignment relation every reader of <see cref="IMailAccountAssignments" /> is handed, or
+    /// <see langword="null" /> to hand them the relation as it is stored. The host answers an erasure through it, because
+    /// a user it is deciding about must reach no mailbox while their rows still exist, and only the host knows who that is.
+    /// </param>
     /// <returns>The service collection, for chaining.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when any argument other than <paramref name="answerMailAccountAssignments" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// <para>
     /// The settings arrive already read rather than as an <c>IConfiguration</c> this method reaches into, so which key
@@ -320,7 +325,8 @@ public static class ServiceCollectionExtensions
         this IServiceCollection services,
         Func<IServiceProvider, PostgresConnectionSettings> currentConnectionSettings,
         PostgresTextSearchConfiguration textSearchConfiguration,
-        MailAnsweringBudget answeringBudget)
+        MailAnsweringBudget answeringBudget,
+        Func<IServiceProvider, IMailAccountAssignments, IMailAccountAssignments>? answerMailAccountAssignments = null)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(currentConnectionSettings);
@@ -346,7 +352,7 @@ public static class ServiceCollectionExtensions
 
         AddPersistenceAdapters(services, currentConnectionSettings, textSearchConfiguration);
         AddEmbeddingAdapters(services);
-        AddStoredMailAdapters(services);
+        AddStoredMailAdapters(services, answerMailAccountAssignments);
         AddMailRuleAdapters(services);
         AddJobQueueAdapters(services);
         AddWorkLeaseAdapters(services);
@@ -590,7 +596,10 @@ public static class ServiceCollectionExtensions
 
     /// <summary>Registers the tables stored mail itself lives in, and the two maintenance walks an operator drives over them.</summary>
     /// <param name="services">The service collection.</param>
-    private static void AddStoredMailAdapters(IServiceCollection services)
+    /// <param name="answerMailAccountAssignments">What the host lays over the assignment relation, if anything.</param>
+    private static void AddStoredMailAdapters(
+        IServiceCollection services,
+        Func<IServiceProvider, IMailAccountAssignments, IMailAccountAssignments>? answerMailAccountAssignments)
     {
         services.AddScoped<IEmailMetadataRepository, StoredEmailMetadataRepository>();
         // Placing a message in its conversation is part of both write paths — the arrival that commits it and the
@@ -651,8 +660,11 @@ public static class ServiceCollectionExtensions
         // One user's own record, read by key and bounded in the statement rather than in the process. A singleton
         // over the pool for the reason the persisted configuration layer's reader is one — the command holds no state
         // between calls — and separate from the directory above because that answers for the deployment and this for
-        // a person.
-        services.AddSingleton<IUserSettingsDocumentReader, PersistedUserSettingsDocumentReader>();
+        // a person. The pool is reached on first use rather than when the reader is built, because the synchronization
+        // coordinator, a hosted service, holds this reader and is built before startup has composed the pool.
+        services.AddSingleton<IUserSettingsDocumentReader>(provider => new PersistedUserSettingsDocumentReader(
+            () => provider.GetRequiredService<NpgsqlDataSource>(),
+            provider.GetRequiredService<DatabaseCommandTimeout>()));
         // The other direction of travel over the same row, registered as a singleton over the pool beside the read for
         // the same reason. It is a second service rather than a second method on the reader because a deployment that
         // never administers a user still reads one on every start, and the two are granted separately in the
@@ -670,6 +682,17 @@ public static class ServiceCollectionExtensions
             provider.GetRequiredService<DatabaseCommandTimeout>()));
         services.AddSingleton<IServedMailAccountReader>(provider => provider.GetRequiredService<PersistedServedMailAccounts>());
         services.AddSingleton<IDeploymentMailFolders>(provider => provider.GetRequiredService<PersistedServedMailAccounts>());
+        // Who reaches which mailbox, read from the relation per question rather than out of a composed roster. A
+        // singleton over the pool for the reason the reader above is one: a signal raised outside any request asks it
+        // as well as a request and a work unit.
+        services.AddSingleton(provider =>
+        {
+            var stored = new PersistedMailAccountAssignments(
+                () => provider.GetRequiredService<NpgsqlDataSource>(),
+                provider.GetRequiredService<DatabaseCommandTimeout>());
+
+            return answerMailAccountAssignments?.Invoke(provider, stored) ?? stored;
+        });
         // What one person set about their own client, which is beside the record above rather than in it: this is a
         // preference about the client and that document is configuration. Scoped because both the read and the upsert
         // are ordinary statements on the request's own context, and registered unconditionally because it is a store

@@ -215,7 +215,7 @@ public sealed class ClientContactCorrespondenceEndpointTests
     {
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
 
-        catalog.AssignedAccounts.Returns([.. accounts.Select(SyntheticServedAccount.Of)]);
+        catalog.ReadAssignedAccountsAsync(Arg.Any<CancellationToken>()).Returns([.. accounts.Select(SyntheticServedAccount.Of)]);
 
         return catalog;
     }

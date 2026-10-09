@@ -232,13 +232,16 @@ public sealed class MailOAuthAccessTokenSourceTests
         // account rather than against whoever is assigned it — so an exchange for an account the deployment does not
         // serve has nowhere to read a refresh token from.
         var accountCatalog = Substitute.For<IDeploymentMailAccountCatalog>();
-        accountCatalog.ServedAccounts.Returns(
-        [
-            new ServedMailAccount(
-                MailAccountId.Create(Account),
-                MailAccountDisplayName.Create("The primary mailbox"),
-                MailSynchronizationMode.Polling),
-        ]);
+        accountCatalog.ReadServedAccountsAsync(
+                Arg.Any<IReadOnlyCollection<MailAccountId>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+            [
+                new ServedMailAccount(
+                    MailAccountId.Create(Account),
+                    MailAccountDisplayName.Create("The primary mailbox"),
+                    MailSynchronizationMode.Polling),
+            ]);
 
         var source = new MailOAuthAccessTokenSource(
             transportFactory,

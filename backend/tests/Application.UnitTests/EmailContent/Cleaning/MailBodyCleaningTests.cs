@@ -327,7 +327,7 @@ public sealed class MailBodyCleaningTests
     private static MailboxScopeResolver ScopeResolverOver(EmailSummary? summary)
     {
         var accountCatalog = Substitute.For<ICallerMailAccountCatalog>();
-        accountCatalog.AssignedAccounts.Returns(
+        accountCatalog.ReadAssignedAccountsAsync(Arg.Any<CancellationToken>()).Returns(
             [SyntheticServedAccount.Of(MailAccountId.Create(SyntheticEmailSummaries.DefaultAccountId))]);
         var participation = StubMailFolderParticipation.Mapping(summary is null
             ? []

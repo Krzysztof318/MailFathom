@@ -47,7 +47,7 @@ namespace MailFathom.Infrastructure.Persistence.Users;
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this reader.")]
 [RequiresIntegrationCoverage]
 internal sealed class PersistedUserSettingsDocumentReader(
-    NpgsqlDataSource dataSource,
+    Func<NpgsqlDataSource> dataSource,
     DatabaseCommandTimeout commandTimeout)
     : IUserSettingsDocumentReader
 {
@@ -185,7 +185,7 @@ internal sealed class PersistedUserSettingsDocumentReader(
     {
         try
         {
-            return await dataSource.OpenConnectionAsync(cancellationToken);
+            return await dataSource().OpenConnectionAsync(cancellationToken);
         }
         catch (NpgsqlException exception)
         {
@@ -211,7 +211,7 @@ internal sealed class PersistedUserSettingsDocumentReader(
 
         try
         {
-            connection = await dataSource.OpenConnectionAsync(cancellationToken);
+            connection = await dataSource().OpenConnectionAsync(cancellationToken);
         }
         catch (NpgsqlException exception)
         {

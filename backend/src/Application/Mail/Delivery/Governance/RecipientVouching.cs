@@ -72,7 +72,7 @@ public sealed class RecipientVouching(
             return 0;
         }
 
-        var ownAddresses = this.OwnAddresses();
+        var ownAddresses = await this.OwnAddressesAsync(cancellationToken);
         var unvouched = namedByCaller.Where(address => !ownAddresses.Contains(address)).ToArray();
 
         if (unvouched.Length == 0)
@@ -82,7 +82,7 @@ public sealed class RecipientVouching(
 
         // Resolved once, so every group of one send is answered about one set of books by construction rather than by
         // each read happening to reach the same principal — and so the resolution is not repeated per chunk.
-        var scope = ownership.Scope;
+        var scope = await ownership.ReadScopeAsync(cancellationToken);
         var count = 0;
 
         foreach (var group in unvouched.Chunk(Contact.MaximumAddressCount))
@@ -121,7 +121,8 @@ public sealed class RecipientVouching(
     /// account without a sending identity contributes none, which is the honest answer: nothing here knows what a
     /// read-only account's own address is.
     /// </remarks>
-    private HashSet<EmailAddress> OwnAddresses() => accounts.AssignedAccounts
+    private async Task<HashSet<EmailAddress>> OwnAddressesAsync(CancellationToken cancellationToken) =>
+        (await accounts.ReadAssignedAccountsAsync(cancellationToken))
         .Select(account => senderIdentities.FindSenderIdentity(account.Id))
         .OfType<OutgoingSenderIdentity>()
         .Select(identity => identity.Address)

@@ -126,7 +126,10 @@ public sealed class MailDeletionRecorder
 
         var target = await this.targets.FindAsync(storedEmailId, cancellationToken);
 
-        if (target is null || !this.scopeResolver.IsReadableByTools(target.Occurrence.AccountId, target.Folder.Alias))
+        if (target is null || !await this.scopeResolver.IsReadableByToolsAsync(
+                target.Occurrence.AccountId,
+                target.Folder.Alias,
+                cancellationToken))
         {
             return AuthoredMailDeletionResult.NotRecorded(MailDeletionOutcome.MessageNotFound);
         }

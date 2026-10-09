@@ -381,7 +381,7 @@ public sealed class SetMailFlagsToolTests
                 folder)));
 
         var accountCatalog = Substitute.For<ICallerMailAccountCatalog>();
-        accountCatalog.AssignedAccounts.Returns([SyntheticServedAccount.Of(Account)]);
+        accountCatalog.ReadAssignedAccountsAsync(Arg.Any<CancellationToken>()).Returns([SyntheticServedAccount.Of(Account)]);
 
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ => new CommittingSession());

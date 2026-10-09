@@ -32,7 +32,6 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
-using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Infrastructure.Observability;
 
@@ -54,7 +53,8 @@ internal sealed partial class AccountSynchronizationSupervisor
 {
     private readonly MailAccountId account;
     private readonly IServiceScopeFactory scopeFactory;
-    private readonly ISettingsSnapshot<MailSynchronizationOptions> settings;
+    private readonly MailSynchronizationOptions boundSettings;
+    private readonly IMailSynchronizationAccountSource accounts;
     private readonly SemaphoreSlim accountRunSlots;
     private readonly AccountPushNotificationWatch pushNotifications;
     private readonly MailSynchronizationTelemetry telemetry;
@@ -62,11 +62,13 @@ internal sealed partial class AccountSynchronizationSupervisor
     private readonly MailAccountRunSignal runSignal;
     private readonly ClientSignals signals;
     private readonly ILogger<AccountSynchronizationSupervisor> logger;
+    private readonly TimeProvider timeProvider;
 
     /// <summary>Initializes a supervisor for one configured account.</summary>
     /// <param name="account">The account this supervisor synchronizes, by its generated identifier together; the identifier is what it logs.</param>
     /// <param name="scopeFactory">Creates the scope each folder work unit runs in.</param>
-    /// <param name="settings">Supplies the snapshot every run is scheduled from.</param>
+    /// <param name="boundSettings">The bound settings this supervisor was started under, which time a run that could not start; the coordinator replaces the supervisor when they reload.</param>
+    /// <param name="accounts">Reads the settings every run is scheduled from, when that run begins.</param>
     /// <param name="accountRunSlots">Bounds how many accounts run at once; owned by the coordinator and never released beyond what this supervisor took.</param>
     /// <param name="pushNotifications">Ends the wait between runs early when a watched folder changes; owned by this supervisor and disposed with it.</param>
     /// <param name="telemetry">Publishes the run as a span with its folders beneath it, and the counts and waits an operator reads without opening a log; it also measures how long a run took.</param>
@@ -74,21 +76,25 @@ internal sealed partial class AccountSynchronizationSupervisor
     /// <param name="runSignal">Ends the wait between runs early when a change is authored here, which is the one event push cannot report.</param>
     /// <param name="signals">Tells whatever the user has open that mail arrived and that the run finished, so a screen catches up without waiting for its own interval.</param>
     /// <param name="logger">Records run outcomes, which carry account and folder aliases and no message-level data.</param>
+    /// <param name="timeProvider">Times the backoff of a run that could not start.</param>
     public AccountSynchronizationSupervisor(
         MailAccountId account,
         IServiceScopeFactory scopeFactory,
-        ISettingsSnapshot<MailSynchronizationOptions> settings,
+        MailSynchronizationOptions boundSettings,
+        IMailSynchronizationAccountSource accounts,
         SemaphoreSlim accountRunSlots,
         AccountPushNotificationWatch pushNotifications,
         MailSynchronizationTelemetry telemetry,
         MailSynchronizationRunLedger runLedger,
         MailAccountRunSignal runSignal,
         ClientSignals signals,
-        ILogger<AccountSynchronizationSupervisor> logger)
+        ILogger<AccountSynchronizationSupervisor> logger,
+        TimeProvider timeProvider)
     {
         this.account = account;
         this.scopeFactory = scopeFactory;
-        this.settings = settings;
+        this.boundSettings = boundSettings;
+        this.accounts = accounts;
         this.accountRunSlots = accountRunSlots;
         this.pushNotifications = pushNotifications;
         this.telemetry = telemetry;
@@ -96,10 +102,11 @@ internal sealed partial class AccountSynchronizationSupervisor
         this.runSignal = runSignal;
         this.signals = signals;
         this.logger = logger;
+        this.timeProvider = timeProvider;
     }
 
-    /// <summary>Supervises the account until scheduling stops or the account leaves configuration.</summary>
-    /// <param name="schedulingToken">Stops the supervisor from starting another run; cancelled when the host begins shutting down, when a reload replaces this supervisor, or when this replica stops holding the account.</param>
+    /// <summary>Supervises the account until scheduling stops or the account is no longer served.</summary>
+    /// <param name="schedulingToken">Stops the supervisor from starting another run; cancelled when the host begins shutting down, when a change to its account or to the synchronization settings replaces this supervisor, or when this replica stops holding the account.</param>
     /// <param name="workUnitToken">Tears down a run already under way; cancelled once the coordinator's bounded shutdown drain expires, or at once when this replica stops holding the account.</param>
     /// <returns>A task that completes when the account is no longer supervised, and that never faults.</returns>
     /// <remarks>
@@ -144,25 +151,36 @@ internal sealed partial class AccountSynchronizationSupervisor
 
     /// <summary>Runs the account, waits, and runs it again until scheduling stops.</summary>
     /// <remarks>
-    /// Everything a run reads is taken from the published snapshot when that run begins, so a reload or a rotated
-    /// credential reaches the next run and never the one already under way. The account is looked up in that same
-    /// snapshot, which is how a supervisor learns that the operator removed the account it was serving.
+    /// <para>
+    /// Everything a run reads is read from the account records when that run begins — this account and the other
+    /// accounts of the users it is assigned to, under the deployment's bound settings — so a commit or a rotated
+    /// credential reaches the next run and never the one already under way.
+    /// </para>
+    /// <para>
+    /// A read that fails, or that does not find the account, is a run that could not start rather than an end of
+    /// supervision: it is counted as a failed run and waited out under the same backoff. Whether the account is still
+    /// served is the coordinator's question, which it answers by stopping this supervisor, so a record that cannot be
+    /// composed or a database that is briefly out of reach costs one backed-off read rather than a supervisor restarted
+    /// on every pass.
+    /// </para>
     /// </remarks>
     private async Task SuperviseAsync(CancellationToken schedulingToken, CancellationToken workUnitToken)
     {
         var consecutiveFailureCount = 0;
+        MailSynchronizationOptions? previousRunSettings = null;
 
         while (!schedulingToken.IsCancellationRequested)
         {
-            var runSettings = this.settings.Current;
-            var account = runSettings.FindConfiguredAccount(this.account);
-
-            if (account is null)
+            if (await this.ReadRunAsync(previousRunSettings, schedulingToken) is not { } read)
             {
-                this.LogAccountNoLongerConfigured(this.account.Value);
+                consecutiveFailureCount++;
+                await this.WaitOutUnreadableRunAsync(consecutiveFailureCount, schedulingToken);
 
-                return;
+                continue;
             }
+
+            var (runSettings, account) = read;
+            previousRunSettings = runSettings;
 
             var run = await this.RunOnceAsync(runSettings, account, schedulingToken, workUnitToken);
 
@@ -210,6 +228,56 @@ internal sealed partial class AccountSynchronizationSupervisor
                 // Something local asked for this account's run. The backoff it was waiting out is not reset by that —
                 // the next run recomputes it from the failure count, which nothing here touched.
             }
+        }
+    }
+
+    /// <summary>Reads what this account's next run is composed from.</summary>
+    /// <returns>The run's settings and the account's declaration in them, or nothing when the read failed or did not find the account.</returns>
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A read that fails is a run that could not start, backed off like any failed run; ending supervision over it would restart the supervisor on every pass for as long as the cause lasts.")]
+    private async Task<(MailSynchronizationOptions RunSettings, MailSynchronizationAccountOptions Account)?> ReadRunAsync(
+        MailSynchronizationOptions? previousRunSettings,
+        CancellationToken schedulingToken)
+    {
+        try
+        {
+            var runSettings = await this.accounts.ReadRunSettingsAsync(this.account, previousRunSettings, schedulingToken);
+
+            if (runSettings?.FindConfiguredAccount(this.account) is { } account)
+            {
+                return (runSettings, account);
+            }
+
+            this.LogAccountNotInItsRecords(this.account.Value);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException || !schedulingToken.IsCancellationRequested)
+        {
+            this.LogRunSettingsUnreadable(exception, this.account.Value);
+        }
+
+        return null;
+    }
+
+    /// <summary>Waits out the backoff of a run that could not start, or until a change authored here asks for the account.</summary>
+    private async Task WaitOutUnreadableRunAsync(int consecutiveFailureCount, CancellationToken schedulingToken)
+    {
+        var delayBeforeNextRun = SynchronizationRunBackoff.DelayBeforeNextRun(
+            this.boundSettings.Interval,
+            this.boundSettings.MaxFailureBackoff,
+            consecutiveFailureCount);
+
+        this.telemetry.RecordScheduledDelay(this.account, delayBeforeNextRun, consecutiveFailureCount);
+        this.runLedger.RecordNextRunDue(this.account, delayBeforeNextRun, consecutiveFailureCount);
+        this.LogNextRunBackedOff(this.account.Value, consecutiveFailureCount, delayBeforeNextRun);
+
+        using var authoredChange = this.runSignal.Register(this.account, schedulingToken);
+
+        try
+        {
+            await Task.Delay(delayBeforeNextRun, this.timeProvider, authoredChange.Token);
+        }
+        catch (OperationCanceledException) when (!schedulingToken.IsCancellationRequested)
+        {
+            // Something local asked for this account's run, which is worth reading the records again for.
         }
     }
 
@@ -714,9 +782,11 @@ internal sealed partial class AccountSynchronizationSupervisor
             var retention = scope.ServiceProvider.GetRequiredService<NotificationRetention>();
             var erasedNotificationCount = 0;
 
-            foreach (var reader in scope.ServiceProvider
+            var readers = await scope.ServiceProvider
                 .GetRequiredService<IMailAccountAssignments>()
-                .UsersAssignedTo(this.account))
+                .ReadUsersAssignedToAsync(this.account, cancellationToken);
+
+            foreach (var reader in readers)
             {
                 erasedNotificationCount += await retention.EraseExpiredAsync(reader, cancellationToken);
             }
@@ -1580,18 +1650,23 @@ internal sealed partial class AccountSynchronizationSupervisor
 
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "Account {AccountId} is no longer configured, so its supervision ended; the mail already stored for it stays readable.")]
-    private partial void LogAccountNoLongerConfigured(string accountId);
+        Message = "Account {AccountId} was not found in the records its run read, so the run did not start; it is read again after the backoff, and its supervision ends once the account is no longer served.")]
+    private partial void LogAccountNotInItsRecords(string accountId);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "The records the run of account {AccountId} is composed from could not be read, so the run did not start; it is read again after the backoff.")]
+    private partial void LogRunSettingsUnreadable(Exception exception, string accountId);
 
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "Supervision of account {AccountId} stopped because it was asked to: the host is shutting down, a reload replaced it, or this replica no longer holds the account.")]
+        Message = "Supervision of account {AccountId} stopped because it was asked to: the host is shutting down, a change to its account or to the synchronization settings replaced it, or this replica no longer holds the account.")]
     private partial void LogSupervisionStopped(string accountId);
 
     /// <summary>Separates a supervisor that ended unexpectedly from one that was asked to stop, because only the first is a defect.</summary>
     [LoggerMessage(
         Level = LogLevel.Error,
-        Message = "Supervision of account {AccountId} ended unexpectedly; it is started again on the next supervision interval and no other account is affected.")]
+        Message = "Supervision of account {AccountId} ended unexpectedly; it is started again on the coordinator's next pass and no other account is affected.")]
     private partial void LogSupervisionFailed(Exception exception, string accountId);
 
     /// <summary>Reports the counts a run produced; the unreadable count is how a malformed message stays visible without its content being logged.</summary>

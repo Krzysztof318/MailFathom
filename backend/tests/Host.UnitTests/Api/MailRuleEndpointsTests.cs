@@ -513,13 +513,18 @@ public sealed class MailRuleEndpointsTests
     private static IDeploymentMailAccountCatalog CatalogServing(params MailAccountId[] accounts)
     {
         var catalog = Substitute.For<IDeploymentMailAccountCatalog>();
-        catalog.ServedAccounts.Returns(
+        IReadOnlyList<ServedMailAccount> served =
         [
             .. accounts.Select(account => new ServedMailAccount(
                 account,
                 MailAccountDisplayName.Create(account.Value),
                 MailSynchronizationMode.Polling)),
-        ]);
+        ];
+
+        catalog.ReadServedAccountsAsync(Arg.Any<CancellationToken>()).Returns(served);
+        catalog.ReadServedAccountsAsync(Arg.Any<IReadOnlyCollection<MailAccountId>>(), Arg.Any<CancellationToken>())
+            .Returns(call => (IReadOnlyList<ServedMailAccount>)
+                [.. served.Where(account => call.ArgAt<IReadOnlyCollection<MailAccountId>>(0).Contains(account.Id))]);
 
         return catalog;
     }

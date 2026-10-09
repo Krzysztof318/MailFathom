@@ -12,7 +12,8 @@ namespace MailFathom.Application.Accounts;
 /// <para>
 /// An account is a record of its own and is assigned to however many users an administrator assigned it to, so which
 /// user reaches which mailbox is a relation rather than a column on either side. This is the one port that reads it,
-/// and the two directions have different callers.
+/// and the two directions have different callers. Every answer is read from the relation as it stands, so an
+/// assignment an administrator just made or withdrew is the answer the next question gets on every replica.
 /// </para>
 /// <para>
 /// Two read the user-to-accounts direction, and no third joins them without a reason of the same kind.
@@ -37,9 +38,10 @@ namespace MailFathom.Application.Accounts;
 /// </remarks>
 public interface IMailAccountAssignments
 {
-    /// <summary>Gets the accounts one user is assigned, or empty when they are assigned none.</summary>
+    /// <summary>Reads the accounts one user is assigned, or empty when they are assigned none.</summary>
     /// <param name="user">The user asked about.</param>
-    /// <returns>The identifiers of the accounts assigned to that user.</returns>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The identifiers of the accounts assigned to that user, in the ordinal order of the identifiers.</returns>
     /// <remarks>
     /// Empty is a real answer rather than an absent one: a user provisioned before an account was assigned to them,
     /// and one left after their last was unassigned, are both served nothing rather than served everything.
@@ -47,11 +49,12 @@ public interface IMailAccountAssignments
     /// <see cref="Emails.Mailboxes.MailboxScope.NothingReadable" /> rather than into a scope carrying an empty account
     /// list, so nothing downstream has to decide what an empty list means.
     /// </remarks>
-    IReadOnlyList<MailAccountId> AccountsAssignedTo(UserId user);
+    Task<IReadOnlyList<MailAccountId>> ReadAccountsAssignedToAsync(UserId user, CancellationToken cancellationToken);
 
-    /// <summary>Gets the users one account is assigned to, or empty when it is assigned to nobody.</summary>
+    /// <summary>Reads the users one account is assigned to, or empty when it is assigned to nobody.</summary>
     /// <param name="account">The account asked about.</param>
-    /// <returns>The users assigned that account.</returns>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The users assigned that account, in the order of their identifiers.</returns>
     /// <remarks>
     /// The relation read the other way round, which is what a fan-out needs: a change to one mailbox reaches every
     /// person served by it, and an account assigned to nobody reaches nobody rather than everybody. It answers about
@@ -59,5 +62,5 @@ public interface IMailAccountAssignments
     /// holding a mailbox and owing something per person: a signal a synchronization run raises, the per-user spend
     /// ceilings, and the language a shared mailbox's derived text is composed in.
     /// </remarks>
-    IReadOnlyList<UserId> UsersAssignedTo(MailAccountId account);
+    Task<IReadOnlyList<UserId>> ReadUsersAssignedToAsync(MailAccountId account, CancellationToken cancellationToken);
 }

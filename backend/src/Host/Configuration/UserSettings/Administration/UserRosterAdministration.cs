@@ -44,6 +44,7 @@ internal sealed partial class UserRosterAdministration(
     IUserErasure erasure,
     IMailAccountRecordStore accounts,
     IMailAccountWorkQuiescing quiescing,
+    WithheldMailAccounts withheldAccounts,
     IUserSettingsDocumentWriter documents,
     ServedUsers servedUsers,
     SeveralUserAdmission admission,
@@ -263,8 +264,9 @@ internal sealed partial class UserRosterAdministration(
     /// <remarks>
     /// <para>
     /// The order here is the whole of what makes an erasure true afterwards, and none of it is bookkeeping. The user
-    /// leaves the runtime roster <em>first</em>, so the accounts they alone were assigned leave the set this replica
-    /// serves and its synchronization coordinator gives their supervision back. No other replica is told before the
+    /// leaves the runtime roster and the accounts they alone were assigned are withheld from synchronization
+    /// <em>first</em>, so this replica's coordinator gives their supervision back — the records it reads them from have
+    /// not changed yet, which is why the withholding is stated rather than read. No other replica is told before the
     /// deletion commits — the announcement follows a committed erasure and is not made on a refusal — so an account
     /// one of them still supervises refuses this erasure rather than being deleted under it. Only then are those
     /// accounts held stopped, and only under that hold is anything deleted —
@@ -294,6 +296,7 @@ internal sealed partial class UserRosterAdministration(
         authorization.RequirePermission(MailFathomPermission.AdminErase);
 
         var solelyAssigned = await accounts.ReadSolelyAssignedAsync(user, cancellationToken);
+        MailAccountId[] solelyAssignedAccounts = [.. solelyAssigned.Select(static account => MailAccountId.Create(account.ToString("D")))];
         bool served;
         var erased = false;
         Guid? unquiesced = null;
@@ -305,9 +308,10 @@ internal sealed partial class UserRosterAdministration(
             served = servedUsers.Users.Any(candidate => candidate.User == user);
 
             using var withheld = servedUsers.Withhold(user);
+            using var unsupervised = withheldAccounts.Withhold(solelyAssignedAccounts);
 
             refusal = await quiescing.RunQuiescedAsync(
-                [.. solelyAssigned.Select(static account => MailAccountId.Create(account.ToString("D")))],
+                solelyAssignedAccounts,
                 async token =>
                 {
                     var outcome = await erasure.EraseAsync(user, solelyAssigned, token);

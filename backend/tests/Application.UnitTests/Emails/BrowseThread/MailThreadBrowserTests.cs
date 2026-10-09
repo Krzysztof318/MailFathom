@@ -670,7 +670,7 @@ public sealed class MailThreadBrowserTests
         IReadOnlyList<MailAccountId>? ownedAccounts = null)
     {
         var accountCatalog = Substitute.For<ICallerMailAccountCatalog>();
-        accountCatalog.AssignedAccounts.Returns(
+        accountCatalog.ReadAssignedAccountsAsync(Arg.Any<CancellationToken>()).Returns(
         [
             .. (ownedAccounts ?? [Account, SecondAccount])
                 .OrderBy(accountId => accountId.Value, StringComparer.Ordinal)

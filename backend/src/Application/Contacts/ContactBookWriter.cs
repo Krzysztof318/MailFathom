@@ -98,7 +98,7 @@ public sealed class ContactBookWriter
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="draft" /> is <see langword="null" />.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold the writing grant.</exception>
     /// <exception cref="ContactRecordInvalidException">Thrown when the record breaks a rule the book holds.</exception>
-    public Task<ContactWriteResult> AmendAsync(
+    public async Task<ContactWriteResult> AmendAsync(
         ContactId contactId,
         ContactRecordDraft draft,
         CancellationToken cancellationToken)
@@ -109,8 +109,10 @@ public sealed class ContactBookWriter
 
         var record = ReadRecord(draft);
 
-        return this.book.AmendAsync(
-            this.ownership.Scope,
+        var scope = await this.ownership.ReadScopeAsync(cancellationToken);
+
+        return await this.book.AmendAsync(
+            scope,
             new ContactAmendment
             {
                 ContactId = contactId,
@@ -136,11 +138,13 @@ public sealed class ContactBookWriter
     /// every other write here does — a caller granted this permission is writing for the user — which is also what
     /// keeps collection from performing it on its own output.
     /// </remarks>
-    public Task<ContactWriteResult> PromoteAsync(ContactId contactId, CancellationToken cancellationToken)
+    public async Task<ContactWriteResult> PromoteAsync(ContactId contactId, CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.MailContactsWrite);
 
-        return this.book.PromoteAsync(this.ownership.Scope, contactId, CallerWriter, cancellationToken);
+        var scope = await this.ownership.ReadScopeAsync(cancellationToken);
+
+        return await this.book.PromoteAsync(scope, contactId, CallerWriter, cancellationToken);
     }
 
     /// <summary>Erases one person and everything the book derived from them.</summary>
@@ -154,11 +158,13 @@ public sealed class ContactBookWriter
     /// erase a contact it could not have amended — and why erasing one a mailbox collected takes it out for every user
     /// assigned that mailbox rather than only for this one.
     /// </remarks>
-    public Task<ContactErasure> EraseAsync(ContactId contactId, CancellationToken cancellationToken)
+    public async Task<ContactErasure> EraseAsync(ContactId contactId, CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.MailContactsWrite);
 
-        return this.book.EraseAsync(this.ownership.Scope, contactId, cancellationToken);
+        var scope = await this.ownership.ReadScopeAsync(cancellationToken);
+
+        return await this.book.EraseAsync(scope, contactId, cancellationToken);
     }
 
     /// <summary>Reads the record a draft states, refusing the one rule it broke.</summary>

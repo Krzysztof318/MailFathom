@@ -147,7 +147,7 @@ internal sealed class ListEmailsTool(
 
         var result = await mailboxTimelineReader.ListEmailsAsync(request, cancellationToken);
 
-        return ListEmailsToolResult.From(result, PublishedAccountNames.From(accountCatalog));
+        return ListEmailsToolResult.From(result, await PublishedAccountNames.FromAsync(accountCatalog, cancellationToken));
     }
 
     /// <summary>Reads the domain direction the protocol value names.</summary>

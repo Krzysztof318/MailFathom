@@ -375,8 +375,12 @@ public sealed class SearchEmailsToolTests
 
         // Assert
         var published = Assert.Single(result.Matches);
+        var names = await PublishedAccountNames.FromAsync(
+            new StubMailAccountCatalog(ServedAccountId),
+            TestContext.Current.CancellationToken);
+
         Assert.Equal(
-            ListedEmailSummary.From(summary, PublishedAccountNames.From(new StubMailAccountCatalog(ServedAccountId)))
+            ListedEmailSummary.From(summary, names)
                 .SenderVerification,
             published.Summary.SenderVerification);
     }
@@ -725,7 +729,7 @@ public sealed class SearchEmailsToolTests
     /// that the mark survives to the wire, and that a description is sourced to itself rather than to a document.
     /// </remarks>
     [Fact]
-    public void From_AMatchAPictureDescriptionAloneFound_PublishesItMarkedAndSourcedToTheDescription()
+    public async Task From_AMatchAPictureDescriptionAloneFound_PublishesItMarkedAndSourcedToTheDescription()
     {
         // Arrange
         var match = MatchWith(rank: 0.5f, snippets: []) with
@@ -743,11 +747,12 @@ public sealed class SearchEmailsToolTests
             ],
         };
 
+        var names = await PublishedAccountNames.FromAsync(
+            new StubMailAccountCatalog(ServedAccountId),
+            TestContext.Current.CancellationToken);
+
         // Act
-        var published = SearchedEmailMatch.From(
-            match,
-            EmailSearchSnippetBounds.Default,
-            PublishedAccountNames.From(new StubMailAccountCatalog(ServedAccountId)));
+        var published = SearchedEmailMatch.From(match, EmailSearchSnippetBounds.Default, names);
 
         // Assert
         var attachment = Assert.Single(published.AttachmentMatches);

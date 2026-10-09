@@ -625,7 +625,7 @@ public sealed class ClientMailMutationsEndpointTests
     private static MailboxScopeResolver ScopeResolver(StubMailFolderParticipation? participation = null)
     {
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
-        catalog.AssignedAccounts.Returns([SyntheticServedAccount.Of(ServedAccount)]);
+        catalog.ReadAssignedAccountsAsync(Arg.Any<CancellationToken>()).Returns([SyntheticServedAccount.Of(ServedAccount)]);
 
         var reachable = participation ?? StubMailFolderParticipation.Nothing;
 

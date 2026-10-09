@@ -694,7 +694,7 @@ public sealed class MailTimelineBrowserTests
     private static ICallerMailAccountCatalog CatalogServing(params MailAccountId[] servedAccountIds)
     {
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
-        catalog.AssignedAccounts.Returns(
+        catalog.ReadAssignedAccountsAsync(Arg.Any<CancellationToken>()).Returns(
         [
             .. servedAccountIds
                 .OrderBy(accountId => accountId.Value, StringComparer.Ordinal)

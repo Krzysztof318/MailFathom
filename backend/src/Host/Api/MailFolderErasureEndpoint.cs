@@ -85,7 +85,7 @@ internal static class MailFolderErasureEndpoint
         ArgumentNullException.ThrowIfNull(mappings);
         ArgumentNullException.ThrowIfNull(eraser);
 
-        if (AdminAccountRequest.Resolve(request?.Account, accounts) is not { } servedAccount)
+        if (await AdminAccountRequest.ResolveAsync(request?.Account, accounts, cancellationToken) is not { } servedAccount)
         {
             return AdminAccountRequest.Refuse(request?.Account);
         }

@@ -384,8 +384,10 @@ public sealed class ContactBookOwnershipTests
         var book = BookOf(store, SyntheticUser.Deployment, MailFathomPermission.AdminErase);
 
         // Act
+        var scope = await new ContactBookScopes(assignments)
+            .ReadScopeAsync(SyntheticUser.Deployment, TestContext.Current.CancellationToken);
         var erasure = await book.EraseAsync(
-            new ContactBookScopes(assignments).Of(SyntheticUser.Deployment),
+            scope,
             collected.Id,
             TestContext.Current.CancellationToken);
         var theOther = await ReaderOf(store, SyntheticUser.Another, assignments)

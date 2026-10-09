@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
+using Microsoft.Extensions.Primitives;
 using StackExchange.Redis;
 
 namespace MailFathom.Host.Signals;
@@ -27,6 +28,11 @@ namespace MailFathom.Host.Signals;
 /// Neither half fails anything. Where no backplane is declared both do nothing, and where one is declared and cannot be
 /// reached an announcement is dropped and listening is attempted again on the next interval.
 /// </para>
+/// <para>
+/// What reads its own replica's changes as well as the others' — the synchronization coordinator, which supervises the
+/// accounts a commit just changed — waits on <see cref="GetChangeToken" /> instead. It rises on every announcement this
+/// replica makes, whether or not a backplane carries it anywhere, and on every one heard from another replica.
+/// </para>
 /// </remarks>
 internal sealed partial class ConfigurationChangeAnnouncements
 {
@@ -37,6 +43,7 @@ internal sealed partial class ConfigurationChangeAnnouncements
     private readonly ILogger<ConfigurationChangeAnnouncements> logger;
     private readonly Lock mutex = new();
     private Task<ISubscriber>? subscriber;
+    private ConfigurationReloadToken changeToken = new();
 
     /// <summary>Initializes the announcements over the backplane they travel on, or over none.</summary>
     /// <param name="connect">Opens the subscriber announcements travel through, or <see langword="null" /> where this deployment declared no backplane.</param>
@@ -52,11 +59,18 @@ internal sealed partial class ConfigurationChangeAnnouncements
         this.logger = logger;
     }
 
+    /// <summary>Gets a token that changes once a change committed here is announced, or one committed elsewhere is heard.</summary>
+    /// <returns>The token for the next change; it is replaced each time it changes, so a reader asks again after every one.</returns>
+    /// <remarks>Hearing another replica's change needs this replica to be listening, which the configuration convergence worker starts and attempts again on every interval.</remarks>
+    public IChangeToken GetChangeToken() => Volatile.Read(ref this.changeToken);
+
     /// <summary>Tells the other replicas that a change committed.</summary>
     /// <returns>A task that completes once the announcement was handed to the connection, or dropped.</returns>
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "An announcement that could not be published must not fail the committed write that raised it; every replica still converges on its own interval.")]
     public async Task AnnounceAsync()
     {
+        this.SignalChange();
+
         if (this.connect is null)
         {
             return;
@@ -92,7 +106,11 @@ internal sealed partial class ConfigurationChangeAnnouncements
         {
             var channel = await this.SubscriberAsync();
 
-            await channel.SubscribeAsync(Channel, (_, _) => announced());
+            await channel.SubscribeAsync(Channel, (_, _) =>
+            {
+                this.SignalChange();
+                announced();
+            });
 
             return true;
         }
@@ -103,6 +121,8 @@ internal sealed partial class ConfigurationChangeAnnouncements
             return false;
         }
     }
+
+    private void SignalChange() => Interlocked.Exchange(ref this.changeToken, new ConfigurationReloadToken()).OnReload();
 
     private Task<ISubscriber> SubscriberAsync()
     {

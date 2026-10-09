@@ -106,9 +106,6 @@ public sealed class MailSynchronizationSettingsReadersTests
 
         // Assert
         Assert.Same(runSnapshot.Readers, scope.Current.Readers);
-        Assert.Equal(
-            [MailAccountId.Create("scheduled-by-the-run")],
-            ConfiguredMailAccounts.CatalogOver(scope.Current).ServedAccounts.Select(static account => account.Id));
     }
 
     private static MailSynchronizationOptions OptionsFor(params MailSynchronizationAccountOptions[] accounts) =>

@@ -54,7 +54,7 @@ public sealed class ContactBookOwnershipsTests
     /// order a test happened to name them would leave every suite asserting a precedence its own arrangement decided.
     /// </remarks>
     [Fact]
-    public void For_AUserAssignedTwoAccounts_ReadsTheirOwnBookFirstAndTheAccountsInTheDocumentedOrder()
+    public async Task For_AUserAssignedTwoAccounts_ReadsTheirOwnBookFirstAndTheAccountsInTheDocumentedOrder()
     {
         // Arrange
         var authorization = AccessAuthorizations.ForUserGranted(
@@ -67,6 +67,8 @@ public sealed class ContactBookOwnershipsTests
             MailAccountId.Create("second-account"),
             MailAccountId.Create("first-account"));
 
+        var scope = await ownership.ReadScopeAsync(TestContext.Current.CancellationToken);
+
         // Assert
         Assert.Equal(
             [
@@ -74,7 +76,7 @@ public sealed class ContactBookOwnershipsTests
                 ContactBookHolder.AccountKeyPrefix + "first-account",
                 ContactBookHolder.AccountKeyPrefix + "second-account",
             ],
-            ownership.Scope.Keys);
+            scope.Keys);
     }
 
     /// <summary>The two principals that reach the books by naming one, which is why neither may be attributed to a user.</summary>

@@ -89,7 +89,7 @@ public sealed class MailDerivedTaskProposals
 
         var written = 0;
 
-        foreach (var user in this.assignments.UsersAssignedTo(account))
+        foreach (var user in await this.assignments.ReadUsersAssignedToAsync(account, cancellationToken))
         {
             foreach (var proposal in proposals)
             {

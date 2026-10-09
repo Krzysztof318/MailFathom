@@ -167,7 +167,7 @@ public sealed class GetEmailContentToolTests
         Assert.Equal("BANK.EXAMPLE.TEST", content.Headers.SenderAuthentication.DisplayedAuthorDomain);
         Assert.Equal(SenderAuthenticationCheck.Dkim, content.Headers.SenderAuthentication.AuthenticatedBy);
         Assert.Equal(DmarcResult.Fail, content.Headers.SenderAuthentication.Dmarc);
-        Assert.Equal(ListedVerdictOf(summary), content.SenderVerification);
+        Assert.Equal(await ListedVerdictOfAsync(summary), content.SenderVerification);
     }
 
     /// <summary>
@@ -267,7 +267,7 @@ public sealed class GetEmailContentToolTests
         var content = ContentOf(Assert.Single(result.Emails));
         Assert.Equal(AuthorAuthenticationState.Authenticated, content.SenderVerification.AuthorAuthentication);
         Assert.Equal(DeploymentTrustState.Unknown, content.SenderVerification.DeploymentTrust);
-        Assert.Equal(ListedVerdictOf(summary), content.SenderVerification);
+        Assert.Equal(await ListedVerdictOfAsync(summary), content.SenderVerification);
     }
 
     /// <summary>Mail stored before the verdict was recorded is published as it is stored.</summary>
@@ -1141,8 +1141,10 @@ public sealed class GetEmailContentToolTests
     /// The mapping the listing tool itself uses rather than a restatement of it, which is what makes the comparison a
     /// claim about the two tools agreeing rather than about this test's own arithmetic.
     /// </remarks>
-    private static ReportedSenderVerification ListedVerdictOf(EmailSummary summary) =>
-        ListedEmailSummary.From(summary, PublishedAccountNames.From(new StubMailAccountCatalog(ServedAccountId)))
+    private static async Task<ReportedSenderVerification> ListedVerdictOfAsync(EmailSummary summary) =>
+        ListedEmailSummary.From(
+                summary,
+                await PublishedAccountNames.FromAsync(new StubMailAccountCatalog(ServedAccountId), TestContext.Current.CancellationToken))
             .SenderVerification;
 
     private static SenderDomain DomainOf(string value)

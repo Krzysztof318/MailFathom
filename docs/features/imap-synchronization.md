@@ -1,6 +1,6 @@
 # IMAP synchronization
 
-<!-- describes: backend/src/Application/Synchronization/**, backend/src/Domain/Synchronization/**, backend/src/Domain/Folders/**, backend/src/Application/Folders/**, backend/src/Infrastructure/Mail/**, backend/src/Application/Mail/Mutations/**, backend/src/Application/Mail/Maintenance/**, backend/src/Domain/Mutations/**, backend/src/Host/Hosting/Workers/MailSynchronizationCoordinator.cs, backend/src/Host/Hosting/Workers/AccountSynchronizationSupervisor.cs, backend/src/Host/Hosting/Workers/AccountPushNotificationWatch.cs, backend/src/Host/Hosting/Workers/WorkLeaseHold.cs, backend/src/Host/Hosting/Workers/WorkLeaseRunner.cs -->
+<!-- describes: backend/src/Application/Synchronization/**, backend/src/Domain/Synchronization/**, backend/src/Domain/Folders/**, backend/src/Application/Folders/**, backend/src/Infrastructure/Mail/**, backend/src/Application/Mail/Mutations/**, backend/src/Application/Mail/Maintenance/**, backend/src/Domain/Mutations/**, backend/src/Host/Hosting/Workers/MailSynchronizationCoordinator.cs, backend/src/Host/Hosting/Workers/AccountSynchronizationSupervisor.cs, backend/src/Host/Hosting/Workers/AccountPushNotificationWatch.cs, backend/src/Host/Hosting/Workers/WithheldMailAccounts.cs, backend/src/Host/Configuration/Mail/*MailSynchronizationAccount*.cs, backend/src/Host/Hosting/Workers/WorkLeaseHold.cs, backend/src/Host/Hosting/Workers/WorkLeaseRunner.cs -->
 
 MailFathom synchronizes mailboxes read-only, on a bounded schedule, and — for an account that asks for it — the moment the mail server says something changed. Both mechanisms run the same synchronization pass over the same read-only session; what differs is only what starts one.
 
@@ -41,7 +41,7 @@ MailFathom synchronizes mailboxes read-only, on a bounded schedule, and — for 
 ## Per-account supervision
 
 `MailSynchronizationCoordinator` is a hosted service that reaches no mail server and holds no scoped service. It
-starts one `AccountSynchronizationSupervisor` per configured account and supervises those supervisors; everything a
+starts one `AccountSynchronizationSupervisor` per served account and supervises those supervisors; everything a
 run actually does belongs to the supervisor of the account it runs for.
 [The arrival pipeline](../architecture/arrival-pipeline.md) draws what a run does after its folders have finished — the
 classification pass, the rules, the cut that produces a message's passages, the reading of what its attachments say,
@@ -49,16 +49,31 @@ and the derivation of what a message is about — and in what order. A run also 
 the account's outbox there, which is what makes sending correct without anything watching for it;
 [mail delivery](mail-delivery.md#how-a-written-down-send-reaches-a-server) states why that step can never fail the run.
 
-The account set is a published snapshot rather than a query the coordinator repeats. A validated configuration reload
-or a committed user document raises its change token, and that signal replaces every supervisor together. The account
-set in the new snapshot then decides which accounts start, resume scheduling, or remain stopped; each replacement begins
-with a new schedule and failure backoff. A rejected reload raises no token and leaves the last valid snapshot in force.
-This costs no database query per account or per tick.
+The account set is read from the account records on every supervision pass, page by page, rather than from a roster
+every replica composes. An account is served when it holds an address, its settings bind, and somebody is assigned it,
+and each one comes back with the version its record stands at. A pass starts a supervisor for a served account that
+has none, replaces the supervisor of an account whose record moved to another version, and stops the supervisor of an
+account the pass no longer read — and touches nothing else, so a change to one person's mailbox interrupts that
+mailbox's schedule and no other. A reload of the `MailSynchronization` section itself is deployment-wide, so it
+replaces every supervisor together. Each replacement begins with a new schedule and failure backoff. A pass whose read
+fails part-way is reported and made again on the next wake: what the pages it did read decided stands, and no
+supervisor is stopped for an account the pass did not get to, because an account missing from an unfinished walk was
+not read rather than removed.
+
+Each run reads what it runs against when it begins: the deployment's bound settings carrying its own account and the
+other accounts of every user it is assigned to, because what a run derives from an account's neighbours — the mail
+domains and addresses that are that person's own — is read across them. That is a handful of records rather than the
+deployment, and finding the account among them is one lookup. A user whose record does not bind, or whose record the
+reader refuses for what it holds — a document past the octets one is bound from, more accounts than one user is served
+with — is left out of the run rather than failing it. A run whose read fails, or that no longer finds its account,
+does not start, and is counted as a failed run and backed off like one rather than ending its supervisor: whether the
+account is still served is the pass's to decide, and the pass stops the supervisor of an account it no longer reads —
+removed, assigned to nobody, or withheld by an erasure.
 
 Replacing a supervisor cancels its scheduling token and not the work-unit token. A run already writing content and its
-checkpoint therefore finishes against the immutable account snapshot it began with; only work still waiting to start
-is skipped. The coordinator starts the replacement after that supervisor has drained, so old and new document versions
-never run the same account concurrently.
+checkpoint therefore finishes against the immutable settings it began with; only work still waiting to start is
+skipped. The coordinator starts the replacement after that supervisor has drained, so old and new record versions never
+run the same account concurrently.
 
 Each supervisor owns its own schedule, its own consecutive-failure count, and its own backoff, and creates a scope per
 folder work unit. That is what a server which stops answering can no longer reach: no other account inherits its
@@ -69,14 +84,14 @@ the limit of it.
 
 ### A second replica supervises nothing for an account the first one holds
 
-Every replica of a deployment reads the same configuration and the same users, so every one of them would otherwise
+Every replica of a deployment reads the same configuration and the same account records, so every one of them would otherwise
 start a supervisor — and its read sessions and its push watch — for every account, against a provider's per-account
 connection limit. So a coordinator starts a supervisor only for an account whose lease it took, under the scope
 `mail-synchronization/<user>/<account>` in the lease table
 [ADR 0031](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md)
 decides; an account identifier too long for a scope, or holding a control character, is named there by its SHA-256
 digest instead. A replica configured with an account another one holds starts nothing for it: no run, no mailbox session, no
-push watch. It asks for the account again on each supervision pass — every `Interval`, and whenever a reload or a
+push watch. It asks for the account again on each supervision pass — every `Interval`, and whenever a change or a
 supervisor ending wakes the pass early — and neither fails nor reports anything, because the account is being
 synchronized, just not here. The folders of one account are never divided between replicas; the account is the unit.
 
@@ -274,10 +289,14 @@ process would exit with the work still running.
 
 ### The account set is re-read rather than fixed at startup
 
-The coordinator re-reads the published snapshot on the configured interval and starts a supervisor for any configured
-account that has none running. One mechanism therefore covers three things: an account a configuration reload adds
-begins synchronizing without a restart, a supervisor that ended unexpectedly is started again instead of leaving one
-account silently unsynchronized, and an account a reload removes ends its own supervision at the start of its next run.
+The coordinator reads the account records again on every pass and starts a supervisor for any served account that has
+none running. A pass runs on the configured `Interval`; when a supervisor ends; when the `MailSynchronization` section
+reloads; when an erasure withholds an account or releases one; and when a committed account change is announced, by
+this replica's own write or — over the [signal backplane](../operations/configuration-sources.md#what-reaches-every-replica)
+— by another replica's. Where no backplane is declared, another replica's change therefore reaches this one within
+`Interval`. One mechanism covers three things: an account recorded at runtime begins synchronizing without a restart, a
+supervisor that ended unexpectedly is started again instead of leaving one account silently unsynchronized, and an
+account that is removed or assigned to nobody has its supervision stopped by the next pass.
 Removing an account is not the same as disabling synchronization: the served-account catalog drops it, and the read side
 resolves its mailbox scopes from that same catalog, so the mail already stored for a removed account stops being
 readable as well as stopping being synchronized. Turning `Enabled` off stops the runs and leaves the stored copy
@@ -922,11 +941,13 @@ or a withdrawn token would stay in use for the lifetime of the process — and a
 which is the opposite of what rotation is for.
 
 **The connection is therefore the operation boundary here.** Each watching session is opened inside a scope pinned to
-the settings snapshot the run used, exactly as a folder work unit is, so the endpoint, the policy, and the credential it
-holds all come from one reload. When a newer snapshot is published the session is closed and reopened between runs — at
-a point where nothing is in flight — and the reconnection resolves the secrets again. A reload is not distinguishable
-from a rotation within it, so every republished snapshot recycles the session rather than being reasoned about;
-reconnecting costs one handshake, and the alternative is a revoked credential outliving the reload that replaced it. The
+the settings the run used, exactly as a folder work unit is, so the endpoint, the policy, and the credential it holds
+all come from one reading. A run whose account, users, and bound settings are what the previous run read is handed the
+very settings that run used, so the session stays open across it. When a run reads anything newer — a reload, or a
+write that moved the record of a user the account is assigned to — the session is closed and reopened between runs, at
+a point where nothing is in flight, and the reconnection resolves the secrets again. A change is not distinguishable
+from a rotation within it, so every replacement recycles the session rather than being reasoned about; reconnecting
+costs one handshake, and the alternative is a revoked credential outliving the change that replaced it. The
 recycle is logged.
 
 ### What an operator can see

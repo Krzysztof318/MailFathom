@@ -12,6 +12,7 @@ using MailFathom.Domain.Folders;
 using MailFathom.Domain.Synchronization;
 using MailFathom.Infrastructure.Persistence.Connections;
 using Npgsql;
+using NpgsqlTypes;
 
 namespace MailFathom.Infrastructure.Persistence.Users.AccountSettings;
 
@@ -51,7 +52,18 @@ internal sealed class PersistedServedMailAccounts(
          SELECT account."Id", account."DisplayName", account."SynchronizationMode"
          FROM settings_mail_accounts AS account
          WHERE {Served}
+           AND (@everyAccount OR account."Id" = ANY(@accounts))
          ORDER BY account."Id";
+         """;
+
+    private const string SelectServedVersions =
+        $"""
+         SELECT account."Id", account."Version"
+         FROM settings_mail_accounts AS account
+         WHERE {Served}
+           AND (@after::uuid IS NULL OR account."Id" > @after)
+         ORDER BY account."Id"
+         LIMIT @limit;
          """;
 
     private const string SelectServedRecords =
@@ -105,23 +117,41 @@ internal sealed class PersistedServedMailAccounts(
          """;
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<ServedMailAccountRow>> ReadServedAsync(CancellationToken cancellationToken)
+    public Task<IReadOnlyList<ServedMailAccountRow>> ReadServedAsync(CancellationToken cancellationToken) =>
+        this.ReadServedRowsAsync(among: null, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<ServedMailAccountRow>> ReadServedAsync(
+        IReadOnlyCollection<Guid> among,
+        CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(among);
+
+        return this.ReadServedRowsAsync([.. among.Distinct()], cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<ServedMailAccountVersion>> ReadServedVersionsAsync(
+        Guid? after,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
+
         await using var connection = await dataSource().OpenConnectionAsync(cancellationToken);
-        await using var command = new NpgsqlCommand(SelectServed, connection) { CommandTimeout = this.CommandTimeoutSeconds };
+        await using var command = new NpgsqlCommand(SelectServedVersions, connection) { CommandTimeout = this.CommandTimeoutSeconds };
+        command.Parameters.Add(new NpgsqlParameter("after", NpgsqlDbType.Uuid) { Value = after is { } last ? last : DBNull.Value });
+        command.Parameters.AddWithValue("limit", limit);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 
-        var served = new List<ServedMailAccountRow>();
+        var page = new List<ServedMailAccountVersion>();
 
         while (await reader.ReadAsync(cancellationToken))
         {
-            served.Add(new ServedMailAccountRow(
-                reader.GetGuid(0),
-                reader.GetString(1),
-                (MailSynchronizationMode)reader.GetInt32(2)));
+            page.Add(new ServedMailAccountVersion(reader.GetGuid(0), reader.GetInt64(1)));
         }
 
-        return [.. served.OrderBy(account => account.Id.ToString("D"), StringComparer.Ordinal)];
+        return page;
     }
 
     /// <inheritdoc />
@@ -242,6 +272,29 @@ internal sealed class PersistedServedMailAccounts(
                     .OfType<Guid>(),
             ],
             cancellationToken);
+    }
+
+    private async Task<IReadOnlyList<ServedMailAccountRow>> ReadServedRowsAsync(
+        Guid[]? among,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await dataSource().OpenConnectionAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(SelectServed, connection) { CommandTimeout = this.CommandTimeoutSeconds };
+        command.Parameters.AddWithValue("everyAccount", among is null);
+        command.Parameters.AddWithValue("accounts", among ?? []);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        var served = new List<ServedMailAccountRow>();
+
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            served.Add(new ServedMailAccountRow(
+                reader.GetGuid(0),
+                reader.GetString(1),
+                (MailSynchronizationMode)reader.GetInt32(2)));
+        }
+
+        return [.. served.OrderBy(account => account.Id.ToString("D"), StringComparer.Ordinal)];
     }
 
     private static SensitiveContentScannerKind[] ToScannerKinds(int[] column) =>

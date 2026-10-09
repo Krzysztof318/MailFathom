@@ -244,7 +244,7 @@ public sealed class ClientMailAttachmentEndpointTests
                 : OpenedEmailAttachmentResult.Opened(attachment)));
 
         var accountCatalog = Substitute.For<ICallerMailAccountCatalog>();
-        accountCatalog.AssignedAccounts.Returns([SyntheticServedAccount.Of(summary.Account)]);
+        accountCatalog.ReadAssignedAccountsAsync(Arg.Any<CancellationToken>()).Returns([SyntheticServedAccount.Of(summary.Account)]);
 
         var principals = Substitute.For<IAuthorizedPrincipalSource>();
         principals.Current.Returns(AuthorizedPrincipal.Caller("client-key", [MailFathomPermission.MailRead]));

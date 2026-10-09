@@ -5,6 +5,7 @@
 using MailFathom.Application.Access;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Mutations;
 
 namespace MailFathom.Application.Mail.Mutations.Authoring;
@@ -83,12 +84,13 @@ public sealed class MailboxChangeProgressReader
 
         ArgumentOutOfRangeException.ThrowIfGreaterThan(recordIds.Count, MaximumRecordsPerRead);
 
-        var held = await this.records.ReadAsync(this.scopeResolver.AssignedAccounts, recordIds, cancellationToken);
+        var assignedAccounts = await this.scopeResolver.ReadAssignedAccountsAsync(cancellationToken);
+        var held = await this.records.ReadAsync(assignedAccounts, recordIds, cancellationToken);
 
         return
         [
             .. held
-                .Where(this.IsReadable)
+                .Where(record => this.IsReadable(assignedAccounts, record))
                 .Select(MailboxChangeProgress.Of),
         ];
     }
@@ -99,7 +101,9 @@ public sealed class MailboxChangeProgressReader
     /// is which mail the caller may be told about and the answer is the folder the message was in when it was asked
     /// about.
     /// </remarks>
-    private bool IsReadable(MailboxMutationRecord record) => this.scopeResolver.IsReadableByTools(
-        record.Request.Occurrence.AccountId,
-        record.Request.Occurrence.FolderResolutionId.Alias);
+    private bool IsReadable(IReadOnlyList<MailAccountId> assignedAccounts, MailboxMutationRecord record) =>
+        this.scopeResolver.IsReadableByTools(
+            assignedAccounts,
+            record.Request.Occurrence.AccountId,
+            record.Request.Occurrence.FolderResolutionId.Alias);
 }

@@ -6,9 +6,11 @@ using System.Globalization;
 using MailFathom.Application.Access;
 using MailFathom.Application.Paging;
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.Configuration.UserSettings.Administration;
+using MailFathom.Host.Hosting.Workers;
 using MailFathom.Host.Signals;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Persistence.Users;
@@ -461,6 +463,7 @@ public sealed class UserRosterAdministrationTests
             new MailAccountRecord(sharedAccount, "shared@roster.test", "shared", "{}", 1));
 
         var servedWhileErasing = true;
+        var withheldWhileErasing = (Own: false, Shared: true);
         IReadOnlyList<Guid> statedAsQuiesced = [];
         harness.Erasure
             .EraseAsync(SyntheticUser.Deployment, Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>())
@@ -468,6 +471,9 @@ public sealed class UserRosterAdministrationTests
             {
                 servedWhileErasing = harness.ServedUsers.Users.Any(
                     candidate => candidate.User == SyntheticUser.Deployment);
+                withheldWhileErasing = (
+                    harness.WithheldAccounts.IsWithheld(MailAccountId.Create(ownAccount.ToString("D"))),
+                    harness.WithheldAccounts.IsWithheld(MailAccountId.Create(sharedAccount.ToString("D"))));
                 statedAsQuiesced = call.Arg<IReadOnlyList<Guid>>()!;
 
                 return new UserErasureOutcome(true, null);
@@ -481,6 +487,7 @@ public sealed class UserRosterAdministrationTests
         // Assert
         Assert.True(outcome.UserErased);
         Assert.False(servedWhileErasing);
+        Assert.Equal((true, false), withheldWhileErasing);
         Assert.Equal([ownAccount.ToString("D")], [.. harness.Quiescing.Quiesced.Select(account => account.Value)]);
 
         // The transaction refuses an account it would delete and which the caller did not state, so the same set that
@@ -497,7 +504,13 @@ public sealed class UserRosterAdministrationTests
     {
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminErase);
+        var ownAccount = new Guid("41d7b2e0-9c35-4a68-8f12-3b6d5e7a9c04");
         harness.Serving(SyntheticUser.Deployment);
+        harness.MailAccountRecords.HoldUser(
+            SyntheticUser.Deployment,
+            "{}",
+            1,
+            new MailAccountRecord(ownAccount, "own@roster.test", "own", "{}", 1));
         harness.Erasing(SyntheticUser.Deployment);
         harness.Quiescing.Refusal = "Mail account 41d7b2e0 is still being synchronized.";
         var heard = await RosterAnnouncementListener.ListenAsync(harness.Backplane, harness.ServedUsers);
@@ -513,6 +526,7 @@ public sealed class UserRosterAdministrationTests
         Assert.Equal(harness.Quiescing.Refusal, outcome.RefusalMessage);
         await harness.Erasure.DidNotReceiveWithAnyArgs().EraseAsync(default, [], CancellationToken.None);
         Assert.Contains(harness.ServedUsers.Users, candidate => candidate.User == SyntheticUser.Deployment);
+        Assert.False(harness.WithheldAccounts.IsWithheld(MailAccountId.Create(ownAccount.ToString("D"))));
         Assert.Empty(heard);
     }
 
@@ -827,6 +841,7 @@ public sealed class UserRosterAdministrationTests
                 this.Erasure,
                 this.MailAccountRecords,
                 this.Quiescing,
+                this.WithheldAccounts,
                 this.Documents,
                 this.ServedUsers,
                 new SeveralUserAdmission(
@@ -856,6 +871,9 @@ public sealed class UserRosterAdministrationTests
 
         /// <summary>Gets the quiescing an erasure runs under, which lets the work through unless a test refuses it.</summary>
         internal RecordedMailAccountWorkQuiescing Quiescing { get; } = new();
+
+        /// <summary>Gets the accounts this replica's synchronization is kept off while an erasure runs.</summary>
+        internal WithheldMailAccounts WithheldAccounts { get; } = new();
 
         internal ServedUsers ServedUsers { get; } = new();
 

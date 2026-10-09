@@ -559,7 +559,7 @@ public sealed class ClientMailThreadEndpointTests
     private EmailContentReader ReadingDrawnMessages(EmailSummary[] summaries)
     {
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
-        catalog.AssignedAccounts.Returns([SyntheticServedAccount.Of(MailAccountId.Create("work"))]);
+        catalog.ReadAssignedAccountsAsync(Arg.Any<CancellationToken>()).Returns([SyntheticServedAccount.Of(MailAccountId.Create("work"))]);
 
         var readTelemetry = Substitute.For<IMailboxReadTelemetry>();
         readTelemetry.BeginRead(Arg.Any<MailboxReadOperation>(), Arg.Any<CancellationToken>())
@@ -627,7 +627,7 @@ public sealed class ClientMailThreadEndpointTests
     private static EmailContentReader ReadingNothing()
     {
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
-        catalog.AssignedAccounts.Returns([SyntheticServedAccount.Of(MailAccountId.Create("work"))]);
+        catalog.ReadAssignedAccountsAsync(Arg.Any<CancellationToken>()).Returns([SyntheticServedAccount.Of(MailAccountId.Create("work"))]);
 
         var readTelemetry = Substitute.For<IMailboxReadTelemetry>();
         readTelemetry.BeginRead(Arg.Any<MailboxReadOperation>(), Arg.Any<CancellationToken>())
@@ -655,7 +655,7 @@ public sealed class ClientMailThreadEndpointTests
     private MailThreadBrowser Browser()
     {
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
-        catalog.AssignedAccounts.Returns([SyntheticServedAccount.Of(MailAccountId.Create("work"))]);
+        catalog.ReadAssignedAccountsAsync(Arg.Any<CancellationToken>()).Returns([SyntheticServedAccount.Of(MailAccountId.Create("work"))]);
 
         var readTelemetry = Substitute.For<IMailboxReadTelemetry>();
         readTelemetry.BeginRead(Arg.Any<MailboxReadOperation>(), Arg.Any<CancellationToken>())

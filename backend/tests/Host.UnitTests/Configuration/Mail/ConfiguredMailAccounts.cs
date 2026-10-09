@@ -3,17 +3,12 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.ComponentModel.DataAnnotations;
-using MailFathom.Application.Accounts;
 using MailFathom.Domain.Transport;
 using MailFathom.Host.Configuration.Mail;
-using MailFathom.Host.Configuration.Mail.Readers;
 using MailFathom.Host.Configuration.UserSettings;
-using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Mail;
-using MailFathom.Infrastructure.Persistence.Users.AccountSettings;
 using MailFathom.Infrastructure.Secrets.Discovery;
 using MailFathom.TestSupport;
-using NSubstitute;
 
 namespace MailFathom.Host.UnitTests.Configuration.Mail;
 
@@ -47,19 +42,6 @@ internal static class ConfiguredMailAccounts
     internal static MailSynchronizationOptions Holding(MailSynchronizationAccountOptions account) =>
         new MailSynchronizationOptions { Enabled = true }
             .WithServedUsers([new ServedUser(SyntheticUser.Deployment, "user", [account])]);
-
-    /// <summary>Builds the catalog of accounts a deployment serves, as the composition root builds it.</summary>
-    /// <param name="options">The snapshot the roster was published onto.</param>
-    /// <returns>The catalog, answering with every recorded account under the user who owns it.</returns>
-    internal static IDeploymentMailAccountCatalog CatalogOver(MailSynchronizationOptions options)
-    {
-        ArgumentNullException.ThrowIfNull(options);
-
-        return new ConfiguredMailAccountCatalog(
-            options,
-            ResolvedServedUsers.Serving([.. options.ServedUsers ?? []]),
-            Substitute.For<IServedMailAccountReader>());
-    }
 
     /// <summary>Builds a complete reading account, which is what a delivery rule is added to and judged over.</summary>
     /// <returns>The account.</returns>

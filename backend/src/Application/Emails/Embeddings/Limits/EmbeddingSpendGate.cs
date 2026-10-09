@@ -91,7 +91,7 @@ public sealed class EmbeddingSpendGate
         CancellationToken cancellationToken)
     {
         var periodStart = this.CurrentPeriodStart();
-        var assignedUsers = this.assignments.UsersAssignedTo(account);
+        var assignedUsers = await this.assignments.ReadUsersAssignedToAsync(account, cancellationToken);
 
         EmbeddingSpendPeriod? strictestUser = null;
         EmbeddingSpendPeriod? deployment = null;
@@ -147,7 +147,7 @@ public sealed class EmbeddingSpendGate
     /// was already too late to be useful.
     /// </para>
     /// </remarks>
-    public Task RecordAccountSpendAsync(
+    public async Task RecordAccountSpendAsync(
         IPersistenceSession session,
         MailAccountId account,
         long inputCharacterCount,
@@ -156,10 +156,12 @@ public sealed class EmbeddingSpendGate
         ArgumentNullException.ThrowIfNull(session);
         ArgumentOutOfRangeException.ThrowIfNegative(inputCharacterCount);
 
-        return this.ledger.RecordSpendAsync(
+        var assignedUsers = await this.assignments.ReadUsersAssignedToAsync(account, cancellationToken);
+
+        await this.ledger.RecordSpendAsync(
             session,
             this.CurrentPeriodStart(),
-            this.assignments.UsersAssignedTo(account),
+            assignedUsers,
             inputCharacterCount,
             cancellationToken);
     }

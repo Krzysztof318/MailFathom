@@ -119,6 +119,6 @@ internal sealed class AskMailTool(
 
         var result = await mailboxQuestionReader.AnswerQuestionAsync(request, cancellationToken);
 
-        return AskMailToolResult.From(result, answerBounds, PublishedAccountNames.From(accountCatalog));
+        return AskMailToolResult.From(result, answerBounds, await PublishedAccountNames.FromAsync(accountCatalog, cancellationToken));
     }
 }

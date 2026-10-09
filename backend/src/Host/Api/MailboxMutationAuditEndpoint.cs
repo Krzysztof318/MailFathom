@@ -80,7 +80,7 @@ internal static class MailboxMutationAuditEndpoint
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(trail);
 
-        if (AdminAccountRequest.Resolve(account, accounts) is not { } servedAccount)
+        if (await AdminAccountRequest.ResolveAsync(account, accounts, cancellationToken) is not { } servedAccount)
         {
             return AdminAccountRequest.Refuse(account);
         }

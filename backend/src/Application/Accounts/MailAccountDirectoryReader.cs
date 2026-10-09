@@ -91,7 +91,7 @@ public sealed class MailAccountDirectoryReader
             MailboxReadOperation.ReadAccountDirectory,
             cancellationToken);
 
-        var assignedAccounts = this.accountCatalog.AssignedAccounts;
+        var assignedAccounts = await this.accountCatalog.ReadAssignedAccountsAsync(cancellationToken);
 
         if (assignedAccounts.Count is 0)
         {

@@ -205,7 +205,7 @@ public sealed class MailAccountDirectoryReaderTests
     {
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
         catalog.SynchronizationEnabled.Returns(true);
-        catalog.AssignedAccounts.Returns([SyntheticServedAccount.Of("personal")]);
+        catalog.ReadAssignedAccountsAsync(Arg.Any<CancellationToken>()).Returns([SyntheticServedAccount.Of("personal")]);
 
         return new MailAccountDirectoryReader(
             catalog,
@@ -238,7 +238,7 @@ public sealed class MailAccountDirectoryReaderTests
     {
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
         catalog.SynchronizationEnabled.Returns(synchronizationEnabled);
-        catalog.AssignedAccounts.Returns([.. servedAccounts]);
+        catalog.ReadAssignedAccountsAsync(Arg.Any<CancellationToken>()).Returns([.. servedAccounts]);
 
         return new MailAccountDirectoryReader(
             catalog,

@@ -214,7 +214,7 @@ public sealed class ContactRelationshipReaderTests
     {
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
         catalog.User.Returns(TheUser);
-        catalog.AssignedAccounts.Returns(
+        catalog.ReadAssignedAccountsAsync(Arg.Any<CancellationToken>()).Returns(
         [
             .. servedAccountIds
                 .OrderBy(accountId => accountId.Value, StringComparer.Ordinal)

@@ -5,7 +5,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography.X509Certificates;
-using MailFathom.Application.Accounts;
 using MailFathom.Application.Discovery.Presentation;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Mail.Mutations.Audit;
@@ -45,6 +44,7 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
     private static readonly TimeSpan HostShutdownMargin = TimeSpan.FromSeconds(5);
 
     private Lazy<MailSynchronizationSettingsReaders> readers;
+    private Lazy<IReadOnlyDictionary<string, MailSynchronizationAccountOptions>> declaredAccountsById;
 
     /// <summary>Initializes the options the binder is about to write into.</summary>
     /// <remarks>
@@ -53,7 +53,11 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
     /// reload binds a new instance rather than rewriting this one — so a value they memoize can never describe
     /// superseded configuration.
     /// </remarks>
-    public MailSynchronizationOptions() => this.readers = ReadersFor(this);
+    public MailSynchronizationOptions()
+    {
+        this.readers = ReadersFor(this);
+        this.declaredAccountsById = IndexFor(this);
+    }
 
     /// <summary>Gets the port readers this snapshot is read through.</summary>
     /// <remarks>
@@ -62,22 +66,31 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
     /// </remarks>
     internal MailSynchronizationSettingsReaders Readers => this.readers.Value;
 
-    /// <summary>Gets or sets the users this deployment serves, which is where every mailbox declaration lives.</summary>
+    /// <summary>Gets or sets the users this snapshot carries, which is where every mailbox declaration it holds lives.</summary>
     /// <remarks>
     /// <para>
-    /// Not bound from anything: the roster is established against the database while the host starts, so it is put onto
-    /// each materialized snapshot afterwards rather than read out of a section. Absent on a snapshot nobody serves from
-    /// — the container a configuration write judges its candidate in — where the only declarations that exist are the
-    /// candidate's own.
+    /// Not bound from anything: users are read from the database, so they are put onto each materialized snapshot
+    /// afterwards rather than read out of a section. Absent on a snapshot nobody serves from — the container a
+    /// configuration write judges its candidate in — where the only declarations that exist are the candidate's own.
     /// </para>
     /// <para>
-    /// It is the immutable roster this snapshot was published with. A later user-document commit produces another
-    /// settings snapshot, so a run already under way never sees its account declaration change beneath it.
+    /// Two kinds of snapshot carry them. The published one carries the whole roster, and a synchronization work unit's
+    /// carries only the users its account is assigned to, read when the work unit begins. Either is immutable: a later
+    /// commit produces another snapshot, so a run already under way never sees its account declaration change beneath
+    /// it.
     /// </para>
     /// </remarks>
-    internal IReadOnlyList<ServedUser>? ServedUsers { get; set; }
+    internal IReadOnlyList<ServedUser>? ServedUsers
+    {
+        get;
+        set
+        {
+            field = value;
+            this.declaredAccountsById = IndexFor(this);
+        }
+    }
 
-    /// <summary>Copies these bound settings onto one immutable user roster, with readers of its own.</summary>
+    /// <summary>Copies these bound settings onto one immutable set of users, with readers of its own.</summary>
     internal MailSynchronizationOptions WithServedUsers(IReadOnlyList<ServedUser> servedUsers)
     {
         ArgumentNullException.ThrowIfNull(servedUsers);
@@ -92,6 +105,16 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
     private static Lazy<MailSynchronizationSettingsReaders> ReadersFor(MailSynchronizationOptions settings) =>
         new(
             () => new MailSynchronizationSettingsReaders(settings),
+            LazyThreadSafetyMode.ExecutionAndPublication);
+
+    /// <summary>Indexes the declared mailboxes by identifier, the first declaration of an identifier winning as a walk would.</summary>
+    private static Lazy<IReadOnlyDictionary<string, MailSynchronizationAccountOptions>> IndexFor(MailSynchronizationOptions settings) =>
+        new(
+            () => settings.DeclaredAccounts
+                .Select(static account => (Id: TryReadAccountId(account.AccountId), Account: account))
+                .Where(static declared => declared.Id is not null)
+                .DistinctBy(static declared => declared.Id, StringComparer.Ordinal)
+                .ToDictionary(static declared => declared.Id!, static declared => declared.Account, StringComparer.Ordinal),
             LazyThreadSafetyMode.ExecutionAndPublication);
 
     /// <summary>Gets or sets whether periodic synchronization is enabled.</summary>
@@ -733,18 +756,14 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
     /// Every other reader wants the account it was handed to exist, and keeps failing when it does not.
     /// </para>
     /// <para>
-    /// The roster is the whole of what is searched, because every mailbox is one user's record and no configuration
-    /// source declares one. What makes the identifier enough to reach the declaration that belongs to it is that this
-    /// release resolves an account's settings by that identifier alone, across the users a deployment serves.
+    /// The users this snapshot carries are the whole of what is searched, because every mailbox is one user's record
+    /// and no configuration source declares one. The identifier is generated and unique across the deployment, so it is
+    /// enough to reach the declaration that belongs to it, and the lookup is one probe of an index this snapshot builds
+    /// once rather than a walk of every account it carries.
     /// </para>
     /// </remarks>
     internal MailSynchronizationAccountOptions? FindConfiguredAccount(MailAccountId accountId) =>
-        this.DeclaredAccounts
-            .FirstOrDefault(
-                candidate => !string.IsNullOrWhiteSpace(candidate.AccountId)
-                    && StringComparer.Ordinal.Equals(
-                        MailAccountId.Create(candidate.AccountId).Value,
-                        accountId.Value));
+        accountId.Value is { } id ? this.declaredAccountsById.Value.GetValueOrDefault(id) : null;
 
     /// <summary>Finds the account a reader was handed, failing when this snapshot does not name it.</summary>
     /// <param name="accountId">The local account identifier.</param>
@@ -1804,29 +1823,6 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
                     $"Account '{this.AccountId}': the display name is not usable [{exception.Message}]",
                     [nameof(this.DisplayName)]),
             ];
-        }
-    }
-
-    /// <summary>Builds what this account is published as, or nothing when its configuration cannot name it.</summary>
-    /// <returns>The served account, or <see langword="null" /> when the identifier or the display name is unusable.</returns>
-    /// <remarks>
-    /// The absence is the reload case rather than an ordinary one: startup refuses configuration this returns nothing
-    /// for, so the only way to reach it is a reload being rejected while the previous snapshot is still serving.
-    /// No user takes part: the identifier is generated and unique across the deployment, so an account is published
-    /// once whoever is assigned it, and who reaches it is the assignment relation's answer rather than this one's.
-    /// </remarks>
-    internal ServedMailAccount? CreateServedAccount()
-    {
-        try
-        {
-            return new ServedMailAccount(
-                MailAccountId.Create(this.AccountId),
-                MailAccountDisplayName.Create(this.DisplayName),
-                this.Mode);
-        }
-        catch (ArgumentException)
-        {
-            return null;
         }
     }
 

@@ -62,18 +62,17 @@ public sealed class AssignedMailAccountCatalog : ICallerMailAccountCatalog
     /// <remarks>
     /// The intersection is taken against the deployment's own set rather than against the assignments alone, so an
     /// assignment naming an account the deployment no longer serves contributes nothing — which is the same answer
-    /// every other reader gives about such an account. The order the deployment's catalog established is preserved,
-    /// because a scope resolved from this set is what a continuation cursor is issued against and filtering a
-    /// canonical order leaves it canonical.
+    /// every other reader gives about such an account. Only the assigned accounts are read, so the answer costs what
+    /// one person is assigned rather than what the deployment holds, and it comes back in the deployment's canonical
+    /// order because a scope resolved from it is what a continuation cursor is issued against.
     /// </remarks>
-    public IReadOnlyList<ServedMailAccount> AssignedAccounts
+    public async Task<IReadOnlyList<ServedMailAccount>> ReadAssignedAccountsAsync(CancellationToken cancellationToken)
     {
-        get
-        {
-            var user = this.authorization.RequireUser();
-            var assigned = this.assignments.AccountsAssignedTo(user).ToHashSet();
+        var user = this.authorization.RequireUser();
+        var assigned = await this.assignments.ReadAccountsAssignedToAsync(user, cancellationToken);
 
-            return [.. this.servedAccounts.ServedAccounts.Where(account => assigned.Contains(account.Id))];
-        }
+        return assigned.Count == 0
+            ? []
+            : await this.servedAccounts.ReadServedAccountsAsync(assigned, cancellationToken);
     }
 }

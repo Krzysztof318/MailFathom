@@ -65,6 +65,16 @@ internal sealed class ServedUsers : IDeploymentUserSource
     /// </remarks>
     private UserId? withheldUser;
 
+    /// <summary>The user an erasure is deciding about, who reaches no mailbox until it ends.</summary>
+    /// <remarks>
+    /// Recorded whether or not this roster serves them, unlike <see cref="withheldUser" />. The assignment relation is
+    /// read from the database, where a user whose record did not bind here, or whom this replica has not converged on
+    /// yet, is still assigned, so their mailboxes are taken away from every reader for the whole of the erasure. It
+    /// does not count towards the sole-user reading, which is about the users this roster serves. Read and written
+    /// under <see cref="mutex" />.
+    /// </remarks>
+    private UserId? userWithheldFromMail;
+
     /// <summary>Gets every user this deployment serves, in the order the roster was established in.</summary>
     /// <exception cref="InvalidOperationException">Thrown when the startup gate that establishes the roster has not yet run.</exception>
     public IReadOnlyList<ServedUser> Users
@@ -297,15 +307,18 @@ internal sealed class ServedUsers : IDeploymentUserSource
     /// <exception cref="ArgumentException">Thrown when the user is unspecified.</exception>
     /// <remarks>
     /// <para>
-    /// An erasure has to stop this process serving the user <em>before</em> it deletes anything: the accounts only they
-    /// are assigned leave the set this replica serves, which is what has the synchronization coordinator give their
-    /// supervision back so nothing is mid-write when the deletion runs. But an erasure can still be refused, and a
-    /// person nothing erased must go on being served rather than disappear until the next convergence reading.
+    /// An erasure has to stop this process serving the user <em>before</em> it deletes anything, so no request acts for
+    /// them while the deletion runs: every reader of the assignment relation is answered through
+    /// <see cref="WithholdingMailAccountAssignments" />, which gives a withheld user no mailbox although their rows are
+    /// still there to be deleted. The synchronization of the accounts only they are
+    /// assigned is stopped beside this, by withholding those accounts from the coordinator. But an erasure can still be
+    /// refused, and a person nothing erased must go on being served rather than disappear until the next convergence
+    /// reading.
     /// </para>
     /// <para>
     /// Restoring is exact rather than re-read: the entry and the record version it was published at are the ones taken
     /// off, so putting them back changes nothing about what this replica had bound. It is the same publication as any
-    /// other, so it signals a reload and the coordinator picks the accounts up again.
+    /// other, so it signals a reload.
     /// </para>
     /// <para>
     /// What the shrunk roster must not change is <see cref="User" />, which is why the withholding is recorded rather
@@ -329,6 +342,8 @@ internal sealed class ServedUsers : IDeploymentUserSource
                 ?? throw new InvalidOperationException(
                     "A user cannot be withheld from the runtime roster before the startup gate has established it.");
 
+            this.userWithheldFromMail = user;
+
             if (users.All(candidate => candidate.User != user))
             {
                 return new Withholding(this, user, withheldRoster: null, withheldVersion: null);
@@ -344,6 +359,17 @@ internal sealed class ServedUsers : IDeploymentUserSource
         this.SignalReload();
 
         return new Withholding(this, user, withheldRoster, withheldVersion);
+    }
+
+    /// <summary>Gets whether an erasure is deciding about this user right now.</summary>
+    /// <param name="user">The user asked about.</param>
+    /// <returns><see langword="true" /> from the moment the user is withheld until the withholding is restored or the deletion commits.</returns>
+    internal bool IsWithheld(UserId user)
+    {
+        lock (this.mutex)
+        {
+            return this.userWithheldFromMail == user;
+        }
     }
 
     /// <summary>Puts a withheld user back exactly as they were published, in the place they were read in.</summary>
@@ -374,6 +400,18 @@ internal sealed class ServedUsers : IDeploymentUserSource
         this.SignalReload();
     }
 
+    /// <summary>Gives a user back the mailboxes they are assigned, their erasure having ended either way.</summary>
+    private void ReleaseFromMail(UserId user)
+    {
+        lock (this.mutex)
+        {
+            if (this.userWithheldFromMail == user)
+            {
+                this.userWithheldFromMail = null;
+            }
+        }
+    }
+
     /// <summary>Stops counting a withheld user, the deletion that took them off having committed.</summary>
     private void WithholdingErased()
     {
@@ -401,8 +439,9 @@ internal sealed class ServedUsers : IDeploymentUserSource
     /// <summary>One user held off the runtime roster while their erasure is decided.</summary>
     /// <remarks>
     /// Nested because what it holds is one entry of this roster and the decision to put it back, neither of which
-    /// another type has business naming. A withholding of a user this roster did not serve restores nothing, which is
-    /// the same no-op erasing them would have been.
+    /// another type has business naming. A withholding of a user this roster did not serve restores no roster entry,
+    /// but it still takes their mailboxes away from every reader of the assignment relation until it ends, because the
+    /// relation is read from the database rather than from this roster.
     /// </remarks>
     internal sealed class Withholding(
         ServedUsers roster,
@@ -416,6 +455,7 @@ internal sealed class ServedUsers : IDeploymentUserSource
         internal void Erased()
         {
             this.erased = true;
+            roster.ReleaseFromMail(user);
 
             if (withheldRoster is not null)
             {
@@ -426,7 +466,14 @@ internal sealed class ServedUsers : IDeploymentUserSource
         /// <inheritdoc />
         public void Dispose()
         {
-            if (this.erased || withheldRoster is null)
+            if (this.erased)
+            {
+                return;
+            }
+
+            roster.ReleaseFromMail(user);
+
+            if (withheldRoster is null)
             {
                 return;
             }

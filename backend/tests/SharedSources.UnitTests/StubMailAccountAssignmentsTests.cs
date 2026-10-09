@@ -16,25 +16,25 @@ namespace MailFathom.SharedSources.UnitTests;
 public sealed class StubMailAccountAssignmentsTests
 {
     [Fact]
-    public void AccountsAssignedTo_AUserAssignedNothing_AreNone()
+    public async Task ReadAccountsAssignedToAsync_AUserAssignedNothing_AreNone()
     {
         // Arrange
         var assignments = new StubMailAccountAssignments();
 
         // Act, Assert
-        Assert.Empty(assignments.AccountsAssignedTo(SyntheticUser.Deployment));
-        Assert.Empty(assignments.UsersAssignedTo(SyntheticMailAccount.Deployment));
+        Assert.Empty(await assignments.ReadAccountsAssignedToAsync(SyntheticUser.Deployment, TestContext.Current.CancellationToken));
+        Assert.Empty(await assignments.ReadUsersAssignedToAsync(SyntheticMailAccount.Deployment, TestContext.Current.CancellationToken));
     }
 
     [Fact]
-    public void AccountsAssignedTo_AUserAssignedTwoMailboxes_AreBothOfThem()
+    public async Task ReadAccountsAssignedToAsync_AUserAssignedTwoMailboxes_AreBothOfThem()
     {
         // Arrange
         var assignments = new StubMailAccountAssignments()
             .Assigning(SyntheticUser.Deployment, SyntheticMailAccount.Deployment, SyntheticMailAccount.Another);
 
         // Act
-        var assigned = assignments.AccountsAssignedTo(SyntheticUser.Deployment);
+        var assigned = await assignments.ReadAccountsAssignedToAsync(SyntheticUser.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal([SyntheticMailAccount.Deployment, SyntheticMailAccount.Another], assigned);
@@ -42,7 +42,7 @@ public sealed class StubMailAccountAssignmentsTests
 
     /// <summary>One mailbox assigned to two people is the same mailbox for both, read from either end.</summary>
     [Fact]
-    public void UsersAssignedTo_AMailboxTwoPeopleShare_AreBothOfThem()
+    public async Task ReadUsersAssignedToAsync_AMailboxTwoPeopleShare_AreBothOfThem()
     {
         // Arrange
         var assignments = new StubMailAccountAssignments()
@@ -50,16 +50,16 @@ public sealed class StubMailAccountAssignmentsTests
             .Assigning(SyntheticUser.Another, SyntheticMailAccount.Deployment);
 
         // Act
-        var readers = assignments.UsersAssignedTo(SyntheticMailAccount.Deployment);
+        var readers = await assignments.ReadUsersAssignedToAsync(SyntheticMailAccount.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal([SyntheticUser.Deployment, SyntheticUser.Another], readers);
-        Assert.Equal([SyntheticMailAccount.Deployment], assignments.AccountsAssignedTo(SyntheticUser.Another));
+        Assert.Equal([SyntheticMailAccount.Deployment], await assignments.ReadAccountsAssignedToAsync(SyntheticUser.Another, TestContext.Current.CancellationToken));
     }
 
     /// <summary>A user assigned one mailbox reaches no other, which is what every narrowing test rests on.</summary>
     [Fact]
-    public void AccountsAssignedTo_AnotherUsersMailbox_IsNotAnsweredWith()
+    public async Task ReadAccountsAssignedToAsync_AnotherUsersMailbox_IsNotAnsweredWith()
     {
         // Arrange
         var assignments = new StubMailAccountAssignments()
@@ -67,7 +67,7 @@ public sealed class StubMailAccountAssignmentsTests
             .Assigning(SyntheticUser.Another, SyntheticMailAccount.Another);
 
         // Act
-        var assigned = assignments.AccountsAssignedTo(SyntheticUser.Deployment);
+        var assigned = await assignments.ReadAccountsAssignedToAsync(SyntheticUser.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.DoesNotContain(SyntheticMailAccount.Another, assigned);

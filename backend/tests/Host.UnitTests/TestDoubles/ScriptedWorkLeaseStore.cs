@@ -22,6 +22,7 @@ internal sealed class ScriptedWorkLeaseStore : IWorkLeaseStore
     private readonly ConcurrentDictionary<WorkScope, WorkLeaseHolder> holders = new();
     private readonly ConcurrentQueue<WorkScope> releases = new();
     private readonly Channel<WorkScope> claims = Channel.CreateUnbounded<WorkScope>();
+    private readonly Channel<WorkScope> givenBack = Channel.CreateUnbounded<WorkScope>();
 
     /// <summary>Gets or sets whether another replica holds every scope, so a claim is refused and a held lease is not renewed.</summary>
     internal bool HeldElsewhere { get; set; }
@@ -34,6 +35,11 @@ internal sealed class ScriptedWorkLeaseStore : IWorkLeaseStore
 
     /// <summary>Waits for the next claim to have been answered, whichever way it was.</summary>
     internal Task WaitForClaimAsync(CancellationToken cancellationToken) => this.claims.Reader.ReadAsync(cancellationToken).AsTask();
+
+    /// <summary>Waits for the next scope to be given back.</summary>
+    /// <returns>The scope that was given back.</returns>
+    internal Task<WorkScope> WaitForReleaseAsync(CancellationToken cancellationToken) =>
+        this.givenBack.Reader.ReadAsync(cancellationToken).AsTask();
 
     public Task<WorkLease?> ClaimAsync(
         WorkScope scope,
@@ -66,6 +72,7 @@ internal sealed class ScriptedWorkLeaseStore : IWorkLeaseStore
         if (released)
         {
             this.releases.Enqueue(scope);
+            this.givenBack.Writer.TryWrite(scope);
         }
 
         return Task.FromResult(released);

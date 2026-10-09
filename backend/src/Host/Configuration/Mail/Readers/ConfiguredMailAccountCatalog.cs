@@ -3,118 +3,73 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Accounts;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
-using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Infrastructure.Persistence.Users.AccountSettings;
 
 namespace MailFathom.Host.Configuration.Mail.Readers;
 
-/// <summary>Publishes the accounts this deployment serves, and which of them each user is assigned.</summary>
+/// <summary>Publishes the accounts this deployment serves, read from the account records.</summary>
 /// <remarks>
 /// <para>
-/// The served set <see cref="ReadServedAccountsAsync" /> reads comes from the account records. The assignment answers
-/// and <see cref="ServedAccounts" /> come from the roster until #2321 moves them: a user's composed record carries the
-/// accounts assigned to them, so that set is the union of those and the assignment relation is which record an account
-/// appeared in. The two agree once the roster has republished the last write, and until then they can disagree about an
-/// account an administrator has just assigned, unassigned, or changed.
+/// Every answer is one statement over the records, so a reader holding an account asks about that account rather than
+/// about the whole set, and a commit on any replica is the answer the next question gets on this one.
 /// </para>
 /// <para>
 /// One account appears once in the deployment's set however many users are assigned it. That is the whole of one
 /// mailbox being one mailbox: the identifier is generated and unique across the deployment, so a second assignment
 /// adds a user rather than a second account, and every row of the mailbox's mail is the one copy both of them read.
 /// </para>
+/// <para>
+/// An account whose display name is missing or unusable is omitted rather than published under an invented one. The
+/// record write refuses such a name, so the omission is only reachable for a row changed behind MailFathom, and
+/// publishing an account under a name no operator chose is the one outcome worse than not publishing it at all.
+/// </para>
 /// </remarks>
 internal sealed class ConfiguredMailAccountCatalog(
     MailSynchronizationOptions settings,
-    ServedUsers servedUsers,
-    IServedMailAccountReader servedAccountReader) : IDeploymentMailAccountCatalog, IMailAccountAssignments
+    IServedMailAccountReader servedAccountReader) : IDeploymentMailAccountCatalog
 {
     /// <inheritdoc />
     public bool SynchronizationEnabled => settings.Enabled;
 
     /// <inheritdoc />
     /// <remarks>
-    /// <para>
-    /// The users' records are what define the set of accounts, so this answers from the same declarations every other
-    /// per-account reader does. It deliberately ignores <see cref="MailSynchronizationOptions.Enabled" />: that switch
-    /// stops runs from fetching mail, and an operator who turned it off has not asked for the copy already stored to
-    /// become unreadable. An account they removed is a different matter, and its absence here is what makes its stored
-    /// mail unreadable.
-    /// </para>
-    /// <para>
-    /// An account whose display name is missing or unusable is omitted rather than published under an invented one.
-    /// Both the record write and the startup gate refuse such a declaration, so the omission is only reachable while a
-    /// record is being rejected, and publishing an account under a name no operator chose is the one outcome worse
-    /// than not publishing it at all.
-    /// </para>
-    /// <para>
-    /// The order is the ordinal order of the identifiers, because a scope resolved from this set is the deployment's
-    /// own and a continuation cursor issued for it has to stay valid while the declarations do not change.
-    /// Deduplication is by identifier because an account assigned to several users is composed into each of their
-    /// records and is one account in every other respect.
-    /// </para>
+    /// It deliberately ignores <see cref="MailSynchronizationOptions.Enabled" />: that switch stops runs from fetching
+    /// mail, and an operator who turned it off has not asked for the copy already stored to become unreadable. An
+    /// account they removed is a different matter, and its absence here is what makes its stored mail unreadable.
     /// </remarks>
-    public IReadOnlyList<ServedMailAccount> ServedAccounts =>
-    [
-        .. this.DeclaredAccounts()
-            .Where(static account => !string.IsNullOrWhiteSpace(account.AccountId))
-            .Select(static account => account.CreateServedAccount())
-            .OfType<ServedMailAccount>()
-            .DistinctBy(static account => account.Id.Value, StringComparer.Ordinal)
-            .OrderBy(static account => account.Id.Value, StringComparer.Ordinal),
-    ];
+    public async Task<IReadOnlyList<ServedMailAccount>> ReadServedAccountsAsync(CancellationToken cancellationToken) =>
+        ToServedAccounts(await servedAccountReader.ReadServedAsync(cancellationToken));
 
     /// <inheritdoc />
     /// <remarks>
-    /// An account whose display name is unusable is omitted here for the reason it is omitted above, and the order is
-    /// the same ordinal order of the identifiers.
+    /// An identifier that is not one this deployment generates names no record, so it is left out of the answer rather
+    /// than refused, which is the same answer as an account the deployment does not serve.
     /// </remarks>
-    public async Task<IReadOnlyList<ServedMailAccount>> ReadServedAccountsAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<ServedMailAccount>> ReadServedAccountsAsync(
+        IReadOnlyCollection<MailAccountId> among,
+        CancellationToken cancellationToken)
     {
-        var served = await servedAccountReader.ReadServedAsync(cancellationToken);
+        ArgumentNullException.ThrowIfNull(among);
 
-        return
+        Guid[] identifiers =
         [
-            .. served
-                .Select(static account => TryCreateServedAccount(account))
-                .OfType<ServedMailAccount>()
-                .OrderBy(static account => account.Id.Value, StringComparer.Ordinal),
+            .. among
+                .Select(static account => Guid.TryParse(account.Value, out var identifier) ? identifier : (Guid?)null)
+                .OfType<Guid>(),
         ];
+
+        return identifiers.Length == 0
+            ? []
+            : ToServedAccounts(await servedAccountReader.ReadServedAsync(identifiers, cancellationToken));
     }
 
-    /// <inheritdoc />
-    /// <remarks>
-    /// A user this roster does not hold is assigned nothing, which is the same answer as a user holding a record that
-    /// declares no account. Both are served nothing rather than served everything, and neither is told apart here:
-    /// what a caller acting for a user the roster never established reads is decided by the resolution, which turns an
-    /// empty answer into a scope admitting no folder.
-    /// </remarks>
-    public IReadOnlyList<MailAccountId> AccountsAssignedTo(UserId user) =>
+    private static ServedMailAccount[] ToServedAccounts(IReadOnlyList<ServedMailAccountRow> served) =>
     [
-        .. servedUsers.Users
-            .Where(served => served.User == user)
-            .SelectMany(static served => served.MailAccounts)
-            .Select(static account => MailSynchronizationOptions.TryReadAccountId(account.AccountId))
-            .OfType<string>()
-            .Distinct(StringComparer.Ordinal)
-            .Select(MailAccountId.Create),
-    ];
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// The order is the ordinal order of the users' identifiers, so a fan-out over a shared mailbox reaches them in
-    /// one order whichever record the roster happened to compose first.
-    /// </remarks>
-    public IReadOnlyList<UserId> UsersAssignedTo(MailAccountId account) =>
-    [
-        .. servedUsers.Users
-            .Where(served => served.MailAccounts.Any(declared =>
-                MailSynchronizationOptions.TryReadAccountId(declared.AccountId) is { } identifier
-                && StringComparer.Ordinal.Equals(identifier, account.Value)))
-            .Select(static served => served.User)
-            .Distinct()
-            .OrderBy(static user => user.Value),
+        .. served
+            .Select(static account => TryCreateServedAccount(account))
+            .OfType<ServedMailAccount>()
+            .OrderBy(static account => account.Id.Value, StringComparer.Ordinal),
     ];
 
     private static ServedMailAccount? TryCreateServedAccount(ServedMailAccountRow account)
@@ -131,8 +86,4 @@ internal sealed class ConfiguredMailAccountCatalog(
             return null;
         }
     }
-
-    /// <summary>Every mail account declared by any user's record, an account assigned to several appearing once per assignment.</summary>
-    private IEnumerable<MailSynchronizationAccountOptions> DeclaredAccounts() =>
-        servedUsers.Users.SelectMany(static user => user.MailAccounts);
 }

@@ -191,7 +191,7 @@ public sealed class SynchronizationNotifications
         // One row per assigned user rather than one for the mailbox, because the unread list, the read mark, and the
         // deduplication window are each one person's. The identity is generated per row for the same reason: two
         // people told the same thing are two rows either of them may read or dismiss without touching the other's.
-        foreach (var user in this.assignments.UsersAssignedTo(account))
+        foreach (var user in await this.assignments.ReadUsersAssignedToAsync(account, cancellationToken))
         {
             var notification = Notification.Compose(
                 NotificationId.Create(Guid.CreateVersion7(occurredAt)),

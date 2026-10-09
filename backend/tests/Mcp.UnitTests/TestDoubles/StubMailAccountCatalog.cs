@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Accounts;
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.TestSupport;
 
 namespace MailFathom.Mcp.UnitTests.TestDoubles;
@@ -20,16 +21,24 @@ internal sealed class StubMailAccountCatalog(params string[] servedAccountIds)
     /// <inheritdoc />
     public bool SynchronizationEnabled { get; init; } = true;
 
-    /// <inheritdoc />
+    /// <summary>Gets the accounts this deployment serves, which are also the accounts the caller is assigned.</summary>
     public IReadOnlyList<ServedMailAccount> ServedAccounts { get; init; } =
         [.. servedAccountIds.Select(accountId => SyntheticServedAccount.Of(accountId))];
 
     /// <inheritdoc />
-    public IReadOnlyList<ServedMailAccount> AssignedAccounts => this.ServedAccounts;
+    public Task<IReadOnlyList<ServedMailAccount>> ReadAssignedAccountsAsync(CancellationToken cancellationToken) =>
+        Task.FromResult(this.ServedAccounts);
 
     /// <inheritdoc />
     public Task<IReadOnlyList<ServedMailAccount>> ReadServedAccountsAsync(CancellationToken cancellationToken) =>
         Task.FromResult(this.ServedAccounts);
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<ServedMailAccount>> ReadServedAccountsAsync(
+        IReadOnlyCollection<MailAccountId> among,
+        CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<ServedMailAccount>>(
+            [.. this.ServedAccounts.Where(account => among.Contains(account.Id))]);
 
     /// <inheritdoc />
     /// <remarks>

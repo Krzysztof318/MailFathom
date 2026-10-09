@@ -180,7 +180,8 @@ public sealed class StubEmailThreadReaderTests
     {
         public bool SynchronizationEnabled => true;
 
-        public IReadOnlyList<ServedMailAccount> AssignedAccounts => served;
+        public Task<IReadOnlyList<ServedMailAccount>> ReadAssignedAccountsAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(served);
 
         public UserId User => SyntheticUser.Deployment;
     }

@@ -325,7 +325,7 @@ public sealed class ClientReplyDraftingEndpointTests
     private static MailReplyDrafting Drafting(IReplyDraftSourceReader sourceReader, IReplyDraftWriter writer)
     {
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
-        catalog.AssignedAccounts.Returns([SyntheticServedAccount.Of(Account)]);
+        catalog.ReadAssignedAccountsAsync(Arg.Any<CancellationToken>()).Returns([SyntheticServedAccount.Of(Account)]);
         catalog.User.Returns(SyntheticUser.Deployment);
 
         var participation = StubMailFolderParticipation.Mapping([new MailFolderIdentity(Account, MailFolderAlias.Create("inbox"))]);

@@ -197,7 +197,9 @@ internal static class ContactEndpoints
             return Refused($"A contact page holds between 1 and {ContactQuery.MaximumPageSize} contacts.");
         }
 
-        var page = await book.ReadPageAsync(scopes.Of(reader), query, cancellationToken);
+        var bookScope = await scopes.ReadScopeAsync(reader, cancellationToken);
+
+        var page = await book.ReadPageAsync(bookScope, query, cancellationToken);
 
         return TypedResults.Ok(new ContactPageResponse(
             [.. page.Contacts.Select(ContactResponse.For)],
@@ -288,7 +290,9 @@ internal static class ContactEndpoints
             return EmptyIdentity();
         }
 
-        var held = await book.FindAsync(scopes.Of(reader), identity, cancellationToken);
+        var bookScope = await scopes.ReadScopeAsync(reader, cancellationToken);
+
+        var held = await book.FindAsync(bookScope, identity, cancellationToken);
 
         return TypedResults.Ok(new ContactLookupResponse(held is null ? null : ContactResponse.For(held)));
     }
@@ -325,7 +329,9 @@ internal static class ContactEndpoints
             return Refused("The lookup names no usable address.");
         }
 
-        var held = await book.FindByAddressAsync(scopes.Of(reader), resolved, cancellationToken);
+        var bookScope = await scopes.ReadScopeAsync(reader, cancellationToken);
+
+        var held = await book.FindByAddressAsync(bookScope, resolved, cancellationToken);
 
         return TypedResults.Ok(new ContactLookupResponse(held is null ? null : ContactResponse.For(held)));
     }
@@ -380,7 +386,7 @@ internal static class ContactEndpoints
         }
 
         var amended = await book.AmendAsync(
-            scopes.Of(writer),
+            await scopes.ReadScopeAsync(writer, cancellationToken),
             new ContactAmendment
             {
                 ContactId = identity,
@@ -437,7 +443,7 @@ internal static class ContactEndpoints
         }
 
         var promoted = await book.PromoteAsync(
-            scopes.Of(writer),
+            await scopes.ReadScopeAsync(writer, cancellationToken),
             identity,
             AdministrativeWriter,
             cancellationToken);
@@ -486,7 +492,9 @@ internal static class ContactEndpoints
             return EmptyIdentity();
         }
 
-        var erasure = await book.EraseAsync(scopes.Of(reader), identity, cancellationToken);
+        var bookScope = await scopes.ReadScopeAsync(reader, cancellationToken);
+
+        var erasure = await book.EraseAsync(bookScope, identity, cancellationToken);
 
         return TypedResults.Ok(new ContactErasureResponse(
             erasure.ContactId.Value,
@@ -519,7 +527,7 @@ internal static class ContactEndpoints
         // The same two questions every administrative route taking an account asks of it, and they matter more here
         // than anywhere: this act cannot be undone, and a mistyped identifier would otherwise be answered with an
         // erasure of nothing, which reads exactly like a successful one on the account that was meant.
-        if (AdminAccountRequest.Resolve(account, accounts) is not { } servedAccount)
+        if (await AdminAccountRequest.ResolveAsync(account, accounts, cancellationToken) is not { } servedAccount)
         {
             return AdminAccountRequest.Refuse(account);
         }
@@ -566,7 +574,9 @@ internal static class ContactEndpoints
             return EmptyIdentity();
         }
 
-        var export = await book.ExportAsync(scopes.Of(reader), identity, cancellationToken);
+        var bookScope = await scopes.ReadScopeAsync(reader, cancellationToken);
+
+        var export = await book.ExportAsync(bookScope, identity, cancellationToken);
 
         return TypedResults.Ok(export is null
             ? new ContactExportResponse(Contact: null, ProducedAt: null)

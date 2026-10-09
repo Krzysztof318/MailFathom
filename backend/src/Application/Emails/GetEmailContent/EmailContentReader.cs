@@ -18,6 +18,7 @@ using MailFathom.Application.Observability;
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.Emails.GetEmailContent;
@@ -191,11 +192,13 @@ public sealed class EmailContentReader
         // a budget spent across the call, and the octets had none, so a read naming ten emails composed ten documents'
         // worth of pictures — a size the senders chose rather than this deployment.
         var remainingImageOctets = MailDocumentBounds.Default.MaximumInlineImageOctetsPerDocument;
+        var assignedAccounts = await this.scopeResolver.ReadAssignedAccountsAsync(cancellationToken);
 
         foreach (var storedEmailId in selection.StoredEmailIds)
         {
             var outcome = await this.ReadOneAsync(
                 storedEmailId,
+                assignedAccounts,
                 request,
                 threads,
                 remainingCharacters,
@@ -251,6 +254,7 @@ public sealed class EmailContentReader
     /// <summary>Reads one email, or reports why it could not be.</summary>
     private async Task<EmailContentReadOutcome> ReadOneAsync(
         StoredEmailId storedEmailId,
+        IReadOnlyList<MailAccountId> assignedAccounts,
         GetEmailContentRequest request,
         EmailThreadContexts threads,
         int remainingCharacters,
@@ -262,7 +266,10 @@ public sealed class EmailContentReader
         // An account this deployment no longer serves leaves its stored rows in place, and a folder an operator withheld
         // from tools keeps its own, so the row existing is not enough. All three cases produce one answer: telling them
         // apart would let a caller learn which identifiers exist by asking about them.
-        if (summary is null || !this.scopeResolver.IsReadableByTools(summary.Account, summary.FolderAlias))
+        if (summary is null || !this.scopeResolver.IsReadableByTools(
+                assignedAccounts,
+                summary.Account,
+                summary.FolderAlias))
         {
             return EmailContentReadOutcome.NotFound(storedEmailId);
         }
