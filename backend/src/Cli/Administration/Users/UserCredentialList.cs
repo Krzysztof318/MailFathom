@@ -13,7 +13,8 @@ internal sealed record UserCredentialList(Guid User, IReadOnlyList<UserCredentia
 /// <param name="Id">The identifier every later act on this credential names.</param>
 /// <param name="Method">The published name of the method the credential is presented by.</param>
 /// <param name="Lookup">What the credential is resolved by, or <see langword="null" /> where the deployment withholds it because it is derived from the secret.</param>
-/// <param name="Permissions">The published permission names the credential holds.</param>
+/// <param name="Permissions">The published permission names the credential narrows its user's grant to, or <see langword="null" /> where it names none and holds what the user holds.</param>
+/// <param name="EffectivePermissions">The published permission names a request the credential admits holds now: what the user holds, kept to <paramref name="Permissions" />.</param>
 /// <param name="Enabled">Whether it currently authenticates anything.</param>
 /// <param name="Version">How many times the record has been written, counting the act that provisioned it.</param>
 /// <param name="CreatedAt">When the credential was provisioned.</param>
@@ -28,7 +29,8 @@ internal sealed record UserCredential(
     Guid Id,
     string Method,
     string? Lookup,
-    IReadOnlyList<string> Permissions,
+    IReadOnlyList<string>? Permissions,
+    IReadOnlyList<string> EffectivePermissions,
     bool Enabled,
     long Version,
     DateTimeOffset CreatedAt,

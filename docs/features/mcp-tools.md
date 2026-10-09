@@ -114,9 +114,8 @@ implies another. `mailfathom.mail.send` is the one worth reading twice, because 
 this deployment and cannot be recalled. What a caller
 holds is what its user's roles grant, kept to what its credential names, and
 [the MCP endpoint](../operations/mcp-endpoint.md#what-a-credential-may-do) is where both are read; a deployment whose
-credentials were provisioned with no permission named serves every caller whatever its user's roles grant of the
-names published when the credential was provisioned, which is what makes this invisible until an operator narrows
-something. An entry setting `PermissionsFromTokenScopes` is the one
+credentials were provisioned with no permission named serves every caller exactly what its user's roles grant, which is
+what makes this invisible until an operator narrows a credential or assigns a narrower role. An entry setting `PermissionsFromTokenScopes` is the one
 place a further thing narrows it: a token then holds only the names its own scopes carry as well as what its credential
 keeps — so a token
 whose client received no scope is served an empty listing on a credential nobody narrowed.
@@ -1945,9 +1944,8 @@ neither sees no contact tool at all, which is also what a deployment looks like 
 `mailfathom.mail.read`. The mailbox tools are unaffected either way; a grant over the book is not a grant over mail, and
 neither is a grant over mail a grant over the book.
 
-Both are on the mail surface, so a credential granted that surface without narrowing holds them already — including an
-entry written before this release, which gains them on upgrade because an absent `Permissions` key means the surface
-rather than the names published the day the file was written.
+Both are on the mail surface, so a credential naming no permission holds them wherever its user's roles grant them, and
+the seeded `Mail user` role lists both.
 
 Each contact use case asks for the same permission itself, so an entrypoint arriving another way is refused there too —
 as `54001`, since a use case does not know what a protocol calls an unknown tool.

@@ -1846,8 +1846,8 @@ that administer one. A mail-serving endpoint states which methods it accepts and
 self-service and no default: whoever administers the deployment provisions the credential and tells the user what it
 is, which is what keeps a user from minting a way into anybody's mail, their own included.
 
-**Four methods, one record shape.** Each credential names its method, is resolved by one indexed value, holds the
-permissions it was provisioned with, and can be disabled, rotated, or removed the same way:
+**Four methods, one record shape.** Each credential names its method, is resolved by one indexed value, keeps the
+part of its user's grant it was provisioned to keep, and can be disabled, rotated, or removed the same way:
 
 | Method | What the client presents | What it is resolved by | What a rotation replaces |
 | --- | --- | --- | --- |
@@ -1882,7 +1882,7 @@ the value.
 
 | Command | What it does |
 | --- | --- |
-| `mfctl credential list` | Reads which credentials a user holds, by which method, what each grants, whether each still authenticates, and how old its material is |
+| `mfctl credential list` | Reads which credentials a user holds, by which method, what each narrows its user's grant to and what that leaves it holding, whether each still authenticates, and how old its material is |
 | `mfctl credential create --method <method> …` | Provisions one, asking for the password or minting the key |
 | `mfctl credential rotate --method <method> --id <credential>` | Replaces what the client presents, which stops the previous material working at that instant |
 | `mfctl credential disable --id <credential>` | Stops it authenticating, keeping everything else about it |
@@ -1894,8 +1894,15 @@ into somebody's mail, and which kind is being provisioned is not a thing to gues
 Each method takes what only it needs — `--username` for a password, `--public-key-file` for a key pair, `--issuer` and
 `--subject` for a mapped subject — and the missing one is named rather than sent as nothing for the deployment to refuse.
 
-`--permission` is repeatable and records what the credential keeps of its user's grant; naming none records every name the
-mail surface publishes, and `--no-permissions` provisions one that authenticates and reaches no tool.
+**What a user may do is granted to the user, and a credential only narrows it.** `--permission` is repeatable and
+records the names the credential keeps of its user's grant: a name the user's roles do not grant is accepted and holds
+nothing until they do, and no name adds to what the user holds. Naming none records no narrowing, so the credential
+holds exactly what its user's roles grant, now and after every change to them — and a permission a later release
+publishes reaches it only through a role that lists it. `--no-permissions` provisions one that authenticates and reaches
+no tool whatever its user holds. Each listed credential carries `permissions`, the names it keeps or `null` where it
+names none, beside `effectivePermissions`, what that leaves it holding under its user's grant at the moment of the
+reading; `mfctl credential list` shows them as "Narrows to" and "Holds". A token presented under
+`PermissionsFromTokenScopes` can narrow the second further for its own session.
 [What a credential may do](permissions.md) is the model behind those names.
 
 Every command takes `--user` and none of them needs it on a deployment holding one user: the command reads the roster,

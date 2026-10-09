@@ -11,7 +11,7 @@ namespace MailFathom.Cli.Commands.Users;
 /// <summary>Writes what the credential commands print, so every one of them prints a credential the same way.</summary>
 /// <remarks>
 /// Nothing here prints a password and nothing here has one to print: the deployment publishes a method, what a
-/// credential is resolved by where that is safe, a grant, a state, and two instants, and that is the whole of what
+/// credential is resolved by where that is safe, its narrowing and what it holds, a state, and two instants, and that is the whole of what
 /// these commands ever hold. A password typed at the prompt reaches the request and nothing else — not the output, not
 /// a confirmation, and not a refusal.
 /// <para>
@@ -39,7 +39,8 @@ internal static class UserCredentialOutput
             "Credential",
             "Method",
             "Resolved by",
-            "Grants",
+            "Narrows to",
+            "Holds",
             "State",
             "Provisioned",
             "Material changed");
@@ -50,7 +51,8 @@ internal static class UserCredentialOutput
                 $"{credential.Id:D}",
                 credential.Method ?? "unreported",
                 credential.Login ?? credential.Lookup ?? WithheldLookup,
-                DescribeGrant(credential.Permissions),
+                DescribeNarrowing(credential.Permissions),
+                DescribeHeld(credential.EffectivePermissions),
                 credential.Enabled ? "enabled" : "disabled",
                 $"{credential.CreatedAt:u}",
                 $"{credential.MaterialChangedAt:u}");
@@ -163,7 +165,15 @@ internal static class UserCredentialOutput
         console.WriteLine($"A validated token naming {lookup} now acts for that user.");
     }
 
-    private static string DescribeGrant(IReadOnlyList<string>? permissions) => permissions switch
+    /// <summary>Describes what a credential narrows its user's grant to.</summary>
+    /// <remarks>A credential naming nothing takes nothing away, which is a different statement from one naming the empty list, so the two are printed apart.</remarks>
+    private static string DescribeNarrowing(IReadOnlyList<string>? permissions) => permissions switch
+    {
+        null => "nothing named",
+        _ => DescribeHeld(permissions),
+    };
+
+    private static string DescribeHeld(IReadOnlyList<string>? permissions) => permissions switch
     {
         null => "unreported",
         { Count: 0 } => "nothing",

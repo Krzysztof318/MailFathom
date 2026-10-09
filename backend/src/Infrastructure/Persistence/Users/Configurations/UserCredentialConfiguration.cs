@@ -63,10 +63,11 @@ internal sealed class UserCredentialConfiguration : IEntityTypeConfiguration<Use
         entity.Property(credential => credential.Material)
             .HasMaxLength(UserCredentialEntity.MaximumMaterialLength);
 
-        // A PostgreSQL text array rather than a joined string, so a grant is read back as the set it is and a value
+        // A PostgreSQL text array rather than a joined string, so a narrowing is read back as the set it is and a value
         // carrying the separator cannot be composed into two permissions. Nothing queries by an element today, which is
-        // why no index sits on it: the grant is read once the row the lookup resolved is already in hand.
-        entity.Property(credential => credential.Permissions).IsRequired();
+        // why no index sits on it: the narrowing is read once the row the lookup resolved is already in hand. It is
+        // nullable because a credential naming nothing is a different statement from one naming the empty list.
+        entity.Property(credential => credential.Permissions).IsRequired(false);
 
         // Every listing an administrator reads is one user's, and so is every write, so the index that answers them is
         // the user's rather than the primary key's.

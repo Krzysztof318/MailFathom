@@ -14,7 +14,7 @@ namespace MailFathom.Host.Api;
 /// <param name="PublicKey">The client's public key, where the method verifies signed assertions.</param>
 /// <param name="Issuer">The authorization server's issuer identifier, where the method maps a validated subject.</param>
 /// <param name="Subject">That server's own identifier for the person, where the method maps a validated subject.</param>
-/// <param name="Permissions">The published permission names the credential holds, or <see langword="null" /> to hold the whole mail surface.</param>
+/// <param name="Permissions">The published permission names the credential narrows its user's grant to, or <see langword="null" /> to name none and hold what the user holds.</param>
 /// <remarks>
 /// <para>
 /// One request shape for four methods, with the method named rather than inferred from which fields arrived. Inferring
@@ -77,7 +77,8 @@ internal sealed record UserCredentialEnablementRequest(bool? Enabled);
 /// <param name="Id">The identifier every later act on this credential names.</param>
 /// <param name="Method">The published name of the method the credential is presented by.</param>
 /// <param name="Lookup">What the credential is resolved by, or <see langword="null" /> where that value is derived from the secret.</param>
-/// <param name="Permissions">The published permission names the credential holds.</param>
+/// <param name="Permissions">The published permission names the credential narrows its user's grant to, or <see langword="null" /> where it names none and holds what the user holds.</param>
+/// <param name="EffectivePermissions">The published permission names a request this credential admits holds now: the user's grant, kept to the mail half and to <paramref name="Permissions" />. A token's scopes may narrow it further.</param>
 /// <param name="Enabled">Whether it currently authenticates anything.</param>
 /// <param name="Version">How many times the record has been written, counting the act that provisioned it.</param>
 /// <param name="CreatedAt">When the credential was provisioned.</param>
@@ -94,7 +95,8 @@ internal sealed record UserCredentialResponse(
     Guid Id,
     string Method,
     string? Lookup,
-    IReadOnlyList<string> Permissions,
+    IReadOnlyList<string>? Permissions,
+    IReadOnlyList<string> EffectivePermissions,
     bool Enabled,
     long Version,
     DateTimeOffset CreatedAt,
@@ -103,17 +105,20 @@ internal sealed record UserCredentialResponse(
 {
     /// <summary>Describes one credential for a caller.</summary>
     /// <param name="credential">The credential as the deployment holds it.</param>
+    /// <param name="userGrant">What the credential's user currently holds.</param>
     /// <returns>The response body.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="credential" /> is <see langword="null" />.</exception>
-    internal static UserCredentialResponse For(UserCredential credential)
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    internal static UserCredentialResponse For(UserCredential credential, ScopedGrant userGrant)
     {
         ArgumentNullException.ThrowIfNull(credential);
+        ArgumentNullException.ThrowIfNull(userGrant);
 
         return new UserCredentialResponse(
             credential.Id,
             credential.Method.Name,
             PublishedLookupOf(credential),
-            [.. credential.Permissions.Select(permission => permission.Name)],
+            credential.Permissions?.Select(permission => permission.Name).ToArray(),
+            [.. credential.HeldUnder(userGrant).Select(permission => permission.Name)],
             credential.Enabled,
             credential.Version,
             credential.CreatedAt,

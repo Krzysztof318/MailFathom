@@ -105,7 +105,18 @@ internal static class FakeUserCredentialDeployment
         string? login = null,
         params string[] permissions) => string.Create(
         CultureInfo.InvariantCulture,
-        $$"""{"id":"{{id:D}}","method":"{{method}}","lookup":{{Written(lookup)}},"permissions":[{{string.Join(',', permissions.Select(permission => $"\"{permission}\""))}}],"enabled":{{(enabled ? "true" : "false")}},"createdAt":"{{Provisioned}}","materialChangedAt":"{{MaterialChanged}}","login":{{Written(login)}}}""");
+        $$"""{"id":"{{id:D}}","method":"{{method}}","lookup":{{Written(lookup)}},"permissions":{{Names(permissions)}},"effectivePermissions":{{Names(permissions)}},"enabled":{{(enabled ? "true" : "false")}},"createdAt":"{{Provisioned}}","materialChangedAt":"{{MaterialChanged}}","login":{{Written(login)}}}""");
+
+    /// <summary>Writes one credential that names no permission, as the deployment reports it.</summary>
+    /// <param name="id">The identifier the credential carries.</param>
+    /// <param name="holds">What the credential's user holds, which a credential naming nothing holds as well.</param>
+    /// <returns>The credential's JSON.</returns>
+    internal static string CredentialNamingNothing(Guid id, params string[] holds) => string.Create(
+        CultureInfo.InvariantCulture,
+        $$"""{"id":"{{id:D}}","method":"api-key","lookup":null,"permissions":null,"effectivePermissions":{{Names(holds)}},"enabled":true,"createdAt":"{{Provisioned}}","materialChangedAt":"{{MaterialChanged}}","login":null}""");
+
+    private static string Names(IEnumerable<string> permissions) =>
+        $"[{string.Join(',', permissions.Select(permission => $"\"{permission}\""))}]";
 
     /// <summary>Reports the requests the command sent to one path under one method.</summary>
     /// <param name="deployment">The deployment the command was pointed at.</param>

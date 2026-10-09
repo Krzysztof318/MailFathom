@@ -79,10 +79,9 @@ public interface IUserCredentialStore
     /// <param name="method">How the credential will be presented.</param>
     /// <param name="lookup">The value it is resolved by.</param>
     /// <param name="material">The stored representation of what is judged, or <see langword="null" /> for a method that keeps none.</param>
-    /// <param name="permissions">What a request this credential admits may do.</param>
+    /// <param name="permissions">The names the credential narrows its user's grant to, or <see langword="null" /> where it names none and holds what its user holds.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>What the act did, or why it did nothing.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="permissions" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody, <paramref name="method" /> or <paramref name="lookup" /> is the unspecified struct default, <paramref name="credentialId" /> is the empty identifier, or <paramref name="material" /> disagrees with what <paramref name="method" /> stores.</exception>
     Task<UserCredentialWriteOutcome> CreateAsync(
         Guid credentialId,
@@ -90,7 +89,7 @@ public interface IUserCredentialStore
         UserCredentialMethod method,
         UserCredentialLookup lookup,
         string? material,
-        IReadOnlyList<MailFathomPermission> permissions,
+        IReadOnlyList<MailFathomPermission>? permissions,
         CancellationToken cancellationToken);
 
     /// <summary>Replaces what one credential is presented as, leaving its user, its identifier, and its grant where they are.</summary>

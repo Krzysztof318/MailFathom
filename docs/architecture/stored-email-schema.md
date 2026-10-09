@@ -664,7 +664,7 @@ these rows are administered through.
 | `Lookup` | The one indexed value that method resolves a credential by, at most 512 characters: the username folded to lower case for a password, a digest of the key for an API key, the fingerprint of the registered public key for a key pair, and the issuer and subject together for a mapped subject. Unique with `Method` and `OrganizationId` rather than within the user, because it is what a presented credential is resolved by and nothing else in the request says whose it is — so a username is unique within one organization or among the credentials in none, and every other method's value is unique **across the deployment**. A colon cannot appear in a username, since that is where [RFC 7617](https://www.rfc-editor.org/rfc/rfc7617.html) splits the header, and neither can a `/`, since that is where a login separates the short name from it |
 | `OrganizationId` | The organization a password credential is scoped to, nullable, and a foreign key onto `organizations` that restricts deletion. It is null for somebody in no organization and for every other method, which a check constraint holds: only a password is scoped to one. It names the organization by identifier rather than by short name, so changing a short name moves every member's login and rewrites no credential, and moving a user between organizations rewrites it for their passwords in the same transaction |
 | `Material` | What a presented secret is verified against, and nothing a client could present. For a password that is the versioned hash record — the format version, the algorithm, the work parameters, the salt, and the derived key, as one string, so a later release moves to another algorithm without rewriting anything; for a key pair it is the registered public half. An API key has none, because the digest in `Lookup` is the whole verifier, and neither does a mapped subject, which states whose token this is rather than holding anything to check |
-| `Permissions` | The names this credential keeps of its user's grant, as published permission names. An empty set keeps nothing and reaches no tool; a credential provisioned with no permission named records every name its surface published that day, and keeps whatever of those its user's roles grant |
+| `Permissions` | The names this credential keeps of its user's grant, as published permission names, or null where it names none and holds exactly what its user's roles grant. An empty set keeps nothing and reaches no tool. A name the user's roles do not grant is kept and grants nothing |
 | `Enabled` | Whether it still authenticates requests. A disabled credential keeps everything about it, so the value it is resolved by stays claimed and the decision is one command away from being reversed |
 | `Version` | A counter every write to the row increments. It is what a listing reports so an administrator can see that a credential changed since they last read it; nothing reads it back to decide whether a write may proceed, so it orders the writes to one row rather than excluding any of them |
 | `CreatedAt` | When the credential was provisioned |
@@ -718,6 +718,14 @@ or delete, and edited by no later migration:
 
 `mailfathom.admin.roles.write` is on two of those lists before this build publishes it, so both read it back as
 unpublished until the release that publishes it, from which it grants what it names without any row changing.
+
+The migration that moved mail grants from credentials onto users, `HoldMailGrantsOnUsers`, gave every user who held no
+assignment one at their own scope reproducing the union of what their credentials listed: `Mail user` where that union
+was the whole mail half — and for a user holding no credential, whom only an endpoint requiring none could have served —
+and otherwise a role of its own, `Carried-over mail grant <n>`, one per distinct union and numbered in the order of the
+names it lists. A user whose credentials all listed nothing was given nothing. The same migration recorded no narrowing
+on every credential whose list held the whole mail half, so it holds what its user holds. Those roles are ordinary rows
+like the seeded ones.
 
 `user_groups` holds one row per group: `Id`; `Name`, at most 128 characters and unique across the deployment under
 `ix_user_groups_name`; `OrganizationId`, the organization the group belongs to or null for none, as a foreign key onto
@@ -846,7 +854,7 @@ records both halves of that, and records why nothing caches what this table answ
 | `Identifier` | The public half of the token, as the minting replica drew it — the base64url of sixteen random bytes — at most 64 characters, and the primary key. It is the only half a statement looks a session up by |
 | `UserId` | Whose session it is. It is the foreign key onto `settings_accounts` with `ON DELETE CASCADE`, which is what an erasure reaches a session by even where no credential stands behind one |
 | `CredentialId` | Which credential admitted the sign-in, nullable, and the foreign key onto `user_credentials` with `ON DELETE CASCADE`. It is null for a session minted on an endpoint requiring no credential, because such a sign-in names no row an operator could act on and a foreign key cannot take a sentinel |
-| `Permissions` | What the credential admitted at the exchange, carried forward unchanged by every renewal. A grant narrowed afterwards reaches the person at their next sign-in rather than at their next renewal |
+| `Permissions` | The narrowing the credential applied at the exchange — every name the mail half published where it named none — carried forward unchanged by every renewal. It is never the grant itself, which is computed from the user's roles on every request, so a role assigned or revoked reaches the session at its next request |
 | `SecretDigest` | The SHA-256 digest of the token's secret half, 32 bytes. The secret itself is never stored, so a row read out of the database or out of a backup authenticates nothing. Verifying a request reads the row and compares the two digests in fixed time; a renewal and a revocation instead carry the digest in the removing statement's own condition, which is what makes the removal and the judgement one act rather than two a second request could arrive between |
 | `ExpiresAt` | When the token stops working, thirty days after it was minted. It is the one index beside the key and the two foreign keys' own, and the index is what makes the removal proportional to what has expired rather than to everything the deployment holds |
 

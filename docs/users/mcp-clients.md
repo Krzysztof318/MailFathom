@@ -317,9 +317,8 @@ absence is the deployment saying it cannot answer questions yet rather than a co
 changes it.
 
 **A credential reaches what its user's roles grant, kept to what it was provisioned with.** A credential provisioned
-with no `--permission` records every name the MCP surface publishes that day, so the client connects with all of
-those its user holds; a name a later release adds reaches it once the credential is provisioned again and a role its
-user holds lists it. Narrowing that is a
+with no `--permission` names nothing to keep, so the client connects with everything its user's roles grant; a name a
+later release adds reaches it once a role its user holds lists it. Narrowing that is a
 change to the credential rather than anything the client sets, and it is made with `mfctl credential create`:
 [what a credential may do](../operations/mcp-endpoint.md#what-a-credential-may-do). A client whose credential you narrow
 is listed fewer tools — the ones its grant does not permit are absent, and a call naming one is answered as an unknown

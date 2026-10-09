@@ -36,9 +36,9 @@ internal static class UserFacingAuthenticationConfiguration
             + "accepting 'public-key' and register the key with 'mfctl credential create --method public-key "
             + "--public-key-file <path>'; the deployment reports the fingerprint the client's assertions must name.",
         ["Permissions"] =
-            "what a credential may do is recorded on the credential, beside the user it resolves. Provision it with "
-            + "'mfctl credential create', naming '--permission' once for each name it holds, or naming none for "
-            + "everything this surface publishes.",
+            "what a caller may do is granted to its user through roles, and a credential only narrows it. Provision "
+            + "the credential with 'mfctl credential create', naming '--permission' once for each name it keeps, or "
+            + "naming none to hold whatever the user's roles grant.",
         ["AuthorizedSubjects"] =
             "which subjects this deployment serves is one credential record per person, because a subject now resolves "
             + "a user rather than being admitted for whoever the deployment serves. Map each with "

@@ -22,6 +22,14 @@ namespace MailFathom.Infrastructure.UnitTests.Persistence.Grants;
 /// </remarks>
 public sealed class RoleSeedingMigrationTests
 {
+    /// <summary>The migrations allowed to write roles after the seeding one, each named rather than admitted by a looser rule.</summary>
+    /// <remarks>
+    /// <see cref="HoldMailGrantsOnUsers" /> carries what each credential granted onto its user, so it creates roles of
+    /// its own and assigns them — and the seeded <c>Mail user</c> — to users who held no role before it. It widens no
+    /// seeded role's list and nobody who already held a role, which is the drift this rule exists to refuse.
+    /// </remarks>
+    private static readonly Type[] RoleWritersAfterTheSeedingOne = [typeof(HoldMailGrantsOnUsers)];
+
     [Fact]
     public void Migrations_AfterTheSeedingOne_WriteNoRoleAndNoRolesPermissions()
     {
@@ -33,6 +41,7 @@ public sealed class RoleSeedingMigrationTests
         // Act
         var writers = migrations.Migrations
             .Where(migration => string.CompareOrdinal(migration.Key, seeding.Key) > 0)
+            .Where(migration => !RoleWritersAfterTheSeedingOne.Contains(migration.Value.AsType()))
             .Where(migration => migrations
                 .CreateMigration(migration.Value, context.Database.ProviderName!)
                 .UpOperations

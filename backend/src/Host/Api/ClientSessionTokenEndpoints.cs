@@ -87,8 +87,8 @@ internal static class ClientSessionTokenEndpoints
     /// <remarks>
     /// Renewal is recognized from the credential rather than from a second route or a body: a request already
     /// authenticated by a session token is one, and replacing the presented token is what makes one sign-in hold one
-    /// live token however long a client stays open. What a renewal carries forward is what the sign-in established, so
-    /// the grant on the answer is the grant the exchange resolved.
+    /// live token however long a client stays open. What a renewal carries forward is what the sign-in established: the
+    /// credential's narrowing, never a snapshot of the grant, which every request reads from the user's roles afresh.
     /// </remarks>
     internal static async Task<Results<Ok<ClientSessionTokenResponse>, ProblemHttpResult>> Exchange(
         HttpContext context,
@@ -122,7 +122,7 @@ internal static class ClientSessionTokenEndpoints
         var admitted = new AdmittedUserCredential(
             CredentialBehind(context),
             authorization.RequireUser(),
-            [.. MailFathomPermission.All.Where(authorization.Permits)],
+            NarrowingBehind(context),
             EndpointAccess: default);
 
         // Which of the three the store reports is the whole answer, and nothing here asks a second question about it:
@@ -222,6 +222,23 @@ internal static class ClientSessionTokenEndpoints
         ?? (context.User.Identity is { IsAuthenticated: true }
             ? throw new InvalidOperationException("The exchange was reached by a principal no user credential admitted.")
             : Guid.Empty);
+
+    /// <summary>The names the credential the exchange authenticated keeps of its user's grant, in the published order.</summary>
+    /// <remarks>
+    /// The session keeps the narrowing rather than the grant the exchange resolved, so what the user's roles grant is
+    /// read again on every request the session makes: a role assigned after the sign-in reaches the session as readily
+    /// as a revoked one leaves it. A credential naming nothing, and a caller no credential admitted, arrive here as every
+    /// name the mail half publishes, which narrows nothing this build publishes.
+    /// <para>
+    /// ponytail: that expansion is stored rather than an absent narrowing, so a mail name a later release publishes
+    /// reaches such a session at its next sign-in rather than at its next request. It fails closed; storing an absent
+    /// narrowing needs a nullable session column and a marker every scheme carries from the credential to here.
+    /// </para>
+    /// </remarks>
+    private static IReadOnlyList<MailFathomPermission> NarrowingBehind(HttpContext context) =>
+        context.User.Identity is { IsAuthenticated: true }
+            ? [.. MailFathomPermission.All.Where(TransportGrant.PermissionsCarriedBy(context.User).Contains)]
+            : MailFathomPermission.PublishedFor(ProtectedSurface.Mail);
 }
 
 /// <summary>What the exchange answers with.</summary>

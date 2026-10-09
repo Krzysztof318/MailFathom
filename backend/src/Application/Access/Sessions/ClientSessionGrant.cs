@@ -9,12 +9,12 @@ namespace MailFathom.Application.Access.Sessions;
 /// <summary>What a signed-in client's session admits, which is what the exchange that minted it established.</summary>
 /// <param name="User">The user the request acts for, which is never absent and is what an erasure reaches the session through.</param>
 /// <param name="CredentialId">The credential the exchange authenticated, or <see langword="null" /> where a client endpoint requiring no credential answered it.</param>
-/// <param name="Permissions">What the session's requests may do, in the published order.</param>
+/// <param name="Permissions">The names the session's requests are kept to, in the published order: the narrowing of the credential the exchange authenticated, never the grant itself.</param>
 /// <remarks>
 /// <para>
-/// The three facts travel together because a renewal carries all three forward unchanged: what a session admits is what
-/// the credential admitted at the sign-in, so a grant narrowed afterwards reaches somebody at their next sign-in rather
-/// than at their next renewal.
+/// The three facts travel together because a renewal carries all three forward unchanged. What a request holds is its
+/// user's grant, read from the user's roles on every request and kept to these names, so a role assigned or revoked
+/// reaches an open session at its next request rather than at its next sign-in.
 /// </para>
 /// <para>
 /// The credential is absent rather than a sentinel, because the column holding it is a foreign key: a client endpoint

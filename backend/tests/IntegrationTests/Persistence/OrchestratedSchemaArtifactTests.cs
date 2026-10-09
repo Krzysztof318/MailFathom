@@ -6,6 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Retrieval.AskMail;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Emails;
 using MailFathom.Infrastructure;
 using MailFathom.Infrastructure.Persistence;
@@ -43,9 +44,9 @@ namespace MailFathom.IntegrationTests.Persistence;
 /// never held the schema takes the complete chain and then satisfies the startup gate, one that already carries part of
 /// it takes only what it is missing without touching a row, and one that carries mail stored before the user axis
 /// existed applies the whole chain over it and comes out with the stored copy discarded. The second is what makes the
-/// artifact safe to apply when nobody is certain which migrations a given database holds; the third is the only one of
-/// the three that cannot be written against the whole chain at once, because what it is about is the state between two
-/// of its migrations.
+/// artifact safe to apply when nobody is certain which migrations a given database holds; the third cannot be written
+/// against the whole chain at once, because what it is about is the state between two of its migrations. The fourth
+/// applies across a later pair the same way, carrying what each credential granted onto its user's roles.
 /// </para>
 /// </remarks>
 [Collection(OrchestratedInfrastructureCollectionDefinition.Name)]
@@ -53,6 +54,12 @@ public sealed class OrchestratedSchemaArtifactTests(MailFathomOrchestrationFixtu
 {
     /// <summary>The migration that introduces the user axis, which the carry-forward test applies across.</summary>
     private const string UserMigrationName = "AddUserAccounts";
+
+    /// <summary>The migration that carries each credential's grant onto its user's roles, which the mail-grant test applies across.</summary>
+    private const string MailGrantMigrationName = "HoldMailGrantsOnUsers";
+
+    /// <summary>How the mail-grant test reads a credential list that names nothing, which no joined list of names can spell.</summary>
+    private const string NamesNothing = "(none)";
 
     private const string CarriedAccount = "artifact-carry-forward";
 
@@ -177,7 +184,7 @@ public sealed class OrchestratedSchemaArtifactTests(MailFathomOrchestrationFixtu
         using var scope = host.Services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<MailFathomDbContext>();
         var releaseBeforeTheUserAxis = context.GetService<IMigrator>().GenerateScript(
-            toMigration: MigrationPrecedingTheUserAxis(context),
+            toMigration: MigrationPreceding(context, UserMigrationName),
             options: MigrationsSqlGenerationOptions.Idempotent);
 
         await ApplyAsync(connectionString, releaseBeforeTheUserAxis, cancellationToken);
@@ -195,18 +202,170 @@ public sealed class OrchestratedSchemaArtifactTests(MailFathomOrchestrationFixtu
         await host.StopAsync(cancellationToken);
     }
 
-    /// <summary>Names the migration a database is left at so that the user migration is the next one it takes.</summary>
-    private static string MigrationPrecedingTheUserAxis(MailFathomDbContext context)
+    /// <summary>Proves the grant each credential named is carried onto its user's roles, and what was carried stops narrowing.</summary>
+    /// <remarks>
+    /// Like the case above, it is a claim about rows that exist while one migration runs, so the chain is applied in
+    /// two parts with the users and their credentials written between them. The five users are the five outcomes the
+    /// migration distinguishes: a credential naming the whole mail half, credentials whose union is narrower, no
+    /// credential at all, credentials that all name nothing, and a user whose roles were already assigned and whom the
+    /// migration leaves alone. Every credential's list is read back, because a list the migration widened is the one
+    /// outcome that would grant somebody more than they held before it.
+    /// </remarks>
+    [Fact]
+    public async Task SchemaArtifact_AppliedOverCredentialsStoredBeforeGrantsMovedToUsers_CarriesEachGrantOntoItsUser()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var connectionString = await this.CreateEmptyDatabaseAsync(
+            "mailfathom_artifact_mail_grants",
+            cancellationToken);
+        using var host = ComposeHost(connectionString);
+        await host.StartAsync(cancellationToken);
+
+        using var scope = host.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<MailFathomDbContext>();
+        var releaseBeforeGrantsMoved = context.GetService<IMigrator>().GenerateScript(
+            toMigration: MigrationPreceding(context, MailGrantMigrationName),
+            options: MigrationsSqlGenerationOptions.Idempotent);
+        await ApplyAsync(connectionString, releaseBeforeGrantsMoved, cancellationToken);
+
+        string[] wholeMailHalf = [.. MailFathomPermission.PublishedFor(ProtectedSurface.Mail).Select(permission => permission.Name)];
+        var mailUser = await context.Roles.AsNoTracking().SingleAsync(role => role.Name == "Mail user", cancellationToken);
+        var wholeHalf = await SeedUserAsync(
+            connectionString,
+            [wholeMailHalf, [MailFathomPermission.MailRead.Name]],
+            assignedRole: null,
+            cancellationToken);
+        var narrower = await SeedUserAsync(
+            connectionString,
+            [[MailFathomPermission.MailAsk.Name], [MailFathomPermission.MailRead.Name]],
+            assignedRole: null,
+            cancellationToken);
+        var withoutCredential = await SeedUserAsync(connectionString, [], assignedRole: null, cancellationToken);
+        var alreadyAssigned = await SeedUserAsync(
+            connectionString,
+            [[MailFathomPermission.MailSend.Name]],
+            mailUser.Id,
+            cancellationToken);
+        var namingNothing = await SeedUserAsync(connectionString, [[], []], assignedRole: null, cancellationToken);
+
+        // Act
+        await ApplyAsync(connectionString, GenerateSchemaArtifact(scope.ServiceProvider), cancellationToken);
+
+        // Assert
+        var assignments = await context.RoleAssignments.AsNoTracking().ToListAsync(cancellationToken);
+        var credentials = await context.UserCredentials.AsNoTracking().ToListAsync(cancellationToken);
+        var narrowerRole = Assert.Single(assignments, assignment => assignment.PrincipalUserId == narrower);
+
+        Assert.All(assignments, assignment => Assert.Equal(assignment.PrincipalUserId, assignment.ScopeUserId));
+        Assert.Equal(mailUser.Id, Assert.Single(assignments, assignment => assignment.PrincipalUserId == wholeHalf).RoleId);
+        Assert.Equal(mailUser.Id, Assert.Single(assignments, assignment => assignment.PrincipalUserId == withoutCredential).RoleId);
+        Assert.Single(assignments, assignment => assignment.PrincipalUserId == alreadyAssigned);
+        Assert.StartsWith(
+            "Carried-over mail grant ",
+            (await context.Roles.AsNoTracking().SingleAsync(role => role.Id == narrowerRole.RoleId, cancellationToken)).Name,
+            StringComparison.Ordinal);
+        Assert.Equal(
+            [MailFathomPermission.MailAsk.Name, MailFathomPermission.MailRead.Name],
+            await context.RolePermissions.AsNoTracking()
+                .Where(permission => permission.RoleId == narrowerRole.RoleId)
+                .Select(permission => permission.Permission)
+                .OrderBy(permission => permission)
+                .ToListAsync(cancellationToken));
+        Assert.DoesNotContain(assignments, assignment => assignment.PrincipalUserId == namingNothing);
+
+        Assert.Equal([NamesNothing, MailFathomPermission.MailRead.Name], ListsHeldBy(wholeHalf));
+        Assert.Equal([MailFathomPermission.MailAsk.Name, MailFathomPermission.MailRead.Name], ListsHeldBy(narrower));
+        Assert.Equal([MailFathomPermission.MailSend.Name], ListsHeldBy(alreadyAssigned));
+        Assert.Equal([string.Empty, string.Empty], ListsHeldBy(namingNothing));
+
+        string[] ListsHeldBy(Guid user) =>
+        [
+            .. credentials
+                .Where(credential => credential.UserId == user)
+                .Select(credential => credential.Permissions is { } names ? string.Join(',', names) : NamesNothing)
+                .Order(StringComparer.Ordinal),
+        ];
+
+        await host.StopAsync(cancellationToken);
+    }
+
+    /// <summary>Names the migration a database is left at so that the named migration is the next one it takes.</summary>
+    private static string MigrationPreceding(MailFathomDbContext context, string migrationName)
     {
         string[] definedMigrations = [.. context.Database.GetMigrations()];
-        var userAxis = Array.FindIndex(
+        var named = Array.FindIndex(
             definedMigrations,
-            migration => migration.EndsWith(UserMigrationName, StringComparison.Ordinal));
+            migration => migration.EndsWith(migrationName, StringComparison.Ordinal));
 
-        return userAxis > 0
-            ? definedMigrations[userAxis - 1]
+        return named > 0
+            ? definedMigrations[named - 1]
             : throw new InvalidOperationException(
-                $"The migration chain holds no {UserMigrationName} with a migration before it, so there is no state to carry a mailbox forward from.");
+                $"The migration chain holds no {migrationName} with a migration before it, so there is no state to carry rows forward from.");
+    }
+
+    /// <summary>Writes a user the way a previous release holds one: an API key per list of names, and the role assigned on the user's own scope where one is given.</summary>
+    /// <remarks>Written by hand rather than through the context, because the context maps the schema this build ends at and a later migration adding a column would make it write one this database does not have yet.</remarks>
+    private static async Task<Guid> SeedUserAsync(
+        string connectionString,
+        string[][] credentialPermissions,
+        Guid? assignedRole,
+        CancellationToken cancellationToken)
+    {
+        var userId = Guid.CreateVersion7();
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
+
+        await ExecuteAsync(
+            connection,
+            """
+            INSERT INTO settings_accounts ("Id", "DisplayName", "Document", "Version", "CreatedAt", "UpdatedAt")
+            VALUES ($1, $1::text, '{}', 1, now(), now());
+            """,
+            [userId],
+            cancellationToken);
+
+        foreach (var permissions in credentialPermissions)
+        {
+            await ExecuteAsync(
+                connection,
+                """
+                INSERT INTO user_credentials ("Id", "UserId", "Method", "Lookup", "Permissions", "Enabled", "Version", "CreatedAt", "MaterialChangedAt")
+                VALUES ($1, $2, 'api-key', $1::text, $3, true, 1, now(), now());
+                """,
+                [Guid.CreateVersion7(), userId, permissions],
+                cancellationToken);
+        }
+
+        if (assignedRole is { } role)
+        {
+            await ExecuteAsync(
+                connection,
+                """
+                INSERT INTO role_assignments ("Id", "RoleId", "PrincipalUserId", "ScopeUserId", "AssignedAt")
+                VALUES ($1, $2, $3, $3, now());
+                """,
+                [Guid.CreateVersion7(), role, userId],
+                cancellationToken);
+        }
+
+        return userId;
+    }
+
+    [SuppressMessage(
+        "Security",
+        "CA2100:Review SQL queries for security vulnerabilities",
+        Justification = "Every statement is a literal of this class, and every value it carries travels as a parameter.")]
+    private static async Task ExecuteAsync(
+        NpgsqlConnection connection,
+        string statement,
+        IReadOnlyList<object> values,
+        CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(statement, connection);
+        command.Parameters.AddRange(values.Select(value => new NpgsqlParameter { Value = value }).ToArray());
+
+        await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     /// <summary>Writes the mailbox row a previous release would hold, while the user column does not yet exist.</summary>

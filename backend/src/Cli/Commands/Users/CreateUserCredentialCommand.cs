@@ -43,7 +43,7 @@ internal static class CreateUserCredentialCommand
         var permissionOption = UserCredentialOptions.Permission();
         var noPermissionsOption = UserCredentialOptions.NoPermissions();
 
-        Command command = new("create", "Provision a credential for one user. A password is asked for, never passed; a key is printed once.")
+        Command command = new("create", "Provision a credential for one user, holding what the user's roles grant unless '--permission' narrows it. A password is asked for, never passed; a key is printed once.")
         {
             methodOption,
             usernameOption,

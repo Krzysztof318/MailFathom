@@ -291,15 +291,16 @@ $ mfctl credential create --method api-key --user 6f1c… \
 ```
 
 [User credentials](admin-endpoint.md#user-credentials) is where the command and its other options are specified.
-`mfctl credential list` reads back what each credential names. A credential naming a permission its user's roles do not
-grant holds nothing by it: naming is a ceiling, and the grant itself comes from
-[the user's roles](#how-a-callers-grant-is-computed).
+`mfctl credential list` reads back both halves for each credential: what it names, and what that leaves it holding under
+its user's current grant. A credential naming a permission its user's roles do not grant holds nothing by it, and the
+name is accepted rather than refused, because the user's grant moves while the credential's list does not: naming is a
+ceiling, and the grant itself comes from [the user's roles](#how-a-callers-grant-is-computed).
 
-**Naming no permission records every name the mail surface publishes when the credential is provisioned**, so the
-caller holds whatever of that list its user's roles grant. It is the list as it stood that day, not the surface: a
-permission a later release publishes is not on it, so it reaches the credential only once the credential is provisioned
-again *and* a role its user holds lists it. `mailfathom.mail.send` is the sharpest name such a credential keeps wherever
-the user's roles grant it, since with it comes the ability to send mail from the user's address to anybody;
+**Naming no permission records no narrowing**, so the credential holds exactly what its user's roles grant on the mail
+half, now and after every change to them. Nothing reaches it on an upgrade: a permission a later release publishes is
+held through such a credential only once a role its user holds lists it, which is an operator writing that name into a
+role rather than the release widening anything. `mailfathom.mail.send` is the sharpest name such a credential holds
+wherever the user's roles grant it, since with it comes the ability to send mail from the user's address to anybody;
 `mailfathom.mail.contacts.write` is the next, being the ability to record, amend, and irreversibly erase what this
 deployment holds about identified third parties. `mailfathom.mail.drafts.write` is milder for the reason it exists: what
 it adds is the ability to put a message in the user's own Drafts folder, which the user sees and can delete.
@@ -308,13 +309,13 @@ it adds is the ability to put a message in the user's own Drafts folder, which t
 and it is served an empty tool list. `mfctl credential disable` is the other way to close one, and it is the one to reach
 for when the reason may turn out to be nothing.
 
-**There is no pattern here, deliberately.** A grant on a credential is written once, by somebody deciding what one client
-of one user may do, and read back from a listing that states names — so a shorthand that quietly widens on the next
-release would be answering a question nobody asked at the moment they provisioned. Where the whole surface as it stands
+**There is no pattern here, deliberately.** A narrowing on a credential is written once, by somebody deciding what one
+client of one user may do, and read back from a listing that states names — so a shorthand that quietly widens on the
+next release would be answering a question nobody asked at the moment they provisioned. Where everything the user holds
 is meant, name no permission; where part of it is, write the part out.
 
-**Provisioning refuses a grant that says something impossible**, naming what was written: a name nothing publishes, and a
-name belonging to the administrative half — which grants nothing to a credential that reaches one user's mail, and is
+**Provisioning refuses a narrowing that says something impossible**, naming what was written: a name nothing publishes,
+and a name belonging to the administrative half — which a credential reaching one user's mail can never keep, and is
 refused with the mail half's own names written back.
 
 **A surface accepting a method it has no provisioned credential for admits nobody**, which is not the same as an

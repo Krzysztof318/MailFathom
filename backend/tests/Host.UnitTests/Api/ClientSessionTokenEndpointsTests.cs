@@ -68,24 +68,33 @@ public sealed class ClientSessionTokenEndpointsTests
         Assert.Equal(CredentialId, admitted?.CredentialId);
     }
 
-    /// <summary>The grant the credential held travels onto the session, so nothing a client could do before the exchange is refused after it.</summary>
+    /// <summary>The narrowing the credential applied travels onto the session, never the grant its user held at the exchange.</summary>
+    /// <remarks>The grant is read from the user's roles on every request, so a session that stored it would keep a role revoked afterwards for as long as it was renewed.</remarks>
     [Fact]
-    public async Task Exchange_ACredentialHoldingAGrant_AnswersATokenCarryingTheSameGrant()
+    public async Task Exchange_ACredentialNarrowingTheGrant_AnswersATokenKeepingTheNarrowingRatherThanTheGrant()
     {
         // Arrange
         var sessions = Sessions(out _);
+        var request = RequestAdmittedBy(
+            "Basic dXNlcjpwYXNzd29yZA==",
+            CredentialId,
+            MailFathomPermission.MailRead,
+            MailFathomPermission.MailAsk,
+            MailFathomPermission.MailSend);
 
         // Act
         var result = await ClientSessionTokenEndpoints.Exchange(
-            RequestCarrying(headerValue: "Basic dXNlcjpwYXNzd29yZA=="),
-            AuthorizationFor(SyntheticUser.Deployment, MailFathomPermission.MailRead, MailFathomPermission.MailAsk),
+            request,
+            AuthorizationFor(SyntheticUser.Deployment, MailFathomPermission.MailRead),
             sessions,
             TestContext.Current.CancellationToken);
 
         // Assert
         var answered = Assert.IsType<Ok<ClientSessionTokenResponse>>(result.Result);
         var admitted = await sessions.VerifyAsync(answered.Value!.Token, TestContext.Current.CancellationToken);
-        Assert.Equal([MailFathomPermission.MailRead, MailFathomPermission.MailAsk], admitted?.Permissions);
+        Assert.Equal(
+            [MailFathomPermission.MailRead, MailFathomPermission.MailAsk, MailFathomPermission.MailSend],
+            admitted?.Permissions);
     }
 
     /// <summary>A client presenting a live token renews it, so a session outlasts one lifetime without anybody typing a password.</summary>
@@ -208,6 +217,7 @@ public sealed class ClientSessionTokenEndpointsTests
         var grant = Assert.Single(store.Grants);
         Assert.Null(grant.CredentialId);
         Assert.Equal(SyntheticUser.Deployment, grant.User);
+        Assert.Equal(MailFathomPermission.PublishedFor(ProtectedSurface.Mail), grant.Permissions);
     }
 
     /// <summary>A deployment already holding every session it will hold says so as a condition that passes, not as a fault.</summary>
@@ -380,12 +390,16 @@ public sealed class ClientSessionTokenEndpointsTests
     private static DefaultHttpContext RequestCarrying(string headerValue) =>
         RequestAdmittedBy(headerValue, CredentialId);
 
-    private static DefaultHttpContext RequestAdmittedBy(string headerValue, Guid? credentialId)
+    private static DefaultHttpContext RequestAdmittedBy(
+        string headerValue,
+        Guid? credentialId,
+        params MailFathomPermission[] narrowedTo)
     {
+        Claim[] credential = credentialId is { } admittedBy ? [TransportCallerCredential.ClaimFor(admittedBy)] : [];
         var context = new DefaultHttpContext();
         context.Request.Headers[HeaderNames.Authorization] = headerValue;
         context.User = new ClaimsPrincipal(new ClaimsIdentity(
-            credentialId is { } admittedBy ? [TransportCallerCredential.ClaimFor(admittedBy)] : [],
+            [.. credential, .. TransportGrant.ClaimsFor(narrowedTo.Length == 0 ? [MailFathomPermission.MailRead] : narrowedTo)],
             "test"));
 
         return context;

@@ -80,8 +80,8 @@ internal sealed class ClientSessionEntity
     /// <summary>Gets or sets the credential the exchange authenticated, or <see langword="null" /> where the endpoint required none.</summary>
     public Guid? CredentialId { get; set; }
 
-    /// <summary>Gets or sets what the session's requests may do, as the published names of the permissions the credential granted.</summary>
-    /// <remarks>Held on the session rather than read from the credential on every request, because what a session admits is what the exchange admitted: a grant narrowed afterwards reaches somebody at their next sign-in, which is the bound <c>ADR 0023</c> records and this table does not change.</remarks>
+    /// <summary>Gets or sets the names the session's requests are kept to, as the narrowing the credential applied at the exchange — never the grant itself.</summary>
+    /// <remarks>Held on the session rather than read from the credential on every request, because a session keeps the narrowing it was exchanged for: a credential narrowed afterwards reaches somebody at their next sign-in, while the grant is read from the user's roles on every request.</remarks>
     public string[] Permissions { get; set; } = [];
 
     /// <summary>Gets or sets the digest of the secret half, which a presented secret is compared against in constant time.</summary>

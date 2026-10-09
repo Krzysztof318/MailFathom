@@ -77,13 +77,13 @@ internal static class UserCredentialOptions
         Description = "The 'sub' that server issues for the person, for '--method oauth-subject'.",
     };
 
-    /// <summary>Builds the repeatable option naming what the credential may do.</summary>
+    /// <summary>Builds the repeatable option naming what the credential narrows its user's grant to.</summary>
     /// <returns>The option.</returns>
     /// <remarks>Written once per permission rather than as one delimited value, so a name is never split by whichever separator a shell decided to expand.</remarks>
     internal static Option<string[]> Permission() => new("--permission")
     {
         Description =
-            "A permission the credential holds, repeatable. Written nowhere at all, the credential holds everything the mail surface publishes.",
+            "A permission the credential keeps of what its user holds, repeatable; it narrows the user's grant and never adds to it. Written nowhere at all, the credential holds whatever the user's roles grant.",
     };
 
     /// <summary>Builds the flag stating that the credential authenticates and may do nothing.</summary>
@@ -92,7 +92,7 @@ internal static class UserCredentialOptions
     internal static Option<bool> NoPermissions() => new("--no-permissions")
     {
         Description =
-            "Provision the credential granting nothing, which authenticates and reaches no tool. Refused beside '--permission'.",
+            "Provision the credential narrowed to nothing, which authenticates and reaches no tool whatever its user holds. Refused beside '--permission'.",
     };
 
     /// <summary>Settles on the method a command acts under, refusing a name this repository does not publish.</summary>
@@ -106,10 +106,10 @@ internal static class UserCredentialOptions
             : throw new CliFailure(
                 $"'{written}' is not a credential method this deployment publishes. Write one of {PublishedMethodNames()}.");
 
-    /// <summary>Settles on the grant a command provisions, refusing the two ways of stating it at once.</summary>
+    /// <summary>Settles on the narrowing a command provisions, refusing the two ways of stating it at once.</summary>
     /// <param name="permissions">The permissions the invocation named, which may be none.</param>
-    /// <param name="noPermissions">Whether the invocation stated that the credential grants nothing.</param>
-    /// <returns>The permission names to send, or <see langword="null" /> to hold the whole mail surface.</returns>
+    /// <param name="noPermissions">Whether the invocation stated that the credential keeps nothing.</param>
+    /// <returns>The permission names to send, or <see langword="null" /> to name none and hold what the user holds.</returns>
     /// <exception cref="CliFailure">Thrown when the invocation both named permissions and stated that there are none.</exception>
     internal static IReadOnlyList<string>? ResolveGrant(string[]? permissions, bool noPermissions)
     {
@@ -117,8 +117,8 @@ internal static class UserCredentialOptions
         {
             return noPermissions
                 ? throw new CliFailure(
-                    "The invocation both names permissions and says there are none. Drop '--no-permissions' to grant "
-                    + "what was named, or drop the '--permission' arguments to grant nothing.")
+                    "The invocation both names permissions and says there are none. Drop '--no-permissions' to keep "
+                    + "what was named of the user's grant, or drop the '--permission' arguments to keep nothing.")
                 : named;
         }
 

@@ -11,7 +11,7 @@ namespace MailFathom.Cli.Administration.Users;
 /// <param name="PublicKey">The client's public key, where the method verifies signed assertions.</param>
 /// <param name="Issuer">The authorization server's issuer identifier, where the method maps a validated subject.</param>
 /// <param name="Subject">That server's own identifier for the person, where the method maps a validated subject.</param>
-/// <param name="Permissions">The published permission names the credential holds, or <see langword="null" /> to hold the whole mail surface.</param>
+/// <param name="Permissions">The published permission names the credential narrows its user's grant to, or <see langword="null" /> to name none and hold what the user holds.</param>
 /// <remarks><see cref="ToString" /> reports no field at all: the method alone would be safe, and a record that printed one field is a record somebody eventually printed while believing it printed none.</remarks>
 internal sealed record UserCredentialProvisioningRequest(
     string Method,
