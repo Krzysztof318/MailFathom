@@ -173,9 +173,9 @@ internal static class AdminApiEndpoints
         // route the group holds, whenever it was added, so nothing here depends on this line staying first.
         api.AddEndpointFilter(RouteAuthorization.RefusingUnpermitted(ProtectedSurface.Administration));
 
-        // A password is accepted here and never asked for. A browser answers a Basic challenge with a dialog and then
-        // attaches what was typed to every request it sends this origin, a cross-site form post included, and this
-        // surface runs no origin check that would refuse one; mfctl chooses its own mode and never reads the challenge.
+        // A password is accepted here and never asked for: a browser answers a Basic challenge with a dialog, and mfctl
+        // chooses its own mode and never reads the challenge. A password a browser was prompted for on another surface of
+        // this origin is refused by the Basic scheme itself when another site's page sends it here.
         api.WithMetadata(NoPasswordChallenge.Instance);
 
         // TypedResults rather than Results, so the response type reaches the endpoint's metadata and the generated

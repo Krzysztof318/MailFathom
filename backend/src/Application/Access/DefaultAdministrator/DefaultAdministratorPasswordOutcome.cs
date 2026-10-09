@@ -13,8 +13,7 @@ public enum DefaultAdministratorPasswordOutcome
     /// <summary>The setting had already been applied by an earlier start, or by another replica of this one, and was ignored.</summary>
     AlreadyApplied = 1,
 
-    /// <summary>The administrator already held a password credential, so nothing was provisioned.</summary>
-    /// <remarks>The setting is recorded as applied, unless it carried a value the policy refuses: such a value is never written anywhere, so a later start that would apply it is the one it stops.</remarks>
+    /// <summary>The administrator already held a password credential, so nothing was provisioned and the setting was recorded as applied.</summary>
     AlreadyHeld = 2,
 
     /// <summary>The default administrator was removed, so there was nobody to apply the setting to.</summary>
@@ -25,4 +24,8 @@ public enum DefaultAdministratorPasswordOutcome
 
     /// <summary>The start carried no password setting, so there was nothing to apply.</summary>
     NotCarried = 5,
+
+    /// <summary>The setting carried a value the policy refuses while the administrator already held a password, so nothing was written and the setting was not recorded as applied.</summary>
+    /// <remarks>Left unrecorded so the value never reaches a password: a later start that finds the administrator holding none would apply it, and that start is the one it stops.</remarks>
+    RefusedWhileHeld = 6,
 }

@@ -239,9 +239,12 @@ internal sealed class DevelopmentCredentialProvisioner(HttpClient client, TimePr
 
         await using var content = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var document = await JsonDocument.ParseAsync(content, cancellationToken: cancellationToken);
+        // Only a user served on a mail endpoint counts: the default administrator every first start records is on the
+        // roster with both switches off, and giving it the local mailbox would serve that mail to nobody.
         var users = document.RootElement
             .GetProperty("users")
             .EnumerateArray()
+            .Where(static user => user.GetProperty("mcpEndpoint").GetBoolean() || user.GetProperty("clientEndpoint").GetBoolean())
             .Select(static user => user.GetProperty("id").GetGuid())
             .ToArray();
 
@@ -250,7 +253,7 @@ internal sealed class DevelopmentCredentialProvisioner(HttpClient client, TimePr
             [] => await this.RecordUserAsync(adminEndpoint, cancellationToken),
             [var only] => only,
             _ => throw new InvalidOperationException(
-                $"The normal Aspire launch expected one recorded user but found {users.Length.ToString(CultureInfo.InvariantCulture)}."),
+                $"The normal Aspire launch expected one user served on a mail endpoint but found {users.Length.ToString(CultureInfo.InvariantCulture)}."),
         };
     }
 

@@ -5,6 +5,7 @@
 using System.Net;
 using System.Text.Json;
 using MailFathom.Cli.Administration;
+using MailFathom.Domain.Access;
 using MailFathom.TestSupport;
 using Xunit;
 
@@ -882,6 +883,34 @@ public sealed class UserCredentialCommandTests : IDisposable
 
         Assert.Equal("nothing named", listing.Cell(row, "Narrows to"));
         Assert.Equal("mailfathom.mail.read, mailfathom.mail.ask", listing.Cell(row, "Holds"));
+    }
+
+    /// <summary>A whole half is named as the half it is, so a credential holding every mail name never reads as one that administers.</summary>
+    [Theory]
+    [InlineData("mail", "all mail")]
+    [InlineData("administrative", "all administrative")]
+    [InlineData("both", "everything")]
+    public async Task List_ACredentialHoldingAWholeSet_NamesThatSet(string held, string expected)
+    {
+        // Arrange
+        string[] names = held switch
+        {
+            "mail" => [.. MailFathomPermission.PublishedFor(ProtectedSurface.Mail).Select(permission => permission.Name)],
+            "administrative" => [.. MailFathomPermission.PublishedFor(ProtectedSurface.Administration).Select(permission => permission.Name)],
+            _ => [.. MailFathomPermission.All.Select(permission => permission.Name)],
+        };
+        using var deployment = FakeUserCredentialDeployment.Holding(
+            [User],
+            FakeUserCredentialDeployment.CredentialNamingNothing(CredentialId, names));
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "credential", "list", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+
+        var listing = DrawnListing.ReadFrom(this.harness.Console.Lines, "Credential", "Method", "Resolved by", "Narrows to", "Holds", "Endpoints", "Accepted from", "State");
+        Assert.Equal(expected, listing.Cell(Assert.Single(listing.Rows), "Holds"));
     }
 
     /// <summary>Nothing about an invocation may carry the password, which is what keeps it out of a shell history and a process table.</summary>

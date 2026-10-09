@@ -106,8 +106,10 @@ what startup refuses in an entry. `password`, `api-key`, `public-key`, and `oaut
 `password` entry's `Basic` block bounds how often a password may be tried exactly as it does there. A password is
 accepted here and never asked for: a refused request carries the bearer challenge alone, never
 `WWW-Authenticate: Basic`, because a browser answers that challenge with a dialog and then attaches what was typed to
-every request it sends the origin, a cross-site form post included, and nothing on this surface checks an origin.
-`mfctl login --mode password` composes the header itself. The entries are this
+every request it sends the origin, a cross-site form post included. A password a browser was prompted for on another
+surface sharing the origin — the MCP endpoint's, on the port every surface uses by default — can still arrive that way,
+so a password on a request whose `Sec-Fetch-Site` says another site's page made it (`cross-site` or `same-site`) is
+refused here before it is read. `mfctl login --mode password` composes the header itself and sends no such header. The entries are this
 endpoint's own: a method accepted on the MCP endpoint is not thereby accepted here, even where both name one
 authorization server.
 
@@ -172,7 +174,7 @@ carrying it is not where it is read from.
   would apply the setting**, because applying it would either fail or sign that user in as the administrator. Unset
   the variable and start, remove that credential and provision the user's password under another username, then set
   the variable again and restart. The same check comes first for a value the policy refuses: where `admin` already
-  holds a password, nothing would be written, so the start goes on and the value is left unrecorded.
+  holds a password, nothing would be written, so the start goes on with a warning and the value is left unrecorded.
 
 The Compose and Quadlet assets set the variable to `admin`, which is safe only while the administrative port stays on
 loopback; the Helm chart sets none and reads it from a Secret when one is named. A deployment that never sets it has an
@@ -277,8 +279,10 @@ sentence. `mfctl` does exactly that, and reports it as the operator's next actio
 replace:
 
 ```text
-The deployment refused the operation: this credential's user does not hold 'mailfathom.admin.read' at the deployment.
-Give them an administrative role that holds it, or sign in as an administrator who already does.
+The deployment refused the operation: this credential does not hold 'mailfathom.admin.read' at the deployment, either
+because its user's roles do not grant it or because the credential's own permission list or its token's scopes leave
+it out. Give the user an administrative role that holds it, provision a credential whose list keeps it, or sign in as
+an administrator who already holds it.
 ```
 
 Naming the permission is a deliberate difference from the MCP surface, which discloses nothing to a refused caller.
@@ -2777,8 +2781,8 @@ removing the log is a way to start a new one rather than a way to turn it off.
 | `No default profile is set.` | Profiles exist but none is selected, which is what forgetting the selected one leaves behind. Run `mfctl switch <name>`. |
 | `There is no profile named …` | A typo, or a profile that was never created. The message lists the ones that exist. |
 | `Not signed in to https://…` | `--endpoint` named an address no profile serves. Sign in to it, or name a profile instead. |
-| `The deployment refused the credential.` | Nobody holds what was presented, or it is disabled or its lifetime has ended, or it does not list `admin` among its endpoints, or the request arrived from outside the networks it is accepted from, or its user holds no administrative role. The answer is the same for all of them by design. A credential provisioned without `--surface admin` — what an MCP client is given — is the commonest case. |
-| `this credential's user does not hold …` | The credential was accepted and the operation was not: no role assigned to its user grants the name the message states at the deployment. Give the user a role that holds it, or run the command as an administrator who already does. `mfctl status` prints what the one in use holds. |
+| `The deployment refused the credential.` | Nobody holds what was presented, or it is disabled or its lifetime has ended, or it does not list `admin` among its endpoints, or the request arrived from outside the networks it is accepted from, or what its own permission list leaves of its user's grant holds no administrative permission. The answer is the same for all of them by design. A credential provisioned without `--surface admin` — what an MCP client is given — is the commonest case. |
+| `this credential does not hold …` | The credential was accepted and the operation was not: no role assigned to its user grants the name the message states at the deployment, or the credential's own permission list or its token's scopes leave it out. Give the user a role that holds it, provision a credential whose list keeps it, or run the command as an administrator who already holds it. `mfctl status` prints what the one in use holds. |
 | `The deployment refused the operation: …` | The endpoint refused for a reason other than a missing permission, and the sentence is the deployment's own. A deployment publishing no permission for the route is a defect worth reporting, because no grant makes such a route reachable. |
 | `answered 429` | The endpoint refused the request for its rate limit rather than for its credential. `Retry-After` on the response says when capacity returns where the limiter can compute one. The whole endpoint shares one bucket, so another caller's burst — including somebody guessing keys — is enough to cause this. |
 | `serves no administrative endpoint at /api/admin/…` | The address answered, but on a listener that serves something else. Check the port, and check that `AdminEndpoint:Enabled` is true. |

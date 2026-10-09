@@ -165,7 +165,7 @@ public sealed class DefaultAdministratorBootstrapTests
         var start = await harness.StartAsync("too-short");
 
         // Assert
-        Assert.Equal(DefaultAdministratorPasswordOutcome.AlreadyHeld, start.PasswordSetting);
+        Assert.Equal(DefaultAdministratorPasswordOutcome.RefusedWhileHeld, start.PasswordSetting);
         await harness.Store.DidNotReceiveWithAnyArgs().ApplyPasswordSettingAsync(default, default, default, default!, default, TestContext.Current.CancellationToken);
     }
 

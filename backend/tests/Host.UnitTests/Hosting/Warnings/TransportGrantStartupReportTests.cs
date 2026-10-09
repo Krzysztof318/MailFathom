@@ -270,7 +270,7 @@ public sealed class TransportGrantStartupReportTests
         var record = Assert.Single(logs.Records);
         Assert.Equal("AdminEndpoint:Authentication:0", Assert.Contains("EntrySettingPath", record.Properties));
         Assert.Equal("api-key", Assert.Contains("AcceptedMethod", record.Properties));
-        Assert.Contains("administrative roles grant", record.Message, StringComparison.Ordinal);
+        Assert.Contains("administrative roles grant, kept to the permissions its credential names", record.Message, StringComparison.Ordinal);
         Assert.Contains("holding none is refused", record.Message, StringComparison.Ordinal);
     }
 
@@ -289,7 +289,10 @@ public sealed class TransportGrantStartupReportTests
 
         // Assert
         var record = Assert.Single(logs.Records);
-        Assert.Contains("kept to those its own scopes carry", record.Message, StringComparison.Ordinal);
+        Assert.Contains(
+            "kept to the permissions its credential names and then to those its own scopes carry",
+            record.Message,
+            StringComparison.Ordinal);
     }
 
     /// <summary>An enabled administrative endpoint accepting no method serves its callers as the default administrator, and the line says where a method would be added.</summary>

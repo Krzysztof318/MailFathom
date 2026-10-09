@@ -131,7 +131,7 @@ public sealed class DefaultAdministratorBootstrap
         if (password != ShippedPassword && UserPasswordPolicy.FindRefusal(password) is { } refusal)
         {
             return await this.HoldsPasswordAsync(administrator, cancellationToken)
-                ? DefaultAdministratorPasswordOutcome.AlreadyHeld
+                ? DefaultAdministratorPasswordOutcome.RefusedWhileHeld
                 : throw DefaultAdministratorUnusableException.PasswordRefused(settingName, refusal);
         }
 

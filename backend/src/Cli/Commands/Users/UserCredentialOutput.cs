@@ -24,8 +24,6 @@ internal static class UserCredentialOutput
 {
     private const string WithheldLookup = "not published";
 
-    private const string WholeSurface = "everything";
-
     /// <summary>Prints one user's credentials as a listing.</summary>
     /// <param name="console">The terminal to write to.</param>
     /// <param name="credentials">The credentials to print, in the order the deployment served them.</param>
@@ -181,15 +179,13 @@ internal static class UserCredentialOutput
     {
         null => "unreported",
         { Count: 0 } => "nothing",
-        _ => NamesEveryNameOfWhatItReads(permissions) ? WholeSurface : string.Join(", ", permissions),
+        _ when IsExactly(MailFathomPermission.All, permissions) => "everything",
+        _ when IsExactly(MailFathomPermission.PublishedFor(ProtectedSurface.Mail), permissions) => "all mail",
+        _ when IsExactly(MailFathomPermission.PublishedFor(ProtectedSurface.Administration), permissions) => "all administrative",
+        _ => string.Join(", ", permissions),
     };
 
-    /// <summary>Reports whether a list is the whole mail half, the whole administrative half, or both, which reads better as one word than as a column of names.</summary>
-    private static bool NamesEveryNameOfWhatItReads(IReadOnlyList<string> permissions) =>
-        new[]
-        {
-            MailFathomPermission.PublishedFor(ProtectedSurface.Mail),
-            MailFathomPermission.PublishedFor(ProtectedSurface.Administration),
-            MailFathomPermission.All,
-        }.Any(whole => whole.Count == permissions.Count && whole.All(permission => permissions.Contains(permission.Name)));
+    /// <summary>Reports whether a list names exactly one whole set, which reads better as a word naming it than as a column of names.</summary>
+    private static bool IsExactly(IReadOnlyList<MailFathomPermission> whole, IReadOnlyList<string> permissions) =>
+        whole.Count == permissions.Count && whole.All(permission => permissions.Contains(permission.Name));
 }

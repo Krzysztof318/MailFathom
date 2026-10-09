@@ -89,6 +89,9 @@ internal sealed partial class DefaultAdministratorStartupGate(
             case DefaultAdministratorPasswordOutcome.AlreadyApplied:
                 this.LogPasswordSettingIgnored();
                 break;
+            case DefaultAdministratorPasswordOutcome.RefusedWhileHeld:
+                this.LogRefusedPasswordLeftUnapplied();
+                break;
         }
 
         if (start.SignsInWithShippedPassword)
@@ -106,6 +109,12 @@ internal sealed partial class DefaultAdministratorStartupGate(
         Level = LogLevel.Information,
         Message = "The default administrator 'admin' already holds a password credential, so " + PasswordVariableName + " was recorded as applied and changed nothing.")]
     private partial void LogPasswordAlreadyHeld();
+
+    /// <remarks>A warning, because the value is inert only while <c>admin</c> holds a password: the start that finds it holding none applies the setting, and the policy stops that start.</remarks>
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = PasswordVariableName + " carries a value the password policy refuses. It was not applied, because the default administrator 'admin' already holds a password, and it was not recorded as applied either: a start that finds 'admin' holding no password will stop on it. Set a value the policy accepts, or unset the variable.")]
+    private partial void LogRefusedPasswordLeftUnapplied();
 
     /// <remarks>Information rather than a warning: the shipped assets keep setting it, and a deployment that changed the password since is the one this reports.</remarks>
     [LoggerMessage(

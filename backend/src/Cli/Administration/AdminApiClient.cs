@@ -2498,7 +2498,7 @@ internal sealed class AdminApiClient
 
         if (problem?.Permission is { Length: > 0 } permission)
         {
-            return $"The deployment refused the operation: this credential's user does not hold '{permission}' at the deployment. Give them an administrative role that holds it, or sign in as an administrator who already does.";
+            return $"The deployment refused the operation: this credential does not hold '{permission}' at the deployment, either because its user's roles do not grant it or because the credential's own permission list or its token's scopes leave it out. Give the user an administrative role that holds it, provision a credential whose list keeps it, or sign in as an administrator who already holds it.";
         }
 
         return problem?.Detail is { Length: > 0 } stated

@@ -263,7 +263,7 @@ internal sealed class OAuthValidationOptions
 
     /// <summary>Names where a grant is written, which a refusal naming the wrong place would send an operator to twice.</summary>
     private const string GrantRemedy =
-        "Write it as a '--permission' of the 'mfctl credential create' that provisions the user's credential, which is what decides what an admitted caller may do on a mail-serving endpoint; on the administrative endpoint it is decided by the administrative roles the user is assigned.";
+        "Grant it through a role assigned to the user, and keep it on the credential: a '--permission' of the 'mfctl credential create' that provisions the user's credential narrows what the user holds on every endpoint, and a credential naming none keeps all of it.";
 
     /// <summary>Names where a grant taken from the token's own scopes is turned on.</summary>
     private const string ScopeGrantRemedy =

@@ -151,6 +151,41 @@ public sealed class BasicAuthenticationHandlerTests
         Assert.Null(result.Principal);
     }
 
+    /// <summary>
+    /// A browser prompted for a password on another surface of the origin attaches it to a form post another site's
+    /// page makes, so on the administrative surface such a request is refused before the password is read. The client
+    /// surface is the control: the same request there reaches the store, which is what says the refusal is the
+    /// administrative surface's rather than a header every surface turns away.
+    /// </summary>
+    [Theory]
+    [InlineData("cross-site")]
+    [InlineData("same-site")]
+    public async Task AuthenticateAsync_APasswordAnotherSitesPageSentToTheAdministrativeEndpoint_IsRefusedUnread(string site)
+    {
+        // Arrange
+        using var administrative = new HandlerHarness { Surface = TransportSurface.Admin };
+        administrative.HoldsTheUsersCredential();
+        var administrativeRequest = new DefaultHttpContext();
+        administrativeRequest.Request.Headers["Sec-Fetch-Site"] = site;
+        var administrativeHandler = await administrative.InitializeAsync(BasicHeader("user", Password), https: true, administrativeRequest);
+
+        using var client = new HandlerHarness { Surface = TransportSurface.Client };
+        client.HoldsTheUsersCredential();
+        var clientRequest = new DefaultHttpContext();
+        clientRequest.Request.Headers["Sec-Fetch-Site"] = site;
+        var clientHandler = await client.InitializeAsync(BasicHeader("user", Password), https: true, clientRequest);
+
+        // Act
+        var refused = await administrativeHandler.AuthenticateAsync();
+        var admitted = await clientHandler.AuthenticateAsync();
+
+        // Assert
+        Assert.False(refused.Succeeded);
+        await administrative.Credentials.DidNotReceiveWithAnyArgs()
+            .FindPasswordAsync(default, TestContext.Current.CancellationToken);
+        Assert.True(admitted.Succeeded);
+    }
+
     /// <summary>The credential itself travels beside the user, so a session this request exchanges it for is one disabling that credential ends.</summary>
     [Fact]
     public async Task AuthenticateAsync_AProvisionedCredential_CarriesTheCredentialThatAdmittedTheRequest()

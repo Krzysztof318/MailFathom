@@ -114,6 +114,41 @@ public sealed class DefaultAdministratorStartupGateTests
             static record => record.Level == LogLevel.Warning && record.Message.Contains("serves no caller", StringComparison.Ordinal));
     }
 
+    /// <summary>A refused value is inert only while <c>admin</c> holds a password, so the start says it was neither applied nor recorded rather than calling it recorded.</summary>
+    [Fact]
+    public async Task StartAsync_ARefusedValueWhileTheAdministratorHoldsAPassword_WarnsThatItWasNotRecorded()
+    {
+        // Arrange
+        var harness = new GateHarness();
+        harness.Store.RecordOnceAsync(Arg.Any<UserId>(), Arg.Any<Guid>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns(new DefaultAdministratorRecord(Administrator, PasswordSettingApplied: false));
+        harness.Settings[DefaultAdministratorStartupGate.PasswordVariableName] = "too-short";
+        harness.Credentials.ReadForUserAsync(Administrator, Arg.Any<CancellationToken>())
+            .Returns([
+                new UserCredential(
+                    Guid.Parse("0197c0de-0000-7000-8000-00000000c001"),
+                    Administrator,
+                    UserCredentialMethod.Password,
+                    UserCredentialLookup.ForUsername(UserCredentialUsername.Create(DefaultAdministratorBootstrap.Username)),
+                    Permissions: null,
+                    Enabled: true,
+                    Version: 1,
+                    new DateTimeOffset(2026, 10, 9, 12, 0, 0, TimeSpan.Zero),
+                    new DateTimeOffset(2026, 10, 9, 12, 0, 0, TimeSpan.Zero)),
+            ]);
+
+        // Act
+        await harness.StartAsync();
+
+        // Assert
+        Assert.Contains(
+            harness.Logs.Records,
+            static record => record.Level == LogLevel.Warning && record.Message.Contains("not recorded as applied", StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            harness.Logs.Records,
+            static record => record.Message.Contains("was recorded as applied", StringComparison.Ordinal));
+    }
+
     private sealed class GateHarness
     {
         internal GateHarness()
@@ -127,6 +162,8 @@ public sealed class DefaultAdministratorStartupGateTests
         internal IUserCredentialStore Credentials { get; } = Substitute.For<IUserCredentialStore>();
 
         internal AdminEndpointOptions AdminEndpoint { get; } = new();
+
+        internal Dictionary<string, string?> Settings { get; } = [];
 
         internal ReverseProxyOptions ReverseProxy { get; } = new();
 
@@ -168,7 +205,7 @@ public sealed class DefaultAdministratorStartupGateTests
 
             var gate = new DefaultAdministratorStartupGate(
                 provider.GetRequiredService<IServiceScopeFactory>(),
-                new ConfigurationBuilder().Build(),
+                new ConfigurationBuilder().AddInMemoryCollection(this.Settings).Build(),
                 Options.Create(this.AdminEndpoint),
                 Options.Create(this.ReverseProxy),
                 this.Recorded,

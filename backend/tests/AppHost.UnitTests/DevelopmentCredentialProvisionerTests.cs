@@ -22,7 +22,7 @@ public sealed class DevelopmentCredentialProvisionerTests
         using var responses = new RecordingHandler(
             Response(HttpStatusCode.ServiceUnavailable),
             Response(HttpStatusCode.OK),
-            JsonResponse($$"""{"users":[{"id":"{{UserId}}","served":true}]}"""));
+            JsonResponse($$"""{"users":[{"id":"{{UserId}}","served":true,"mcpEndpoint":true,"clientEndpoint":true}]}"""));
         using var client = new HttpClient(responses);
         var timeProvider = new FakeTimeProvider();
         var provisioner = new DevelopmentCredentialProvisioner(client, timeProvider);
@@ -74,6 +74,37 @@ public sealed class DevelopmentCredentialProvisionerTests
             responses.Requests.Select(static request => $"{request.Method} {request.Address}"));
         using var body = JsonDocument.Parse(responses.Requests[^1].Body!);
         Assert.Equal("user", body.RootElement.GetProperty("displayName").GetString());
+    }
+
+    /// <summary>Every first start records the default administrator with both mail switches off, so the roster carries it beside the user the launch serves, or alone.</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task WaitForSoleServedUserAsync_ARosterCarryingTheDefaultAdministrator_PassesOverIt(bool aServedUserIsRecorded)
+    {
+        // Arrange
+        var administrator = """{"id":"0f0e0d0c-0b0a-4908-8706-050403020100","served":true,"mcpEndpoint":false,"clientEndpoint":false}""";
+        var served = $$"""{"id":"{{UserId}}","served":true,"mcpEndpoint":true,"clientEndpoint":true}""";
+        using var responses = aServedUserIsRecorded
+            ? new RecordingHandler(
+                Response(HttpStatusCode.OK),
+                JsonResponse($$"""{"users":[{{administrator}},{{served}}]}"""))
+            : new RecordingHandler(
+                Response(HttpStatusCode.OK),
+                JsonResponse($$"""{"users":[{{administrator}}]}"""),
+                JsonResponse($$"""{"id":"{{UserId}}"}"""));
+        using var client = new HttpClient(responses);
+        var provisioner = new DevelopmentCredentialProvisioner(client, new FakeTimeProvider());
+
+        // Act
+        var user = await provisioner.WaitForSoleServedUserAsync(
+            StartedEndpoint,
+            AdminEndpoint,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(UserId, user);
+        Assert.Equal(aServedUserIsRecorded ? 2 : 3, responses.Requests.Count);
     }
 
     [Fact]

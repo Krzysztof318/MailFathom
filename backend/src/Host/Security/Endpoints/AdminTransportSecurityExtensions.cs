@@ -102,8 +102,9 @@ internal static class AdminTransportSecurityExtensions
     /// Credentials are never allowed, under any policy, for the reason the other two surfaces state: a browser that
     /// could attach an ambient cookie would let a page act as whoever is logged in somewhere else. This surface's
     /// credential is one the client sets deliberately — a bearer token, or a password <c>mfctl</c> sends in a Basic
-    /// header of its own composing — and never one a browser holds, because no administrative route asks a browser for a
-    /// password; <see cref="NoPasswordChallenge" /> holds why.
+    /// header of its own composing. No administrative route asks a browser for a password, which
+    /// <see cref="NoPasswordChallenge" /> holds why, and one a browser holds from another surface is refused here when
+    /// another site's page sends it.
     /// </remarks>
     private static void ConfigureCorsPolicy(CorsPolicyBuilder policy, BrowserOriginPolicy originPolicy)
     {

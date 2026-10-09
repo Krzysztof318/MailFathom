@@ -220,7 +220,8 @@ internal sealed partial class TransportGrantStartupReport : IHostedService
         Level = LogLevel.Information,
         Message = "The administrative endpoint entry {EntrySettingPath} accepts {AcceptedMethod} from a credential "
             + "listing the 'admin' surface, and each caller it admits is that credential's user, holding what their "
-            + "administrative roles grant. A user holding none is refused. {GrantEnforcement}")]
+            + "administrative roles grant, kept to the permissions its credential names. A credential left holding none "
+            + "is refused. Read a credential's names with 'mfctl credential list'. {GrantEnforcement}")]
     private partial void LogAdministrativeEntry(
         string entrySettingPath,
         string acceptedMethod,
@@ -230,7 +231,8 @@ internal sealed partial class TransportGrantStartupReport : IHostedService
         Level = LogLevel.Information,
         Message = "The administrative endpoint entry {EntrySettingPath} accepts {AcceptedMethod} from a credential "
             + "listing the 'admin' surface, and each token holds what its user's administrative roles grant, kept to "
-            + "those its own scopes carry. A user holding none is refused. {GrantEnforcement}")]
+            + "the permissions its credential names and then to those its own scopes carry. A credential left holding "
+            + "none is refused. Read a credential's names with 'mfctl credential list'. {GrantEnforcement}")]
     private partial void LogAdministrativeEntryNarrowedByTokenScopes(
         string entrySettingPath,
         string acceptedMethod,
