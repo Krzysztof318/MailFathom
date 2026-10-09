@@ -34,7 +34,7 @@ namespace MailFathom.Host.Hosting.Workers;
 internal sealed partial class ConfigurationConvergenceWorker : BackgroundService
 {
     /// <summary>The longest a replica serves settings or a roster without comparing them against what PostgreSQL holds.</summary>
-    /// <remarks>A constant rather than a setting, because it is the bound the documentation promises an operator about how long a change takes to reach every replica. What it costs is one statement over the users' versions and one read of the deployment's document per replica per interval.</remarks>
+    /// <remarks>A constant rather than a setting, because it is the bound the documentation promises an operator about how long a change takes to reach every replica. What it costs is one statement over the users' versions, one read of the deployment's document, and one read of the accounts whose settings columns trail their document per replica per interval — plus a short write transaction for each of up to <see cref="MailAccountSettingsReconciliation.MaximumAccountsPerReading" /> such accounts, which is nothing once a rolling upgrade has finished.</remarks>
     internal static readonly TimeSpan Interval = TimeSpan.FromSeconds(30);
 
     private readonly Channel<bool> announced = Channel.CreateBounded<bool>(
@@ -97,11 +97,11 @@ internal sealed partial class ConfigurationConvergenceWorker : BackgroundService
 
             if (persistedSettings is not null)
             {
-                await this.ReadInIsolationAsync(persistedSettings.ReloadAsync, stoppingToken);
+                await this.RunInIsolationAsync(persistedSettings.ReloadAsync, this.LogReadingFailed, stoppingToken);
             }
 
-            await this.ReadInIsolationAsync(this.users.ConvergeAsync, stoppingToken);
-            await this.ReadInIsolationAsync(this.accountSettings.ReconcileAsync, stoppingToken);
+            await this.RunInIsolationAsync(this.users.ConvergeAsync, this.LogReadingFailed, stoppingToken);
+            await this.RunInIsolationAsync(this.accountSettings.ReconcileAsync, this.LogReconciliationFailed, stoppingToken);
         }
     }
 
@@ -118,9 +118,12 @@ internal sealed partial class ConfigurationConvergenceWorker : BackgroundService
         stoppingToken.ThrowIfCancellationRequested();
     }
 
-    /// <summary>Runs one reading, so that one failing leaves the other to run and the worker to go on.</summary>
+    /// <summary>Runs one reading, so that one failing leaves the others to run and the worker to go on.</summary>
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A reading that failed leaves the version in force where it was and is made again on the next interval; ending the worker over it would leave the replica never catching up again.")]
-    private async Task ReadInIsolationAsync(Func<CancellationToken, Task> reading, CancellationToken stoppingToken)
+    private async Task RunInIsolationAsync(
+        Func<CancellationToken, Task> reading,
+        Action<TimeSpan, Exception> report,
+        CancellationToken stoppingToken)
     {
         try
         {
@@ -132,7 +135,7 @@ internal sealed partial class ConfigurationConvergenceWorker : BackgroundService
         }
         catch (Exception exception)
         {
-            this.LogReadingFailed(Interval, exception);
+            report(Interval, exception);
         }
     }
 
@@ -140,4 +143,9 @@ internal sealed partial class ConfigurationConvergenceWorker : BackgroundService
         Level = LogLevel.Warning,
         Message = "This replica could not compare what it serves against the persisted configuration and the users' records, and reads them again in {Interval}; what it bound stays in force.")]
     private partial void LogReadingFailed(TimeSpan interval, Exception exception);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "This replica could not read the accounts whose settings columns trail their document, and reads them again in {Interval}; every question asked of all accounts at once goes on answering from what those columns hold.")]
+    private partial void LogReconciliationFailed(TimeSpan interval, Exception exception);
 }

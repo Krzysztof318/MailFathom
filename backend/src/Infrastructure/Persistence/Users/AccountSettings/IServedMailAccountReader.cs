@@ -31,6 +31,16 @@ public interface IServedMailAccountReader
     /// <returns>The served accounts, in the ordinal order of their identifiers.</returns>
     Task<IReadOnlyList<MailAccountRecord>> ReadServedRecordsAsync(CancellationToken cancellationToken);
 
+    /// <summary>Reads accounts whose settings columns were not read out of the document they now hold, served or not.</summary>
+    /// <param name="limit">The most accounts to read, in identifier order.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The accounts, each at the version its document stands at, without the document where it is past the size MailFathom binds one from.</returns>
+    /// <remarks>
+    /// Only a build older than those columns leaves one, by rewriting or creating the document alone during a rolling
+    /// upgrade, and the migration that added them leaves every row it filled for the host's own binding to read again.
+    /// </remarks>
+    Task<IReadOnlyList<MailAccountTrailingSettings>> ReadTrailingSettingsAsync(int limit, CancellationToken cancellationToken);
+
     /// <summary>Reads each distinct answer served accounts gave about scanning their mail.</summary>
     /// <param name="user">The user whose assigned accounts are asked about, or <see langword="null" /> for every served account.</param>
     /// <param name="cancellationToken">Cancels the read.</param>

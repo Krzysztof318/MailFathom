@@ -283,9 +283,11 @@ document, so the settings they filter on are held relationally beside the docume
 per mapped folder in `mail_account_folder_settings`. **The account write reads them out of the document it is
 committing**, binding it exactly as a mailbox run binds it, and writes them in the same transaction with
 `SettingsVersion` set to the version it committed. A row whose `SettingsVersion` differs from its `Version` is one a
-build older than these columns wrote the document of alone; every replica reads up to a hundred such rows again from
-their documents on each [convergence interval](../operations/database-schema.md#ordering-a-deployment), writing them
-only where the account still stands at the version it read, so the columns trail such a write by at most one interval.
+build older than these columns wrote the document of alone, or one the migration that added them filled. Every replica
+reads a hundred such rows again from their documents on each
+[convergence interval](../operations/database-schema.md#ordering-a-deployment), in identifier order, writing them only
+where the account still stands at the version it read and stepping over one whose reading fails. So the columns trail
+such a write by one interval while no more than a hundred rows trail, and a larger backlog drains at that rate.
 
 | Column of `mail_account_folder_settings` | What it records |
 |---|---|

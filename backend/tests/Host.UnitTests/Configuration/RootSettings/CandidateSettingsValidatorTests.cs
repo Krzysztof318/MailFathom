@@ -316,7 +316,7 @@ public sealed class CandidateSettingsValidatorTests
     private static IServedMailAccountReader RecordsHolding(params Guid[] accountIds) =>
         ServedMailAccountReaders.Holding(
         [
-            .. accountIds.Select(accountId => new MailAccountRecord(accountId, "alex@example.test", "Alex at work", "{}", Version: 1)),
+            .. accountIds.Select(accountId => new MailAccountRecord(accountId, "alex@example.test", "Alex at work", ServableMailAccountDocuments.Completing("{}"), Version: 1)),
         ]);
 
     /// <summary>A candidate declaring one rule, scoped to the mailbox identifier a test names.</summary>

@@ -87,9 +87,9 @@ public sealed class MailFolderDirectoryReader
             return new MailFolderDirectory(accounts.SynchronizationEnabled, []);
         }
 
-        // The same scope the composed reading resolved, asked for again rather than passed down: it is configuration
-        // read in process, and resolving it here is what keeps the folders this counts mail in identical to the folders
-        // that reading reported freshness for. Junk is included for the reason the mailbox list includes it — the
+        // The scope the composed reading resolved, asked for again rather than passed down: it is read again from the
+        // account records, so it matches the folders that reading reported freshness for unless an account write
+        // commits between the two reads. Junk is included for the reason the mailbox list includes it — the
         // withholding is about not returning its mail unasked, and no mail is returned here.
         var scope = await this.scopeResolver.ReadableScopeAsync([], [], JunkMailInclusion.Included, cancellationToken);
 

@@ -297,6 +297,34 @@ public sealed class PersonalDataAnalyzerHealthCheckTests
         await probe.DidNotReceive().VerifyAvailableAsync(Arg.Any<CancellationToken>());
     }
 
+    /// <summary>A database outage ending on a deployment that scans nobody is recorded as the posture read answering again, not as scanning having stopped.</summary>
+    [Fact]
+    public async Task CheckHealthAsync_ThePostureReadRecoveringWhereNobodyIsScanned_LogsThatTheRecordsAnswerAgain()
+    {
+        // Arrange
+        using var loggerFactory = new RecordingLoggerFactory();
+        var postures = Substitute.For<ISensitiveContentPostures>();
+        var readable = false;
+        postures
+            .RunsForAnyAccountAsync(SensitiveContentScannerKind.Pii, Arg.Any<CancellationToken>())
+            .Returns(_ => readable ? Task.FromResult(false) : throw new InvalidOperationException("The database is not answering."));
+
+        var check = new PersonalDataAnalyzerHealthCheck(
+            Substitute.For<IPersonalDataAnalyzerProbe>(),
+            postures,
+            loggerFactory.CreateLogger<PersonalDataAnalyzerHealthCheck>());
+
+        // Act
+        await check.CheckHealthAsync(new HealthCheckContext(), TestContext.Current.CancellationToken);
+        readable = true;
+        var ready = await check.CheckHealthAsync(new HealthCheckContext(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(HealthStatus.Healthy, ready.Status);
+        Assert.Equal([LogLevel.Error, LogLevel.Information], loggerFactory.Records.Select(record => record.Level));
+        Assert.Contains("can be read from the account records again", loggerFactory.Records.Last().Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task CheckHealthAsync_TheCallerCancellingThePostureRead_PropagatesTheCancellation()
     {

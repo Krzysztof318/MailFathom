@@ -30,6 +30,7 @@ internal static class ServedMailAccountReaders
         reader.ReadServedRecordsAsync(Arg.Any<CancellationToken>()).Returns(records);
         reader.ReadServedAsync(Arg.Any<CancellationToken>()).Returns([]);
         reader.ReadScanningRequestsAsync(Arg.Any<UserId?>(), Arg.Any<CancellationToken>()).Returns([]);
+        reader.ReadTrailingSettingsAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns([]);
 
         return reader;
     }

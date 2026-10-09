@@ -25,8 +25,10 @@ namespace MailFathom.Infrastructure.Persistence.Entities;
 /// <para>
 /// A build older than these columns rewrites the document alone during a rolling upgrade, so a row whose
 /// <see cref="SettingsVersion" /> differs from <see cref="Version" /> holds settings read out of an earlier document, or
-/// none at all. Such a row is read again out of its document within one convergence interval of the write, and until then
-/// every question about every account answers from what it held before.
+/// none at all, and the migration that added the columns leaves every row it filled the same way. Such rows are read
+/// again out of their documents a hundred per convergence interval, so one is read within an interval of its write
+/// while no more than that trail, and a larger backlog drains at that rate. Until then every question about every
+/// account answers from what the row held before.
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "EF Core materializes this entity through the DbSet and model metadata.")]

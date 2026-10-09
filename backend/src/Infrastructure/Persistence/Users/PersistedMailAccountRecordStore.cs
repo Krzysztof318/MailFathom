@@ -389,27 +389,12 @@ internal sealed class PersistedMailAccountRecordStore(
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<MailAccountRecord>> ReadWithUnreadSettingsAsync(int limit, CancellationToken cancellationToken)
-    {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
-
-        var accounts = await dbContext.MailAccountRecords
-            .AsNoTracking()
-            .Where(account => account.SettingsVersion != account.Version)
-            .OrderBy(account => account.Id)
-            .Take(limit)
-            .ToListAsync(cancellationToken);
-
-        return [.. accounts.Select(ToRecord)];
-    }
-
-    /// <inheritdoc />
     public Task<bool> RecordSettingsAsync(
-        MailAccountRecord account,
+        Guid accountId,
+        long readFrom,
         MailAccountQueryableSettings settings,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(account);
         ArgumentNullException.ThrowIfNull(settings);
 
         return commitPolicy.CommitAsync(
@@ -417,7 +402,7 @@ internal sealed class PersistedMailAccountRecordStore(
             {
                 var context = await EfCorePersistenceSessionAccessor.JoinAsync(session, token);
 
-                return await WriteQueryableSettingsAsync(context, account.Id, account.Version, settings, token);
+                return await WriteQueryableSettingsAsync(context, accountId, readFrom, settings, token);
             },
             cancellationToken);
     }

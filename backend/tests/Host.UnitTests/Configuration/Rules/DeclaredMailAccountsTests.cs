@@ -5,6 +5,7 @@
 using MailFathom.Application.Rules.Actions;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.Rules;
+using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Persistence.Users;
 using Xunit;
 
@@ -33,10 +34,11 @@ public sealed class DeclaredMailAccountsTests
         Assert.Equal([Work.ToString("D"), Primary.ToString("D")], Identifiers(accounts));
     }
 
-    /// <summary>A document this process could not bind is an account nobody is served, so it declares nothing a rule may name.</summary>
+    /// <summary>A document this process could not bind, or would refuse to serve, is an account nobody is served, so it declares nothing a rule may name.</summary>
     [Theory]
     [InlineData("""{"NoSuchSetting":true}""")]
     [InlineData("[]")]
+    [InlineData("""{"Port":0}""")]
     public void ReadFrom_ARecordWhoseDocumentDoesNotBind_DeclaresNothing(string document)
     {
         // Act
@@ -180,7 +182,7 @@ public sealed class DeclaredMailAccountsTests
     private static MailSynchronizationAccountOptions Account(string accountId) => new() { AccountId = accountId };
 
     private static MailAccountRecord Record(Guid accountId, string document) =>
-        new(accountId, "alex@example.test", "Alex at work", document, Version: 1);
+        new(accountId, "alex@example.test", "Alex at work", ServableMailAccountDocuments.Completing(document), Version: 1);
 
     private static IReadOnlyList<string> Identifiers(IEnumerable<DeclaredMailAccount> accounts) =>
         [.. accounts.Select(account => account.AccountId)];

@@ -13,10 +13,11 @@ namespace MailFathom.Host.Configuration.Mail.Readers;
 /// <summary>Publishes the accounts this deployment serves, and which of them each user is assigned.</summary>
 /// <remarks>
 /// <para>
-/// Both answers come from the roster, because the roster is what the start establishes against the database: a user's
-/// composed record carries the accounts assigned to them, so the deployment's set is the union of those and the
-/// assignment relation is which record an account appeared in. Reading them from one place is what stops the two from
-/// disagreeing about an account an administrator has just assigned or unassigned.
+/// The served set <see cref="ReadServedAccountsAsync" /> reads comes from the account records. The assignment answers
+/// and <see cref="ServedAccounts" /> come from the roster until #2321 moves them: a user's composed record carries the
+/// accounts assigned to them, so that set is the union of those and the assignment relation is which record an account
+/// appeared in. The two agree once the roster has republished the last write, and until then they can disagree about an
+/// account an administrator has just assigned, unassigned, or changed.
 /// </para>
 /// <para>
 /// One account appears once in the deployment's set however many users are assigned it. That is the whole of one

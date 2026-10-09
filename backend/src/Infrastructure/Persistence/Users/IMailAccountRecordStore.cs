@@ -105,23 +105,16 @@ public interface IMailAccountRecordStore
     /// </remarks>
     Task<IReadOnlyList<Guid>> ReadSolelyAssignedAsync(UserId user, CancellationToken cancellationToken);
 
-    /// <summary>Reads accounts whose settings columns were not read out of the document they now hold.</summary>
-    /// <param name="limit">The most accounts to read, in identifier order.</param>
-    /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The accounts, each at the version its document stands at.</returns>
-    /// <remarks>
-    /// Only a build older than those columns leaves one, by rewriting or creating the document alone during a rolling
-    /// upgrade; every write of this build records them with the document.
-    /// </remarks>
-    Task<IReadOnlyList<MailAccountRecord>> ReadWithUnreadSettingsAsync(int limit, CancellationToken cancellationToken);
-
     /// <summary>Records the settings read out of an account's document, where the account still stands at the version they were read from.</summary>
-    /// <param name="account">The account as it was read, carrying the version of the document the settings came from.</param>
+    /// <param name="accountId">The account.</param>
+    /// <param name="readFrom">The version of the document the settings came from.</param>
     /// <param name="settings">The settings read out of that document.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>Whether they were recorded; an account that moved on, or is gone, records nothing.</returns>
+    /// <remarks>Every write of this build records them with the document; this is for a row a build older than the settings columns wrote alone.</remarks>
     Task<bool> RecordSettingsAsync(
-        MailAccountRecord account,
+        Guid accountId,
+        long readFrom,
         MailAccountQueryableSettings settings,
         CancellationToken cancellationToken);
 }

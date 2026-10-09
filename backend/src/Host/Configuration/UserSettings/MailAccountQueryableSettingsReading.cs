@@ -23,9 +23,10 @@ namespace MailFathom.Host.Configuration.UserSettings;
 /// it asked, and the reader that asks about every account composes it with what the deployment provides.
 /// </para>
 /// <para>
-/// A document that does not bind is read as settings that take part in nothing rather than refused. The write path
-/// judges a declaration before it ever reaches this, so the case is a row something other than the administration
-/// wrote, and the honest answer about such an account is that nothing can be said for it.
+/// A document that does not bind, or binds to a declaration the roster's judge would refuse, is read as settings that
+/// take part in nothing rather than refused. The write path judges a declaration before it ever reaches this, so the
+/// case is a row something other than the administration wrote, and the honest answer about such an account is that
+/// nothing can be said for it.
 /// </para>
 /// </remarks>
 internal static class MailAccountQueryableSettingsReading
@@ -38,15 +39,30 @@ internal static class MailAccountQueryableSettingsReading
     {
         ArgumentNullException.ThrowIfNull(account);
 
-        return TryBind(account) is { } bound ? Of(bound) : MailAccountQueryableSettings.Unreadable;
+        if (TryBind(account) is not { } bound)
+        {
+            return MailAccountQueryableSettings.Unreadable;
+        }
+
+        try
+        {
+            return Of(bound);
+        }
+        catch (ArgumentException)
+        {
+            // A value the binder accepted and the domain refuses — a folder alias or a classification threshold no
+            // validation reaches — leaves nothing that can be said for the account, which is what Unreadable answers.
+            return MailAccountQueryableSettings.Unreadable;
+        }
     }
 
     /// <summary>Binds one account's declaration as the options every per-account reader reads it as.</summary>
     /// <param name="account">The account as its record holds it.</param>
-    /// <returns>The bound declaration, or <see langword="null" /> where the document does not bind.</returns>
+    /// <returns>The bound declaration, or <see langword="null" /> where the document does not bind or the declaration is refused.</returns>
     /// <remarks>
-    /// Strict, as the binder a record is judged by is: a property nothing binds is a document this process would refuse
-    /// to serve, so reading settings out of what was left of it would publish an answer about an account nobody serves.
+    /// Strict, as the binder a record is judged by is: a property nothing binds, and a declaration that fails the rules
+    /// <see cref="UserMailAccountRules" /> judges every served account by, are documents this process would refuse to
+    /// serve, so reading settings out of what was left of them would publish an answer about an account nobody serves.
     /// </remarks>
     internal static MailSynchronizationAccountOptions? TryBind(MailAccountRecord account)
     {
@@ -66,7 +82,9 @@ internal static class MailAccountQueryableSettingsReading
         {
             document = new ConfigurationRoot([new JsonStreamConfigurationSource { Stream = stream }.Build(new ConfigurationBuilder())]);
 
-            return document.Get<MailSynchronizationAccountOptions>(binder => binder.ErrorOnUnknownConfiguration = true);
+            var bound = document.Get<MailSynchronizationAccountOptions>(binder => binder.ErrorOnUnknownConfiguration = true);
+
+            return bound is not null && !bound.ValidateForSynchronization(synchronizationEnabled: true).Any() ? bound : null;
         }
         catch (Exception unbound) when (unbound is InvalidOperationException or FormatException or JsonException)
         {

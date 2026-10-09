@@ -63,6 +63,17 @@ internal sealed class PersistedServedMailAccounts(
          ORDER BY account."Id";
          """;
 
+    private const string SelectTrailingSettings =
+        """
+        SELECT account."Id", account."EmailAddress", account."DisplayName",
+               CASE WHEN octet_length(account."Document"::text) <= @maximumOctets THEN account."Document"::text END,
+               account."Version"
+        FROM settings_mail_accounts AS account
+        WHERE account."SettingsVersion" <> account."Version"
+        ORDER BY account."Id"
+        LIMIT @limit;
+        """;
+
     private const string SelectScanningRequests =
         $"""
          SELECT DISTINCT account."ScansFor", account."ScreensOutgoingMailFor"
@@ -148,6 +159,35 @@ internal sealed class PersistedServedMailAccounts(
         }
 
         return [.. records.OrderBy(account => account.Id.ToString("D"), StringComparer.Ordinal)];
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<MailAccountTrailingSettings>> ReadTrailingSettingsAsync(int limit, CancellationToken cancellationToken)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
+
+        await using var connection = await dataSource().OpenConnectionAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(SelectTrailingSettings, connection) { CommandTimeout = this.CommandTimeoutSeconds };
+        command.Parameters.AddWithValue("maximumOctets", UserSettingsDocument.MaximumOctets);
+        command.Parameters.AddWithValue("limit", limit);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        var trailing = new List<MailAccountTrailingSettings>();
+
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var id = reader.GetGuid(0);
+            var version = reader.GetInt64(4);
+
+            trailing.Add(new MailAccountTrailingSettings(
+                id,
+                version,
+                reader.IsDBNull(3)
+                    ? null
+                    : new MailAccountRecord(id, reader.IsDBNull(1) ? null : reader.GetString(1), reader.GetString(2), reader.GetString(3), version)));
+        }
+
+        return trailing;
     }
 
     /// <inheritdoc />

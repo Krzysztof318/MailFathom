@@ -6,6 +6,7 @@ using MailFathom.Application.SensitiveContent;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Synchronization;
 using MailFathom.Host.Configuration.UserSettings;
+using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Persistence.Users;
 using MailFathom.Infrastructure.Persistence.Users.AccountSettings;
 using Xunit;
@@ -157,10 +158,12 @@ public sealed class MailAccountQueryableSettingsReadingTests
         Assert.Empty(ClassifiedAliases(settings));
     }
 
-    /// <summary>A document this process could not bind is an account nobody is served, so its settings take part in nothing.</summary>
+    /// <summary>A document this process could not bind, or would refuse to serve, is an account nobody is served, so its settings take part in nothing.</summary>
     [Theory]
     [InlineData("""{"NoSuchSetting":true}""")]
     [InlineData("[]")]
+    [InlineData("""{"Port":0}""")]
+    [InlineData("""{"SpamClassification":{"Enabled":true,"ScannedFolders":["IN\u0007BOX"]}}""")]
     public void Of_ADocumentThatDoesNotBind_ReadsTheUnreadableSettings(string document)
     {
         // Act
@@ -174,5 +177,5 @@ public sealed class MailAccountQueryableSettingsReadingTests
         [.. settings.Folders.Where(folder => folder.IsClassifiedForSpam).Select(folder => folder.Alias)];
 
     private static MailAccountRecord Record(string document) =>
-        new(AccountId, "alex@example.test", "Alex at work", document, Version: 1);
+        new(AccountId, "alex@example.test", "Alex at work", ServableMailAccountDocuments.Completing(document), Version: 1);
 }

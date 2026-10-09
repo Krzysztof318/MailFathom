@@ -154,9 +154,14 @@ internal sealed partial class PersonalDataAnalyzerHealthCheck : IHealthCheck
             // began meets a check that reports that outage instead of one holding a verdict about nobody's mail. The
             // transition out of an outage is still written: the probe flips to ready here, and an operator whose log
             // ends at the Error record would otherwise have nothing saying the instance is back in traffic.
-            if (this.Observed(AnalyzerAvailability.Unobserved) is AnalyzerAvailability.Unavailable or AnalyzerAvailability.PostureUnreadable)
+            switch (this.Observed(AnalyzerAvailability.Unobserved))
             {
-                this.LogAnalyzerNoLongerAsked();
+                case AnalyzerAvailability.Unavailable:
+                    this.LogAnalyzerNoLongerAsked();
+                    break;
+                case AnalyzerAvailability.PostureUnreadable:
+                    this.LogPostureReadable();
+                    break;
             }
 
             return HealthCheckResult.Healthy(
@@ -224,6 +229,12 @@ internal sealed partial class PersonalDataAnalyzerHealthCheck : IHealthCheck
         Level = LogLevel.Error,
         Message = "Whether any mailbox is scanned for personal data could not be read from the account records, so this instance reports unready without asking the personal-data analyzer. It becomes ready by itself once the database answers again.")]
     private partial void LogPostureUnreadable(Exception failure);
+
+    /// <summary>Reports that the posture read answers again on a deployment where nobody's mail is scanned for personal data.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Whether any mailbox is scanned for personal data can be read from the account records again, and none is, so this instance reports ready without asking the personal-data analyzer.")]
+    private partial void LogPostureReadable();
 
     /// <summary>Reports the recovery, which is what tells an operator watching the first record that the outage ended.</summary>
     [LoggerMessage(
