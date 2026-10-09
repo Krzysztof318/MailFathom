@@ -83,7 +83,7 @@ internal static class OutboxEndpoints
         // The one reading that names people, and therefore the one published under the grant every other reading of
         // identified third parties is published under rather than under the grant its two neighbours share.
         api.MapGet(SendRoute, ReadSendAsync)
-            .RequirePermission(MailFathomPermission.AdminAuditRead);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminAuditRead);
 
         // The attribute is reached for its metadata rather than as an MVC filter, exactly as the dead-letter decisions
         // reach it: it implements IRequestSizeLimitMetadata, which the routing pipeline applies to the request body

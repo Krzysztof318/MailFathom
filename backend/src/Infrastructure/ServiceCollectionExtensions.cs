@@ -337,8 +337,11 @@ public static class ServiceCollectionExtensions
         // What a use case asks before it does the work it was reached for. The principal behind it comes from whatever
         // admitted that work, which only a composition root knows, so IAuthorizedPrincipalSource is registered there and
         // this line says only that the question is asked in the application layer rather than at whichever entrypoint
-        // arrived first.
-        services.AddScoped<AccessAuthorization>();
+        // arrived first. The placement port is named rather than left to constructor selection, because the overload
+        // without it places no target and would leave every scoped administrator refused without saying so.
+        services.AddScoped(provider => new AccessAuthorization(
+            provider.GetRequiredService<IAuthorizedPrincipalSource>(),
+            provider.GetRequiredService<IAdministrativeTargets>()));
 
         // The wall clock the acting person is standing on, which every operation resolving a relative period states as
         // its anchor. Scoped because the person is the request's, over a zone reader and a clock that are both the
@@ -702,6 +705,11 @@ public static class ServiceCollectionExtensions
 
             return answerMailAccountAssignments?.Invoke(provider, stored) ?? stored;
         });
+        // Where a user or a mailbox sits for an administrative scope, read per question for the reason the relation
+        // above is: a move between organizations has to reach the next check on every replica.
+        services.AddSingleton<IAdministrativeTargets>(provider => new PersistedAdministrativeTargets(
+            () => provider.GetRequiredService<NpgsqlDataSource>(),
+            provider.GetRequiredService<DatabaseCommandTimeout>()));
         // What one person set about their own client, which is beside the record above rather than in it: this is a
         // preference about the client and that document is configuration. Scoped because both the read and the upsert
         // are ordinary statements on the request's own context, and registered unconditionally because it is a store

@@ -239,6 +239,21 @@ public sealed class AuthorizedPrincipal
         && this.Grant.ScopesOf(permission).Count > 0
         && !this.Holds(permission);
 
+    /// <summary>Reports whether this principal was granted one named capability over one target.</summary>
+    /// <param name="permission">The capability being asked about.</param>
+    /// <param name="target">Where the thing the operation names sits in the deployment.</param>
+    /// <returns><see langword="true" /> when the principal holds it at a scope covering the target.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="target" /> is <see langword="null" />.</exception>
+    /// <remarks>A mail permission never reads its scope, so it is answered exactly as <see cref="Holds" /> answers it whatever the target.</remarks>
+    public bool HoldsOver(MailFathomPermission permission, AdministrativeTarget target)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+
+        return permission.Surface == ProtectedSurface.Mail
+            ? this.Permissions.Contains(permission)
+            : this.Grant.Covers(permission, target);
+    }
+
     private static ScopedGrant AtDeployment(IEnumerable<MailFathomPermission> grantedPermissions)
     {
         ArgumentNullException.ThrowIfNull(grantedPermissions);

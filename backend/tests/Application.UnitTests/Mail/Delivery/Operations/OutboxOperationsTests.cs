@@ -6,6 +6,7 @@ using MailFathom.Application.Access;
 using MailFathom.Application.Mail.Delivery;
 using MailFathom.Application.Mail.Delivery.Operations;
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.TestSupport;
 using NSubstitute;
@@ -149,6 +150,67 @@ public sealed class OutboxOperationsTests
         // Assert
         Assert.Equal(OutboxDecisionOutcome.Accepted, outcome);
         await this.outbox.Received(1).RequeueAsync(Send, refusalRestated: true, Arg.Any<CancellationToken>());
+    }
+
+    public static TheoryData<AssignmentScope> ScopesCoveringTheAccount => [.. AccessAuthorizations.ScopesCoveringTheirTarget];
+
+    public static TheoryData<AssignmentScope> ScopesOutsideTheAccount => [.. AccessAuthorizations.ScopesOutsideTheirTarget];
+
+    [Theory]
+    [MemberData(nameof(ScopesCoveringTheAccount))]
+    public async Task FindAsync_AnAdministratorScopedOverTheAccountItWasQueuedFrom_IsServedTheRecord(AssignmentScope scope)
+    {
+        // Arrange
+        var record = QueuedRecord();
+        this.sends.FindAsync(Send, Arg.Any<CancellationToken>()).Returns(record);
+        var operations = this.OperationsFor(AccessAuthorizations.ForAdministratorScopedAt(scope, MailFathomPermission.AdminAuditRead));
+
+        // Act
+        var found = await operations.FindAsync(Send, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Same(record, found);
+    }
+
+    /// <summary>A message queued from an account outside the caller's scope is answered exactly as one this deployment does not hold, so its existence is not disclosed.</summary>
+    [Theory]
+    [MemberData(nameof(ScopesOutsideTheAccount))]
+    public async Task FindAsync_AnAdministratorScopedElsewhere_IsAnsweredAsThoughNoSuchSendExisted(AssignmentScope scope)
+    {
+        // Arrange
+        this.sends.FindAsync(Send, Arg.Any<CancellationToken>()).Returns(QueuedRecord());
+        var operations = this.OperationsFor(AccessAuthorizations.ForAdministratorScopedAt(scope, MailFathomPermission.AdminAuditRead));
+
+        // Act
+        var found = await operations.FindAsync(Send, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(found);
+    }
+
+    private static OutgoingEmailRecord QueuedRecord()
+    {
+        var recorded = new DateTimeOffset(2026, 8, 19, 9, 0, 0, TimeSpan.Zero);
+
+        return new OutgoingEmailRecord
+        {
+            Id = Send,
+            AccountId = MailAccountId.Create("0198f0aa-0000-7000-8000-00000000f0bb"),
+            Requester = OutgoingEmailRequester.Command("send-1"),
+            Principal = null,
+            Recipients = [],
+            Stage = OutgoingEmailStage.Recorded,
+            MimeByteLength = 512,
+            AttemptCount = 0,
+            RecordedAt = recorded,
+            StageChangedAt = recorded,
+            AvailableAt = recorded,
+            DueAt = null,
+            LastFailure = null,
+            LastReplyCode = null,
+            Filings = [],
+            LastFilingFailure = null,
+        };
     }
 
     private static OutboxQuery EverySend() =>

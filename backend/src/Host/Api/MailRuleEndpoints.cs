@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Rules;
 using MailFathom.Application.Rules.Evaluation;
@@ -83,7 +84,7 @@ internal static class MailRuleEndpoints
             .RequirePermission(MailFathomPermission.AdminRead);
 
         api.MapGet(HistoryRoute, ReadHistoryAsync)
-            .RequirePermission(MailFathomPermission.AdminAuditRead);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminAuditRead);
     }
 
     /// <summary>Reports the rule set in force, and whether the configuration on disk is the one it was read from.</summary>
@@ -195,6 +196,7 @@ internal static class MailRuleEndpoints
     /// <param name="cursor">The cursor the previous page returned, or <see langword="null" /> for the first page.</param>
     /// <param name="accounts">Reports whether this deployment serves the named account.</param>
     /// <param name="history">Reads the page.</param>
+    /// <param name="authorization">Answers whether the caller's scope covers the named account.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
     /// <returns><c>200</c> with the page, or <c>400</c> naming what was wrong with the request.</returns>
     /// <remarks>
@@ -212,12 +214,18 @@ internal static class MailRuleEndpoints
         [FromQuery] string? cursor,
         [FromServices] IDeploymentMailAccountCatalog accounts,
         [FromServices] MailRuleHistory history,
+        [FromServices] AccessAuthorization authorization,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(history);
 
-        if (await AdminAccountRequest.ResolveAsync(account, accounts, cancellationToken) is not { } servedAccount)
+        if (await AdminAccountRequest.ResolveCoveredAsync(
+                account,
+                MailFathomPermission.AdminAuditRead,
+                accounts,
+                authorization,
+                cancellationToken) is not { } servedAccount)
         {
             return AdminAccountRequest.Refuse(account);
         }

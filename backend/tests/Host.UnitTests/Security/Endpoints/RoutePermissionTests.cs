@@ -42,6 +42,27 @@ public sealed class RoutePermissionTests
         Assert.Throws<ArgumentException>(() => RoutePermission.Requiring(default));
     }
 
+    /// <summary>Only a route stating that it names a target lets the transport admit a grant held below the deployment.</summary>
+    [Fact]
+    public void RequiringOverTarget_APublishedPermission_CarriesItAndNamesATargetWhereRequiringDoesNot()
+    {
+        // Act
+        var overTarget = RoutePermission.RequiringOverTarget(MailFathomPermission.AdminAuditRead);
+        var overDeployment = RoutePermission.Requiring(MailFathomPermission.AdminAuditRead);
+
+        // Assert
+        Assert.Equal(MailFathomPermission.AdminAuditRead, overTarget.Permission);
+        Assert.True(overTarget.NamesTarget);
+        Assert.False(overDeployment.NamesTarget);
+    }
+
+    [Fact]
+    public void RequiringOverTarget_TheUnspecifiedDefault_IsRefused()
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentException>(() => RoutePermission.RequiringOverTarget(default));
+    }
+
     /// <summary>The route that requires none says so, rather than being a route whose decision is missing.</summary>
     [Fact]
     public void None_Always_NamesNoPermission()

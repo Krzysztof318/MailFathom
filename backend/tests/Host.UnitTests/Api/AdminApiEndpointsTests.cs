@@ -310,11 +310,11 @@ public sealed class AdminApiEndpointsTests
                 $"POST {prefix}{MailboxMaintenanceEndpoints.RewindRoute} -> {MailFathomPermission.AdminOperate.Name}",
                 $"POST {prefix}{MailboxMaintenanceEndpoints.RederivationRoute} -> {MailFathomPermission.AdminOperate.Name}",
                 $"GET {prefix}{MailboxMaintenanceEndpoints.RederivationRoute} -> {MailFathomPermission.AdminRead.Name}",
-                $"GET {prefix}{MailboxMutationAuditEndpoint.Route} -> {MailFathomPermission.AdminAuditRead.Name}",
+                $"GET {prefix}{MailboxMutationAuditEndpoint.Route} -> {MailFathomPermission.AdminAuditRead.Name} over its target",
                 $"GET {prefix}{MailAccountCustodyEndpoints.CustodyRoute} -> {MailFathomPermission.AdminRead.Name}",
                 $"POST {prefix}{MailAccountCustodyEndpoints.CustodyAppendSettlementRoute} -> {MailFathomPermission.AdminCustodyWrite.Name}",
                 $"POST {prefix}{MailAccountCustodyEndpoints.CustodySwitchRoute} -> {MailFathomPermission.AdminCustodyWrite.Name}",
-                $"GET {prefix}{MailAnsweringAuditEndpoint.Route} -> {MailFathomPermission.AdminAuditRead.Name}",
+                $"GET {prefix}{MailAnsweringAuditEndpoint.Route} -> {MailFathomPermission.AdminAuditRead.Name} over its target",
                 $"GET {prefix}{EmbeddingProfileEndpoints.StatusRoute} -> {MailFathomPermission.AdminRead.Name}",
                 $"GET {prefix}{EmbeddingProfileEndpoints.ActivationRoute} -> {MailFathomPermission.AdminRead.Name}",
                 $"POST {prefix}{EmbeddingProfileEndpoints.ActivationRoute} -> {MailFathomPermission.AdminSpend.Name}",
@@ -323,27 +323,27 @@ public sealed class AdminApiEndpointsTests
                 $"GET {prefix}{MailRuleEndpoints.RulesRoute} -> {MailFathomPermission.AdminRead.Name}",
                 $"GET {prefix}{MailRuleEndpoints.RunsRoute} -> {MailFathomPermission.AdminRead.Name}",
                 $"POST {prefix}{MailRuleEndpoints.RunsRoute} -> {MailFathomPermission.AdminOperate.Name}",
-                $"GET {prefix}{MailRuleEndpoints.HistoryRoute} -> {MailFathomPermission.AdminAuditRead.Name}",
+                $"GET {prefix}{MailRuleEndpoints.HistoryRoute} -> {MailFathomPermission.AdminAuditRead.Name} over its target",
                 $"GET {prefix}{SpamClassificationEndpoints.RunsRoute} -> {MailFathomPermission.AdminRead.Name}",
                 $"POST {prefix}{SpamClassificationEndpoints.RunsRoute} -> {MailFathomPermission.AdminOperate.Name}",
-                $"GET {prefix}{SpamClassificationEndpoints.ClassificationsRoute} -> {MailFathomPermission.AdminAuditRead.Name}",
+                $"GET {prefix}{SpamClassificationEndpoints.ClassificationsRoute} -> {MailFathomPermission.AdminAuditRead.Name} over its target",
                 $"GET {prefix}{JobDeadLetterEndpoints.DeadLettersRoute} -> {MailFathomPermission.AdminRead.Name}",
                 $"POST {prefix}{JobDeadLetterEndpoints.RetryRoute} -> {MailFathomPermission.AdminOperate.Name}",
                 $"POST {prefix}{JobDeadLetterEndpoints.DropRoute} -> {MailFathomPermission.AdminOperate.Name}",
                 $"GET {prefix}{OutboxEndpoints.SummaryRoute} -> {MailFathomPermission.AdminRead.Name}",
                 $"GET {prefix}{OutboxEndpoints.OutboxRoute} -> {MailFathomPermission.AdminRead.Name}",
-                $"GET {prefix}{OutboxEndpoints.SendRoute} -> {MailFathomPermission.AdminAuditRead.Name}",
+                $"GET {prefix}{OutboxEndpoints.SendRoute} -> {MailFathomPermission.AdminAuditRead.Name} over its target",
                 $"POST {prefix}{OutboxEndpoints.CancellationRoute} -> {MailFathomPermission.AdminOperate.Name}",
                 $"POST {prefix}{OutboxEndpoints.RequeueRoute} -> {MailFathomPermission.AdminOperate.Name}",
                 $"POST {prefix}{MailFolderErasureEndpoint.ErasureRoute} -> {MailFathomPermission.AdminErase.Name}",
-                $"GET {prefix}{ContactEndpoints.ContactsRoute} -> {MailFathomPermission.AdminAuditRead.Name}",
+                $"GET {prefix}{ContactEndpoints.ContactsRoute} -> {MailFathomPermission.AdminAuditRead.Name} over its target",
                 $"POST {prefix}{ContactEndpoints.ContactsRoute} -> {MailFathomPermission.AdminOperate.Name}",
-                $"GET {prefix}{ContactEndpoints.ContactByAddressRoute} -> {MailFathomPermission.AdminAuditRead.Name}",
-                $"GET {prefix}{ContactEndpoints.ContactRoute} -> {MailFathomPermission.AdminAuditRead.Name}",
+                $"GET {prefix}{ContactEndpoints.ContactByAddressRoute} -> {MailFathomPermission.AdminAuditRead.Name} over its target",
+                $"GET {prefix}{ContactEndpoints.ContactRoute} -> {MailFathomPermission.AdminAuditRead.Name} over its target",
                 $"PUT {prefix}{ContactEndpoints.ContactRoute} -> {MailFathomPermission.AdminOperate.Name}",
                 $"DELETE {prefix}{ContactEndpoints.ContactRoute} -> {MailFathomPermission.AdminErase.Name}",
                 $"DELETE {prefix}{ContactEndpoints.CollectedContactsRoute} -> {MailFathomPermission.AdminErase.Name}",
-                $"GET {prefix}{ContactEndpoints.ContactExportRoute} -> {MailFathomPermission.AdminAuditRead.Name}",
+                $"GET {prefix}{ContactEndpoints.ContactExportRoute} -> {MailFathomPermission.AdminAuditRead.Name} over its target",
                 $"POST {prefix}{ContactEndpoints.ContactPromotionRoute} -> {MailFathomPermission.AdminOperate.Name}",
                 $"GET {prefix}{ContentMoveEndpoints.MoveRoute} -> {MailFathomPermission.AdminRead.Name}",
                 $"POST {prefix}{ContentMoveEndpoints.MoveRoute} -> {MailFathomPermission.AdminOperate.Name}",
@@ -594,11 +594,14 @@ public sealed class AdminApiEndpointsTests
             endpoint => endpoint.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods,
             (endpoint, method) => $"{method} /{endpoint.RoutePattern.RawText?.TrimStart('/')} -> {Describe(endpoint)}");
 
-    /// <summary>Names what a route decided, with the route that decided on none saying so.</summary>
+    /// <summary>Names what a route decided, with the route that decided on none saying so and a route naming its target saying that.</summary>
     private static string Describe(Endpoint endpoint) =>
-        endpoint.Metadata.GetMetadata<RoutePermission>() is { Permission.IsSpecified: true } published
-            ? published.Permission.Name
-            : "none";
+        endpoint.Metadata.GetMetadata<RoutePermission>() switch
+        {
+            { Permission.IsSpecified: true, NamesTarget: true } published => $"{published.Permission.Name} over its target",
+            { Permission.IsSpecified: true } published => published.Permission.Name,
+            _ => "none",
+        };
 
     /// <summary>Builds the routing seam the mapping extends, with the routing services the group needs and nothing else.</summary>
     /// <param name="authorization">What the group's filter asks about the caller, defaulting to the one no test issues a request under.</param>

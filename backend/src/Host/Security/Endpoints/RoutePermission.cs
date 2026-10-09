@@ -28,13 +28,24 @@ namespace MailFathom.Host.Security.Endpoints;
 /// </remarks>
 internal sealed class RoutePermission
 {
-    private RoutePermission(MailFathomPermission permission) => this.Permission = permission;
+    private RoutePermission(MailFathomPermission permission, bool namesTarget)
+    {
+        this.Permission = permission;
+        this.NamesTarget = namesTarget;
+    }
 
     /// <summary>Gets the decision of a route that requires no permission at all.</summary>
-    internal static RoutePermission None { get; } = new(default);
+    internal static RoutePermission None { get; } = new(default, namesTarget: false);
 
     /// <summary>Gets the permission a caller must hold, unspecified where the route requires none.</summary>
     internal MailFathomPermission Permission { get; }
+
+    /// <summary>Gets whether the route names a user or a mail account, so the permission may be held at any scope covering it rather than over the whole deployment.</summary>
+    /// <remarks>
+    /// The transport cannot place the target, so for such a route it refuses only a caller holding the permission at no
+    /// scope at all, and the operation decides whether the scope it is held at covers what the request named.
+    /// </remarks>
+    internal bool NamesTarget { get; }
 
     /// <summary>States the one permission a route is published under.</summary>
     /// <param name="permission">The capability the route is reached with.</param>
@@ -47,7 +58,17 @@ internal sealed class RoutePermission
     /// served on is the same kind of defect and is refused by <see cref="RouteAuthorization" />, which is the half that
     /// knows which surface that is.
     /// </remarks>
-    internal static RoutePermission Requiring(MailFathomPermission permission)
+    internal static RoutePermission Requiring(MailFathomPermission permission) =>
+        new(Published(permission), namesTarget: false);
+
+    /// <summary>States the one permission a route naming a user or a mail account is published under.</summary>
+    /// <param name="permission">The capability the route is reached with, at a scope covering the target it names.</param>
+    /// <returns>The metadata the route carries.</returns>
+    /// <exception cref="ArgumentException">Thrown when the value names nothing published.</exception>
+    internal static RoutePermission RequiringOverTarget(MailFathomPermission permission) =>
+        new(Published(permission), namesTarget: true);
+
+    private static MailFathomPermission Published(MailFathomPermission permission)
     {
         if (!permission.IsSpecified)
         {
@@ -56,6 +77,6 @@ internal sealed class RoutePermission
                 nameof(permission));
         }
 
-        return new RoutePermission(permission);
+        return permission;
     }
 }

@@ -608,6 +608,7 @@ public sealed class MailRuleEndpointsTests
             cursor,
             CatalogServing(Account),
             new MailRuleHistory(this.history, AdministrativeGrant.WholeSurface),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
     private sealed class CommittingSession : IPersistenceSession

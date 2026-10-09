@@ -368,6 +368,46 @@ credential it was admitted as. One operator reading one `403` is not a rate anyb
 starts asking for what it was never granted is what the record exists to make visible.
 [Telemetry](telemetry.md#what-an-authorization-refusal-records) says what it carries and what it deliberately does not.
 
+### A grant held below the deployment
+
+A role assigned at an organization or at one user grants its administrative names over that part of the deployment
+alone. A route that names a mail account or a user checks the grant against what it names:
+
+- **The deployment** covers everything.
+- **An organization** covers its members and the mail accounts that belong to it.
+- **A user** covers that user, and a mail account only while it is assigned to that user and nobody else — a mailbox
+  somebody else reads as well is not one person's to administer.
+
+A user or an account in no organization is covered by the deployment scope alone, and a user in none by a scope naming
+them as well.
+
+These routes accept a grant held at any of the three, and check it against the target in the second column:
+
+| Route | Checked against |
+| --- | --- |
+| `GET /api/admin/mailbox/mutations/audit` | The mail account `account` names |
+| `GET /api/admin/answering/audit` | The mail account `account` names |
+| `GET /api/admin/rules/history` | The mail account `account` names |
+| `GET /api/admin/spam/classifications` | The mail account `account` names |
+| `GET /api/admin/outbox/{id}` | The mail account the message was queued from |
+| `GET /api/admin/contacts`, `GET /api/admin/contacts/by-address`, `GET /api/admin/contacts/{id}`, `GET /api/admin/contacts/{id}/export` | The user `user` names, and each mail account whose collected book that user reads |
+
+**A target outside the caller's scope is answered exactly as one that does not exist**, because a refusal naming the
+missing scope would tell an organization's administrator that the account or the person exists elsewhere in the
+deployment. So an account outside it is refused with `400` as an account this deployment does not configure, a queued
+message from one is `404`, a contact read for a user outside it is answered with an empty page or no contact, and an
+export for one is refused with `400` as a user this deployment holds no record for. The check runs before anything else
+about the request is answered, so a malformed cursor or filter on an account outside the scope draws the same refusal
+as the account itself.
+
+**A read across several books returns the ones the scope covers.** The books a user reads are their own beside the
+collected book of each mail account assigned to them, and a scope covering the user but not one of those accounts —
+a user scope, where the account is assigned to somebody else too — reads the user's own book and every collected book
+it does cover, and leaves that one out rather than refusing the user.
+
+Every other route is reached only by a grant held over the whole deployment, and refuses one held at a narrower scope
+with the `403` above.
+
 ## Where a credential may be presented from
 
 A credential may name the networks it is accepted from: a network such as `10.20.0.0/16`, or a single address, which

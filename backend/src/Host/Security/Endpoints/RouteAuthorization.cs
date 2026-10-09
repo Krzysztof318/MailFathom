@@ -84,6 +84,26 @@ internal static class RouteAuthorization
         return route.WithMetadata(RoutePermission.Requiring(permission));
     }
 
+    /// <summary>States the one permission a route naming a user or a mail account is published under, at a scope covering what it names.</summary>
+    /// <param name="route">The route being mapped.</param>
+    /// <param name="permission">The capability a caller must hold over the target the request names.</param>
+    /// <returns>The route, so a mapping reads as one expression.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="route" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when the permission names nothing published.</exception>
+    /// <remarks>
+    /// The transport then refuses only a caller holding the permission at no scope at all. Whether the scope covers the
+    /// target is the handler's to decide before it answers anything else about it, and the use case's to enforce — a
+    /// route published this way without either of those would admit an organization's administrator to every target.
+    /// </remarks>
+    internal static RouteHandlerBuilder RequirePermissionOverTarget(
+        this RouteHandlerBuilder route,
+        MailFathomPermission permission)
+    {
+        ArgumentNullException.ThrowIfNull(route);
+
+        return route.WithMetadata(RoutePermission.RequiringOverTarget(permission));
+    }
+
     /// <summary>States that a route requires no permission, which on each surface is its session read and nothing else.</summary>
     /// <param name="route">The route being mapped.</param>
     /// <returns>The route, so a mapping reads as one expression.</returns>
@@ -146,7 +166,7 @@ internal static class RouteAuthorization
         }
 
         if (published.Permission.IsSpecified
-            && !context.HttpContext.RequestServices.GetRequiredService<AccessAuthorization>().Permits(published.Permission))
+            && !PermitsAtTheTransport(context.HttpContext.RequestServices.GetRequiredService<AccessAuthorization>(), published))
         {
             RecordRefusal(context.HttpContext, surface, published.Permission);
 
@@ -183,6 +203,11 @@ internal static class RouteAuthorization
     /// is a defect report rather than a wider grant, and a refusal nobody counted is the one nobody finds.
     /// </para>
     /// </remarks>
+    private static bool PermitsAtTheTransport(AccessAuthorization authorization, RoutePermission published) =>
+        published.NamesTarget
+            ? authorization.PermitsAtAnyScope(published.Permission)
+            : authorization.Permits(published.Permission);
+
     private static void RecordRefusal(
         HttpContext context,
         ProtectedSurface surface,

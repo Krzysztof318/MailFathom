@@ -44,16 +44,19 @@ public sealed class MailboxMutationAuditTrailReader
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The page, and the cursor the following one is asked with.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="query" /> is <see langword="null" />.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.AdminAuditRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.AdminAuditRead" /> at a scope covering the account.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels.</exception>
-    public Task<MailboxMutationAuditPage> ReadPageAsync(
+    public async Task<MailboxMutationAuditPage> ReadPageAsync(
         MailboxMutationAuditQuery query,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(query);
 
-        this.authorization.RequirePermission(MailFathomPermission.AdminAuditRead);
+        await this.authorization.RequirePermissionOverAsync(
+            MailFathomPermission.AdminAuditRead,
+            query.Account,
+            cancellationToken);
 
-        return this.entries.ReadPageAsync(query, cancellationToken);
+        return await this.entries.ReadPageAsync(query, cancellationToken);
     }
 }

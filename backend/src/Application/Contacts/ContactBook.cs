@@ -105,9 +105,9 @@ public sealed class ContactBook
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The page, and the cursor the following one is asked with.</returns>
     /// <exception cref="ArgumentNullException">Thrown when a required argument is <see langword="null" />.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the read was reached by anything but a caller granted <see cref="MailFathomPermission.AdminAuditRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the read was reached by anything but a caller granted <see cref="MailFathomPermission.AdminAuditRead" /> at a scope covering the scope's user.</exception>
     /// <remarks>The page is bounded by the query the caller composed, which is where the ceiling on how much of a person's correspondents leaves the database at once already lives.</remarks>
-    public Task<ContactPage> ReadPageAsync(
+    public async Task<ContactPage> ReadPageAsync(
         ContactBookScope scope,
         ContactQuery query,
         CancellationToken cancellationToken)
@@ -115,9 +115,9 @@ public sealed class ContactBook
         ArgumentNullException.ThrowIfNull(scope);
         ArgumentNullException.ThrowIfNull(query);
 
-        this.authorization.RequirePermission(MailFathomPermission.AdminAuditRead);
+        var audited = await this.AuditedAsync(scope, cancellationToken);
 
-        return this.directory.ReadPageAsync(scope, query, cancellationToken);
+        return await this.directory.ReadPageAsync(audited, query, cancellationToken);
     }
 
     /// <summary>Reads one contact by the identity the book gave it.</summary>
@@ -126,17 +126,17 @@ public sealed class ContactBook
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The contact, or <see langword="null" /> where the scope shows no such person.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="scope" /> is <see langword="null" />.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the read was reached by anything but a caller granted <see cref="MailFathomPermission.AdminAuditRead" />.</exception>
-    public Task<Contact?> FindAsync(
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the read was reached by anything but a caller granted <see cref="MailFathomPermission.AdminAuditRead" /> at a scope covering the scope's user.</exception>
+    public async Task<Contact?> FindAsync(
         ContactBookScope scope,
         ContactId contactId,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(scope);
 
-        this.authorization.RequirePermission(MailFathomPermission.AdminAuditRead);
+        var audited = await this.AuditedAsync(scope, cancellationToken);
 
-        return this.directory.FindAsync(scope, contactId, cancellationToken);
+        return await this.directory.FindAsync(audited, contactId, cancellationToken);
     }
 
     /// <summary>Reads the person who uses one address.</summary>
@@ -145,18 +145,18 @@ public sealed class ContactBook
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The contact, or <see langword="null" /> where nobody in the scope holds it.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="scope" /> is <see langword="null" />.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the read was reached by anything but a caller granted <see cref="MailFathomPermission.AdminAuditRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the read was reached by anything but a caller granted <see cref="MailFathomPermission.AdminAuditRead" /> at a scope covering the scope's user.</exception>
     /// <remarks>Resolving an address to a person is the most pointed read the book answers, which is why it asks for the same grant the listing does rather than a weaker one.</remarks>
-    public Task<Contact?> FindByAddressAsync(
+    public async Task<Contact?> FindByAddressAsync(
         ContactBookScope scope,
         EmailAddress address,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(scope);
 
-        this.authorization.RequirePermission(MailFathomPermission.AdminAuditRead);
+        var audited = await this.AuditedAsync(scope, cancellationToken);
 
-        return this.directory.FindByAddressAsync(scope, address, cancellationToken);
+        return await this.directory.FindByAddressAsync(audited, address, cancellationToken);
     }
 
     /// <summary>Answers whether one account's own book already holds an address, without answering whose it is.</summary>
@@ -475,7 +475,7 @@ public sealed class ContactBook
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The export, or <see langword="null" /> when the scope shows no such contact.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="scope" /> is <see langword="null" />.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the export was reached by anything but a caller granted <see cref="MailFathomPermission.AdminAuditRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the export was reached by anything but a caller granted <see cref="MailFathomPermission.AdminAuditRead" /> at a scope covering the scope's user.</exception>
     /// <remarks>It is what a data-subject access request is answered from, which is reading what this deployment derived about a person rather than a report of its own state.</remarks>
     public async Task<ContactExport?> ExportAsync(
         ContactBookScope scope,
@@ -484,11 +484,39 @@ public sealed class ContactBook
     {
         ArgumentNullException.ThrowIfNull(scope);
 
-        this.authorization.RequirePermission(MailFathomPermission.AdminAuditRead);
+        var audited = await this.AuditedAsync(scope, cancellationToken);
 
-        var held = await this.directory.FindAsync(scope, contactId, cancellationToken);
+        var held = await this.directory.FindAsync(audited, contactId, cancellationToken);
 
         return held is null ? null : new ContactExport(held, this.timeProvider.GetUtcNow());
+    }
+
+    /// <summary>Requires the audit read over the scope's user, and keeps of the scope only the collected books the caller's scope covers.</summary>
+    /// <remarks>
+    /// The user's own book is theirs, so the scope covering them covers it. A collected book is a mail account's, and an
+    /// account another person is assigned is read by them as well: a scope naming one user reaches it only while that
+    /// user is the account's alone, so a read across the books returns the ones the caller may reach rather than
+    /// refusing the user for one shared mailbox.
+    /// </remarks>
+    private async Task<ContactBookScope> AuditedAsync(ContactBookScope scope, CancellationToken cancellationToken)
+    {
+        await this.authorization.RequirePermissionOverAsync(
+            MailFathomPermission.AdminAuditRead,
+            scope.User,
+            cancellationToken);
+
+        var accounts = scope.Books.Select(book => book.Account).OfType<MailAccountId>().ToArray();
+        var covered = new List<MailAccountId>(accounts.Length);
+
+        foreach (var account in accounts)
+        {
+            if (await this.authorization.PermitsOverAsync(MailFathomPermission.AdminAuditRead, account, cancellationToken))
+            {
+                covered.Add(account);
+            }
+        }
+
+        return covered.Count == accounts.Length ? scope : ContactBookScope.Of(scope.User, covered);
     }
 
     /// <summary>Mints the identity for a person nobody has written down yet and commits the record, whoever asked.</summary>

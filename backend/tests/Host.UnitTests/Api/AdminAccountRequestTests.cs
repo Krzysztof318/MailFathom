@@ -3,9 +3,11 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Accounts;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Synchronization;
 using MailFathom.Host.Api;
+using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using NSubstitute;
@@ -203,6 +205,49 @@ public sealed class AdminAccountRequestTests
         Assert.NotNull(refusal);
         Assert.Null(accountId);
         Assert.Equal("This deployment configures no mail account named 'archive'.", Detail(refusal!));
+    }
+
+    public static TheoryData<AssignmentScope> ScopesCoveringTheAccount => [.. AccessAuthorizations.ScopesCoveringTheirTarget];
+
+    public static TheoryData<AssignmentScope> ScopesOutsideTheAccount => [.. AccessAuthorizations.ScopesOutsideTheirTarget];
+
+    [Theory]
+    [MemberData(nameof(ScopesCoveringTheAccount))]
+    public async Task ResolveCoveredAsync_AnAccountTheCallersScopeCovers_ReadsTheIdentifier(AssignmentScope scope)
+    {
+        // Arrange
+        var accounts = CatalogServing(Work);
+
+        // Act
+        var accountId = await AdminAccountRequest.ResolveCoveredAsync(
+            "work",
+            MailFathomPermission.AdminAuditRead,
+            accounts,
+            AccessAuthorizations.ForAdministratorScopedAt(scope, MailFathomPermission.AdminAuditRead),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(WorkIdentity, accountId);
+    }
+
+    /// <summary>An account outside the caller's scope resolves to nothing, exactly as one the deployment does not serve, so the route answers it with the same refusal.</summary>
+    [Theory]
+    [MemberData(nameof(ScopesOutsideTheAccount))]
+    public async Task ResolveCoveredAsync_AnAccountOutsideTheCallersScope_ReadsNothing(AssignmentScope scope)
+    {
+        // Arrange
+        var accounts = CatalogServing(Work);
+
+        // Act
+        var accountId = await AdminAccountRequest.ResolveCoveredAsync(
+            "work",
+            MailFathomPermission.AdminAuditRead,
+            accounts,
+            AccessAuthorizations.ForAdministratorScopedAt(scope, MailFathomPermission.AdminAuditRead),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(accountId);
     }
 
     private static string? Detail(ProblemHttpResult refusal) => refusal.ProblemDetails.Detail;

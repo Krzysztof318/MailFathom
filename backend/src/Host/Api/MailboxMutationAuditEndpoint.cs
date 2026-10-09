@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Domain.Access;
@@ -46,7 +47,7 @@ internal static class MailboxMutationAuditEndpoint
         ArgumentNullException.ThrowIfNull(api);
 
         api.MapGet(Route, ReadAsync)
-            .RequirePermission(MailFathomPermission.AdminAuditRead);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminAuditRead);
     }
 
     /// <summary>Serves one page of an account's audit trail, or reports what was wrong with the request.</summary>
@@ -58,6 +59,7 @@ internal static class MailboxMutationAuditEndpoint
     /// <param name="cursor">The cursor the previous page returned, or <see langword="null" /> for the first page.</param>
     /// <param name="accounts">Reports whether this deployment serves the named account.</param>
     /// <param name="trail">Reads the page, for a caller the trail's own grant admits.</param>
+    /// <param name="authorization">Answers whether the caller's scope covers the named account.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
     /// <returns><c>200</c> with the page, or <c>400</c> naming what was wrong with the request.</returns>
     /// <remarks>
@@ -75,12 +77,18 @@ internal static class MailboxMutationAuditEndpoint
         [FromQuery] string? cursor,
         [FromServices] IDeploymentMailAccountCatalog accounts,
         [FromServices] MailboxMutationAuditTrailReader trail,
+        [FromServices] AccessAuthorization authorization,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(trail);
 
-        if (await AdminAccountRequest.ResolveAsync(account, accounts, cancellationToken) is not { } servedAccount)
+        if (await AdminAccountRequest.ResolveCoveredAsync(
+                account,
+                MailFathomPermission.AdminAuditRead,
+                accounts,
+                authorization,
+                cancellationToken) is not { } servedAccount)
         {
             return AdminAccountRequest.Refuse(account);
         }

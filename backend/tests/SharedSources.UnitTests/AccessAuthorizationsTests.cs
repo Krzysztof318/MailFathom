@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.TestSupport;
 using Xunit;
 
@@ -112,5 +113,32 @@ public sealed class AccessAuthorizationsTests
         // Assert
         Assert.True(authorization.Permits(MailFathomPermission.AdminCredentialsWrite));
         Assert.Throws<PrincipalNotAuthorizedException>(() => authorization.RequireUser());
+    }
+
+    /// <summary>
+    /// The scope lists are what every "at each scope kind" theory reads, so a covering scope that covered nothing would
+    /// turn each of those refusal tests into a pass for the wrong reason.
+    /// </summary>
+    [Fact]
+    public async Task ForAdministratorScopedAt_TheScopesListed_CoverTheHolderAndTheirAccountsExactlyAsNamed()
+    {
+        // Arrange
+        var account = MailAccountId.Create("0198f0aa-0000-7000-8000-00000000f0aa");
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        // Act
+        var covering = await Task.WhenAll(AccessAuthorizations.ScopesCoveringTheirTarget.Select(scope =>
+            ReachesBothAsync(AccessAuthorizations.ForAdministratorScopedAt(scope, MailFathomPermission.AdminAuditRead))));
+        var outside = await Task.WhenAll(AccessAuthorizations.ScopesOutsideTheirTarget.Select(scope =>
+            ReachesBothAsync(AccessAuthorizations.ForAdministratorScopedAt(scope, MailFathomPermission.AdminAuditRead))));
+
+        // Assert
+        Assert.All(covering, Assert.True);
+        Assert.All(outside, Assert.False);
+        Assert.Equal([AssignmentScopeKind.Deployment, AssignmentScopeKind.Organization, AssignmentScopeKind.User], AccessAuthorizations.ScopesCoveringTheirTarget.Select(scope => scope.Kind));
+
+        async Task<bool> ReachesBothAsync(AccessAuthorization authorization) =>
+            await authorization.PermitsOverAsync(MailFathomPermission.AdminAuditRead, account, cancellationToken)
+            && await authorization.PermitsOverAsync(MailFathomPermission.AdminAuditRead, AccessAuthorizations.ScopedHolder, cancellationToken);
     }
 }

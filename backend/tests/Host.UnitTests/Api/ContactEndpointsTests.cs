@@ -306,6 +306,7 @@ public sealed class ContactEndpointsTests
             User,
             this.Book(),
             this.Scopes(),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -323,6 +324,7 @@ public sealed class ContactEndpointsTests
             User,
             this.Book(),
             this.Scopes(),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -352,6 +354,7 @@ public sealed class ContactEndpointsTests
             address,
             this.Book(),
             this.Scopes(),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -378,6 +381,7 @@ public sealed class ContactEndpointsTests
             cursor: null,
             book: this.Book(),
             scopes: this.Scopes(),
+            authorization: AdministrativeGrant.WholeSurface,
             cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
@@ -402,6 +406,7 @@ public sealed class ContactEndpointsTests
             cursor: null,
             book: this.Book(),
             scopes: this.Scopes(),
+            authorization: AdministrativeGrant.WholeSurface,
             cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
@@ -431,6 +436,7 @@ public sealed class ContactEndpointsTests
             cursor,
             this.Book(),
             this.Scopes(),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -558,6 +564,7 @@ public sealed class ContactEndpointsTests
             this.Book(),
             this.Scopes(),
             this.Roster(),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         var promotion = await ContactEndpoints.PromoteAsync(
@@ -632,6 +639,7 @@ public sealed class ContactEndpointsTests
             this.Book(),
             this.Scopes(),
             this.Roster(),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -654,6 +662,7 @@ public sealed class ContactEndpointsTests
             this.Book(),
             this.Scopes(),
             this.Roster(),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -661,6 +670,67 @@ public sealed class ContactEndpointsTests
         Assert.Equal("Anna Kowalska", export.Value!.Contact!.DisplayName);
         Assert.Equal("Met at the conference.", export.Value.Contact.Note);
         Assert.Equal(this.clock.GetUtcNow(), export.Value.ProducedAt);
+    }
+
+    /// <summary>A user outside the caller's scope is answered exactly as one the books hold nothing for, and the books are never read.</summary>
+    [Fact]
+    public async Task ListAsync_AUserOutsideTheCallersScope_AnswersAnEmptyPageWithoutReadingTheBooks()
+    {
+        // Arrange
+        var elsewhere = AccessAuthorizations.ForAdministratorScopedAt(
+            AccessAuthorizations.ScopesOutsideTheirTarget[0],
+            MailFathomPermission.AdminAuditRead);
+
+        // Act
+        var result = await ContactEndpoints.ListAsync(
+            User,
+            origin: null,
+            pageSize: null,
+            cursor: null,
+            book: this.Book(),
+            scopes: this.Scopes(),
+            authorization: elsewhere,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        var page = Assert.IsType<Ok<ContactPageResponse>>(result.Result);
+        Assert.Empty(page.Value!.Contacts);
+        Assert.Null(page.Value.NextCursor);
+        Assert.Empty(this.directory.ReceivedCalls());
+    }
+
+    /// <summary>Exporting from the books of a user outside the caller's scope is refused as a user this deployment holds no record for.</summary>
+    [Fact]
+    public async Task ExportAsync_AUserOutsideTheCallersScope_IsRefusedAsAnUnknownUser()
+    {
+        // Arrange
+        var elsewhere = AccessAuthorizations.ForAdministratorScopedAt(
+            AccessAuthorizations.ScopesOutsideTheirTarget[1],
+            MailFathomPermission.AdminAuditRead);
+        var unknown = await ContactEndpoints.ExportAsync(
+            Identity,
+            Guid.Parse("0198f0aa-0000-7000-8000-00000000f0dd"),
+            this.Book(),
+            this.Scopes(),
+            this.Roster(),
+            AdministrativeGrant.WholeSurface,
+            TestContext.Current.CancellationToken);
+
+        // Act
+        var result = await ContactEndpoints.ExportAsync(
+            Identity,
+            User,
+            this.Book(),
+            this.Scopes(),
+            this.Roster(),
+            elsewhere,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(result.Result);
+        var unknownRefusal = Assert.IsType<ProblemHttpResult>(unknown.Result);
+        Assert.Equal(unknownRefusal.StatusCode, refusal.StatusCode);
+        Assert.Empty(this.directory.ReceivedCalls());
     }
 
     private static Contact Asserted(string displayName, string address, string? note = null) =>

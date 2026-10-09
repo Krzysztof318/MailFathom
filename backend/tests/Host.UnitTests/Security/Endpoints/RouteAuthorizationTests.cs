@@ -96,6 +96,45 @@ public sealed class RouteAuthorizationTests
         Assert.False(reached);
     }
 
+    /// <summary>A route naming its target admits a grant held below the deployment, and the operation decides whether that scope covers the target.</summary>
+    [Fact]
+    public async Task RefuseUnpermittedAsync_AGrantBelowTheDeploymentOnARouteNamingItsTarget_ReachesTheHandler()
+    {
+        // Arrange
+        var context = ContextFor(
+            RoutePermission.RequiringOverTarget(MailFathomPermission.AdminAuditRead),
+            AccessAuthorizations.ForAdministratorScopedAt(
+                AssignmentScope.Organization(AccessAuthorizations.ScopedOrganization),
+                MailFathomPermission.AdminAuditRead));
+
+        // Act
+        var answer = await RouteAuthorization.RefuseUnpermittedAsync(context, Served, Surface);
+
+        // Assert
+        Assert.Equal("served", answer);
+    }
+
+    /// <summary>A route naming no target is reached only with the permission held over the whole deployment.</summary>
+    [Fact]
+    public async Task RefuseUnpermittedAsync_AGrantBelowTheDeploymentOnARouteNamingNoTarget_Refuses()
+    {
+        // Arrange
+        var reached = false;
+        var context = ContextFor(
+            RoutePermission.Requiring(MailFathomPermission.AdminAuditRead),
+            AccessAuthorizations.ForAdministratorScopedAt(
+                AssignmentScope.Organization(AccessAuthorizations.ScopedOrganization),
+                MailFathomPermission.AdminAuditRead));
+
+        // Act
+        var answer = await RouteAuthorization.RefuseUnpermittedAsync(context, Reaching(() => reached = true), Surface);
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(answer);
+        Assert.Equal(StatusCodes.Status403Forbidden, refusal.StatusCode);
+        Assert.False(reached);
+    }
+
     /// <summary>
     /// The client surface answers the same way, and that is the decision rather than an inheritance: its caller is a
     /// page holding this person's own credential, and the session route already tells that caller its whole grant — so
