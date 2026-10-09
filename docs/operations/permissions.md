@@ -250,6 +250,12 @@ what it may do is a fact about the credential and is recorded beside it; the dep
 deployment, so what it may do is configured with it. The two halves of the published set are therefore written in two
 places, and neither surface accepts the other's shape.
 
+The deployment also records roles, groups, and role assignments, and seeds three roles — `Mail user`,
+`Organization administrator`, and `Administrator` — when it is migrated. Nothing reads those records to decide what a
+caller holds yet, so writing one grants nothing; the two places below are still the whole of where a grant is written.
+[The stored schema](../architecture/stored-email-schema.md#the-roles-groups-and-assignments-a-grant-is-read-from)
+describes the tables and what each seeded role lists.
+
 ### On a user's credential
 
 The grant is named where the credential is provisioned, once per permission:

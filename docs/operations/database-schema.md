@@ -28,7 +28,11 @@ database that already carries some of them takes only what it is missing. You do
 given installation holds in order to know which file to apply — there is one file, and applying it twice is applying it
 once.
 
-It can write two rows as well as creating tables, and each is written once and left alone afterwards. Where it upgrades
+It can write rows as well as creating tables, and each is written once and left alone afterwards. Every database, fresh
+or upgraded, gets the three built-in roles — `Mail user`, `Organization administrator`, and `Administrator` — with the
+permissions [the stored schema](../architecture/stored-email-schema.md#the-roles-groups-and-assignments-a-grant-is-read-from)
+lists for each; they are ordinary rows a deployment may rename, edit, or delete, and no later migration touches them.
+Where it upgrades
 a database that already holds mail, or anything recorded about it, from a release before users were recorded, the chain
 provisions the **user** that mail is bound to — one record, labelled `user`, with the mail accounts this deployment already
 holds carried onto it — because a mailbox belongs to somebody from the moment its row exists. A fresh database gets no

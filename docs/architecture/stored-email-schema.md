@@ -658,6 +658,63 @@ identically.
 **Removing a user removes these with the rest.** The cascade from `settings_accounts` takes them, which is what the
 foreign key is for: a person erased from the deployment leaves nothing behind that could still be signed in as.
 
+## The roles, groups, and assignments a grant is read from
+
+Five tables hold what a user's grant is computed from under
+[ADR 0012](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0012-authorization-model-named-permissions-and-where-they-are-enforced.md):
+a role is a name and an explicit list of permissions, a group is a set of users, and an assignment gives one role to
+one user or one group at one scope. They are rows rather than settings so a change to any of them is the same on every
+replica from the moment it commits. Nothing reads them to admit a caller yet; what a caller is granted is still
+decided by the credential they present.
+
+`roles` holds one row per role: `Id`, a version 7 identifier; `Name`, at most 128 characters and unique across the
+deployment under `ix_roles_name`, compared exactly; and `CreatedAt`. `role_permissions` holds the role's list, one row
+per published permission name keyed by `(RoleId, Permission)`, so a role lists a name once, and cascading from its
+role. A name is written only when this build publishes it. One stored name a later build no longer publishes is read
+back beside the role as unpublished and grants nothing, rather than making the whole role unreadable.
+
+The migration that creates the tables seeds three roles, written once as ordinary rows an operator may rename, edit,
+or delete, and edited by no later migration:
+
+| Role | What it lists |
+|---|---|
+| `Mail user` | Every name the mail half published when it was seeded |
+| `Organization administrator` | `mailfathom.admin.read`, `mailfathom.admin.audit.read`, `mailfathom.admin.operate`, `mailfathom.admin.credentials.write`, `mailfathom.admin.configuration.write`, `mailfathom.admin.erase`, and `mailfathom.admin.roles.write` |
+| `Administrator` | Every name both halves published when it was seeded, and `mailfathom.admin.roles.write` |
+
+`mailfathom.admin.roles.write` is on two of those lists before this build publishes it, so both read it back as
+unpublished until the release that publishes it, from which it grants what it names without any row changing.
+
+`user_groups` holds one row per group: `Id`; `Name`, at most 128 characters and unique across the deployment under
+`ix_user_groups_name`; `OrganizationId`, the organization the group belongs to or null for none, as a foreign key onto
+`organizations` that cascades; and `CreatedAt`. `user_group_members` keys one membership by `(GroupId, UserId)` with
+the instant it was added, cascading from the group and from `settings_accounts`. A group in an organization holds only
+that organization's members, which the write adding a member checks under share locks on the group and the user rather
+than a constraint, for the reason the account's own organization rule is not one: a null on either side would leave a
+composite key unchecked.
+
+`role_assignments` holds one row per assignment:
+
+| Column | What it records |
+|---|---|
+| `Id` | The assignment's identity, which a revocation names |
+| `RoleId` | The role given, a foreign key onto `roles` that **restricts** deletion: removing a role still assigned would take the grant from everybody holding it as a side effect, so it is refused naming how many assignments stand in the way |
+| `PrincipalUserId` | The user the role is given to, when the principal is a user, as a foreign key onto `settings_accounts` that cascades |
+| `PrincipalGroupId` | The group the role is given to, when the principal is a group, as a foreign key onto `user_groups` that cascades. Removing a group that is still assigned is refused by the write that removes it, under the group's row lock, naming how many assignments stand in the way; the cascade is what an organization's removal takes with its groups |
+| `ScopeOrganizationId` | The organization the assignment reaches, when its scope is one, as a foreign key onto `organizations` that cascades |
+| `ScopeUserId` | The user the assignment reaches, when its scope is one, as a foreign key onto `settings_accounts` that cascades |
+| `AssignedAt` | When the role was given |
+
+Two check constraints hold the shape: `ck_role_assignments_one_principal` sets exactly one principal column, and
+`ck_role_assignments_at_most_one_scope` at most one scope column, neither meaning the deployment. The unique index
+`ix_role_assignments_role_principal_scope` over the role and all four columns has nulls not distinct, because every row
+leaves three of the four null and an index treating each null as distinct would admit the same assignment twice — the
+one at the deployment scope above all. It leads with `RoleId`, so it is also what the count refusing a role's deletion
+reads; each of the other four foreign keys has an index of its own, which its cascade and the group's refusal read.
+
+**Removing a user or an organization takes every membership and assignment naming it with it**, in the statement that
+removes it: an organization is removed only once nobody belongs to it, so its groups are empty and leave with it.
+
 ## The assertions this deployment has already served
 
 `spent_client_assertions` is what makes a captured [client assertion](../operations/mcp-endpoint.md#key-pairs)
