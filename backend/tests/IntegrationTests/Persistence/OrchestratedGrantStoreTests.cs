@@ -475,6 +475,126 @@ public sealed class OrchestratedGrantStoreTests(MailFathomOrchestrationFixture o
         }
     }
 
+    /// <summary>
+    /// Narrowing a role and ending a membership each take a permission away, so each forgets what this process
+    /// remembered — a write that kept the grant cached would go on serving the removed name until the interval.
+    /// </summary>
+    [Fact]
+    public async Task UserGrantResolver_ARoleNarrowedThenAMembershipEnded_ResolvesWithoutWhatEachTookAway()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var user = Guid.CreateVersion7();
+        var role = Guid.CreateVersion7();
+        var group = Guid.CreateVersion7();
+        await ProvisionUserAsync(services, user, cancellationToken);
+
+        try
+        {
+            await services.InScopeAsync(
+                (scope, token) => Store(scope).CreateRoleAsync(
+                    role,
+                    $"role-{role:N}",
+                    RolePermissions.Of([MailFathomPermission.MailRead, MailFathomPermission.MailAsk]),
+                    RecordedAt,
+                    token),
+                cancellationToken);
+            await services.InScopeAsync(
+                (scope, token) => Store(scope).CreateGroupAsync(group, $"group-{group:N}", organizationId: null, RecordedAt, token),
+                cancellationToken);
+            await services.InScopeAsync(
+                (scope, token) => Store(scope).AddGroupMemberAsync(group, UserId.Create(user), RecordedAt, token),
+                cancellationToken);
+            await AssignAsync(services, role, AssignmentPrincipal.Group(group), AssignmentScope.Deployment, cancellationToken);
+            var before = await ResolveAsync(services, user, cancellationToken);
+
+            // Act
+            await services.InScopeAsync(
+                (scope, token) => Store(scope).ReplaceRolePermissionsAsync(role, ReadMail, token),
+                cancellationToken);
+            var afterNarrowing = await ResolveAsync(services, user, cancellationToken);
+            await services.InScopeAsync(
+                (scope, token) => Store(scope).RemoveGroupMemberAsync(group, UserId.Create(user), token),
+                cancellationToken);
+            var afterLeaving = await ResolveAsync(services, user, cancellationToken);
+
+            // Assert
+            Assert.Equal(
+                new HashSet<MailFathomPermission> { MailFathomPermission.MailRead, MailFathomPermission.MailAsk },
+                before.Permissions);
+            Assert.Equal([MailFathomPermission.MailRead], afterNarrowing.Permissions);
+            Assert.Empty(afterLeaving.Permissions);
+        }
+        finally
+        {
+            await OrchestratedForeignUser.EraseAsync(services, user);
+            await RevokeEveryAssignmentOfRoleAsync(services, role);
+            await services.InScopeAsync((scope, token) => Store(scope).DeleteGroupAsync(group, token), CancellationToken.None);
+            await DeleteRoleAsync(services, role);
+        }
+    }
+
+    /// <summary>
+    /// Moving a user out of an organization leaves their memberships of its groups behind, and those grant nothing once
+    /// the user is no longer in it — the move also forgets what this process remembered, so the next request reads that.
+    /// </summary>
+    [Fact]
+    public async Task UserGrantResolver_AUserMovedOutOfTheOrganizationWhoseGroupGrantedThem_ResolvesWithoutIt()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var user = Guid.CreateVersion7();
+        var role = Guid.CreateVersion7();
+        var group = Guid.CreateVersion7();
+        var organization = Guid.CreateVersion7();
+        await ProvisionUserAsync(services, user, cancellationToken);
+
+        try
+        {
+            await CreateRoleAsync(services, role, $"role-{role:N}", cancellationToken);
+            await services.InScopeAsync(
+                (scope, token) => scope.GetRequiredService<IOrganizationStore>().CreateAsync(
+                    organization,
+                    $"Organization {organization:N}",
+                    OrganizationShortName.Create($"{organization:N}"),
+                    RecordedAt,
+                    token),
+                cancellationToken);
+            await services.InScopeAsync(
+                (scope, token) => scope.GetRequiredService<IOrganizationStore>().SetUserOrganizationAsync(UserId.Create(user), organization, token),
+                cancellationToken);
+            await services.InScopeAsync(
+                (scope, token) => Store(scope).CreateGroupAsync(group, $"group-{group:N}", organization, RecordedAt, token),
+                cancellationToken);
+            await services.InScopeAsync(
+                (scope, token) => Store(scope).AddGroupMemberAsync(group, UserId.Create(user), RecordedAt, token),
+                cancellationToken);
+            await AssignAsync(services, role, AssignmentPrincipal.Group(group), AssignmentScope.Organization(organization), cancellationToken);
+            var before = await ResolveAsync(services, user, cancellationToken);
+
+            // Act
+            var moved = await services.InScopeAsync(
+                (scope, token) => scope.GetRequiredService<IOrganizationStore>().SetUserOrganizationAsync(UserId.Create(user), null, token),
+                cancellationToken);
+            var after = await ResolveAsync(services, user, cancellationToken);
+
+            // Assert
+            Assert.Equal([MailFathomPermission.MailRead], before.Permissions);
+            Assert.Equal(OrganizationWriteOutcome.Written, moved.Outcome);
+            Assert.Empty(after.Permissions);
+        }
+        finally
+        {
+            await OrchestratedForeignUser.EraseAsync(services, user);
+            await services.InScopeAsync(
+                (scope, token) => scope.GetRequiredService<IOrganizationStore>().DeleteAsync(organization, token),
+                CancellationToken.None);
+            await DeleteRoleAsync(services, role);
+        }
+    }
+
     private static Task<ScopedGrant> ResolveAsync(
         OrchestratedMailFathomServices services,
         Guid user,

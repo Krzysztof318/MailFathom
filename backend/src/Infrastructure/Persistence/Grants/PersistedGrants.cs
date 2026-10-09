@@ -492,9 +492,16 @@ internal sealed class PersistedGrants(MailFathomDbContext dbContext, IGrantChang
     {
         var userId = RequireUser(user);
 
-        var groupsOfUser = dbContext.UserGroupMembers
-            .Where(member => member.UserId == userId)
-            .Select(member => member.GroupId);
+        // The membership rule AdmitsMember applies when a member is added, read again against the user's organization
+        // now: moving a user leaves their memberships of the old organization's groups behind, and those must grant
+        // nothing once nobody in that organization covers the user any more.
+        var groupsOfUser =
+            from member in dbContext.UserGroupMembers
+            where member.UserId == userId
+            join userGroup in dbContext.UserGroups on member.GroupId equals userGroup.Id
+            join account in dbContext.UserAccounts on member.UserId equals account.Id
+            where userGroup.OrganizationId == null || userGroup.OrganizationId == account.OrganizationId
+            select userGroup.Id;
 
         var held = await dbContext.RoleAssignments
             .AsNoTracking()

@@ -227,6 +227,28 @@ public sealed class TransportAuthorizedPrincipalSourceTests
     }
 
     /// <summary>
+    /// The grant is read once per request and every scope of that request answers from it — the MCP server runs a tool
+    /// call in a scope of its own, so a source composed there has to see what the pipeline's source read.
+    /// </summary>
+    [Fact]
+    public async Task Current_ASecondSourceOverARequestWhoseGrantWasRead_HoldsTheGrantTheFirstRead()
+    {
+        // Arrange
+        var request = RequestBy(AuthenticatedUserHolding(SyntheticUser.Another, MailFathomPermission.MailRead), McpEndpointRoute.Path);
+        var pipeline = SourceOver(request, mcpConfiguresACredential: true);
+        var toolCall = SourceOver(request, mcpConfiguresACredential: true);
+
+        // Act
+        await pipeline.ResolveGrantAsync(
+            GrantsOver(StoreHolding(ScopedGrant.AtDeployment([MailFathomPermission.MailRead]))),
+            TestContext.Current.CancellationToken);
+        var principal = toolCall.Current;
+
+        // Assert
+        Assert.Equal([MailFathomPermission.MailRead], principal?.Permissions);
+    }
+
+    /// <summary>
     /// A request whose user's grant was never read — a branch of the pipeline that bypassed the read — is answered as
     /// one whose user holds nothing, whatever its credential names, so skipping the read refuses rather than admits.
     /// </summary>

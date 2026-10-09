@@ -3,8 +3,8 @@
 <!-- describes: backend/src/Domain/Access/**, backend/src/Application/Access/**, backend/src/Host/Configuration/Access/AdministratorOptions.cs, backend/src/Host/Configuration/Access/UserFacingAuthenticationOptions.cs, backend/src/Host/Api/Client*.cs, backend/src/Host/Security/Endpoints/**, backend/src/Host/Security/Transport/**, backend/src/Mcp/Tools/PublishedTools.cs -->
 
 Authentication decides whether a caller reaches a surface at all. What it may then do is a **permission**: a named
-capability MailFathom publishes, written on the administrator the caller signed in as or on the user credential that
-admitted it, checked by the use case behind every operation, and counted under its own name when a caller is refused.
+capability MailFathom publishes, written on the administrator the caller signed in as or granted to a user through a
+role and kept to what the user credential that admitted it names, checked by the use case behind every operation, and counted under its own name when a caller is refused.
 
 This page is the whole model. The names, what each one reaches, how a grant is written, what an unwritten grant means,
 and what a refused caller is told are all here; the pages that configure a listener, publish a tool, or serve a route
@@ -276,8 +276,9 @@ from the credential rather than from the grant — [what a permission does not d
 permissions, a group's membership, or a user's organization forgets what every replica remembered: the replica writing it
 at once, the others through the [configuration change announcement](configuration-sources.md#what-reaches-every-replica) where a
 backplane is declared, and within thirty seconds where none is or the announcement is lost. A client session holds no grant of its
-own — only what its credential named — so a revoked assignment reaches a session already signed in on its next
-request.
+own — only what its credential named — so a revoked assignment reaches a session already signed in on its first
+request after the replica serving it has forgotten: at once on the replica that wrote the change, and within the bound
+above on every other.
 
 ### On a user's credential
 
@@ -402,8 +403,9 @@ administrator.
 **Startup records what every administrator and entry resolved to**, one line each, so the posture is read on the first
 run rather than inferred later. An administrator's line names it, its grant, and the networks it may act from; one that
 wrote no grant says so rather than being reported as though somebody had chosen what it holds, and one granted nothing
-as `nothing`. A mail-serving entry reports the method it accepts and says
-where the grants behind it are read — `mfctl credential list` — because there is none in that section to report. Nothing
+as `nothing`. A mail-serving entry reports the method it accepts and says that
+each caller holds what its user's roles grant, kept to the names its credential carries, and that `mfctl credential
+list` reads those names — because there is no grant in that section to report. Nothing
 in the report names a key, a public key, a token, an authorization server, or a subject: what it states is what the
 deployment configured, never which credential was presented.
 [The MCP endpoint](mcp-endpoint.md#what-a-credential-may-do) and
@@ -411,8 +413,8 @@ deployment configured, never which credential was presented.
 
 ### Which names are published where
 
-A grant on a user's credential draws from the mail half, and a grant on the administrative endpoint from the
-administrative half. `mailfathom.mail.flags.write`, `mailfathom.mail.move`, `mailfathom.mail.delete`, and
+A credential's narrowing draws from the mail half, and a grant on the administrative endpoint from the administrative
+half. `mailfathom.mail.flags.write`, `mailfathom.mail.move`, `mailfathom.mail.delete`, and
 `mailfathom.mail.send` are the four worth naming rather than leaving to the ungoverned default: the first three write to
 the user's real mail server, the second of them being the one that can lose a message if it stops half way and the third
 the one that means to lose it, and the fourth is the only name in either half whose effect leaves the deployment and

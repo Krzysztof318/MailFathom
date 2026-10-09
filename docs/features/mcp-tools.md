@@ -111,9 +111,9 @@ credential, the permission, or what a different caller would have been served.
 [Which tool each name covers](../operations/permissions.md#which-tool-each-name-covers) is the mapping, one row per
 tool, and the page around it is the model those names belong to: what each one reaches, and why no permission here
 implies another. `mailfathom.mail.send` is the one worth reading twice, because it is the only name whose effect leaves
-this deployment and cannot be recalled. Which grant a credential
-holds is recorded on the credential itself, beside the user it resolves, and
-[the MCP endpoint](../operations/mcp-endpoint.md#what-a-credential-may-do) is where that is read; a deployment whose
+this deployment and cannot be recalled. What a caller
+holds is what its user's roles grant, kept to what its credential names, and
+[the MCP endpoint](../operations/mcp-endpoint.md#what-a-credential-may-do) is where both are read; a deployment whose
 credentials were provisioned with no permission named serves every caller whatever its user's roles grant, which is
 what makes this invisible until an operator narrows something. An entry setting `PermissionsFromTokenScopes` is the one
 place a further thing narrows it: a token then holds only the names its own scopes carry as well as what its credential

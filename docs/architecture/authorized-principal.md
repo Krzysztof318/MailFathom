@@ -46,7 +46,7 @@ There are three kinds of principal, and none of them is a weaker version of anot
 
 | Kind | What it is | What it holds |
 | --- | --- | --- |
-| Caller | Somebody who presented a credential a configured entry admits, or — where the surface configures no entry at all — somebody who presented nothing | On a mail surface, what the user's roles grant kept to what the credential names, each permission at the scopes it was granted at; on the administrative surface, what the administrator was configured with |
+| Caller | Somebody who presented a credential a configured entry admits, or — where the surface configures no entry at all — somebody who presented nothing | On a mail surface, what the user's roles grant kept to what the credential names, each permission at the scopes it was granted at; on the administrative surface, what the administrator was configured with, or everything that surface publishes where it configures no entry |
 | Process identity | MailFathom itself, running work no caller requested | Nothing, by construction |
 | Signed capability | A ticket this deployment signed for one object | Nothing; the ticket is the authorization |
 
@@ -114,10 +114,11 @@ The host composes one `IAuthorizedPrincipalSource` per scope, which for a served
   download route is the one that does.
 
 **A request that authenticated nothing depends on what the surface it reached configures.** Where that surface
-configures no `Authentication` entry at all, the caller acts for the user the deployment serves and holds what that
-user's roles grant on the surface's half — there is no credential to narrow it with, which is the posture ADR 0012
-settled and the startup record already states, so reporting no principal there would have a use case refuse every call
-on a deployment whose own record says it serves somebody. Where the
+configures no `Authentication` entry at all, the caller is served anyway — there is no credential to narrow it with,
+which is the posture ADR 0012 settled and the startup record already states, so reporting no principal there would have
+a use case refuse every call on a deployment whose own record says it serves somebody. On the MCP or client surface that
+caller acts for the user the deployment serves and holds what that user's roles grant on the mail half; on the
+administrative surface it acts for no user and holds everything that surface publishes. Where the
 surface does configure a credential, such a request is none of the three.
 
 **The download route is withheld from that grant on either posture.** The MCP surface serves it beside the protocol

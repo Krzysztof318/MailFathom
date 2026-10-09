@@ -810,9 +810,9 @@ The operational consequences are the ones that always applied to an unauthentica
 - **Restrict who can reach the address at the network layer.** A loopback bind, a firewall rule, a private network, or an
   authenticating reverse proxy are all outside MailFathom and all appropriate.
 - **What can be read here can also be marked, and the contact book can be erased.** An endpoint with no
-  `Authentication` entry grants every permission this surface publishes, so anyone who can reach the port holds the
-  reading half — where the exposure is disclosure of a mailbox, which is enough on its own — and every writing half
-  with it. `mailfathom.mail.flags.write` lets them mark, star, and relabel the user's mail on the real mail server
+  `Authentication` entry serves anyone who can reach the port as the user the deployment serves, holding whatever of
+  this surface's half that user's roles grant — with `Mail user`, all of it: the reading half, where the exposure is
+  disclosure of a mailbox, which is enough on its own, and every writing half with it. `mailfathom.mail.flags.write` lets them mark, star, and relabel the user's mail on the real mail server
   through `set_mail_flags`, and the change converges out over the account's own write connection; nothing there sends,
   deletes, or moves mail, but a message somebody else marked read is a message the user never saw arrive.
   `mailfathom.mail.contacts.write` lets them record, amend, and irreversibly erase the records about identified third
