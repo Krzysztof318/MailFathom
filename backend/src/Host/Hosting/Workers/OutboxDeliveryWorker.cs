@@ -8,6 +8,7 @@ using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery.Filing;
+using MailFathom.Host.Configuration.Mail;
 using MailFathom.Infrastructure.Observability;
 
 namespace MailFathom.Host.Hosting.Workers;
@@ -97,7 +98,9 @@ internal sealed partial class OutboxDeliveryWorker : BackgroundService
     /// A failed pass keeps the loop alive on purpose. What can fail here is the claim itself — a send's own failure is
     /// already recorded against its record by the attempt — and a database that is briefly unavailable says nothing
     /// about whether there is mail to send. Anything the pass had claimed keeps its lease and is claimable again when
-    /// that lease expires, so nothing is lost by leaving it to the account's next run.
+    /// that lease expires, so nothing is lost by leaving it to the account's next run. The scope holds the account's
+    /// settings and those of the other accounts its users hold, read before the pass is composed from them; an account
+    /// no longer served sends nothing here, and its mail waits where it is.
     /// </remarks>
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "One account's pass must not stop the loop that serves every other account; each send's own record already carries how far it got, and the account's synchronization run drains what this pass did not.")]
     private async Task<MailOutboxPassReport> RunPassAsync(MailAccountId account, CancellationToken stoppingToken)
@@ -105,6 +108,13 @@ internal sealed partial class OutboxDeliveryWorker : BackgroundService
         try
         {
             using var scope = this.scopeFactory.CreateScope();
+
+            if (!await scope.ServiceProvider
+                .GetRequiredService<ScopedMailSynchronizationSettings>()
+                .UseAccountSettingsAsync(account, stoppingToken))
+            {
+                return MailOutboxPassReport.Empty;
+            }
 
             var pass = scope.ServiceProvider.GetRequiredService<MailOutboxPass>();
             var report = await pass.RunAsync(account, stoppingToken);

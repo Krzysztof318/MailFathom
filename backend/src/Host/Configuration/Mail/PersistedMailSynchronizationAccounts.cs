@@ -19,7 +19,7 @@ namespace MailFathom.Host.Configuration.Mail;
 /// <summary>Reads the accounts synchronization supervises, and what one account's run reads, from PostgreSQL per pass and per run.</summary>
 /// <remarks>
 /// <para>
-/// A run reads the users its account is assigned to and composes each of their records exactly as the roster does,
+/// A run reads the users its account is assigned to and composes each of their records exactly as the served users do,
 /// because what a run derives from an account's <em>neighbours</em> — the mail domains and addresses that are that
 /// person's own — is read across the other accounts of the same user. That is a handful of records rather than the
 /// deployment, and it is read when the run begins, so a commit reaches the next run of the account it changed whichever
@@ -27,7 +27,7 @@ namespace MailFathom.Host.Configuration.Mail;
 /// </para>
 /// <para>
 /// A user whose own record does not bind, or whose record the reader refuses for what it holds, is left out of the run
-/// rather than failing it, for the reason a start leaves such a user unserved: the convergence reports the record, and
+/// rather than failing it, for the reason such a user is left unserved: composing them reports the record, and
 /// an account nobody else is assigned is then no longer one this run can find, so its runs wait out their backoff until
 /// the record is corrected. A database that declines the read fails the run instead.
 /// </para>
@@ -40,7 +40,8 @@ internal sealed class PersistedMailSynchronizationAccounts(
     IUserSettingsDocumentReader documents,
     ServedUserRecordComposition composition,
     ConfigurationChangeAnnouncements announcements,
-    WithheldMailAccounts withheldAccounts) : IMailSynchronizationAccountSource
+    WithheldMailAccounts withheldAccounts,
+    ServedUsers servedUsers) : IMailSynchronizationAccountSource
 {
     /// <summary>How many accounts one statement of a pass reads.</summary>
     /// <remarks>Large enough that a deployment of thousands of accounts is a handful of statements per pass, and small enough that one page is a few kilobytes of identifiers rather than a table.</remarks>
@@ -49,6 +50,10 @@ internal sealed class PersistedMailSynchronizationAccounts(
     /// <summary>What each run's settings were composed from, held for as long as the settings themselves are.</summary>
     /// <remarks>Keyed on the settings instance rather than on the account, so it holds nothing for an account whose supervisor has ended and needs nothing to remove it.</remarks>
     private readonly ConditionalWeakTable<MailSynchronizationOptions, RunComposition> compositions = new();
+
+    /// <summary>The settings each held user was last served under, held for as long as that composition of the user is.</summary>
+    /// <remarks>Keyed on the composition rather than on the user, so a user whose record moved is served under new settings and the old ones go with the composition they were built from.</remarks>
+    private readonly ConditionalWeakTable<ServedUser, UserComposition> userSettings = new();
 
     /// <inheritdoc />
     public async IAsyncEnumerable<SupervisedMailAccount> ReadSupervisedAsync(
@@ -126,6 +131,32 @@ internal sealed class PersistedMailSynchronizationAccounts(
 
     /// <inheritdoc />
     /// <remarks>
+    /// The same instance answers every request of one user while neither their record nor the deployment's section has
+    /// moved, so the per-account maps its readers memoize are built once rather than once per request.
+    /// </remarks>
+    public async Task<MailSynchronizationOptions> ReadUserSettingsAsync(UserId user, CancellationToken cancellationToken)
+    {
+        var bound = boundSettings.Current;
+
+        if (await servedUsers.ReadAsync(user, cancellationToken) is not { } served)
+        {
+            return bound.WithServedUsers([]);
+        }
+
+        if (this.userSettings.TryGetValue(served, out var composed) && ReferenceEquals(composed.Bound, bound))
+        {
+            return composed.Settings;
+        }
+
+        var settings = bound.WithServedUsers([served]);
+
+        this.userSettings.AddOrUpdate(served, new UserComposition(bound, settings));
+
+        return settings;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
     /// A committed change to any account is announced, here and to every other replica, and a withholding is this
     /// replica's own; either may move an account into or out of what a pass reads.
     /// </remarks>
@@ -157,6 +188,11 @@ internal sealed class PersistedMailSynchronizationAccounts(
         composition.Compose(document, UserRecordArrival.AlreadyHeld).Record is { } record
             ? new ServedUser(document.User, document.DisplayName, [.. record.MailAccounts])
             : null;
+
+    /// <summary>One user's settings and the bound settings instance they were composed over.</summary>
+    /// <param name="Bound">The bound settings instance, compared by reference because a reload binds a new one.</param>
+    /// <param name="Settings">The bound settings carrying the user's accounts.</param>
+    private sealed record UserComposition(MailSynchronizationOptions Bound, MailSynchronizationOptions Settings);
 
     /// <summary>What one run's settings were composed from: the bound settings, and each user's record at the version read.</summary>
     /// <param name="Bound">The bound settings instance, compared by reference because a reload binds a new one.</param>

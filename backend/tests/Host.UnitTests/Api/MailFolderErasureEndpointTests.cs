@@ -182,6 +182,28 @@ public sealed class MailFolderErasureEndpointTests
     }
 
     /// <summary>
+    /// An account whose record is gone by the time its settings are prepared is refused like one never served, because
+    /// what the eraser reads about its folders would otherwise be another account's settings or none at all.
+    /// </summary>
+    [Fact]
+    public async Task EraseAsync_AnAccountWhoseSettingsCannotBePrepared_RefusesWithoutReachingTheEraser()
+    {
+        // Arrange
+        var store = new RecordingMirrorStore(MailFolderMirrorErasure.Nothing);
+
+        // Act
+        var result = await this.EraseAsync(
+            store,
+            new MailFolderErasureRequest("work", "archive"),
+            MailAccountId.Create("personal"));
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(result.Result);
+        Assert.Equal(StatusCodes.Status400BadRequest, refusal.StatusCode);
+        Assert.Empty(store.Passes);
+    }
+
+    /// <summary>
     /// Text the alias type refuses reaches a stated refusal rather than a failure the process reports as its own,
     /// which is what a body an operator typed is owed.
     /// </summary>
@@ -207,15 +229,24 @@ public sealed class MailFolderErasureEndpointTests
     private void Maps(MailFolderMapping? mapping) =>
         this.mappings.FindFolderNamed(Account, Archive).Returns(mapping);
 
-    private Task<Results<Ok<MailFolderErasureResponse>, ProblemHttpResult>> EraseAsync(
+    private async Task<Results<Ok<MailFolderErasureResponse>, ProblemHttpResult>> EraseAsync(
         IStoredMailFolderMirrorStore store,
-        MailFolderErasureRequest request) =>
-        MailFolderErasureEndpoint.EraseAsync(
+        MailFolderErasureRequest request,
+        params MailAccountId[] preparableAccounts)
+    {
+        using var scoped = AccountScopedRequest.Serving(
+            services => services
+                .AddSingleton(this.mappings)
+                .AddSingleton(EraserOver(store, this.mappings)),
+            preparableAccounts is [] ? [Account] : preparableAccounts);
+
+        return await MailFolderErasureEndpoint.EraseAsync(
             request,
             CatalogServing(Account),
-            this.mappings,
-            EraserOver(store, this.mappings),
+            scoped.MailSettings,
+            scoped.Context,
             TestContext.Current.CancellationToken);
+    }
 
     private static UnmirroredMailFolderEraser EraserOver(
         IStoredMailFolderMirrorStore store,

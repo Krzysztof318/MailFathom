@@ -214,7 +214,7 @@ public sealed class RedactingEmailMimeReaderTests
 
         // Assert
         Assert.Equal(
-            derivation.Guard.StampFor(ScanningSensitiveContentDerivation.Account),
+            await derivation.Guard.StampForAsync(ScanningSensitiveContentDerivation.Account, TestContext.Current.CancellationToken),
             extraction.Metadata!.RedactedUnder);
     }
 
@@ -248,7 +248,7 @@ public sealed class RedactingEmailMimeReaderTests
 
         // Assert
         Assert.DoesNotContain(Marker, scanned.Metadata!.Text.OriginalText, StringComparison.Ordinal);
-        Assert.Equal(derivation.Guard.StampFor(AnotherAccount), scanned.Metadata.RedactedUnder);
+        Assert.Equal(await derivation.Guard.StampForAsync(AnotherAccount, TestContext.Current.CancellationToken), scanned.Metadata.RedactedUnder);
 
         Assert.Equal($"before {Marker} after", unscanned.Metadata!.Text.OriginalText);
         Assert.Null(unscanned.Metadata.RedactedUnder);
@@ -272,7 +272,7 @@ public sealed class RedactingEmailMimeReaderTests
 
         // Assert
         Assert.Equal(
-            derivation.Guard.StampFor(ScanningSensitiveContentDerivation.Account),
+            await derivation.Guard.StampForAsync(ScanningSensitiveContentDerivation.Account, TestContext.Current.CancellationToken),
             extraction.Metadata!.RedactedUnder);
     }
 

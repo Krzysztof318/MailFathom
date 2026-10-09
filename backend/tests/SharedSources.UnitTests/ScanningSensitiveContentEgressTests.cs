@@ -127,7 +127,7 @@ public sealed class ScanningSensitiveContentEgressTests
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.True(egress.Screen.IsActiveFor(ScanningSensitiveContentEgress.Account));
+        Assert.True(await egress.Screen.IsActiveForAsync(ScanningSensitiveContentEgress.Account, TestContext.Current.CancellationToken));
         Assert.NotNull(refusal);
         Assert.Equal(scanner, refusal.Scanner);
     }

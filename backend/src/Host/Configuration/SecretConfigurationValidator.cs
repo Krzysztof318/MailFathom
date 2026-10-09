@@ -247,7 +247,7 @@ internal sealed partial class SecretConfigurationValidator
     /// <param name="candidate">The bound snapshot, which may be the startup one or a reloaded one.</param>
     /// <remarks>
     /// The mailboxes are not in this section and therefore not in this walk: they are each user's own record, and the
-    /// secrets and trust anchors they name are proven against the roster by the startup gate that establishes it.
+    /// secrets and trust anchors they name are proven when a user's record is read and composed.
     /// What is left here is whatever secret-bearing value the deployment's own synchronization keys carry.
     /// </remarks>
     /// <param name="cancellationToken">Cancels the resolution and the certificate loading.</param>

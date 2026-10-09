@@ -20,6 +20,10 @@ public sealed record MailAccountRecord(
     /// <summary>The greatest number of accounts one user is read with, which bounds the record composed for them.</summary>
     public const int MaximumAssignedPerUser = 64;
 
+    /// <summary>The greatest number of users one account is assigned to, which bounds everybody a question about its mail reaches.</summary>
+    /// <remarks>An assignment past it is refused, so the reads that stop at it never leave one of the account's users out.</remarks>
+    public const int MaximumUsersAssigned = 256;
+
     /// <summary>The longest address an account holds, which is the longest RFC 5321 permits a path to carry.</summary>
     public const int MaximumEmailAddressLength = 320;
 

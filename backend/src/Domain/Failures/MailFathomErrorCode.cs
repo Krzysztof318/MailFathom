@@ -182,7 +182,8 @@ public readonly record struct MailFathomErrorCode
     /// <summary>Gets subcategory 4, principal authorization: this deployment cannot say which of the users it holds an act is for, or cannot serve them.</summary>
     /// <remarks>
     /// It sits beside the refusal above because it is the same axis — whose mail an act reaches. A request naming no
-    /// user meets a deployment serving nobody or several, or a start meets a roster it may not serve, and an operator
+    /// user meets a deployment serving nobody or several, or a start meets several users behind a surface that admits a
+    /// caller naming none, and an operator
     /// resolves either in the user records rather than in a grant, which is what separates it from the code above.
     /// </remarks>
     public static MailFathomErrorCode DeploymentUserUnresolved { get; } = new(14002);

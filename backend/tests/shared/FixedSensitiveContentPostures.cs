@@ -18,32 +18,37 @@ internal sealed class FixedSensitiveContentPostures : ISensitiveContentPostures
 {
     private readonly IReadOnlyDictionary<MailAccountId, SensitiveContentPosture> byAccount;
     private readonly IReadOnlyDictionary<MailAccountId, UserId> assignees;
-    private readonly SensitiveContentPosture fallback;
 
     private FixedSensitiveContentPostures(
         SensitiveContentPosture fallback,
         IReadOnlyDictionary<MailAccountId, SensitiveContentPosture> byAccount,
         IReadOnlyDictionary<MailAccountId, UserId> assignees)
     {
-        this.fallback = fallback;
+        this.Deployment = fallback;
         this.byAccount = byAccount;
         this.assignees = assignees;
     }
 
-    /// <summary>Gets the account <see cref="ForEveryAccount" /> names, which a test reading <see cref="Current" /> asserts on.</summary>
+    /// <summary>Gets the account <see cref="ForEveryAccount" /> names, which a test asking about one account asserts on.</summary>
     public static MailAccountId SoleAccount { get; } = MailAccountId.Create("primary");
 
     /// <inheritdoc />
     public Task<bool> IsActiveForAnyAccountAsync(CancellationToken cancellationToken) =>
-        Task.FromResult(this.fallback.IsActive || this.byAccount.Values.Any(posture => posture.IsActive));
+        Task.FromResult(this.Deployment.IsActive || this.byAccount.Values.Any(posture => posture.IsActive));
 
     /// <inheritdoc />
-    public IReadOnlyList<MailAccountSensitiveContentPosture> Current =>
-    [
-        .. this.byAccount
-            .OrderBy(entry => entry.Key.Value, StringComparer.Ordinal)
-            .Select(entry => new MailAccountSensitiveContentPosture(entry.Key, entry.Value)),
-    ];
+    public SensitiveContentPosture Deployment { get; }
+
+    /// <inheritdoc />
+    /// <remarks>An account answered with the fallback itself is left out, as the real composition leaves out an account asking for nothing beyond the deployment.</remarks>
+    public Task<IReadOnlyList<MailAccountSensitiveContentPosture>> ReadAccountsBeyondDeploymentAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<MailAccountSensitiveContentPosture>>(
+        [
+            .. this.byAccount
+                .Where(entry => !ReferenceEquals(entry.Value, this.Deployment))
+                .OrderBy(entry => entry.Key.Value, StringComparer.Ordinal)
+                .Select(entry => new MailAccountSensitiveContentPosture(entry.Key, entry.Value)),
+        ]);
 
     /// <summary>Builds the postures of a deployment where no account's mail is scanned for anything.</summary>
     /// <returns>Postures that hold no redaction, whichever account is asked about.</returns>
@@ -57,8 +62,9 @@ internal sealed class FixedSensitiveContentPostures : ISensitiveContentPostures
     /// <returns>Postures answering that one posture for every mailbox.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="posture" /> is <see langword="null" />.</exception>
     /// <remarks>
-    /// The sole account is named as well as answered, so a consumer that walks every account meets one rather than
-    /// none. That is the deployment this stands for: one mailbox, whose posture is the deployment's own.
+    /// The sole account is named as well as answered, so a consumer asking about it by name meets the same posture a
+    /// consumer asking about any other does. That is the deployment this stands for: one mailbox, whose posture is the
+    /// deployment's own.
     /// </remarks>
     public static FixedSensitiveContentPostures ForEveryAccount(SensitiveContentPosture posture)
     {
@@ -112,8 +118,14 @@ internal sealed class FixedSensitiveContentPostures : ISensitiveContentPostures
     }
 
     /// <inheritdoc />
+    public Task<SensitiveContentPosture> ForAccountAsync(MailAccountId account, CancellationToken cancellationToken) =>
+        Task.FromResult(this.ForAccount(account));
+
+    /// <summary>Finds what one account's mail is scanned under, for a test arranging what it then asserts against.</summary>
+    /// <param name="account">The account asked about.</param>
+    /// <returns>The account's posture, or the fallback where it names none.</returns>
     public SensitiveContentPosture ForAccount(MailAccountId account) =>
-        this.byAccount.TryGetValue(account, out var posture) ? posture : this.fallback;
+        this.byAccount.TryGetValue(account, out var posture) ? posture : this.Deployment;
 
     /// <inheritdoc />
     /// <remarks>
@@ -145,7 +157,7 @@ internal sealed class FixedSensitiveContentPostures : ISensitiveContentPostures
         var candidates = this.assignees
             .Where(entry => entry.Value == user)
             .Select(entry => this.byAccount[entry.Key])
-            .Append(this.fallback)
+            .Append(this.Deployment)
             .ToArray();
 
         return candidates.FirstOrDefault(candidate => candidates.All(other =>
@@ -157,5 +169,5 @@ internal sealed class FixedSensitiveContentPostures : ISensitiveContentPostures
 
     /// <inheritdoc />
     public Task<bool> RunsForAnyAccountAsync(SensitiveContentScannerKind scanner, CancellationToken cancellationToken) =>
-        Task.FromResult(this.fallback.Runs(scanner) || this.byAccount.Values.Any(posture => posture.Runs(scanner)));
+        Task.FromResult(this.Deployment.Runs(scanner) || this.byAccount.Values.Any(posture => posture.Runs(scanner)));
 }

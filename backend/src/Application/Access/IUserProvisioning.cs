@@ -14,9 +14,9 @@ namespace MailFathom.Application.Access;
 /// until a write to the user's record fills it.
 /// </para>
 /// <para>
-/// Both operations are idempotent, because a start runs them on every restart against a roster that ordinarily has not
-/// changed. Provisioning a user the deployment already holds writes nothing, and relabelling one already carrying the
-/// label writes nothing.
+/// Both operations are idempotent, because two writers may reach one row at once and the one that lost has to be
+/// answered with what the deployment holds rather than with a failure. Provisioning a user the deployment already
+/// holds writes nothing, and relabelling one already carrying the label writes nothing.
 /// </para>
 /// </remarks>
 public interface IUserProvisioning

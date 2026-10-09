@@ -86,13 +86,14 @@ internal sealed partial class UserRosterAdministration(
         authorization.RequirePermission(MailFathomPermission.AdminRead);
 
         var page = await directory.ReadUserPageAsync(query, cancellationToken);
+        var served = await this.ReadServedAmongAsync([.. page.Entries.Select(static record => record.User)], cancellationToken);
 
         return new AdministrativeListingPage<UserRosterEntry>(
             [
                 .. page.Entries.Select(record => new UserRosterEntry(
                     record.User,
                     record.DisplayName,
-                    Served: servedUsers.Users.Any(served => served.User == record.User),
+                    Served: served.Contains(record.User),
                     record.EndpointAccess)),
             ],
             page.ContinuesAfter);
@@ -121,47 +122,24 @@ internal sealed partial class UserRosterAdministration(
         }
 
         var label = displayName!.Trim();
-        var held = await directory.ReadUsersAsync(ServedUsers.MaximumUsers + 1, cancellationToken);
 
-        if (held.Count > 0 && admission.AdmitsACallerNamingNoUser)
+        if (admission.AdmitsACallerNamingNoUser
+            && (await directory.ReadUsersAsync(1, cancellationToken)).Count > 0)
         {
             return UserProvisioningOutcome.Refused(admission.Refusal);
         }
 
-        if (held.Count + 1 > ServedUsers.MaximumUsers)
-        {
-            return UserProvisioningOutcome.Refused(
-                $"This deployment already holds the {ServedUsers.MaximumUsers} users one deployment may serve. Remove a user it no longer serves before recording another.");
-        }
+        var outcome = await this.RecordAndPublishAsync(UserId.Create(Guid.CreateVersion7()), label, cancellationToken);
 
-        if (held.Any(record => StringComparer.Ordinal.Equals(record.DisplayName, label)))
-        {
-            return UserProvisioningOutcome.Refused(LabelTaken(label));
-        }
-
-        UserProvisioningOutcome outcome;
-        await servedUsers.WaitForRosterPublicationAsync(cancellationToken);
-
-        try
-        {
-            outcome = await this.RecordAndPublishAsync(UserId.Create(Guid.CreateVersion7()), label, cancellationToken);
-        }
-        finally
-        {
-            servedUsers.ReleaseRosterPublication();
-        }
-
-        // Announced once the roster is released: nothing on this replica waits for the announcement, and a backplane
-        // slow to answer would otherwise hold every other roster write and the convergence reading behind it.
         if (outcome.IsProvisioned)
         {
-            await announcements.AnnounceAsync();
+            await this.RecountAndAnnounceAsync(cancellationToken);
         }
 
         return outcome;
     }
 
-    /// <summary>Records a user and their first record, and publishes them, under the roster publication the caller holds.</summary>
+    /// <summary>Records a user and their first record, and holds them on this replica.</summary>
     private async Task<UserProvisioningOutcome> RecordAndPublishAsync(
         UserId user,
         string label,
@@ -169,8 +147,8 @@ internal sealed partial class UserRosterAdministration(
     {
         if (!await provisioning.ProvisionAsync(user, label, cancellationToken))
         {
-            // The label was taken between the roster being read and the insert reaching the table, which no reading of
-            // a snapshot could have refused earlier.
+            // The label is unique in the table, so another user carrying it refuses the insert rather than anything read
+            // ahead of it, which no read could have done without racing a concurrent write.
             return UserProvisioningOutcome.Refused(LabelTaken(label));
         }
 
@@ -231,22 +209,16 @@ internal sealed partial class UserRosterAdministration(
         }
 
         var label = displayName!.Trim();
-        var held = await directory.ReadUsersAsync(ServedUsers.MaximumUsers + 1, cancellationToken);
 
-        if (held.All(record => record.User != user))
+        if (await directory.ReadUserAsync(user, cancellationToken) is null)
         {
             return UserRelabelOutcome.NoSuchUser;
         }
 
-        if (held.Any(record => record.User != user && StringComparer.Ordinal.Equals(record.DisplayName, label)))
-        {
-            return UserRelabelOutcome.Refused(LabelTaken(label));
-        }
-
         if (!await provisioning.RelabelAsync(user, label, cancellationToken))
         {
-            // The label was taken between the roster being read and the statement reaching the table, which no reading
-            // of a snapshot could have refused earlier.
+            // The label is unique in the table, so another user carrying it refuses the statement rather than anything
+            // read ahead of it, which no read could have done without racing a concurrent write.
             return UserRelabelOutcome.Refused(LabelTaken(label));
         }
 
@@ -264,7 +236,7 @@ internal sealed partial class UserRosterAdministration(
     /// <remarks>
     /// <para>
     /// The order here is the whole of what makes an erasure true afterwards, and none of it is bookkeeping. The user
-    /// leaves the runtime roster and the accounts they alone were assigned are withheld from synchronization
+    /// is withheld from the served-user cache and the accounts they alone were assigned are withheld from synchronization
     /// <em>first</em>, so this replica's coordinator gives their supervision back — the records it reads them from have
     /// not changed yet, which is why the withholding is stated rather than read. No other replica is told before the
     /// deletion commits — the announcement follows a committed erasure and is not made on a refusal — so an account
@@ -278,12 +250,12 @@ internal sealed partial class UserRosterAdministration(
     /// itself, on what only it can see: an account that became solely this user's after the set below was read, and a
     /// job claimed between the wait and the lock the transaction takes over those accounts' job rows. All three answer
     /// the caller identically, because all three leave the deployment exactly as it was. The user is therefore
-    /// <em>withheld</em> rather than erased from the roster until the deletion has actually committed: refusing to
+    /// <em>withheld</em> rather than let go of until the deletion has actually committed: refusing to
     /// erase somebody is not a reason to stop serving them, and putting them back is what a refusal does.
     /// </para>
     /// <para>
     /// Whether the user was served is read before any of that, because the answer must describe the deployment the
-    /// caller asked about rather than the roster the erasure left.
+    /// caller asked about rather than the one the erasure left.
     /// </para>
     /// </remarks>
     internal async Task<UserRosterErasureOutcome> EraseAsync(UserId user, CancellationToken cancellationToken)
@@ -297,17 +269,13 @@ internal sealed partial class UserRosterAdministration(
 
         var solelyAssigned = await accounts.ReadSolelyAssignedAsync(user, cancellationToken);
         MailAccountId[] solelyAssignedAccounts = [.. solelyAssigned.Select(static account => MailAccountId.Create(account.ToString("D")))];
-        bool served;
+        var served = await this.IsServedAsync(user, cancellationToken);
         var erased = false;
         Guid? unquiesced = null;
         string? refusal;
-        await servedUsers.WaitForRosterPublicationAsync(cancellationToken);
 
-        try
+        using (var withheld = servedUsers.Withhold(user))
         {
-            served = servedUsers.Users.Any(candidate => candidate.User == user);
-
-            using var withheld = servedUsers.Withhold(user);
             using var unsupervised = withheldAccounts.Withhold(solelyAssignedAccounts);
 
             refusal = await quiescing.RunQuiescedAsync(
@@ -326,10 +294,6 @@ internal sealed partial class UserRosterAdministration(
                 withheld.Erased();
                 this.LogUserErased(served);
             }
-        }
-        finally
-        {
-            servedUsers.ReleaseRosterPublication();
         }
 
         if (refusal is { } stillRunning)
@@ -352,10 +316,61 @@ internal sealed partial class UserRosterAdministration(
 
         if (erased)
         {
-            await announcements.AnnounceAsync();
+            await this.RecountAndAnnounceAsync(cancellationToken);
         }
 
         return new UserRosterErasureOutcome(erased, served);
+    }
+
+    /// <summary>Counts the users again after a committed write and tells every other replica about it, whatever the count does.</summary>
+    /// <remarks>
+    /// The write is committed whether or not the count can be read, so a count that fails leaves the caller answered with
+    /// what was committed rather than with a failure a retry would then refuse, and this replica's next comparison counts
+    /// the rows like every other replica's. The announcement goes out either way, so no replica waits a whole interval to
+    /// learn of a write that did happen.
+    /// </remarks>
+    private async Task RecountAndAnnounceAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await servedUsers.CountAsync(cancellationToken);
+        }
+        catch (UserSettingsUnreadableException)
+        {
+            // Answered by the remarks above: the committed write is the answer, and the next comparison recounts.
+        }
+        finally
+        {
+            await announcements.AnnounceAsync();
+        }
+    }
+
+    /// <summary>Reads which users of one page this replica serves, in one reading for the page.</summary>
+    /// <remarks>Rows that cannot be read answer nobody as served rather than failing the listing, since nothing can be served from them either.</remarks>
+    private async Task<IReadOnlySet<UserId>> ReadServedAmongAsync(UserId[] users, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await servedUsers.ReadServedAmongAsync(users, cancellationToken);
+        }
+        catch (UserSettingsUnreadableException)
+        {
+            return new HashSet<UserId>();
+        }
+    }
+
+    /// <summary>Reads whether this deployment serves one user, which is whether their record composes.</summary>
+    /// <remarks>A record that cannot be read at all is answered as not served rather than failing the act that asked, since nothing can be served from it either.</remarks>
+    private async Task<bool> IsServedAsync(UserId user, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await servedUsers.ReadAsync(user, cancellationToken) is not null;
+        }
+        catch (UserSettingsUnreadableException)
+        {
+            return false;
+        }
     }
 
     /// <summary>Says why a label cannot be a user's, or nothing when it can.</summary>
@@ -396,7 +411,7 @@ internal sealed partial class UserRosterAdministration(
     /// <remarks>The record names no user at all: a person's whole record was disposed of, and a log line naming them would outlive the erasure it reports.</remarks>
     [LoggerMessage(
         Level = LogLevel.Warning,
-        Message = "A user and everything recorded for them were erased. This process was serving them: {WasServed}. The runtime roster now excludes them.")]
+        Message = "A user and everything recorded for them were erased. This process was serving them: {WasServed}. No replica serves them any more.")]
     private partial void LogUserErased(bool wasServed);
 
     /// <remarks>
@@ -408,6 +423,6 @@ internal sealed partial class UserRosterAdministration(
     /// </remarks>
     [LoggerMessage(
         Level = LogLevel.Warning,
-        Message = "An erasure was refused because work bound to the user's own mail accounts was still in flight. Nothing was erased, and the runtime roster goes on serving them.")]
+        Message = "An erasure was refused because work bound to the user's own mail accounts was still in flight. Nothing was erased, and this deployment goes on serving them.")]
     private partial void LogUserErasureRefused();
 }

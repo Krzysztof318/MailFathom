@@ -11,7 +11,7 @@ namespace MailFathom.Application.Access;
 /// <param name="DisplayName">The label an operator tells this user apart by, which is unique across the deployment.</param>
 /// <remarks>
 /// The document itself is deliberately absent. Who this deployment holds is decided from the envelope alone, so
-/// establishing the roster never materializes one person's record, let alone everybody's.
+/// listing the users it holds never materializes one person's record, let alone everybody's.
 /// </remarks>
 public sealed record UserRecord(UserId User, string DisplayName)
 {

@@ -26,8 +26,8 @@ internal static class ConfiguredMailFolders
     /// identity for it here would attach one folder's decision to a name no operator wrote.
     /// </para>
     /// <para>
-    /// Every mailbox is read through <see cref="MailSynchronizationOptions.DeclaredAccounts" />, which is the whole
-    /// roster's rather than one user's: a folder mapping belongs to the account that declares it, and the account
+    /// Every mailbox is read through <see cref="MailSynchronizationOptions.DeclaredAccounts" />, which holds the accounts
+    /// of every user the snapshot was prepared for rather than one user's alone: a folder mapping belongs to the account that declares it, and the account
     /// belongs to the user whose record holds it. A deployment whose users record no mailbox maps no folder, which is
     /// what a first run looks like.
     /// </para>
@@ -41,7 +41,7 @@ internal static class ConfiguredMailFolders
     /// <remarks>
     /// The overload a decision about one user's own mailboxes is read through. A user's folders are theirs, so a
     /// question asked about them has to be asked of their accounts and of no others — and asking it the same way the
-    /// whole roster's accounts are read is what keeps one answer to *which folder plays which part*.
+    /// accounts of a whole snapshot are read is what keeps one answer to *which folder plays which part*.
     /// </remarks>
     internal static IEnumerable<ConfiguredFolder> Of(IEnumerable<MailSynchronizationAccountOptions> accounts) =>
         accounts

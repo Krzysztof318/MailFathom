@@ -91,10 +91,11 @@ public readonly record struct SensitiveContentDerivationStamp
     }
 
     /// <summary>Computes the one stamp a walk over every account's mail is re-deriving towards.</summary>
-    /// <param name="postures">What every account this deployment serves has its mail scanned under, ordered by account.</param>
-    /// <param name="unserved">
-    /// What mail whose account the roster no longer names is judged against, which is the deployment's own posture, and
-    /// <see langword="null" /> where nothing scans it.
+    /// <param name="postures">What every account whose own record asks for more than the deployment has its mail scanned under, ordered by account.</param>
+    /// <param name="everyOtherAccount">
+    /// What the mail of every other account is judged against — served accounts asking for nothing more, and accounts
+    /// this deployment no longer serves — which is the deployment's own posture, and <see langword="null" /> where
+    /// nothing scans it.
     /// </param>
     /// <returns>The composite, or <see langword="null" /> where no mail this walk covers is scanned at all.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="postures" /> is <see langword="null" />.</exception>
@@ -108,23 +109,21 @@ public readonly record struct SensitiveContentDerivationStamp
     /// </para>
     /// <para>
     /// It carries the account beside each stamp, so two accounts exchanging postures is a different composite rather
-    /// than the same one. Accounts whose mail nothing scans are in the digest as well, by their identifier alone,
-    /// because an account that switched its scanner off since the cursor was written is exactly the case that has to
-    /// discard it.
+    /// than the same one. An account that switched its scanner off since the cursor was written leaves the set, which
+    /// changes the composite as well, and that is exactly the case that has to discard it.
     /// </para>
     /// <para>
-    /// The fallback is digested beside them because the walk judges mail against it: rows belonging to an account this
-    /// deployment has stopped serving are stale exactly when the deployment's own posture moved, and that move is
-    /// invisible in the served stamps whenever every served account had already asked for at least as much.
+    /// The fallback is digested beside them because the walk judges every other account's mail against it: those rows
+    /// are stale exactly when the deployment's own posture moved, and that move is invisible in the named stamps.
     /// </para>
     /// </remarks>
     public static SensitiveContentDerivationStamp? Across(
         IReadOnlyList<MailAccountSensitiveContentPosture> postures,
-        SensitiveContentDerivationStamp? unserved)
+        SensitiveContentDerivationStamp? everyOtherAccount)
     {
         ArgumentNullException.ThrowIfNull(postures);
 
-        if (unserved is null && !postures.Any(posture => posture.Posture.Stamp is not null))
+        if (everyOtherAccount is null && !postures.Any(posture => posture.Posture.Stamp is not null))
         {
             return null;
         }
@@ -140,7 +139,7 @@ public readonly record struct SensitiveContentDerivationStamp
             CanonicalDigest.AppendText(digest, posture.Posture.Stamp?.Value ?? string.Empty);
         }
 
-        CanonicalDigest.AppendText(digest, unserved?.Value ?? string.Empty);
+        CanonicalDigest.AppendText(digest, everyOtherAccount?.Value ?? string.Empty);
 
         return new SensitiveContentDerivationStamp(Convert.ToHexStringLower(digest.GetHashAndReset()));
     }

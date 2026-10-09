@@ -14,7 +14,7 @@ namespace MailFathom.Host.Configuration.Rules;
 /// <para>
 /// A rule's scope, its destination folders, and the actions it declares are all claims about somebody's mailboxes, so
 /// judging them needs those mailboxes — and every one of them is a user's own record rather than a configuration key.
-/// So both readings here start from bound declarations, which is what keeps a rule set the startup gate accepted one
+/// So both readings here start from bound declarations, which is what keeps a rule set a configuration write accepted one
 /// the first reload that changed nothing still accepts.
 /// </para>
 /// <para>

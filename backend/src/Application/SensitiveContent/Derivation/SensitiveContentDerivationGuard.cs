@@ -71,38 +71,42 @@ public sealed class SensitiveContentDerivationGuard
     /// <returns><see langword="true" /> when at least one served account's mail is redacted.</returns>
     /// <remarks>
     /// Read by a walk deciding whether work only a redaction makes necessary is worth arranging at all. What one
-    /// message is judged by is <see cref="StampFor" />, because a deployment that redacts one mailbox's mail need not
+    /// message is judged by is <see cref="StampForAsync" />, because a deployment that redacts one mailbox's mail need not
     /// redact every mailbox's.
     /// </remarks>
     public Task<bool> IsActiveAsync(CancellationToken cancellationToken) =>
         this.postures.IsActiveForAnyAccountAsync(cancellationToken);
 
-    /// <summary>Gets what every account this deployment serves has its mail derived under, ordered by account.</summary>
+    /// <summary>Reads what every account whose own record asks for more than the deployment has its mail derived under, ordered by account.</summary>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>Those accounts with their postures; every other account derives under <see cref="StampForEveryOtherAccount" />.</returns>
     /// <remarks>
     /// For the walk that judges rows belonging to several accounts in one query, which is the one consumer that cannot
-    /// ask about the account in front of it. <see cref="ISensitiveContentPostures.Current" /> holds why.
+    /// ask about the account in front of it. <see cref="ISensitiveContentPostures.ReadAccountsBeyondDeploymentAsync" />
+    /// holds why.
     /// </remarks>
-    public IReadOnlyList<MailAccountSensitiveContentPosture> Current => this.postures.Current;
+    public Task<IReadOnlyList<MailAccountSensitiveContentPosture>> ReadAccountsBeyondDeploymentAsync(
+        CancellationToken cancellationToken) =>
+        this.postures.ReadAccountsBeyondDeploymentAsync(cancellationToken);
 
-    /// <summary>Gets what a row belonging to an account this deployment no longer serves is judged against.</summary>
+    /// <summary>Gets what a row belonging to an account the walk was not given a posture of is judged against.</summary>
     /// <remarks>
-    /// The deployment's own posture, which is what <see cref="ISensitiveContentPostures.ForAccount" /> answers for an
-    /// account off the roster and is the stricter of the two candidates. Read by the walk that judges rows belonging to
-    /// several accounts at once, so that mail still stored for a mailbox a deployment has stopped serving is judged by
-    /// something rather than stepped over.
-    /// <para>
-    /// The unspecified identifier is what asks the question, because no roster carries one: an account identifier is
-    /// created from text that may not be blank, so this reaches the fallback by the same route every account the
-    /// roster does not name reaches it.
-    /// </para>
+    /// The deployment's own posture, which is what every account asking for nothing more derives under and what
+    /// <see cref="ISensitiveContentPostures.ForAccountAsync" /> answers for an account this deployment does not serve,
+    /// the stricter of the two candidates. Read by the walk that judges rows belonging to several accounts at once, so
+    /// that mail still stored for a mailbox a deployment has stopped serving is judged by something rather than stepped
+    /// over.
     /// </remarks>
-    public SensitiveContentDerivationStamp? StampForUnservedAccount => this.postures.ForAccount(default).Stamp;
+    public SensitiveContentDerivationStamp? StampForEveryOtherAccount => this.postures.Deployment.Stamp;
 
-    /// <summary>Gets the configuration a row of one account's mail written now records, or nothing where it is not scanned.</summary>
+    /// <summary>Reads the configuration a row of one account's mail written now records, or nothing where it is not scanned.</summary>
     /// <param name="account">The account whose mail the row is derived from.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>That account's stamp, or <see langword="null" /> where nothing scans its mail.</returns>
-    public SensitiveContentDerivationStamp? StampFor(MailAccountId account) =>
-        this.postures.ForAccount(account).Stamp;
+    public async Task<SensitiveContentDerivationStamp?> StampForAsync(
+        MailAccountId account,
+        CancellationToken cancellationToken) =>
+        (await this.postures.ForAccountAsync(account, cancellationToken)).Stamp;
 
     /// <summary>Redacts one text about to be written into a derived store.</summary>
     /// <param name="account">The account whose mail the text was extracted from.</param>
@@ -129,13 +133,13 @@ public sealed class SensitiveContentDerivationGuard
     /// exists for — because a placeholder is shorter or longer than what it replaced, so every such offset past the
     /// first finding has moved.
     /// </remarks>
-    public Task<RedactedText> GuardTextAsync(MailAccountId account, string text, CancellationToken cancellationToken)
+    public async Task<RedactedText> GuardTextAsync(MailAccountId account, string text, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(text);
 
-        return this.postures.ForAccount(account).Redactor is { } active
-            ? this.RedactAsync(active, text, cancellationToken)
-            : Task.FromResult(RedactedText.Create(text, [], omittedCharacterCount: 0));
+        return (await this.postures.ForAccountAsync(account, cancellationToken)).Redactor is { } active
+            ? await this.RedactAsync(active, text, cancellationToken)
+            : RedactedText.Create(text, [], omittedCharacterCount: 0);
     }
 
     /// <summary>Runs the account's redaction and reports what it found, or reports the refusal and re-raises it.</summary>

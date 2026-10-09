@@ -260,7 +260,7 @@ internal sealed class UserRecordAdministration(
     /// <para>
     /// A record already stating the zone is answered without a commit, as <see cref="RelinkOwnPortraitAsync" /> answers
     /// an unchanged portrait: a re-submitted or double-clicked choice would otherwise bump the record's version and
-    /// republish the roster across every replica for a change that changed nothing.
+    /// have every replica recompose that user for a change that changed nothing.
     /// </para>
     /// </remarks>
     internal async Task<bool> ChangeOwnTimeZoneAsync(UserTimeZone zone, CancellationToken cancellationToken)
@@ -593,41 +593,31 @@ internal sealed class UserRecordAdministration(
         var unusable = await secrets.FindUserMailAccountErrorsAsync(RecordPath, bound.MailAccounts, cancellationToken);
 
         UserRecordWriteOutcome? outcome;
-        await servedUsers.WaitForRosterPublicationAsync(cancellationToken);
 
-        try
+        if (await store.CommitAsync(
+                user,
+                candidateJson,
+                bound.EndpointAccess.Access,
+                inForce.Version,
+                cancellationToken) is { } committed)
         {
-            if (await store.CommitAsync(
-                    user,
-                    candidateJson,
-                    bound.EndpointAccess.Access,
-                    inForce.Version,
-                    cancellationToken) is { } committed)
-            {
-                servedUsers.UserDocumentPublished(user, inForce.DisplayName, bound, committed);
-                outcome = UserRecordWriteOutcome.Committed(committed, [.. unusable.Select(DescribeAsAlreadyHeld)]);
-            }
-            else
-            {
-                // The record moved while this candidate was being judged, or the user was erased under it. Which of the
-                // two is settled by reading rather than assumed, because the statement distinguishes neither.
-                outcome = await documents.ReadAsync(user, cancellationToken) is { } current
-                    ? UserRecordWriteOutcome.Refused(
-                        MailFathomErrorCode.ConfigurationVersionSuperseded,
-                        current.Version,
-                        [
-                            $"The change was composed over user record version {inForce.Version}, and version {current.Version} is in force. Read the record as it now stands and decide again against it.",
-                        ])
-                    : null;
-            }
+            servedUsers.UserDocumentPublished(user, inForce.DisplayName, bound, committed);
+            outcome = UserRecordWriteOutcome.Committed(committed, [.. unusable.Select(DescribeAsAlreadyHeld)]);
         }
-        finally
+        else
         {
-            servedUsers.ReleaseRosterPublication();
+            // The record moved while this candidate was being judged, or the user was erased under it. Which of the
+            // two is settled by reading rather than assumed, because the statement distinguishes neither.
+            outcome = await documents.ReadAsync(user, cancellationToken) is { } current
+                ? UserRecordWriteOutcome.Refused(
+                    MailFathomErrorCode.ConfigurationVersionSuperseded,
+                    current.Version,
+                    [
+                        $"The change was composed over user record version {inForce.Version}, and version {current.Version} is in force. Read the record as it now stands and decide again against it.",
+                    ])
+                : null;
         }
 
-        // Announced once the roster is released: nothing on this replica waits for the announcement, and a backplane
-        // slow to answer would otherwise hold every other roster write and the convergence reading behind it.
         if (outcome is { IsCommitted: true })
         {
             await announcements.AnnounceAsync();
@@ -742,7 +732,7 @@ internal sealed class UserRecordAdministration(
     private static bool NamesASecret(string path) => SecretPropertyNaming.NamesASecret(path.Split(':')[^1]);
 
     /// <summary>The path a refusal about a user's own record names, which is the record rather than a file.</summary>
-    /// <remarks>The same word the startup gate uses for a user read from their own document, because an operator reading either one is being told there is no configuration key to go and correct.</remarks>
+    /// <remarks>The same word composing a served user uses for a user read from their own document, because an operator reading either one is being told there is no configuration key to go and correct.</remarks>
     private const string RecordPath = "document";
 
     private static void RequireNamed(UserId user)

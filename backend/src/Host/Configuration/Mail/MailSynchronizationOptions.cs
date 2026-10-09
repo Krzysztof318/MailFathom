@@ -74,8 +74,8 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
     /// configuration write judges its candidate in — where the only declarations that exist are the candidate's own.
     /// </para>
     /// <para>
-    /// Two kinds of snapshot carry them. The published one carries the whole roster, and a synchronization work unit's
-    /// carries only the users its account is assigned to, read when the work unit begins. Either is immutable: a later
+    /// The published snapshot carries none. A request's carries the user it acts for, and a work unit's only the users
+    /// its account is assigned to, each read when the scope is prepared. Either is immutable: a later
     /// commit produces another snapshot, so a run already under way never sees its account declaration change beneath
     /// it.
     /// </para>
@@ -564,11 +564,11 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
         ? MachineAuthorshipProfile.Standard
         : MachineAuthorshipProfile.Disabled;
 
-    /// <summary>Gets every mailbox this deployment holds, which is every mailbox its users' records declare.</summary>
+    /// <summary>Gets every mailbox the users this snapshot was prepared for declare in their records.</summary>
     /// <remarks>
-    /// A mailbox is one user's, so the whole set is the roster's rather than a section's, and a snapshot nobody serves
-    /// from holds none. Every reader of the whole set asks here, so *which mailboxes exist* is one answer rather than
-    /// one per reader.
+    /// A mailbox is one user's, so the set is the users' the snapshot was prepared for rather than a section's, and a
+    /// snapshot nobody serves from holds none. Every reader of the set asks here, so which mailboxes a piece of work can
+    /// reach is one answer rather than one per reader.
     /// </remarks>
     internal IEnumerable<MailSynchronizationAccountOptions> DeclaredAccounts =>
         this.DeclaredAccountsByOwner.SelectMany(static owned => owned);
@@ -796,8 +796,7 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="configuration" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// Read straight from configuration rather than off a bound snapshot, because the startup gate asks it before any
-    /// snapshot is resolved: whether a deployment has work to do is judged against the roster, and the roster is what
-    /// that gate is establishing.
+    /// snapshot is resolved, to report a deployment with synchronization on and no account to synchronize.
     /// </remarks>
     internal static bool IsEnabledIn(IConfiguration configuration)
     {

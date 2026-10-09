@@ -682,7 +682,7 @@ public static class ServiceCollectionExtensions
             provider.GetRequiredService<DatabaseCommandTimeout>()));
         services.AddSingleton<IServedMailAccountReader>(provider => provider.GetRequiredService<PersistedServedMailAccounts>());
         services.AddSingleton<IDeploymentMailFolders>(provider => provider.GetRequiredService<PersistedServedMailAccounts>());
-        // Who reaches which mailbox, read from the relation per question rather than out of a composed roster. A
+        // Who reaches which mailbox, read from the relation per question rather than out of what a replica holds. A
         // singleton over the pool for the reason the reader above is one: a signal raised outside any request asks it
         // as well as a request and a work unit.
         services.AddSingleton(provider =>
@@ -1722,7 +1722,7 @@ public static class ServiceCollectionExtensions
     /// Called only where the deployment stood an analyzer up, which is what keeps an opt-in nobody took from opening
     /// anything: with no address configured no client is registered, and none of the three descriptors below exists.
     /// It is the address rather than the <c>Pii</c> switch that gates this, because a user may switch that scanner on
-    /// for their own mail and no roster exists while services are being registered — so what is registered is what the
+    /// for their own mail and no user's record is read while services are being registered — so what is registered is what the
     /// deployment can provide, and which users meet it is their postures. The composed
     /// <see cref="PersonalDataAnalyzerProfile" /> is the host's to register, because where the analyzer is comes from
     /// configuration this project does not bind.

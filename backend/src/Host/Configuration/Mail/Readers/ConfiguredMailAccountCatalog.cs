@@ -24,13 +24,18 @@ namespace MailFathom.Host.Configuration.Mail.Readers;
 /// record write refuses such a name, so the omission is only reachable for a row changed behind MailFathom, and
 /// publishing an account under a name no operator chose is the one outcome worse than not publishing it at all.
 /// </para>
+/// <para>
+/// The synchronization switch is read off the published snapshot rather than the scope's, because it is the
+/// deployment's own value and every snapshot carries the same one. Reading the scope's would pin it to the published
+/// snapshot the moment the catalog is resolved, before an administrative route naming an account has prepared it.
+/// </para>
 /// </remarks>
 internal sealed class ConfiguredMailAccountCatalog(
-    MailSynchronizationOptions settings,
+    ISettingsSnapshot<MailSynchronizationOptions> publishedSettings,
     IServedMailAccountReader servedAccountReader) : IDeploymentMailAccountCatalog
 {
     /// <inheritdoc />
-    public bool SynchronizationEnabled => settings.Enabled;
+    public bool SynchronizationEnabled => publishedSettings.Current.Enabled;
 
     /// <inheritdoc />
     /// <remarks>

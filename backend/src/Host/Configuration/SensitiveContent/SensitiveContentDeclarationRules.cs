@@ -23,7 +23,7 @@ namespace MailFathom.Host.Configuration.SensitiveContent;
 /// Two questions are asked of different sets, and the difference is who can turn a scanner on. What the operator
 /// <em>wrote</em> under a scanner — its categories and its suppressions — is judged for every scanner this deployment
 /// provides, switched on or not, because a user's own record may switch a provided scanner on for their own mail and
-/// no roster exists while this runs: a mistyped category under a switch that is off would otherwise pass a start and
+/// no user's record is read while this runs: a mistyped category under a switch that is off would otherwise pass a start and
 /// then throw out of the posture composition the moment somebody opted in, taking every scanning path on the
 /// deployment with it. A scanner this section switched on is judged too, whether or not the deployment can provide it,
 /// so a switch on with nothing behind it is still answered here rather than by the endpoint rule alone. Whether a

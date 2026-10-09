@@ -158,7 +158,8 @@ public sealed class MailEnrichmentPass
 
         // Established for the whole pass rather than per message, because which mailbox a passage is from decides the
         // posture it is scanned under and every message in the batch belongs to the one account this pass walks.
-        using var actingFor = this.egressGuard.ActingFor(account);
+        using var actingFor = this.egressGuard.ActingFor(
+            await this.egressGuard.ReadPostureOfAsync(account, cancellationToken));
 
         // Resolved once for the same reason and from the same fact: every message in this batch is one mailbox's,
         // and what that mailbox is read in is what every reading derived from it is written in.

@@ -124,6 +124,13 @@ last. The same columns answer the deployment-wide questions — whether any serv
 any runs a given scanner, which is what [the readiness check on the analyzer](#the-analyzer-is-deployed-only-when-the-switch-is-on) asks before
 it reaches the analyzer — and each of those is asked where it is needed rather than held between requests.
 
+**What one mailbox is judged by is read from the same columns, and kept for thirty seconds.** A pass deriving one
+account's mail asks per message, so the answer about an account is read the first time a replica meets it and reused for
+the thirty seconds every other change to a record takes to reach every replica; an account switching a scanner on is
+scanned under it on every replica within that interval. The walk that rebuilds stale rows names only the accounts whose
+record asks for more than the deployment, and judges every other account's rows against the deployment's own posture,
+so what it reads follows the mailboxes that opted into something rather than every mailbox a deployment holds.
+
 ## The guarded egress points
 
 Every place text leaves this deployment goes through one guard, and the guard is told which place it is. There are

@@ -54,12 +54,15 @@ public sealed class ServedUserLanguagesTests
         Assert.Equal(UserLanguage.English, answer);
     }
 
-    /// <summary>Nothing derives before the gate has run, and a read that gets there first answers rather than throwing.</summary>
+    /// <summary>
+    /// The answer is synchronous and reads only a user this replica already holds, so a read reaching a user nobody has
+    /// asked for yet answers rather than throwing or reading their record.
+    /// </summary>
     [Fact]
-    public void LanguageOf_ADeploymentWhoseGateHasNotRun_AnswersEnglish()
+    public void LanguageOf_AUserThisReplicaDoesNotHold_AnswersEnglish()
     {
         // Arrange
-        var languages = new ServedUserLanguages(new ServedUsers());
+        var languages = new ServedUserLanguages(ResolvedServedUsers.Serving());
 
         // Act
         var answer = languages.LanguageOf(SyntheticUser.Deployment);

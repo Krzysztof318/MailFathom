@@ -76,7 +76,7 @@ public sealed class OutgoingMailScreening(
                 nameof(rawMime));
         }
 
-        if (!screen.IsActiveFor(account))
+        if (!await screen.IsActiveForAsync(account, cancellationToken))
         {
             return null;
         }

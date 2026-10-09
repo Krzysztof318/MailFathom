@@ -267,6 +267,9 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         builder.Services.AddSecretResolution(SecretValueInterpretation.ReferenceOnly);
         builder.Services.AddOutboundResiliencePipelines(builder.Configuration.GetSection("Resilience"));
         builder.Services.AddSingleton<IImapAccountSettingsProvider>(account);
+        // The port a write connection prepares its own scope through before it reads the account's settings, registered by
+        // the composition root over the per-scope settings. This suite's settings are this one account's in every scope.
+        builder.Services.AddSingleton<IMailAccountSettingsScope>(account);
         // Where the same mailbox's mail is submitted, registered by the composition root from the same options section.
         // The delivery session factory resolves it, so a harness without it would fail to compose rather than behave
         // like a deployment that configured no submission endpoint.

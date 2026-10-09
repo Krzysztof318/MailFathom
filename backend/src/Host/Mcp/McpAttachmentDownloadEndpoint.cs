@@ -9,6 +9,7 @@ using MailFathom.Application.Emails.DownloadAttachment;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Failures;
 using MailFathom.Host.Api;
+using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Security.Endpoints;
 using MailFathom.Host.Security.Transport;
 using MailFathom.Mcp;
@@ -69,10 +70,10 @@ internal static class McpAttachmentDownloadEndpoint
     /// <summary>Verifies the presented capability and streams the attachment it authorizes.</summary>
     /// <param name="capability">The capability the URL carried, which is entirely untrusted.</param>
     /// <param name="ticketReader">Verifies the capability against the deployment's key ring.</param>
-    /// <param name="downloadReader">Opens the attachment the verified capability names.</param>
+    /// <param name="mailSettings">Holds the account settings the read runs against, which this route prepares for the user it acts for.</param>
     /// <param name="principals">Carries what authorized this request into the application layer.</param>
     /// <param name="deploymentUser">Names the user whose mail a redeemed capability reaches.</param>
-    /// <param name="context">The request being answered, whose response body the attachment is written to.</param>
+    /// <param name="context">The request being answered, whose response body the attachment is written to, and whose services the attachment is opened through once the request's user is known.</param>
     /// <param name="cancellationToken">Cancels the read when the reader disconnects.</param>
     /// <returns>The attachment's octets, <c>404</c> with a body that says nothing about why, or <c>409</c> where this deployment's screen stopped the file or has no sole user for a ticket naming nobody.</returns>
     /// <exception cref="ArgumentNullException">Thrown when any resolved dependency is <see langword="null" />.</exception>
@@ -81,19 +82,21 @@ internal static class McpAttachmentDownloadEndpoint
     /// reached. Nothing authenticated here, so without that statement the use case would be reached under no principal
     /// and would refuse — which is the same rule that makes an entrypoint added later say what admitted it rather than
     /// inherit a permission from somewhere. The principal states a user beside the capability, because the read behind
-    /// it is bounded to one user's accounts like every other mail read rather than to the deployment's.
+    /// it is bounded to one user's accounts like every other mail read rather than to the deployment's. The reader is
+    /// resolved after both, because what it is composed from reads that user's account settings, and nothing before
+    /// this route has said who the user is.
     /// </remarks>
     internal static async Task<Results<EmptyHttpResult, NotFound<ProblemDetails>, ProblemHttpResult>> DownloadAsync(
         string capability,
         IAttachmentDownloadTicketReader ticketReader,
-        EmailAttachmentDownloadReader downloadReader,
+        ScopedMailSynchronizationSettings mailSettings,
         TransportAuthorizedPrincipalSource principals,
         IDeploymentUserSource deploymentUser,
         HttpContext context,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(ticketReader);
-        ArgumentNullException.ThrowIfNull(downloadReader);
+        ArgumentNullException.ThrowIfNull(mailSettings);
         ArgumentNullException.ThrowIfNull(principals);
         ArgumentNullException.ThrowIfNull(deploymentUser);
         ArgumentNullException.ThrowIfNull(context);
@@ -123,8 +126,11 @@ internal static class McpAttachmentDownloadEndpoint
         }
 
         principals.Assume(AuthorizedPrincipal.SignedCapability(user, AuthorizedObjectOf(ticket)));
+        await mailSettings.UseUserSettingsAsync(user, cancellationToken);
 
-        var download = await downloadReader.OpenAsync(ticket, cancellationToken);
+        var download = await context.RequestServices
+            .GetRequiredService<EmailAttachmentDownloadReader>()
+            .OpenAsync(ticket, cancellationToken);
 
         await using var attachment = download.Attachment;
 

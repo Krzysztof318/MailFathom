@@ -262,6 +262,36 @@ public sealed class MailAccountAdministrationTests
         Assert.Equal(shared, Assert.Single(deployment.MailAccountRecords.Accounts));
     }
 
+    /// <summary>
+    /// An account is assigned to no more users than every read of who it reaches returns, so a question about its mail
+    /// never silently leaves one of them out.
+    /// </summary>
+    [Fact]
+    public async Task AssignAsync_AnAccountAssignedToTheMostUsers_IsRefusedNamingTheCeilingAndAssignsNothing()
+    {
+        // Arrange
+        var shared = Mailbox("shared@example.test", "shared");
+        var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
+        deployment.Holding(Alex, EmptyRecord, version: 5);
+
+        foreach (var assignee in Enumerable.Range(1, MailAccountRecord.MaximumUsersAssigned)
+            .Select(index => UserId.Create(new Guid($"0197c0de-0000-4000-8000-{index:D12}"))))
+        {
+            deployment.MailAccountRecords.HoldUser(assignee, EmptyRecord, version: 1, shared);
+        }
+
+        // Act
+        var outcome = await deployment.MailAccounts.AssignAsync(shared.Id, Alex, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
+        Assert.Contains(
+            $"at most {MailAccountRecord.MaximumUsersAssigned} users",
+            Assert.Single(outcome.Messages),
+            StringComparison.Ordinal);
+        Assert.Empty(deployment.MailAccountRecords.DocumentOf(Alex)!.MailAccounts);
+    }
+
     /// <summary>An account in an organization is assigned only to its members, and the refusal names both sides — "none" among them — so the administrator knows which one to move.</summary>
     [Fact]
     public async Task AssignAsync_AnAccountOfAnOrganizationTheUserIsNotIn_IsRefusedNamingBothAndAssignsNothing()
@@ -646,16 +676,17 @@ public sealed class MailAccountAdministrationTests
     }
 
     /// <summary>
-    /// A committed account is served on this replica before it is announced, so a replica that hears the announcement
-    /// finds this one's roster free rather than still being written, and this replica serves the account at once.
+    /// A committed account is served on this replica before it is announced, so a user this replica already holds is
+    /// served the account at once rather than once the announcement comes back around.
     /// </summary>
     [Fact]
-    public async Task CreateAsync_ACommittedAccount_ConvergesTheRosterBeforeAnnouncingIt()
+    public async Task CreateAsync_ACommittedAccount_ConvergesTheHeldUserBeforeAnnouncingIt()
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
         deployment.Holding(Alex, EmptyRecord, version: 4);
-        var heard = await RosterAnnouncementListener.ListenAsync(deployment.Backplane, deployment.ServedUsers);
+        await deployment.ServedUsers.ReadAsync(Alex, TestContext.Current.CancellationToken);
+        var heard = await RosterAnnouncementListener.ListenAsync(deployment.Backplane, () => AccountsHeldFor(deployment, Alex));
 
         // Act
         var created = await deployment.MailAccounts.CreateAsync(
@@ -664,52 +695,44 @@ public sealed class MailAccountAdministrationTests
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal([true], heard);
-        Assert.Equal(5, deployment.ServedUsers.PublishedVersionOf(Alex));
-        Assert.Equal(
-            [created!.AccountId!.Value.ToString("D")],
-            Assert.Single(deployment.ServedUsers.Users).MailAccounts.Select(account => account.AccountId));
+        Assert.Equal([created!.AccountId!.Value.ToString("D")], Assert.Single(heard));
     }
 
     [Fact]
-    public async Task AssignAsync_AnAccountNobodyHolds_AssignsItAndConvergesTheRosterBeforeAnnouncingIt()
+    public async Task AssignAsync_AnAccountNobodyHolds_AssignsItAndConvergesTheHeldUserBeforeAnnouncingIt()
     {
         // Arrange
         var archive = Mailbox("archive@example.test", "archive");
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
         deployment.Holding(Alex, EmptyRecord, version: 4);
         deployment.MailAccountRecords.HoldAccount(archive);
-        var heard = await RosterAnnouncementListener.ListenAsync(deployment.Backplane, deployment.ServedUsers);
+        await deployment.ServedUsers.ReadAsync(Alex, TestContext.Current.CancellationToken);
+        var heard = await RosterAnnouncementListener.ListenAsync(deployment.Backplane, () => AccountsHeldFor(deployment, Alex));
 
         // Act
         var outcome = await deployment.MailAccounts.AssignAsync(archive.Id, Alex, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(outcome!.IsCommitted);
-        Assert.Equal([true], heard);
-        Assert.Equal(5, deployment.ServedUsers.PublishedVersionOf(Alex));
-        Assert.Equal(
-            [archive.Id.ToString("D")],
-            Assert.Single(deployment.ServedUsers.Users).MailAccounts.Select(account => account.AccountId));
+        Assert.Equal([archive.Id.ToString("D")], Assert.Single(heard));
     }
 
     [Fact]
-    public async Task EraseAsync_AnAccountThisDeploymentHolds_ErasesItAndConvergesTheRosterBeforeAnnouncingIt()
+    public async Task EraseAsync_AnAccountThisDeploymentHolds_ErasesItAndConvergesTheHeldUserBeforeAnnouncingIt()
     {
         // Arrange
         var work = Mailbox("work@example.test", "work");
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminErase]);
         deployment.Holding(Alex, EmptyRecord, version: 1, work);
-        var heard = await RosterAnnouncementListener.ListenAsync(deployment.Backplane, deployment.ServedUsers);
+        await deployment.ServedUsers.ReadAsync(Alex, TestContext.Current.CancellationToken);
+        var heard = await RosterAnnouncementListener.ListenAsync(deployment.Backplane, () => AccountsHeldFor(deployment, Alex));
 
         // Act
         var erased = await deployment.MailAccounts.EraseAsync(work.Id, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(erased);
-        Assert.Equal([true], heard);
-        Assert.Equal(2, deployment.ServedUsers.PublishedVersionOf(Alex));
-        Assert.Empty(Assert.Single(deployment.ServedUsers.Users).MailAccounts);
+        Assert.Empty(Assert.Single(heard));
     }
 
     /// <summary>The rows are committed whether or not this replica can read them back, so a reading that failed after the commit does not turn the write into a reported failure.</summary>
@@ -773,7 +796,7 @@ public sealed class MailAccountAdministrationTests
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
         deployment.Holding(Alex, EmptyRecord, version: 4);
-        var heard = await RosterAnnouncementListener.ListenAsync(deployment.Backplane, deployment.ServedUsers);
+        var heard = await RosterAnnouncementListener.ListenAsync(deployment.Backplane, () => true);
 
         // Act
         await deployment.MailAccounts.CreateAsync(
@@ -1050,6 +1073,10 @@ public sealed class MailAccountAdministrationTests
     }
 
     /// <summary>As many distinct mailboxes as a test needs, each under its own address and name.</summary>
+    /// <summary>Reads the mail accounts this replica holds a user with, without reading anything.</summary>
+    private static string[] AccountsHeldFor(UserRecordDeployment deployment, UserId user) =>
+        [.. deployment.ServedUsers.Peek(user)?.MailAccounts.Select(account => account.AccountId) ?? []];
+
     private static MailAccountRecord[] Mailboxes(int count) =>
         [.. Enumerable.Range(0, count).Select(index => Mailbox($"box{index}@example.test", $"box{index}"))];
 

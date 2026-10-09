@@ -267,6 +267,62 @@ public sealed class PersistedMailSynchronizationAccountsTests
             .Select(index => new ServedMailAccountVersion(new Guid($"0199a0c0-0000-7000-8000-{index:D12}"), index + 1L)),
     ];
 
+    /// <summary>
+    /// What acts for one person reads their mailboxes and nobody else's, composed from their own record — so a reply,
+    /// a draft, or an agent's answer is prepared with exactly the accounts that person is assigned.
+    /// </summary>
+    [Fact]
+    public async Task ReadUserSettingsAsync_AUserThisDeploymentServes_HoldsTheirOwnAccountsOnly()
+    {
+        // Arrange
+        var harness = new SourceHarness();
+        harness.Holding(HeldRecord(Alex, version: 3, Mailbox(AlexWork, "alex@work.test"), Mailbox(AlexHome, "alex@home.test")));
+        harness.Holding(HeldRecord(Morgan, version: 7, Mailbox(MorganWork, "morgan@work.test")));
+
+        // Act
+        var settings = await harness.Source.ReadUserSettingsAsync(Alex, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(settings.Enabled);
+        Assert.Equal(
+            [AlexWork.ToString("D"), AlexHome.ToString("D")],
+            settings.DeclaredAccounts.Select(account => account.AccountId));
+    }
+
+    /// <summary>A user no record holds is acted for with no mailbox at all, rather than with the deployment's or anybody else's.</summary>
+    [Fact]
+    public async Task ReadUserSettingsAsync_AUserNoRecordHolds_HoldsNoAccount()
+    {
+        // Arrange
+        var harness = new SourceHarness();
+        harness.Holding(HeldRecord(Morgan, version: 7, Mailbox(MorganWork, "morgan@work.test")));
+
+        // Act
+        var settings = await harness.Source.ReadUserSettingsAsync(Alex, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(settings.DeclaredAccounts);
+    }
+
+    /// <summary>
+    /// Every request acting for one person prepares their settings, so a user whose record has not moved is handed the
+    /// settings composed the last time rather than a new composition — and its memoized readers — per request.
+    /// </summary>
+    [Fact]
+    public async Task ReadUserSettingsAsync_AskedAgainForAUserWhoseRecordHasNotMoved_AnswersTheSameSettings()
+    {
+        // Arrange
+        var harness = new SourceHarness();
+        harness.Holding(HeldRecord(Alex, version: 3, Mailbox(AlexWork, "alex@work.test")));
+        var first = await harness.Source.ReadUserSettingsAsync(Alex, TestContext.Current.CancellationToken);
+
+        // Act
+        var second = await harness.Source.ReadUserSettingsAsync(Alex, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Same(first, second);
+    }
+
     private static MailAccountRecord Mailbox(Guid id, string emailAddress) =>
         new(
             id,
@@ -294,6 +350,7 @@ public sealed class PersistedMailSynchronizationAccountsTests
                 new FakeTimeProvider(),
                 Options.Create(new SensitiveContentOptions()));
 
+            this.ServedUsers = ResolvedServedUsers.Over(this.Documents);
             this.Source = new PersistedMailSynchronizationAccounts(
                 new StubSettingsSnapshot<MailSynchronizationOptions>(new MailSynchronizationOptions { Enabled = true }),
                 this.Rows,
@@ -301,7 +358,8 @@ public sealed class PersistedMailSynchronizationAccountsTests
                 this.Documents,
                 new ServedUserRecordComposition(binder),
                 this.Announcements,
-                this.Withheld);
+                this.Withheld,
+                this.ServedUsers);
         }
 
         internal IServedMailAccountReader Rows { get; } = Substitute.For<IServedMailAccountReader>();
@@ -314,6 +372,9 @@ public sealed class PersistedMailSynchronizationAccountsTests
             new(connect: null, NullLogger<ConfigurationChangeAnnouncements>.Instance);
 
         internal WithheldMailAccounts Withheld { get; } = new();
+
+        /// <summary>Gets the users this replica holds, read from the records <see cref="Documents" /> answers.</summary>
+        internal ServedUsers ServedUsers { get; }
 
         internal PersistedMailSynchronizationAccounts Source { get; }
 

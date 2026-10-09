@@ -62,12 +62,15 @@ public sealed class ServedUserTimeZonesTests
         Assert.Equal(UserTimeZone.Coordinated, answer);
     }
 
-    /// <summary>Nothing resolves a period before the gate has run, and a read that gets there first answers rather than throwing.</summary>
+    /// <summary>
+    /// The answer is synchronous and reads only a user this replica already holds, so a read reaching a user nobody has
+    /// asked for yet answers rather than throwing or reading their record.
+    /// </summary>
     [Fact]
-    public void ZoneOf_ADeploymentWhoseGateHasNotRun_AnswersTheCoordinatedZone()
+    public void ZoneOf_AUserThisReplicaDoesNotHold_AnswersTheCoordinatedZone()
     {
         // Arrange
-        var zones = new ServedUserTimeZones(new ServedUsers());
+        var zones = new ServedUserTimeZones(ResolvedServedUsers.Serving());
 
         // Act
         var answer = zones.ZoneOf(SyntheticUser.Deployment);

@@ -6,6 +6,7 @@ using MailFathom.Application.Accounts;
 using MailFathom.Application.Folders;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Folders;
+using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Security.Endpoints;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
@@ -64,26 +65,33 @@ internal static class MailFolderErasureEndpoint
     /// <summary>Erases one bounded pass of what is stored for a folder this deployment no longer mirrors.</summary>
     /// <param name="request">The account and the folder whose stored mail is erased.</param>
     /// <param name="accounts">Reports whether this deployment serves the named account.</param>
-    /// <param name="mappings">Reports what the account's configuration says about the named folder, where it says anything.</param>
-    /// <param name="eraser">Performs the pass.</param>
+    /// <param name="mailSettings">Holds the account settings the pass reads, which this route prepares for the named account.</param>
+    /// <param name="context">The request being answered, whose services the folder's mapping and the eraser are resolved through once the account's settings are prepared.</param>
     /// <param name="cancellationToken">Cancels the pass when the client disconnects, leaving what earlier passes committed.</param>
     /// <returns><c>200</c> with what the pass erased, or <c>400</c> naming what was wrong with the request.</returns>
     /// <remarks>
+    /// <para>
     /// A folder the account still mirrors is refused rather than erased. Removing the rows of a folder a run is about to
     /// visit would open a hole the next run silently refills, so what the caller would have got is the cost of a
     /// remirror and none of the storage back — which is a refusal that names the two ways to make the folder erasable
     /// rather than an operation to perform carefully.
+    /// </para>
+    /// <para>
+    /// An administrative caller acts for no user, so nothing before this route has said whose account settings the
+    /// request reads. The mapping reader and the eraser are therefore resolved after the named account's settings are
+    /// prepared, because what they are composed from pins the settings the scope holds when it is first resolved.
+    /// </para>
     /// </remarks>
     internal static async Task<Results<Ok<MailFolderErasureResponse>, ProblemHttpResult>> EraseAsync(
         [FromBody] MailFolderErasureRequest? request,
         [FromServices] IDeploymentMailAccountCatalog accounts,
-        [FromServices] IMailFolderMappingReader mappings,
-        [FromServices] UnmirroredMailFolderEraser eraser,
+        [FromServices] ScopedMailSynchronizationSettings mailSettings,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(accounts);
-        ArgumentNullException.ThrowIfNull(mappings);
-        ArgumentNullException.ThrowIfNull(eraser);
+        ArgumentNullException.ThrowIfNull(mailSettings);
+        ArgumentNullException.ThrowIfNull(context);
 
         if (await AdminAccountRequest.ResolveAsync(request?.Account, accounts, cancellationToken) is not { } servedAccount)
         {
@@ -96,6 +104,14 @@ internal static class MailFolderErasureEndpoint
                 "The request named no folder. Name the alias of the folder whose stored mail is to be erased.",
                 statusCode: StatusCodes.Status400BadRequest);
         }
+
+        if (!await mailSettings.UseAccountSettingsAsync(servedAccount, cancellationToken))
+        {
+            return AdminAccountRequest.Unknown(servedAccount.Value);
+        }
+
+        var mappings = context.RequestServices.GetRequiredService<IMailFolderMappingReader>();
+        var eraser = context.RequestServices.GetRequiredService<UnmirroredMailFolderEraser>();
 
         if (mappings.FindFolderNamed(servedAccount, folderAlias) is { Participation.IsSynchronized: true })
         {

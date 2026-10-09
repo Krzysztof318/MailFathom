@@ -15,10 +15,10 @@ using MailFathom.Host.Signals;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Persistence.Users;
 using MailFathom.TestSupport;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Configuration.UserSettings.Administration;
@@ -26,8 +26,7 @@ namespace MailFathom.Host.UnitTests.Configuration.UserSettings.Administration;
 /// <summary>
 /// Covers what an administrator does to the roster itself: who this deployment holds, who joins it, and who leaves.
 /// The rules worth stating are the ones that stop a deployment from becoming one that serves the wrong person — the
-/// several-user refusal, the unique label, the bound on how many users one deployment holds — and the one act that
-/// disposes of everything recorded for somebody.
+/// several-user refusal and the unique label — and the one act that disposes of everything recorded for somebody.
 /// </summary>
 public sealed class UserRosterAdministrationTests
 {
@@ -72,6 +71,48 @@ public sealed class UserRosterAdministrationTests
         // Assert
         Assert.Equal("alex", Assert.Single(roster.Entries).DisplayName);
         Assert.Equal(SyntheticUser.Deployment.Value, roster.ContinuesAfter);
+    }
+
+    /// <summary>Rows that could not be read list their users as unserved rather than failing the whole page.</summary>
+    [Fact]
+    public async Task ReadRosterAsync_RowsThatCannotBeRead_ListTheirUsersAsUnserved()
+    {
+        // Arrange
+        var harness = new RosterHarness(MailFathomPermission.AdminRead);
+        harness.Holding(new UserRecord(SyntheticUser.Another, "morgan"));
+        harness.UserRows.ReadVersionsAsync(Arg.Any<IReadOnlyCollection<UserId>>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new UserSettingsUnreadableException("The user records could not be read."));
+
+        // Act
+        var roster = await harness.Roster.ReadRosterAsync(FirstPage, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(Assert.Single(roster.Entries).Served);
+    }
+
+    /// <summary>
+    /// Whether a listed user is served is answered from what this replica holds and one reading of the page's rows, so a
+    /// page of a thousand people costs one statement rather than a read and a secret resolution for each of them.
+    /// </summary>
+    [Fact]
+    public async Task ReadRosterAsync_UsersThisReplicaHasNotComposed_AreListedFromTheirRowsWithoutReadingTheirRecords()
+    {
+        // Arrange
+        var harness = new RosterHarness(MailFathomPermission.AdminRead);
+        harness.Holding(
+            new UserRecord(SyntheticUser.Deployment, "alex"),
+            new UserRecord(SyntheticUser.Another, "morgan"));
+        harness.UserRows.ReadVersionsAsync(Arg.Any<IReadOnlyCollection<UserId>>(), Arg.Any<CancellationToken>())
+            .Returns([new UserSettingsDocumentVersion(SyntheticUser.Another, 1)]);
+
+        // Act
+        var roster = await harness.Roster.ReadRosterAsync(FirstPage, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            [("alex", false), ("morgan", true)],
+            roster.Entries.Select(entry => (entry.DisplayName, entry.Served)));
+        await harness.UserRows.DidNotReceive().ReadAsync(Arg.Any<UserId>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -126,25 +167,25 @@ public sealed class UserRosterAdministrationTests
             UserEndpointAccess.Everywhere,
             1,
             Arg.Any<CancellationToken>());
-        Assert.Contains(harness.ServedUsers.Users, user => user.User == outcome.User);
+        Assert.Equal("alex", harness.ServedUsers.Peek(outcome.User)?.DisplayName);
     }
 
     /// <summary>
-    /// A recorded user is announced so a replica that did not record them serves them at once, and only once the roster
-    /// is released, so a backplane slow to answer holds no other roster write behind it.
+    /// A recorded user is announced so every other replica counts its users again at once, and only once this replica
+    /// has counted them itself, so the replica that recorded the user is never the one still answering for the old count.
     /// </summary>
     [Fact]
-    public async Task ProvisionAsync_ALabelTheDeploymentAccepts_AnnouncesTheChangeOnceTheRosterIsReleased()
+    public async Task ProvisionAsync_ALabelTheDeploymentAccepts_CountsTheUsersAgainBeforeAnnouncingTheChange()
     {
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
-        var heard = await RosterAnnouncementListener.ListenAsync(harness.Backplane, harness.ServedUsers);
+        var heard = await RosterAnnouncementListener.ListenAsync(harness.Backplane, harness.CountsRead);
 
         // Act
         await harness.Roster.ProvisionAsync("alex", TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal([true], heard);
+        Assert.Equal([1], heard);
     }
 
     /// <summary>A refused provisioning recorded nobody, so no replica is asked to read anything again.</summary>
@@ -153,8 +194,8 @@ public sealed class UserRosterAdministrationTests
     {
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
-        harness.Holding(new UserRecord(SyntheticUser.Deployment, "alex"));
-        var heard = await RosterAnnouncementListener.ListenAsync(harness.Backplane, harness.ServedUsers);
+        harness.LabelTaken();
+        var heard = await RosterAnnouncementListener.ListenAsync(harness.Backplane, () => true);
 
         // Act
         await harness.Roster.ProvisionAsync("alex", TestContext.Current.CancellationToken);
@@ -163,21 +204,26 @@ public sealed class UserRosterAdministrationTests
         Assert.Empty(heard);
     }
 
-    /// <summary>An erasure is announced so every other replica stops serving the user at once, once the roster is released.</summary>
+    /// <summary>
+    /// An erasure is announced so every other replica stops serving the user at once, and only once this replica has
+    /// let go of them and counted its users again.
+    /// </summary>
     [Fact]
-    public async Task EraseAsync_AUserThisDeploymentHolds_AnnouncesTheChangeOnceTheRosterIsReleased()
+    public async Task EraseAsync_AUserThisDeploymentHolds_LetsGoOfThemAndCountsAgainBeforeAnnouncingTheChange()
     {
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminErase);
         harness.Serving(SyntheticUser.Deployment);
         harness.Erasing(SyntheticUser.Deployment);
-        var heard = await RosterAnnouncementListener.ListenAsync(harness.Backplane, harness.ServedUsers);
+        var heard = await RosterAnnouncementListener.ListenAsync(
+            harness.Backplane,
+            () => (Held: harness.ServedUsers.Peek(SyntheticUser.Deployment) is not null, Counted: harness.CountsRead()));
 
         // Act
         await harness.Roster.EraseAsync(SyntheticUser.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal([true], heard);
+        Assert.Equal([(false, 1)], heard);
     }
 
     /// <summary>Erasing a user the deployment does not hold removed nothing, so no replica is asked to read anything again.</summary>
@@ -186,7 +232,7 @@ public sealed class UserRosterAdministrationTests
     {
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminErase);
-        var heard = await RosterAnnouncementListener.ListenAsync(harness.Backplane, harness.ServedUsers);
+        var heard = await RosterAnnouncementListener.ListenAsync(harness.Backplane, () => true);
 
         // Act
         await harness.Roster.EraseAsync(SyntheticUser.Another, TestContext.Current.CancellationToken);
@@ -195,13 +241,17 @@ public sealed class UserRosterAdministrationTests
         Assert.Empty(heard);
     }
 
-    /// <summary>A label is what an administrator selects a user by, so two users carrying one would leave nothing to select on.</summary>
+    /// <summary>
+    /// A label is what an administrator selects a user by, so two users carrying one would leave nothing to select on.
+    /// The table's unique index is what refuses it, because no read ahead of the insert could have done so without
+    /// racing a concurrent write — and the label it is asked about is the one written, trimmed.
+    /// </summary>
     [Fact]
-    public async Task ProvisionAsync_ALabelAnotherUserAlreadyCarries_IsRefusedWithoutWritingAnything()
+    public async Task ProvisionAsync_ALabelAnotherUserAlreadyCarries_IsRefusedNamingTheLabel()
     {
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
-        harness.Holding(new UserRecord(SyntheticUser.Deployment, "alex"));
+        harness.LabelTaken();
 
         // Act
         var outcome = await harness.Roster.ProvisionAsync("  alex  ", TestContext.Current.CancellationToken);
@@ -209,19 +259,16 @@ public sealed class UserRosterAdministrationTests
         // Assert
         Assert.False(outcome.IsProvisioned);
         Assert.Contains("already recorded as 'alex'", outcome.RefusalMessage!, StringComparison.Ordinal);
-        await harness.Provisioning.DidNotReceiveWithAnyArgs()
-            .ProvisionAsync(default, default!, TestContext.Current.CancellationToken);
+        await harness.Provisioning.Received(1).ProvisionAsync(Arg.Any<UserId>(), "alex", Arg.Any<CancellationToken>());
     }
 
-    /// <summary>The label was taken between the roster being read and the insert reaching the table, which no reading of a snapshot could have refused earlier.</summary>
+    /// <summary>An insert the index refused recorded nobody, so no record is written for an identifier nothing holds and nothing is counted again.</summary>
     [Fact]
-    public async Task ProvisionAsync_ALabelTakenBetweenTheReadAndTheInsert_IsRefusedRatherThanReportedAsProvisioned()
+    public async Task ProvisionAsync_ALabelTheInsertRefuses_WritesNoRecordAndCountsNothing()
     {
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
-        harness.Provisioning
-            .ProvisionAsync(Arg.Any<UserId>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(false);
+        harness.LabelTaken();
 
         // Act
         var outcome = await harness.Roster.ProvisionAsync("alex", TestContext.Current.CancellationToken);
@@ -230,6 +277,7 @@ public sealed class UserRosterAdministrationTests
         Assert.False(outcome.IsProvisioned);
         await harness.Documents.DidNotReceiveWithAnyArgs()
             .CommitAsync(default, default!, default, default, TestContext.Current.CancellationToken);
+        Assert.Equal(0, harness.CountsRead());
     }
 
     /// <summary>
@@ -337,9 +385,12 @@ public sealed class UserRosterAdministrationTests
         Assert.True(outcome.IsProvisioned);
     }
 
-    /// <summary>An administrator acts for the deployment rather than for a person, which is what makes recording a second user reachable at all.</summary>
+    /// <summary>
+    /// An administrator acts for the deployment rather than for a person, which is what makes recording a second user
+    /// reachable at all — and, with no surface to refuse it for, the users already held are not even read.
+    /// </summary>
     [Fact]
-    public async Task ProvisionAsync_ASecondUserWhileOnlyTheAdministrativeSurfaceIsServed_IsRecorded()
+    public async Task ProvisionAsync_ASecondUserWhileOnlyTheAdministrativeSurfaceIsServed_IsRecordedWithoutReadingTheUsersHeld()
     {
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
@@ -350,27 +401,7 @@ public sealed class UserRosterAdministrationTests
 
         // Assert
         Assert.True(outcome.IsProvisioned);
-    }
-
-    [Fact]
-    public async Task ProvisionAsync_ADeploymentAlreadyHoldingEveryUserItMay_IsRefusedNamingTheBound()
-    {
-        // Arrange
-        var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
-        harness.Holding(
-        [
-            .. Enumerable.Range(0, ServedUsers.MaximumUsers)
-                .Select(position => new UserRecord(
-                    UserId.Create(Guid.NewGuid()),
-                    $"user-{position}")),
-        ]);
-
-        // Act
-        var outcome = await harness.Roster.ProvisionAsync("morgan", TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.False(outcome.IsProvisioned);
-        Assert.Contains("already holds", outcome.RefusalMessage!, StringComparison.Ordinal);
+        await harness.Directory.DidNotReceiveWithAnyArgs().ReadUsersAsync(default, TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -406,34 +437,24 @@ public sealed class UserRosterAdministrationTests
         Assert.True(outcome.WasServed);
     }
 
-    /// <summary>An erasure waits until a document write has published, so it cannot remove the user between commit and publication.</summary>
+    /// <summary>A user whose record could not be read is reported as unserved rather than failing the erasure, which still runs.</summary>
     [Fact]
-    public async Task EraseAsync_AnotherRosterWriteIsPublishing_WaitsBeforeDeletingTheUser()
+    public async Task EraseAsync_AUserWhoseRecordCannotBeRead_ErasesThemAndReportsThemUnserved()
     {
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminErase);
-        harness.Serving(SyntheticUser.Deployment);
         harness.Erasing(SyntheticUser.Deployment);
-        await harness.ServedUsers.WaitForRosterPublicationAsync(TestContext.Current.CancellationToken);
+        harness.UserRows.ReadAsync(SyntheticUser.Deployment, Arg.Any<CancellationToken>())
+            .ThrowsAsync(new UserSettingsUnreadableException("The user records could not be read."));
 
-        Task<UserRosterErasureOutcome> erasing;
-        try
-        {
-            // Act
-            erasing = harness.Roster.EraseAsync(
-                SyntheticUser.Deployment,
-                TestContext.Current.CancellationToken);
+        // Act
+        var outcome = await harness.Roster.EraseAsync(
+            SyntheticUser.Deployment,
+            TestContext.Current.CancellationToken);
 
-            // Assert
-            Assert.False(erasing.IsCompleted);
-            await harness.Erasure.DidNotReceiveWithAnyArgs().EraseAsync(default, [], CancellationToken.None);
-        }
-        finally
-        {
-            harness.ServedUsers.ReleaseRosterPublication();
-        }
-
-        Assert.True((await erasing).UserErased);
+        // Assert
+        Assert.True(outcome.UserErased);
+        Assert.False(outcome.WasServed);
     }
 
     /// <summary>
@@ -469,8 +490,7 @@ public sealed class UserRosterAdministrationTests
             .EraseAsync(SyntheticUser.Deployment, Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>())
             .Returns(call =>
             {
-                servedWhileErasing = harness.ServedUsers.Users.Any(
-                    candidate => candidate.User == SyntheticUser.Deployment);
+                servedWhileErasing = harness.ServedUsers.Peek(SyntheticUser.Deployment) is not null;
                 withheldWhileErasing = (
                     harness.WithheldAccounts.IsWithheld(MailAccountId.Create(ownAccount.ToString("D"))),
                     harness.WithheldAccounts.IsWithheld(MailAccountId.Create(sharedAccount.ToString("D"))));
@@ -513,7 +533,7 @@ public sealed class UserRosterAdministrationTests
             new MailAccountRecord(ownAccount, "own@roster.test", "own", "{}", 1));
         harness.Erasing(SyntheticUser.Deployment);
         harness.Quiescing.Refusal = "Mail account 41d7b2e0 is still being synchronized.";
-        var heard = await RosterAnnouncementListener.ListenAsync(harness.Backplane, harness.ServedUsers);
+        var heard = await RosterAnnouncementListener.ListenAsync(harness.Backplane, () => true);
 
         // Act
         var outcome = await harness.Roster.EraseAsync(
@@ -525,7 +545,7 @@ public sealed class UserRosterAdministrationTests
         Assert.False(outcome.IsQuiesced);
         Assert.Equal(harness.Quiescing.Refusal, outcome.RefusalMessage);
         await harness.Erasure.DidNotReceiveWithAnyArgs().EraseAsync(default, [], CancellationToken.None);
-        Assert.Contains(harness.ServedUsers.Users, candidate => candidate.User == SyntheticUser.Deployment);
+        Assert.NotNull(harness.ServedUsers.Peek(SyntheticUser.Deployment));
         Assert.False(harness.WithheldAccounts.IsWithheld(MailAccountId.Create(ownAccount.ToString("D"))));
         Assert.Empty(heard);
     }
@@ -545,7 +565,7 @@ public sealed class UserRosterAdministrationTests
         harness.Erasure
             .EraseAsync(SyntheticUser.Deployment, Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>())
             .Returns(new UserErasureOutcome(false, appearedUnheld));
-        var heard = await RosterAnnouncementListener.ListenAsync(harness.Backplane, harness.ServedUsers);
+        var heard = await RosterAnnouncementListener.ListenAsync(harness.Backplane, () => true);
 
         // Act
         var outcome = await harness.Roster.EraseAsync(
@@ -558,7 +578,7 @@ public sealed class UserRosterAdministrationTests
         Assert.Contains(appearedUnheld.ToString("D"), outcome.RefusalMessage!, StringComparison.Ordinal);
 
         // Nothing was erased, so the person goes on being served and no replica is told otherwise.
-        Assert.Contains(harness.ServedUsers.Users, candidate => candidate.User == SyntheticUser.Deployment);
+        Assert.NotNull(harness.ServedUsers.Peek(SyntheticUser.Deployment));
         Assert.Empty(heard);
     }
 
@@ -641,36 +661,13 @@ public sealed class UserRosterAdministrationTests
             .RelabelAsync(SyntheticUser.Deployment, "alex", Arg.Any<CancellationToken>());
     }
 
-    /// <summary>Two users carrying one label would leave an administrator nothing to select on, which the column's index refuses.</summary>
-    [Fact]
-    public async Task RelabelAsync_ALabelAnotherUserCarries_IsRefusedWithoutReachingTheRow()
-    {
-        // Arrange
-        var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
-        harness.Holding(
-            new UserRecord(SyntheticUser.Deployment, "alexandra"),
-            new UserRecord(SyntheticUser.Another, "alex"));
-
-        // Act
-        var outcome = await harness.Roster.RelabelAsync(
-            SyntheticUser.Deployment,
-            "alex",
-            TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.True(outcome.UserHeld);
-        Assert.NotNull(outcome.RefusalMessage);
-        Assert.Contains("'alex'", outcome.RefusalMessage, StringComparison.Ordinal);
-        await harness.Provisioning.DidNotReceiveWithAnyArgs()
-            .RelabelAsync(default, default!, CancellationToken.None);
-    }
-
     /// <summary>
-    /// The label taken between the roster being read and the statement reaching the table is what no reading of a
-    /// snapshot could have refused, so the write reports it and the refusal is the same sentence either way.
+    /// Two users carrying one label would leave an administrator nothing to select on, which the column's index refuses —
+    /// and the index is what decides it, because no reading of a snapshot could refuse a label taken while the write
+    /// was in flight.
     /// </summary>
     [Fact]
-    public async Task RelabelAsync_ALabelTakenWhileTheWriteWasInFlight_IsRefusedWithTheSameSentence()
+    public async Task RelabelAsync_ALabelAnotherUserCarries_IsRefusedNamingTheLabel()
     {
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
@@ -736,7 +733,7 @@ public sealed class UserRosterAdministrationTests
         Assert.True(outcome.UserHeld);
         Assert.NotNull(outcome.RefusalMessage);
         await harness.Directory.DidNotReceiveWithAnyArgs()
-            .ReadUsersAsync(default, CancellationToken.None);
+            .ReadUserAsync(default, CancellationToken.None);
     }
 
     [Fact]
@@ -823,16 +820,11 @@ public sealed class UserRosterAdministrationTests
                     Arg.Any<CancellationToken>())
                 .Returns((long?)2);
 
-            // A roster naming somebody no test acts on, so "served" is a fact a test states rather than a default.
-            this.ServedUsers.Resolved(
-            [
-                new(
-                    UserId.Create(new Guid("99999999-9999-9999-9999-999999999999")),
-                    "nobody-these-tests-name",
-                    []),
-            ]);
-
-            var settings = new ConfigurationBuilder().Build();
+            // No user's record is held unless a test states it, so "served" is a fact a test states rather than a default.
+            this.UserRows = Substitute.For<IUserSettingsDocumentReader>();
+            this.UserRows.ReadVersionsAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns([]);
+            this.UserRows.ReadVersionsAsync(Arg.Any<IReadOnlyCollection<UserId>>(), Arg.Any<CancellationToken>()).Returns([]);
+            this.ServedUsers = ResolvedServedUsers.Over(this.UserRows);
 
             this.Roster = new UserRosterAdministration(
                 new AccessAuthorization(principals),
@@ -875,19 +867,34 @@ public sealed class UserRosterAdministrationTests
         /// <summary>Gets the accounts this replica's synchronization is kept off while an erasure runs.</summary>
         internal WithheldMailAccounts WithheldAccounts { get; } = new();
 
-        internal ServedUsers ServedUsers { get; } = new();
+        /// <summary>Gets the user rows the served users are read from, which hold nobody's record until a test says so.</summary>
+        internal IUserSettingsDocumentReader UserRows { get; }
+
+        internal ServedUsers ServedUsers { get; }
 
         internal void Holding(params UserRecord[] held)
         {
             this.Directory.ReadUsersAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(held);
             this.Directory.ReadUserPageAsync(Arg.Any<AdministrativeListingQuery>(), Arg.Any<CancellationToken>())
                 .Returns(new AdministrativeListingPage<UserRecord>(held, ContinuesAfter: null));
+
+            foreach (var record in held)
+            {
+                this.Directory.ReadUserAsync(record.User, Arg.Any<CancellationToken>()).Returns(record);
+            }
         }
 
-        internal void Serving(UserId user) =>
-            this.ServedUsers.Resolved([new(user, "served", [])]);
+        internal void Serving(UserId user) => this.ServedUsers.Published(new ServedUser(user, "served", []), 1);
 
-        internal void Serving(params ServedUser[] users) => this.ServedUsers.Resolved(users);
+        /// <summary>Has the table's unique index refuse whatever label is written, as it does a label another user carries.</summary>
+        internal void LabelTaken() =>
+            this.Provisioning
+                .ProvisionAsync(Arg.Any<UserId>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+                .Returns(false);
+
+        /// <summary>Counts how often the users this deployment holds were counted, which a provisioning or an erasure does once it commits.</summary>
+        internal int CountsRead() =>
+            this.UserRows.ReceivedCalls().Count(call => call.GetMethodInfo().Name == nameof(IUserSettingsDocumentReader.ReadVersionsAsync));
 
         internal void Erasing(UserId user) =>
             this.Erasure.EraseAsync(user, Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>())

@@ -15,13 +15,16 @@ using MailFathom.Application.Emails.Extraction.Attachments;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.SensitiveContent.Egress;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authorship;
 using MailFathom.Domain.Failures;
 using MailFathom.Domain.Folders;
 using MailFathom.Host.Api;
+using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Endpoints;
+using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Mcp;
 using MailFathom.Host.Security.Endpoints;
 using MailFathom.Host.Security.Transport;
@@ -29,6 +32,7 @@ using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using Xunit;
@@ -68,6 +72,7 @@ public sealed class McpAttachmentDownloadEndpointTests
             "capability",
             TicketReaderRedeeming(new AttachmentDownloadTicket(StoredEmailId.Create(Guid.CreateVersion7()), 0)),
             AttachmentOpening(
+                context,
                 principals,
                 new StubOpenedEmailAttachment("invoice.pdf", "application/pdf", "%PDF-1.7"u8.ToArray()),
                 egress.Screen),
@@ -100,7 +105,7 @@ public sealed class McpAttachmentDownloadEndpointTests
         var result = await McpAttachmentDownloadEndpoint.DownloadAsync(
             "capability",
             TicketReaderRedeeming(new AttachmentDownloadTicket(StoredEmailId.Create(Guid.CreateVersion7()), 0)),
-            AttachmentOpening(principals, new StubOpenedEmailAttachment("invoice.pdf", "application/pdf", "%PDF-1.7"u8.ToArray())),
+            AttachmentOpening(context, principals, new StubOpenedEmailAttachment("invoice.pdf", "application/pdf", "%PDF-1.7"u8.ToArray())),
             principals,
             DeploymentUser(),
             context,
@@ -131,7 +136,7 @@ public sealed class McpAttachmentDownloadEndpointTests
         await McpAttachmentDownloadEndpoint.DownloadAsync(
             "capability",
             TicketReaderRedeeming(new AttachmentDownloadTicket(StoredEmailId.Create(Guid.CreateVersion7()), 0)),
-            AttachmentOpening(principals, new StubOpenedEmailAttachment(
+            AttachmentOpening(context, principals, new StubOpenedEmailAttachment(
                 "page.html",
                 "text/html",
                 "<script>alert(1)</script>"u8.ToArray())),
@@ -164,7 +169,7 @@ public sealed class McpAttachmentDownloadEndpointTests
         await McpAttachmentDownloadEndpoint.DownloadAsync(
             "capability",
             TicketReaderRedeeming(new AttachmentDownloadTicket(StoredEmailId.Create(Guid.CreateVersion7()), 0)),
-            AttachmentOpening(principals, new StubOpenedEmailAttachment("invoice.pdf", "application/pdf", "%PDF-1.7"u8.ToArray())),
+            AttachmentOpening(context, principals, new StubOpenedEmailAttachment("invoice.pdf", "application/pdf", "%PDF-1.7"u8.ToArray())),
             principals,
             DeploymentUser(),
             context,
@@ -191,7 +196,7 @@ public sealed class McpAttachmentDownloadEndpointTests
         await McpAttachmentDownloadEndpoint.DownloadAsync(
             "capability",
             TicketReaderRedeeming(new AttachmentDownloadTicket(StoredEmailId.Create(Guid.CreateVersion7()), 0)),
-            AttachmentOpening(principals, new StubOpenedEmailAttachment(
+            AttachmentOpening(context, principals, new StubOpenedEmailAttachment(
                 "faktura \"żółć\"; x=1.pdf",
                 "application/pdf",
                 "bytes"u8.ToArray())),
@@ -226,7 +231,7 @@ public sealed class McpAttachmentDownloadEndpointTests
         await McpAttachmentDownloadEndpoint.DownloadAsync(
             "capability",
             TicketReaderRedeeming(new AttachmentDownloadTicket(StoredEmailId.Create(Guid.CreateVersion7()), 0)),
-            AttachmentOpening(principals, new StubOpenedEmailAttachment("file.bin", declared, "bytes"u8.ToArray())),
+            AttachmentOpening(context, principals, new StubOpenedEmailAttachment("file.bin", declared, "bytes"u8.ToArray())),
             principals,
             DeploymentUser(),
             context,
@@ -250,7 +255,7 @@ public sealed class McpAttachmentDownloadEndpointTests
         await McpAttachmentDownloadEndpoint.DownloadAsync(
             "capability",
             TicketReaderRedeeming(new AttachmentDownloadTicket(StoredEmailId.Create(Guid.CreateVersion7()), 0)),
-            AttachmentOpening(principals, new StubOpenedEmailAttachment(fileName: null, "image/png", "png"u8.ToArray())),
+            AttachmentOpening(context, principals, new StubOpenedEmailAttachment(fileName: null, "image/png", "png"u8.ToArray())),
             principals,
             DeploymentUser(),
             context,
@@ -279,7 +284,7 @@ public sealed class McpAttachmentDownloadEndpointTests
         var refusedCapability = await McpAttachmentDownloadEndpoint.DownloadAsync(
             "forged",
             TicketReaderRedeeming(null),
-            AttachmentOpening(principals, null),
+            AttachmentOpening(context, principals, null),
             principals,
             DeploymentUser(),
             context,
@@ -288,7 +293,7 @@ public sealed class McpAttachmentDownloadEndpointTests
         var refusedMail = await McpAttachmentDownloadEndpoint.DownloadAsync(
             "capability",
             TicketReaderRedeeming(ticket),
-            AttachmentOpening(principals, null),
+            AttachmentOpening(context, principals, null),
             principals,
             DeploymentUser(),
             context,
@@ -317,7 +322,7 @@ public sealed class McpAttachmentDownloadEndpointTests
         var result = await McpAttachmentDownloadEndpoint.DownloadAsync(
             "a-capability-somebody-presented",
             TicketReaderRedeeming(new AttachmentDownloadTicket(storedEmailId, 3)),
-            AttachmentOpening(principals, null),
+            AttachmentOpening(context, principals, null),
             principals,
             DeploymentUser(),
             context,
@@ -350,7 +355,7 @@ public sealed class McpAttachmentDownloadEndpointTests
         var result = await McpAttachmentDownloadEndpoint.DownloadAsync(
             "capability",
             TicketReaderRedeeming(new AttachmentDownloadTicket(StoredEmailId.Create(Guid.CreateVersion7()), 0)),
-            AttachmentOpening(principals, new StubOpenedEmailAttachment("invoice.pdf", "application/pdf", "%PDF-1.7"u8.ToArray())),
+            AttachmentOpening(context, principals, new StubOpenedEmailAttachment("invoice.pdf", "application/pdf", "%PDF-1.7"u8.ToArray())),
             principals,
             deploymentUser,
             context,
@@ -411,16 +416,35 @@ public sealed class McpAttachmentDownloadEndpointTests
         return ticketReader;
     }
 
-    /// <summary>Builds the real use case over ports that answer with the attachment a test wants served, or with nothing.</summary>
+    /// <summary>
+    /// Puts the real use case where the route resolves it once it knows the user, over ports that answer with the
+    /// attachment a test wants served or with nothing, and answers the settings the route prepares before resolving it.
+    /// </summary>
     /// <remarks>
     /// The use case is a concrete type rather than a port, so it is composed here instead of substituted. That is the
     /// honest shape as well: what this endpoint has to get right is how an opened attachment becomes a response and how
     /// an absent one becomes a refusal, and both travel through the real reader either way.
     /// </remarks>
-    private static EmailAttachmentDownloadReader AttachmentOpening(
+    private static ScopedMailSynchronizationSettings AttachmentOpening(
+        HttpContext context,
         IAuthorizedPrincipalSource principals,
         IOpenedEmailAttachment? attachment,
         SensitiveContentEgressScreen? screen = null)
+    {
+        context.RequestServices = new ServiceCollection()
+            .AddSingleton(DownloadReaderOpening(principals, attachment, screen))
+            .BuildServiceProvider();
+
+        var accounts = Substitute.For<IMailSynchronizationAccountSource>();
+        accounts.ReadUserSettingsAsync(Arg.Any<UserId>(), Arg.Any<CancellationToken>()).Returns(new MailSynchronizationOptions());
+
+        return new ScopedMailSynchronizationSettings(Substitute.For<ISettingsSnapshot<MailSynchronizationOptions>>(), accounts);
+    }
+
+    private static EmailAttachmentDownloadReader DownloadReaderOpening(
+        IAuthorizedPrincipalSource principals,
+        IOpenedEmailAttachment? attachment,
+        SensitiveContentEgressScreen? screen)
     {
         var summary = SummaryOf();
 

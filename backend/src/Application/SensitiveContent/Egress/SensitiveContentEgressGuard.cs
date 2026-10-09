@@ -39,7 +39,7 @@ namespace MailFathom.Application.SensitiveContent.Egress;
 /// </para>
 /// <para>
 /// <b>Whose mail is being published is settled before any of it is.</b> A deployment serves several mailboxes and each
-/// of them has a posture of its own, so the use case names what it resolved once — with <see cref="ActingFor(MailAccountId)" />
+/// of them has a posture of its own, so the use case names what it resolved once — with <see cref="ActingFor(MailAccountSensitiveContentPosture)" />
 /// where it is acting on one account, and with <see cref="ActingFor(UserSensitiveContentPosture)" /> where it reads across every account
 /// one user is assigned — and every value guarded anywhere inside that flow is read under the posture that names.
 /// Guarding outside such a scope while this deployment scans anything is a defect rather than a permissive default, and
@@ -114,16 +114,34 @@ public sealed class SensitiveContentEgressGuard
     public async Task<bool> IsActiveAsync(CancellationToken cancellationToken) =>
         this.PostureInScope()?.IsActive ?? await this.postures.IsActiveForAnyAccountAsync(cancellationToken);
 
+    /// <summary>Reads what one account's mail is scanned under, for a use case acting on that account to act for.</summary>
+    /// <param name="account">The account the use case is acting on.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The posture, which <see cref="ActingFor(MailAccountSensitiveContentPosture)" /> enters.</returns>
+    /// <remarks>
+    /// Read apart from entering the scope for the reason <see cref="ReadPostureAcrossAccountsOfAsync" /> is: a use case
+    /// reads the posture and then enters it, in that order, on its own flow.
+    /// </remarks>
+    public async Task<MailAccountSensitiveContentPosture> ReadPostureOfAsync(
+        MailAccountId account,
+        CancellationToken cancellationToken) =>
+        new(account, await this.postures.ForAccountAsync(account, cancellationToken));
+
     /// <summary>States that everything guarded on this flow from here on comes out of one account.</summary>
-    /// <param name="account">The account the use case is acting on, whose posture every value is read under.</param>
+    /// <param name="posture">The account the use case is acting on, with the posture every value is read under.</param>
     /// <returns>The scope, which restores whatever the flow was acting for when it is disposed.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="posture" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// Opened by a use case that holds one mailbox rather than a user's whole mail — a synchronization pass, a
     /// derivation enqueued for one account — so the text is judged by the settings written on the account it came out
     /// of and by nothing another of that user's mailboxes asked for.
     /// </remarks>
-    public IDisposable ActingFor(MailAccountId account) =>
-        this.Enter(new MailInScope(User: null, account, this.postures.ForAccount(account)));
+    public IDisposable ActingFor(MailAccountSensitiveContentPosture posture)
+    {
+        ArgumentNullException.ThrowIfNull(posture);
+
+        return this.Enter(new MailInScope(User: null, posture.Account, posture.Posture));
+    }
 
     /// <summary>Reads what a read spanning every account of one user is scanned under, for that read to act for.</summary>
     /// <param name="user">The user the use case resolved.</param>

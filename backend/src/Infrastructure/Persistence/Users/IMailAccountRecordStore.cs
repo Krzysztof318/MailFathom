@@ -11,9 +11,9 @@ namespace MailFathom.Infrastructure.Persistence.Users;
 /// <summary>Reads and writes the mail accounts a deployment holds and the users each is assigned to.</summary>
 /// <remarks>
 /// Every write that changes what a user is served also moves that user's record version in the same transaction. The
-/// roster a replica serves is composed from a user's record and the accounts assigned to them, and a replica learns
-/// that it has to compose one again by the record's version moving — so a write that left the version where it was would
-/// change a mailbox no replica ever republished.
+/// user a replica serves is composed from their record and the accounts assigned to them, and a replica learns that it
+/// has to compose them again by the record's version moving — so a write that left the version where it was would
+/// change a mailbox no replica holding that user ever composed again.
 /// </remarks>
 public interface IMailAccountRecordStore
 {
@@ -56,12 +56,13 @@ public interface IMailAccountRecordStore
         MailAccountQueryableSettings settings,
         CancellationToken cancellationToken);
 
-    /// <summary>Assigns an account to one more user, where the two belong to the same organization or both to none.</summary>
+    /// <summary>Assigns an account to one more user, where the two belong to the same organization or both to none and the account is assigned to fewer than <see cref="MailAccountRecord.MaximumUsersAssigned" /> users.</summary>
     /// <param name="accountId">The account.</param>
     /// <param name="user">The user it is assigned to.</param>
     /// <param name="expectedUserVersion">The version of that user's record the assignment was judged against.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>What the write did, carrying both organizations where they differ.</returns>
+    /// <remarks>The account's row is held for the rest of the transaction before its users are counted, so two assignments of one account count one after the other and neither takes it past the bound.</remarks>
     Task<MailAccountWrite> AssignAsync(
         Guid accountId,
         UserId user,
@@ -92,7 +93,7 @@ public interface IMailAccountRecordStore
     /// are exactly these. An account somebody else still reads is left running and unheld, because the mailbox and its
     /// mail are that person's — the erasure still takes what the departing user authored in it, their drafts and their
     /// recurring sends, and those rows key onto the user rather than needing the mailbox to be still. The set is read
-    /// from the assignment relation rather than from a runtime roster, so an account assigned to a user whose record
+    /// from the assignment relation rather than from the users a replica has composed, so an account assigned to a user whose record
     /// this build will not read still counts as shared.
     /// </para>
     /// <para>
@@ -174,6 +175,9 @@ public enum MailAccountWriteResult
 
     /// <summary>The account and the user belong to different organizations, counting none as one, so the assignment was refused.</summary>
     OrganizationsDiffer = 5,
+
+    /// <summary>The account is already assigned to <see cref="MailAccountRecord.MaximumUsersAssigned" /> users, so the assignment was refused.</summary>
+    AssignedToMostUsers = 6,
 }
 
 /// <summary>What ending one assignment did.</summary>

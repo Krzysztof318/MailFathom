@@ -42,9 +42,9 @@ internal static class MailRuleDeclarationRules
     /// <param name="declaredAccounts">
     /// The mailboxes this deployment serves, which a rule's scope, destinations, and actions are judged against, or
     /// <see langword="null" /> where the caller cannot yet know them. Every mailbox belongs to a user's own record, so
-    /// a reading taken before the roster is established — the composition of the host, and the judgement of a
-    /// configuration write — has no way to name one, and passing an empty set there would refuse every rule scoped to
-    /// a mailbox that does exist. What that reading skips is judged once against the roster, behind the startup gate.
+    /// the composition of the host, which reads no record, has no way to name one, and passing an empty set there would
+    /// refuse every rule scoped to a mailbox that does exist. A configuration write and a reload pass the accounts the
+    /// records hold, and judge what the composition skipped against them.
     /// </param>
     /// <returns>One message per rule the declaration breaks, empty when it is usable.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="compiler" /> is <see langword="null" />.</exception>

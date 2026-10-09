@@ -201,6 +201,11 @@ internal sealed class InMemoryMailAccountRecordStore : IMailAccountRecordStore
             return Written(MailAccountWriteResult.NothingToChange, account.Version);
         }
 
+        if (this.assignments[accountId].Count >= MailAccountRecord.MaximumUsersAssigned)
+        {
+            return Written(MailAccountWriteResult.AssignedToMostUsers, account.Version);
+        }
+
         if (held.Version != expectedUserVersion)
         {
             return Written(MailAccountWriteResult.VersionSuperseded, held.Version);

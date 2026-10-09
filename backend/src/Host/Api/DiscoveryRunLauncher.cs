@@ -9,6 +9,7 @@ using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.Signals;
 using MailFathom.Domain.Access;
+using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Security.Transport;
 
 namespace MailFathom.Host.Api;
@@ -144,6 +145,11 @@ internal sealed partial class DiscoveryRunLauncher
             await using var scope = this.scopeFactory.CreateAsyncScope();
 
             scope.ServiceProvider.GetRequiredService<TransportAuthorizedPrincipalSource>().Assume(caller);
+
+            await scope.ServiceProvider
+                .GetRequiredService<ScopedMailSynchronizationSettings>()
+                .UseUserSettingsAsync(user, this.lifetime.ApplicationStopping);
+
             ledger = scope.ServiceProvider.GetRequiredService<MailAnsweringRunLedger>();
 
             await scope.ServiceProvider

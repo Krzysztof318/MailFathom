@@ -69,17 +69,18 @@ internal sealed class PersistedUserSettingsDocumentReader(
         WHERE "Id" = @user;
         """;
 
-    /// <summary>Reads every row's version and nothing else, in the order the roster is read in.</summary>
+    /// <summary>Reads the first rows' versions and nothing else, in the order the users were recorded in.</summary>
     private const string SelectVersions =
         """
         SELECT "Id", "Version"
         FROM settings_accounts
+        WHERE @everyUser OR "Id" = ANY(@users)
         ORDER BY "CreatedAt", "Id"
         LIMIT @limit;
         """;
 
     /// <summary>Reads the accounts assigned to one user, bounded in count and in the size of each document.</summary>
-    /// <remarks>One more than a user may be read with, so a set past the bound is refused rather than silently truncated into a roster that would then drop a mailbox.</remarks>
+    /// <remarks>One more than a user may be read with, so a set past the bound is refused rather than silently truncated into a composed user who would then be missing a mailbox.</remarks>
     private const string SelectAssignedAccounts =
         """
         SELECT
@@ -103,6 +104,33 @@ internal sealed class PersistedUserSettingsDocumentReader(
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
 
+        return await this.ReadVersionsAsync(everyUser: true, [], limit, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<UserSettingsDocumentVersion>> ReadVersionsAsync(
+        IReadOnlyCollection<UserId> users,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(users);
+
+        if (users.Count == 0)
+        {
+            return [];
+        }
+
+        Guid[] named = [.. users.Select(static user => user.Value).Distinct()];
+
+        return await this.ReadVersionsAsync(everyUser: false, named, named.Length, cancellationToken);
+    }
+
+    /// <summary>Reads the versions of every user, or of the named ones, and nothing else.</summary>
+    private async Task<IReadOnlyList<UserSettingsDocumentVersion>> ReadVersionsAsync(
+        bool everyUser,
+        Guid[] users,
+        int limit,
+        CancellationToken cancellationToken)
+    {
         var connection = await this.OpenConnectionAsync(cancellationToken);
 
         await using (connection)
@@ -112,6 +140,8 @@ internal sealed class PersistedUserSettingsDocumentReader(
                 await using var command = new NpgsqlCommand(SelectVersions, connection);
 
                 command.CommandTimeout = (int)commandTimeout.Value.TotalSeconds;
+                command.Parameters.AddWithValue("everyUser", everyUser);
+                command.Parameters.AddWithValue("users", users);
                 command.Parameters.AddWithValue("limit", limit);
 
                 await using var reader = await command.ExecuteReaderAsync(cancellationToken);

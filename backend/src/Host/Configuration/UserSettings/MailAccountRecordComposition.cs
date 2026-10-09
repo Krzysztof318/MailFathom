@@ -13,7 +13,7 @@ namespace MailFathom.Host.Configuration.UserSettings;
 /// <remarks>
 /// <para>
 /// A mail account is a record of its own, and a user's document no longer carries one. What the binder judges and what
-/// the roster publishes is still one record per user, because every rule about a user's mailboxes — that two of their
+/// a user is served from is still one record per user, because every rule about a user's mailboxes — that two of their
 /// accounts cannot share a display name, that a junk destination resolves within their own accounts — is a rule over
 /// the set that user is served. So the set is composed back in here, as the collection a document used to state, with the
 /// generated identifier standing where an operator-typed one did.
@@ -21,7 +21,7 @@ namespace MailFathom.Host.Configuration.UserSettings;
 /// <para>
 /// An account holding no address is left out. An upgrade could not derive one for it, and serving a mailbox the
 /// deployment cannot compare against every other would be serving the one kind of account the address exists to rule
-/// out; the startup gate reports it instead.
+/// out; composing the user reports it instead.
 /// </para>
 /// </remarks>
 internal static class MailAccountRecordComposition

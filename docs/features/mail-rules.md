@@ -71,14 +71,15 @@ and the comparison is case-sensitive. **An account no served user is assigned is
 by a reload**, naming the rule and the identifier: a rule scoped to a mistyped account would otherwise reach no mail and
 say nothing about why. The judgement is made against the account records in the database rather than against a
 configuration key — every account that holds an address, whose settings bind, and that somebody is assigned — so a rule
-naming a mailbox nobody is assigned yet is refused until somebody is, the same answer every replica gives whatever
-roster it last read, and a reload that refuses keeps the rule set it last accepted.
+naming a mailbox nobody is assigned yet is refused until somebody is, the same answer every replica gives, and a
+reload that refuses keeps the rule set it last accepted.
 
-**A start reports it instead of refusing.** A mailbox can stop being served after the rule naming it was accepted —
-its user is erased, its account is erased, or its assignment ends — and a start refusing then could be undone only
-through the running host it refused. So a start logs a `Warning` for each rule that names a mailbox nobody is served,
-or that reaches a mailbox which no longer maps its destination folder or permits its action, and the rule does nothing
-there until the account is assigned again, the mailbox maps what the rule needs, or the rule is changed.
+**A start neither refuses it nor reads every account to report it.** A mailbox can stop being served after the rule
+naming it was accepted — its user is erased, its account is erased, or its assignment ends — and a start refusing then
+could be undone only through the running host it refused. So a rule that names a mailbox nobody is served, or that
+reaches a mailbox which no longer maps its destination folder or permits its action, does nothing there until the
+account is assigned again, the mailbox maps what the rule needs, or the rule is changed; the next reload or
+configuration write is what names it.
 
 The `account` fact stays available and is a different tool. The filter decides whether a rule runs; the fact lets one
 rule that does run say something about which account it is running for — `account == '5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10' ? … : …` inside a condition

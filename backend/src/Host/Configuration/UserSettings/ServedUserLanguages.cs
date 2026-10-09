@@ -8,18 +8,19 @@ using MailFathom.Domain.Access;
 
 namespace MailFathom.Host.Configuration.UserSettings;
 
-/// <summary>Answers each person's language out of the roster their own records were published into.</summary>
+/// <summary>Answers each person's language out of the served-user cache their own record is held in.</summary>
 /// <remarks>
 /// <para>
-/// The roster is followed rather than read per call: it is published by the startup gate and republished by each
-/// user-record commit, so a language changed through an administrative surface or by the person themselves reaches the
-/// next derivation without a restart and without any use case holding a copy of its own.
+/// The cache is read rather than the record, because whatever composes text for somebody has already prepared its scope
+/// with their accounts, which holds them here, and a held user is current until their record moves: a language changed
+/// through an administrative surface or by the person themselves reaches the next derivation without a restart and
+/// without any use case holding a copy of its own.
 /// </para>
 /// <para>
-/// A deployment before its gate has run, and a user it does not serve, are one answer rather than two — English, which
-/// is what <see cref="IUserLanguages" /> states and why. Neither is a state a derivation can reach in an ordinary
-/// run: nothing composes for somebody before the roster exists, and a use case acting for somebody erased mid-run is
-/// racing the erasure rather than reading a record that says nothing.
+/// A user this replica does not hold, and a user it does not serve, are one answer rather than two — English, which is
+/// what <see cref="IUserLanguages" /> states and why. Neither is a state a derivation reaches in an ordinary run:
+/// nothing composes for somebody whose scope was not prepared for them, and a use case acting for somebody erased
+/// mid-run is racing the erasure rather than reading a record that says nothing.
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this reader.")]
@@ -27,6 +28,6 @@ internal sealed class ServedUserLanguages(ServedUsers servedUsers) : IUserLangua
 {
     /// <inheritdoc />
     public UserLanguage LanguageOf(UserId user) =>
-        servedUsers.TryGetUsers()?.FirstOrDefault(served => served.User == user)?.Language
+        servedUsers.Peek(user)?.Language
             ?? UserLanguage.English;
 }

@@ -4,8 +4,10 @@
 
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Mail.Mutations;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
+using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Mail.MailKit.Writes;
 using MailFathom.Infrastructure.Mail.OAuth;
 using MailFathom.Infrastructure.Observability;
@@ -22,7 +24,7 @@ namespace MailFathom.Infrastructure.UnitTests.TestDoubles;
 
 /// <summary>Builds the harness, the folders, and the server answers a write-session test arranges around.</summary>
 /// <remarks>
-/// The scope factory is a real one over a container holding only the two scoped collaborators a write connection
+/// The scope factory is a real one over a container holding only the scoped collaborators a write connection
 /// resolves, because owning that scope is part of the pool's contract: a substitute would let a test pass while the
 /// production wiring resolved nothing.
 /// </remarks>
@@ -193,7 +195,7 @@ internal static class MailKitImapWriteSessionTestContext
         return destination;
     }
 
-    /// <summary>A container holding exactly the two scoped services a write connection resolves from its own scope.</summary>
+    /// <summary>A container holding exactly the scoped services a write connection resolves from its own scope.</summary>
     /// <param name="scopeDisposals">Counts the scopes the pool released, so a test can prove one was not leaked.</param>
     /// <remarks>
     /// The probe is resolved by the settings provider's own factory rather than registered and forgotten, because a
@@ -212,8 +214,19 @@ internal static class MailKitImapWriteSessionTestContext
             return CreateSettingsProvider();
         });
         services.AddScoped<IMailAccessTokenSource>(_ => new UnusedMailAccessTokenSource());
+        services.AddScoped(_ => PreparedAccountSettingsScope());
 
         return services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
+    }
+
+    private static IMailAccountSettingsScope PreparedAccountSettingsScope()
+    {
+        var settingsScope = Substitute.For<IMailAccountSettingsScope>();
+        settingsScope
+            .UseAccountSettingsAsync(Arg.Any<MailAccountId>(), Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        return settingsScope;
     }
 
     /// <summary>Counts how many of the pool's per-connection scopes were disposed.</summary>

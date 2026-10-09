@@ -61,11 +61,11 @@ internal static class ClientTimeZoneEndpoint
     }
 
     /// <summary>Hands the acting person the zone their own days are read in.</summary>
-    /// <param name="zones">Answers each person's zone out of the roster their records were published into.</param>
+    /// <param name="zones">Answers each person's zone out of the served-user cache their own record is held in.</param>
     /// <param name="authorization">Names the person the request is being served for.</param>
     /// <returns><c>200</c> with the zone identifier and whether it is still the one an unstated record falls to.</returns>
     /// <remarks>
-    /// Answered from the roster rather than from a document read, because that is where every other reader of this
+    /// Answered from the served-user cache rather than from a document read, because that is where every other reader of this
     /// value takes it from and a second source would be a second answer. <c>isDefault</c> is whether the record states
     /// a zone at all rather than whether it reads as the coordinated one: what it decides is whether the client may
     /// propose the zone the browser reports, and comparing identifiers would propose over a person who chose UTC.

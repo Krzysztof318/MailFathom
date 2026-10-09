@@ -10,7 +10,7 @@ using MailFathom.Host.Signals;
 
 namespace MailFathom.Host.Hosting.Workers;
 
-/// <summary>Keeps this replica's persisted settings and roster at what PostgreSQL holds, whichever replica committed a change.</summary>
+/// <summary>Keeps this replica's persisted settings and the users it holds at what PostgreSQL holds, whichever replica committed a change.</summary>
 /// <remarks>
 /// <para>
 /// A committed write republishes only in the process that committed it, and this is how every other replica catches up.
@@ -33,15 +33,15 @@ namespace MailFathom.Host.Hosting.Workers;
 /// </remarks>
 internal sealed partial class ConfigurationConvergenceWorker : BackgroundService
 {
-    /// <summary>The longest a replica serves settings or a roster without comparing them against what PostgreSQL holds.</summary>
-    /// <remarks>A constant rather than a setting, because it is the bound the documentation promises an operator about how long a change takes to reach every replica. What it costs is one statement over the users' versions, one read of the deployment's document, and one read of the accounts whose settings columns trail their document per replica per interval — plus a short write transaction for each of up to <see cref="MailAccountSettingsReconciliation.MaximumAccountsPerReading" /> such accounts, which is nothing once a rolling upgrade has finished.</remarks>
+    /// <summary>The longest a replica serves settings or a held user without comparing them against what PostgreSQL holds.</summary>
+    /// <remarks>A constant rather than a setting, because it is the bound the documentation promises an operator about how long a change takes to reach every replica. What it costs is one statement over the versions of the users this replica holds, one read of the deployment's document, and one read of the accounts whose settings columns trail their document per replica per interval — plus a short write transaction for each of up to <see cref="MailAccountSettingsReconciliation.MaximumAccountsPerReading" /> such accounts, which is nothing once a rolling upgrade has finished.</remarks>
     internal static readonly TimeSpan Interval = TimeSpan.FromSeconds(30);
 
     private readonly Channel<bool> announced = Channel.CreateBounded<bool>(
         new BoundedChannelOptions(1) { FullMode = BoundedChannelFullMode.DropWrite, SingleReader = true });
 
     private readonly ConfigurationChangeAnnouncements announcements;
-    private readonly ServedUsersConvergence users;
+    private readonly ServedUsers users;
     private readonly MailAccountSettingsReconciliation accountSettings;
     private readonly Func<RootSettingsReloader?> rootSettings;
     private readonly TimeProvider timeProvider;
@@ -49,7 +49,7 @@ internal sealed partial class ConfigurationConvergenceWorker : BackgroundService
 
     /// <summary>Initializes the worker over the readings it runs.</summary>
     /// <param name="announcements">What another replica's change is heard through.</param>
-    /// <param name="users">Brings the roster up to the users' records.</param>
+    /// <param name="users">Brings the users this replica holds up to their records.</param>
     /// <param name="accountSettings">Brings the settings columns of an account an older build wrote up to its document.</param>
     /// <param name="rootSettings">Resolves what brings the persisted layer up to the deployment's document, answering <see langword="null" /> where the host composed no persisted layer.</param>
     /// <param name="timeProvider">What the interval is measured by.</param>
@@ -57,7 +57,7 @@ internal sealed partial class ConfigurationConvergenceWorker : BackgroundService
     /// <exception cref="ArgumentNullException">Thrown when a required collaborator is <see langword="null" />.</exception>
     public ConfigurationConvergenceWorker(
         ConfigurationChangeAnnouncements announcements,
-        ServedUsersConvergence users,
+        ServedUsers users,
         MailAccountSettingsReconciliation accountSettings,
         Func<RootSettingsReloader?> rootSettings,
         TimeProvider timeProvider,

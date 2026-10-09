@@ -10,10 +10,10 @@ namespace MailFathom.Application.Access;
 /// <remarks>
 /// <para>
 /// The counterpart of <see cref="IUserProvisioning" /> and deliberately a port of its own, because the two are
-/// not one capability with a flag. Provisioning runs on every start against a roster that ordinarily has not changed
-/// and is idempotent for that reason; this runs when a person asked for it, once, and what it removes cannot be
-/// written back. A deployment that never calls it goes on holding a user it no longer serves, which is the state the
-/// startup gate reports rather than repairs.
+/// not one capability with a flag. Provisioning is idempotent because two writers may reach one row at once and the
+/// loser is answered with what the deployment holds; this runs when a person asked for it, once, and what it removes
+/// cannot be written back. A deployment that never calls it goes on holding the user, and every user a deployment
+/// holds is served.
 /// </para>
 /// <para>
 /// It is the whole of the erasure rather than the user row alone. The mail graph hangs on that row through
@@ -44,8 +44,8 @@ public interface IUserErasure
     /// <para>
     /// The accounts are handed in rather than discovered here because stopping a writer is the caller's act and takes
     /// a lease no adapter of this port owns. What this port then owes is the other half: the set it is about to delete
-    /// is recomputed inside the transaction, so an account that became solely this user's after the caller read the
-    /// roster refuses rather than being deleted with nothing holding it still.
+    /// is recomputed inside the transaction, so an account that became solely this user's after the caller read that
+    /// set refuses rather than being deleted with nothing holding it still.
     /// </para>
     /// </remarks>
     Task<UserErasureOutcome> EraseAsync(

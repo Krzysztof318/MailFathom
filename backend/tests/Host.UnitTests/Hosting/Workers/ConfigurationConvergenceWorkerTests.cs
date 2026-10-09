@@ -2,17 +2,13 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Host.Configuration;
-using MailFathom.Host.Configuration.Records;
 using MailFathom.Host.Configuration.RootSettings;
-using MailFathom.Host.Configuration.SensitiveContent;
 using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.Hosting.Workers;
 using MailFathom.Host.Signals;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Persistence.Settings;
 using MailFathom.Infrastructure.Persistence.Users;
-using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using StackExchange.Redis;
@@ -168,24 +164,9 @@ public sealed class ConfigurationConvergenceWorkerTests
         TimeProvider clock,
         RecordingLogger<ConfigurationConvergenceWorker>? logger = null)
     {
-        var roster = new ServedUsers();
-
-        roster.Resolved([]);
-
-        var users = new ServedUsersConvergence(
-            UserRecordScopes.Resolving(
-                documents,
-                new UserAccountDocumentBinder(
-                    new PersistedSecretMaterial(DeclaredSecretScheme.Registered),
-                    clock,
-                    Options.Create(new SensitiveContentOptions()))),
-            roster,
-            new HeldBackRecords(),
-            new RecordingLogger<ServedUsersConvergence>());
-
         return new ConfigurationConvergenceWorker(
             new ConfigurationChangeAnnouncements(connect, new RecordingLogger<ConfigurationChangeAnnouncements>()),
-            users,
+            ResolvedServedUsers.Over(documents, clock),
             new MailAccountSettingsReconciliation(
                 ServedMailAccountReaders.HoldingNothing(),
                 MailAccountRecordScopes.Resolving(new InMemoryMailAccountRecordStore()),

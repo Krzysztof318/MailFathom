@@ -7,6 +7,7 @@ using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Secrets.Discovery;
+using NSubstitute;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Configuration.Mail.Readers;
@@ -28,8 +29,8 @@ public sealed class MailSynchronizationSettingsReadersTests
             OptionsFor(AccountAt("work", "user@work.example")));
 
         // Act
-        var first = new ScopedMailSynchronizationSettings(published).Current.Readers;
-        var second = new ScopedMailSynchronizationSettings(published).Current.Readers;
+        var first = ScopeOver(published).Current.Readers;
+        var second = ScopeOver(published).Current.Readers;
 
         // Assert
         Assert.Same(first, second);
@@ -45,9 +46,9 @@ public sealed class MailSynchronizationSettingsReadersTests
         var work = MailAccountId.Create("work");
 
         // Act
-        var first = new ScopedMailSynchronizationSettings(published).Current
+        var first = ScopeOver(published).Current
             .Readers.SenderTrustPolicies.GetTrustPolicy(work);
-        var second = new ScopedMailSynchronizationSettings(published).Current
+        var second = ScopeOver(published).Current
             .Readers.SenderTrustPolicies.GetTrustPolicy(work);
 
         // Assert
@@ -65,9 +66,9 @@ public sealed class MailSynchronizationSettingsReadersTests
         var work = MailAccountId.Create("work");
 
         // Act
-        var first = new ScopedMailSynchronizationSettings(published).Current
+        var first = ScopeOver(published).Current
             .Readers.ContactCollection.GetContactCollectionSettings(work);
-        var second = new ScopedMailSynchronizationSettings(published).Current
+        var second = ScopeOver(published).Current
             .Readers.ContactCollection.GetContactCollectionSettings(work);
 
         // Assert
@@ -81,11 +82,11 @@ public sealed class MailSynchronizationSettingsReadersTests
         // Arrange
         var published = new StubSettingsSnapshot<MailSynchronizationOptions>(
             OptionsFor(AccountAt("work", "user@work.example")));
-        var beforeReload = new ScopedMailSynchronizationSettings(published).Current.Readers;
+        var beforeReload = ScopeOver(published).Current.Readers;
 
         // Act
         published.Current = OptionsFor(AccountAt("work", "user@work.example"));
-        var afterReload = new ScopedMailSynchronizationSettings(published).Current.Readers;
+        var afterReload = ScopeOver(published).Current.Readers;
 
         // Assert
         Assert.NotSame(beforeReload, afterReload);
@@ -99,7 +100,7 @@ public sealed class MailSynchronizationSettingsReadersTests
         var published = new StubSettingsSnapshot<MailSynchronizationOptions>(
             OptionsFor(AccountAt("added-by-a-reload", "user@work.example")));
         var runSnapshot = OptionsFor(AccountAt("scheduled-by-the-run", "user@work.example"));
-        var scope = new ScopedMailSynchronizationSettings(published);
+        var scope = ScopeOver(published);
 
         // Act
         scope.UseRunSnapshot(runSnapshot);
@@ -107,6 +108,10 @@ public sealed class MailSynchronizationSettingsReadersTests
         // Assert
         Assert.Same(runSnapshot.Readers, scope.Current.Readers);
     }
+
+    /// <summary>A scope over the published snapshot, which no test here prepares for a user or an account.</summary>
+    private static ScopedMailSynchronizationSettings ScopeOver(StubSettingsSnapshot<MailSynchronizationOptions> published) =>
+        new(published, Substitute.For<IMailSynchronizationAccountSource>());
 
     private static MailSynchronizationOptions OptionsFor(params MailSynchronizationAccountOptions[] accounts) =>
         new MailSynchronizationOptions().Serving(accounts);

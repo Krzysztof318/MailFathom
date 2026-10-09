@@ -22,8 +22,19 @@ public interface IUserSettingsDocumentReader
     /// <returns>Each held user and the version of their record, in the order the users were recorded in, and no more than <paramref name="limit" /> of them.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="limit" /> is not positive.</exception>
     /// <exception cref="UserSettingsUnreadableException">Thrown when the database declined the read.</exception>
-    /// <remarks>What a replica compares its roster against on every interval, so it is one statement and sends no document: a record is read only once its version says it moved.</remarks>
+    /// <remarks>What says whether a deployment holds nobody, one user, or several, so it is one statement and sends no document.</remarks>
     Task<IReadOnlyList<UserSettingsDocumentVersion>> ReadVersionsAsync(int limit, CancellationToken cancellationToken);
+
+    /// <summary>Reads the version the record of each named user stands at, without any record.</summary>
+    /// <param name="users">The users asked about.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>Each named user this deployment still holds and the version of their record; a user it no longer holds is absent.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="users" /> is <see langword="null" />.</exception>
+    /// <exception cref="UserSettingsUnreadableException">Thrown when the database declined the read.</exception>
+    /// <remarks>What a replica compares the users it has composed against, so it is one statement and sends no document: a record is read only once its version says it moved.</remarks>
+    Task<IReadOnlyList<UserSettingsDocumentVersion>> ReadVersionsAsync(
+        IReadOnlyCollection<UserId> users,
+        CancellationToken cancellationToken);
 
     /// <summary>Reads the record of one user.</summary>
     /// <param name="user">The user whose record is read.</param>

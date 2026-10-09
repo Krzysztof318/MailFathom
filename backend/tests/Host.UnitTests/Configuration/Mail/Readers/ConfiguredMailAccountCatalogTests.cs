@@ -6,6 +6,7 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Synchronization;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.Mail.Readers;
+using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Persistence.Users.AccountSettings;
 using NSubstitute;
 using Xunit;
@@ -107,5 +108,5 @@ public sealed class ConfiguredMailAccountCatalogTests
         return new ConfiguredMailAccountCatalog(Synchronizing(), reader);
     }
 
-    private static MailSynchronizationOptions Synchronizing() => new() { Enabled = true };
+    private static StubSettingsSnapshot<MailSynchronizationOptions> Synchronizing() => new(new() { Enabled = true });
 }

@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Runtime.CompilerServices;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Mail;
@@ -63,6 +64,11 @@ internal sealed class SnapshotMailSynchronizationAccounts(ISettingsSnapshot<Mail
 
         return Task.FromResult(current.FindConfiguredAccount(account) is null ? null : current);
     }
+
+    /// <inheritdoc />
+    /// <remarks>The snapshot itself, whoever is asked about: a test composing it states exactly the users it serves.</remarks>
+    public Task<MailSynchronizationOptions> ReadUserSettingsAsync(UserId user, CancellationToken cancellationToken) =>
+        Task.FromResult(settings.Current);
 
     /// <inheritdoc />
     public IChangeToken GetChangeToken() => settings.GetReloadToken();

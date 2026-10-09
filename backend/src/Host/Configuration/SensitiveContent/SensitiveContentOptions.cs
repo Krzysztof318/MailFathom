@@ -121,7 +121,7 @@ internal sealed class SensitiveContentOptions : IValidatableObject
     /// <summary>Gets every scanner this deployment stands behind, whether or not it scans its users' mail with one.</summary>
     /// <remarks>
     /// This is what the composition root registers detectors on, because which of them run over one user's mail is
-    /// that user's posture and no roster exists while services are being registered. The secrets scanner is always
+    /// that user's posture and no user's record is read while services are being registered. The secrets scanner is always
     /// among them: it runs inside this process and needs nothing deployed beside it. Registering a detector constructs
     /// none, so a deployment nobody asked for scanning on still compiles no expression and opens no client.
     /// </remarks>

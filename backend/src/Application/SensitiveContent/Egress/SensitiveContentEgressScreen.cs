@@ -76,14 +76,15 @@ public sealed class SensitiveContentEgressScreen
 
     /// <summary>Reports whether anything stops one account's message at this kind of egress.</summary>
     /// <param name="account">The account whose message is about to be queued or filed.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns><see langword="true" /> when a finding in that message could stop it.</returns>
     /// <remarks>
     /// Read by a consumer deciding whether work only a screen makes necessary is worth doing — parsing a message back
     /// into the values to screen, for one — never as permission to let the act happen unscreened, which is what calling
     /// the screen already does when it is inactive.
     /// </remarks>
-    public bool IsActiveFor(MailAccountId account) =>
-        this.postures.ForAccount(account).ScreensAnything;
+    public async Task<bool> IsActiveForAsync(MailAccountId account, CancellationToken cancellationToken) =>
+        (await this.postures.ForAccountAsync(account, cancellationToken)).ScreensAnything;
 
     /// <summary>Screens every text of one act, and reports the first thing that stops it.</summary>
     /// <param name="egressPoint">Where the texts were about to go.</param>
@@ -106,7 +107,7 @@ public sealed class SensitiveContentEgressScreen
     /// detection straddle the join between a subject and a body that have nothing to do with each other.
     /// </para>
     /// </remarks>
-    public Task<SensitiveContentEgressRefusal?> ScreenAsync(
+    public async Task<SensitiveContentEgressRefusal?> ScreenAsync(
         SensitiveContentEgressPoint egressPoint,
         MailAccountId account,
         IReadOnlyList<string> texts,
@@ -114,11 +115,16 @@ public sealed class SensitiveContentEgressScreen
     {
         ArgumentNullException.ThrowIfNull(texts);
 
-        var posture = this.postures.ForAccount(account);
+        if (texts.Count == 0)
+        {
+            return null;
+        }
 
-        return texts.Count > 0 && posture is { ScreensAnything: true, Redactor: { } active }
-            ? this.ScreenEachAsync(active, posture.Screening, egressPoint, account, texts, cancellationToken)
-            : Task.FromResult<SensitiveContentEgressRefusal?>(null);
+        var posture = await this.postures.ForAccountAsync(account, cancellationToken);
+
+        return posture is { ScreensAnything: true, Redactor: { } active }
+            ? await this.ScreenEachAsync(active, posture.Screening, egressPoint, account, texts, cancellationToken)
+            : null;
     }
 
     private async Task<SensitiveContentEgressRefusal?> ScreenEachAsync(

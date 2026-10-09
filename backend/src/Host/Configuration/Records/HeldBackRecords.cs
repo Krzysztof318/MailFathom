@@ -10,19 +10,20 @@ namespace MailFathom.Host.Configuration.Records;
 /// <remarks>
 /// <para>
 /// A report rather than a guarantee, which is what makes one process's dictionary the right shape for it: every replica
-/// binds the same rows and refuses the same documents, so what this holds is this replica's reading of them and an
-/// operator reading one replica learns what every replica did. Nothing decides anything on it.
+/// binds the same rows and refuses the same documents, so what this holds is this replica's reading of the users it has
+/// composed, and an operator reading one replica learns what any replica composing those users refuses. Nothing decides
+/// anything on it.
 /// </para>
 /// <para>
 /// The entries are kept by user because that is the unit the records are re-read in: a user's document and every mail
-/// account assigned to them are bound together, so a republication replaces whatever the last one left rather than
-/// adding to it, and a user whose record binds leaves nothing behind. An organization is not kept here — no roster
-/// binds one, so the listing reads the rows when it is asked.
+/// account assigned to them are bound together, so a recomposition replaces whatever the last one left rather than
+/// adding to it, and a user whose record binds leaves nothing behind. An organization is not kept here — nothing
+/// composes one, so the listing reads the rows when it is asked.
 /// </para>
 /// <para>
-/// What it can grow to is the roster's own ceiling rather than a bound of its own: at most the users one deployment
-/// serves, each with at most the accounts one user is assigned, which is what a deployment refusing every record it
-/// holds would leave here. Nothing accumulates beyond that, because each user's entry replaces the last.
+/// What it can grow to is the records this replica has read rather than a bound of its own: at most one entry per user
+/// it has read, each with at most the accounts one user is assigned. Nothing accumulates beyond that, because each
+/// user's entry replaces the last, and a user this replica erases or lets go of takes theirs with them.
 /// </para>
 /// </remarks>
 internal sealed class HeldBackRecords

@@ -15,7 +15,7 @@ namespace MailFathom.Application.Access;
 /// bound was guessed.
 /// </para>
 /// <para>
-/// The messages name the count, the label an operator wrote, and the remedy, and nothing else. A user identity is a
+/// The messages name the label an operator wrote and the remedy, and nothing else. A user identity is a
 /// generated identifier naming a person inside this deployment, so no message here carries one; a label is the
 /// operator's own text for a person this deployment holds, in the same class as an account alias, and naming it is
 /// what makes a refusal actionable.
@@ -31,26 +31,13 @@ public sealed class DeploymentUserUnresolvedException : MailFathomException
     /// <inheritdoc />
     public override MailFathomErrorCode ErrorCode => MailFathomErrorCode.DeploymentUserUnresolved;
 
-    /// <summary>Reports a deployment holding more user records than it may serve.</summary>
-    /// <param name="maximumUsers">The greatest number of users one deployment serves.</param>
-    /// <returns>The failure to raise.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="maximumUsers" /> is not positive.</exception>
-    public static DeploymentUserUnresolvedException TooManyUsers(int maximumUsers)
-    {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumUsers);
-
-        return new(
-            $"This deployment holds more than the {maximumUsers} user records one deployment serves. A roster that "
-            + "long was generated rather than provisioned: check what wrote the settings_accounts table.");
-    }
-
     /// <summary>Reports several users on a deployment whose surfaces cannot say which of them an act is for.</summary>
     /// <param name="refusal">The sentence naming which surface cannot name a user and what an operator changes about it.</param>
     /// <returns>The failure to raise.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="refusal" /> is <see langword="null" />, empty, or white space.</exception>
     /// <remarks>
     /// The sentence is composed by the reading that decides the question rather than here, because the same fact
-    /// refuses two acts a start apart — a roster this start would serve, and a user an administrator is provisioning
+    /// refuses two acts a start apart — several users this start would serve, and a user an administrator is provisioning
     /// into a deployment that is already running — and an operator correcting one is correcting the other.
     /// </remarks>
     public static DeploymentUserUnresolvedException SeveralUsersOnAUserFacingSurface(string refusal)
@@ -63,7 +50,7 @@ public sealed class DeploymentUserUnresolvedException : MailFathomException
     /// <summary>Reports a request that names no user reaching a deployment that serves nobody.</summary>
     /// <returns>The failure to raise.</returns>
     /// <remarks>
-    /// Kept apart from <see cref="NoSoleUserToActFor" /> because the remedy is the opposite one: a roster of none — a
+    /// Kept apart from <see cref="NoSoleUserToActFor" /> because the remedy is the opposite one: a deployment holding nobody — a
     /// fresh database, or a deployment whose every user was erased — is ended by recording somebody rather than by
     /// naming which of several a caller is.
     /// </remarks>
@@ -86,5 +73,5 @@ public sealed class DeploymentUserUnresolvedException : MailFathomException
         "This deployment serves more than one user, so a request that names none has nobody to act for. The acts "
         + "that read or write one person's contacts, mail accounts, or mailbox are reached by a credential that names "
         + "the user it acts for; grant one such credential per user, and use the deployment-wide administrative "
-        + "routes — which name the user they act on — for everything an administrator does across the roster.");
+        + "routes — which name the user they act on — for everything an administrator does across every user.");
 }

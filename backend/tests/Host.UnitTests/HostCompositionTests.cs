@@ -6,15 +6,18 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Xml.Linq;
 using MailFathom.Application.Access;
+using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.Search.Phrasing;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Domain.Accounts;
 using MailFathom.Host.Configuration.Endpoints;
+using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.RootSettings;
 using MailFathom.Host.Hosting;
 using MailFathom.Host.Hosting.Startup;
 using MailFathom.Host.Security.Transport;
 using MailFathom.Host.Signals;
+using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Persistence.Settings;
 using MailFathom.Infrastructure.Secrets.Database;
 using MailFathom.Infrastructure.Secrets.References;
@@ -880,13 +883,40 @@ public sealed class HostCompositionTests
         bool expected)
     {
         // Arrange
-        await using var provider = ComposeServices(shape).BuildServiceProvider();
+        // The account records are a query against PostgreSQL, so the composed reader is replaced by one holding no
+        // account, which every account then reads as asking for nothing beyond the deployment's own posture.
+        var services = ComposeServices(shape);
+        services.AddSingleton(ServedMailAccountReaders.HoldingNothing());
+        await using var provider = services.BuildServiceProvider();
 
         // Act
         var screen = provider.GetRequiredService<SensitiveContentEgressScreen>();
+        var isActive = await screen.IsActiveForAsync(MailAccountId.Create("primary"), TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(expected, screen.IsActiveFor(MailAccountId.Create("primary")));
+        Assert.Equal(expected, isActive);
+    }
+
+    /// <summary>
+    /// An administrative route naming an account takes the catalog as a parameter, which is resolved before the route
+    /// prepares the account's settings. A catalog that read the scope's settings to answer the synchronization switch
+    /// would pin the scope to the published snapshot first, and every such route would then fail preparing it.
+    /// </summary>
+    [Fact]
+    public async Task Compose_TheMailAccountCatalog_LeavesItsScopeUnprepared()
+    {
+        // Arrange
+        await using var provider = ComposeServices("probes only").BuildServiceProvider();
+        await using var scope = provider.CreateAsyncScope();
+        _ = scope.ServiceProvider.GetRequiredService<IDeploymentMailAccountCatalog>().SynchronizationEnabled;
+        var settings = scope.ServiceProvider.GetRequiredService<ScopedMailSynchronizationSettings>();
+        var prepared = new MailSynchronizationOptions();
+
+        // Act
+        settings.UseRunSnapshot(prepared);
+
+        // Assert
+        Assert.Same(prepared, settings.Current);
     }
 
     /// <summary>
