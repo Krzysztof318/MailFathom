@@ -780,7 +780,7 @@ report_connection() {
 }
 
 # Printed wherever this script did not record the mailbox itself, which is every path that leaves the deployment not
-# running and every fresh database, which holds no user to record it for. Nothing is synchronized until this record
+# running and every fresh database, which serves no user to record it for. Nothing is synchronized until this record
 # exists, so it is a step rather than an afterthought.
 report_recording_commands() {
   printf '\nThen record the user it serves, unless it holds one already, and add the mailbox it reads for\n' >&2

@@ -214,6 +214,7 @@ public sealed class UserClientAssertionAuthenticatorTests
         Assert.Equal(User, second.Admitted?.User);
     }
 
+    /// <summary>The lifetime is judged with the signature, so an expired assertion is refused before anything it claims is read.</summary>
     [Fact]
     public async Task AuthenticateAsync_AnAssertionThatHasExpired_IsRefused()
     {
@@ -227,7 +228,7 @@ public sealed class UserClientAssertionAuthenticatorTests
 
         // Assert
         Assert.Null(result.Admitted);
-        Assert.Equal(ClientAssertionRejection.ClaimsUnacceptable, result.Rejection);
+        Assert.Equal(ClientAssertionRejection.SignatureUnrecognized, result.Rejection);
     }
 
     /// <summary>The identifier is what the endpoint remembers, so one no assertion could reasonably carry is refused before it is stored.</summary>

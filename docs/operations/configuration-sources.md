@@ -333,12 +333,12 @@ A label is applied only where nobody else holds it, because a label names one us
 
 ### A deployment that records no user
 
-**A fresh database holds no user.** A user is somebody an administrator records, so a first run serves nobody and reads no mail until `mfctl user add` records the first person and `mfctl account add` gives them a mailbox — without naming them, while they are the only one. The migration that creates the table of users writes a row of its own only where it upgrades a database already holding mail from a release before users were recorded, so that the stored mail has somebody to belong to: one user, labelled `user`, with a record stating nothing. `mfctl user rename` changes that label.
+**A fresh database serves no user.** The one user its first start records is [the default administrator](admin-endpoint.md#the-default-administrator), kept off both mail endpoints. A user served is somebody an administrator records, so a first run serves nobody and reads no mail until `mfctl user add` records the first person and `mfctl account add` gives them a mailbox — without naming them, while they are the only one. The migration that creates the table of users writes a row of its own only where it upgrades a database already holding mail from a release before users were recorded, so that the stored mail has somebody to belong to: one user, labelled `user`, with a record stating nothing. `mfctl user rename` changes that label.
 
 **A deployment holding no user starts, completes every startup gate, reports itself started, and serves nobody.** That is where every new deployment stands on its first start, and where one whose every user was erased returns to, and nothing about it is a failure: there is nobody to compose, no mailbox to read, and no surface answering for anybody. It says so once, at `Information`:
 
 ```
-This deployment holds no user and therefore serves nobody. Record one with 'mfctl user add', then give them a mailbox with 'mfctl account add'.
+This deployment serves no user and therefore reads nobody's mail. Record one with 'mfctl user add', then give them a mailbox with 'mfctl account add'.
 ```
 
 Synchronization being switched on changes nothing about that. A deployment whose served users are assigned no mailbox has nothing to synchronize, which is **reported** rather than refused, for the same reason: it is the ordinary state of a deployment between its first start and its first mailbox.

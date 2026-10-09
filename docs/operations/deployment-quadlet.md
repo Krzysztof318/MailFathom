@@ -272,7 +272,7 @@ that runs it becomes the user of everything it creates, and what each startup fa
 
 ### Recording the mailbox
 
-The started deployment holds no user, and reads no mailbox. Who it serves and which mailboxes it reads are rows it
+The started deployment serves no user, and reads no mailbox. Who it serves and which mailboxes it reads are rows it
 keeps rather than settings it reads, so each is recorded over the administrative endpoint enabled above, signed in as
 the default administrator — then change its password:
 

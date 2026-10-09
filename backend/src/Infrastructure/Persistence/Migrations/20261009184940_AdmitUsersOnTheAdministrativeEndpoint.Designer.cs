@@ -14,7 +14,7 @@ using Pgvector;
 namespace MailFathom.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(MailFathomDbContext))]
-    [Migration("20261009174727_AdmitUsersOnTheAdministrativeEndpoint")]
+    [Migration("20261009184940_AdmitUsersOnTheAdministrativeEndpoint")]
     partial class AdmitUsersOnTheAdministrativeEndpoint
     {
         /// <inheritdoc />
@@ -4021,7 +4021,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid");
 
                     b.PrimitiveCollection<string[]>("Permissions")
-                        .IsRequired()
                         .HasColumnType("text[]");
 
                     b.PrimitiveCollection<string[]>("Surfaces")

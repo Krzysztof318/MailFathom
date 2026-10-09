@@ -877,7 +877,7 @@ public sealed class UserCredentialCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
 
-        var listing = DrawnListing.ReadFrom(this.harness.Console.Lines, "Credential", "Method", "Resolved by", "Narrows to", "Holds", "State");
+        var listing = DrawnListing.ReadFrom(this.harness.Console.Lines, "Credential", "Method", "Resolved by", "Narrows to", "Holds", "Endpoints", "Accepted from", "State");
         var row = Assert.Single(listing.Rows);
 
         Assert.Equal("nothing named", listing.Cell(row, "Narrows to"));

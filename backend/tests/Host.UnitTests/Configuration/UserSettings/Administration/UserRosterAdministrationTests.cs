@@ -357,6 +357,8 @@ public sealed class UserRosterAdministrationTests
             MailFathomPermission.AdminConfigurationWrite,
             clientEndpoint: new ClientEndpointOptions { Enabled = true });
         harness.Holding(new UserRecord(SyntheticUser.Deployment, "alex"));
+        harness.UserRows.ReadVersionsAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns([new UserSettingsDocumentVersion(SyntheticUser.Deployment, 1)]);
 
         // Act
         var outcome = await harness.Roster.ProvisionAsync("morgan", TestContext.Current.CancellationToken);

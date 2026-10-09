@@ -267,7 +267,7 @@ schema](database-schema.md) states the privileges it needs, the locks it takes, 
 
 ### Recording the mailbox
 
-A started deployment holds no user, and reads no mailbox. Who it serves and which mailboxes it reads are rows it keeps
+A started deployment serves no user, and reads no mailbox. Who it serves and which mailboxes it reads are rows it keeps
 rather than settings it reads, so neither is in the file above, and each is recorded over the administrative endpoint
 once the stack is up, signed in as the default administrator with the password above:
 

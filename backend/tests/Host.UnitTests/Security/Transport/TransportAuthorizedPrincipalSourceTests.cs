@@ -43,7 +43,7 @@ public sealed class TransportAuthorizedPrincipalSourceTests
     public async Task Current_AnAuthenticatedRequest_ReportsTheCallerAndTheGrantItsEntryResolvedTo()
     {
         // Arrange
-        var context = RequestBy(AuthenticatedCallerHolding(MailFathomPermission.MailRead));
+        var context = RequestBy(AuthenticatedCallerHolding(MailFathomPermission.MailRead), McpEndpointRoute.Path);
         var source = SourceOver(context);
 
         // Act
@@ -61,7 +61,7 @@ public sealed class TransportAuthorizedPrincipalSourceTests
     public async Task Current_AnAuthenticatedRequestWhoseEntryGrantedNothing_ReportsACallerHoldingNothing()
     {
         // Arrange
-        var context = RequestBy(AuthenticatedCallerHolding());
+        var context = RequestBy(AuthenticatedCallerHolding(), McpEndpointRoute.Path);
         var source = SourceOver(context);
 
         // Act

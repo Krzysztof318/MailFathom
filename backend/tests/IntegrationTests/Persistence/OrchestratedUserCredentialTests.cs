@@ -104,6 +104,7 @@ public sealed class OrchestratedUserCredentialTests(MailFathomOrchestrationFixtu
                 UserCredentialLookup.ForDigest("orchestrated-naming-nothing"),
                 UserCredentialMethod.ApiKey.StoresMaterial ? StoredHash : null,
                 permissions: null,
+                UserCredentialReach.Default,
                 token),
             cancellationToken);
 

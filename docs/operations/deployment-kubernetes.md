@@ -281,7 +281,7 @@ the locks the script takes and what each startup failure means.
 
 ## Recording the mailbox
 
-A started deployment holds no user and reads no mailbox, and no ConfigMap entry changes that: who a deployment serves
+A started deployment serves no user and reads no mailbox, and no ConfigMap entry changes that: who a deployment serves
 and which mailboxes it reads are rows it keeps rather than settings it reads. Each is recorded over the administrative
 endpoint, which is why the values above turn it on — reach it with a port-forward and record them:
 

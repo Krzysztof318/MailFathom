@@ -108,6 +108,7 @@ public sealed class DefaultAdministratorBootstrap
             await this.SignsInWithShippedPasswordAsync(administrator, cancellationToken));
     }
 
+    /// <summary>Gives the default administrator the password the setting carries, refusing a value the policy refuses.</summary>
     /// <remarks>The policy is asked here rather than on every start, because a setting already applied is ignored whatever it now holds, and a value nobody will apply is no reason to stop a start.</remarks>
     private async Task<DefaultAdministratorPasswordOutcome> ApplyAsync(
         UserId administrator,
