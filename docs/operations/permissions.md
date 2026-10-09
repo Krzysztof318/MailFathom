@@ -3,8 +3,8 @@
 <!-- describes: backend/src/Domain/Access/**, backend/src/Application/Access/**, backend/src/Host/Configuration/Access/AdministratorOptions.cs, backend/src/Host/Configuration/Access/UserFacingAuthenticationOptions.cs, backend/src/Host/Api/Client*.cs, backend/src/Host/Security/Endpoints/**, backend/src/Host/Security/Transport/**, backend/src/Mcp/Tools/PublishedTools.cs -->
 
 Authentication decides whether a caller reaches a surface at all. What it may then do is a **permission**: a named
-capability MailFathom publishes, written on the administrator the caller signed in as or on the user credential that
-admitted it, checked by the use case behind every operation, and counted under its own name when a caller is refused.
+capability MailFathom publishes, written on the administrator the caller signed in as or granted to a user through a
+role and kept to what the user credential that admitted it names, checked by the use case behind every operation, and counted under its own name when a caller is refused.
 
 This page is the whole model. The names, what each one reaches, how a grant is written, what an unwritten grant means,
 and what a refused caller is told are all here; the pages that configure a listener, publish a tool, or serve a route
@@ -245,20 +245,44 @@ because that is what a data-subject request is answered from, and so is emptying
 
 ## Writing a grant
 
-**Where a grant is written follows from what the credential names.** A user's credential reaches that user's mail, so
-what it may do is a fact about the credential and is recorded beside it; the deployment's own credential answers for the
-deployment, so what it may do is configured with it. The two halves of the published set are therefore written in two
-places, and neither surface accepts the other's shape.
-
-The deployment also records roles, groups, and role assignments, and seeds three roles — `Mail user`,
-`Organization administrator`, and `Administrator` — when it is migrated. Nothing reads those records to decide what a
-caller holds yet, so writing one grants nothing; the two places below are still the whole of where a grant is written.
+**What a user may do on the mail surfaces is granted to the user, through roles.** The deployment records roles, groups,
+and role assignments, and seeds three roles — `Mail user`, `Organization administrator`, and `Administrator` — when it
+is migrated. A user's credential then narrows what the user holds rather than granting it, and the deployment's
+administrators are still configured with the deployment, so neither surface accepts the other's shape.
 [The stored schema](../architecture/stored-email-schema.md#the-roles-groups-and-assignments-a-grant-is-read-from)
 describes the tables and what each seeded role lists.
 
+### How a caller's grant is computed
+
+**A user's grant is the union of every assignment that reaches them**: the ones naming the user, and the ones naming a
+group the user belongs to. Each permission a role lists is held at the scope of the assignment that gave it — the
+deployment, one organization, or one user — and a permission two assignments give is held at both scopes. There is no
+deny and no order between assignments, so adding one can only add, and the only way to take a permission away is to
+revoke, narrow, or delete what gave it. A name a stored role lists that this build does not publish grants nothing.
+
+**A caller on a mail surface holds that grant kept to what its credential names**, and then, on an entry with
+`PermissionsFromTokenScopes`, to what its token's scopes carry. Each of those only keeps names: a name the credential
+lists that the user's roles do not grant grants nothing, and a name kept stays at every scope it was held at. The
+administrative half of a user's grant is dropped on a mail surface, since no check there reads it. A surface requiring no
+credential has nothing to narrow with, so its caller holds what the user that deployment serves is granted on the mail
+half.
+
+**A mail permission is held whatever scope gave it.** It reaches its holder's own mail, and which mail that is follows
+from the credential rather than from the grant — [what a permission does not decide](#what-a-permission-does-not-decide).
+**An administrative permission answers a question naming no target only at deployment scope**, so a caller granted
+`mailfathom.admin.read` over one organization alone is refused a check that names none.
+
+**The grant is computed per request and remembered per user by each replica.** A change to an assignment, a role's
+permissions, a group's membership, or a user's organization forgets what every replica remembered: the replica writing it
+at once, the others through the [configuration change announcement](configuration-sources.md#what-reaches-every-replica) where a
+backplane is declared, and within thirty seconds where none is or the announcement is lost. A client session holds no grant of its
+own — only what its credential named — so a revoked assignment reaches a session already signed in on its first
+request after the replica serving it has forgotten: at once on the replica that wrote the change, and within the bound
+above on every other.
+
 ### On a user's credential
 
-The grant is named where the credential is provisioned, once per permission:
+What a credential keeps of its user's grant is named where the credential is provisioned, once per permission:
 
 ```console
 $ mfctl credential create --method api-key --user 6f1c… \
@@ -267,44 +291,45 @@ $ mfctl credential create --method api-key --user 6f1c… \
 ```
 
 [User credentials](admin-endpoint.md#user-credentials) is where the command and its other options are specified.
-`mfctl credential list` reads back what each credential holds.
+`mfctl credential list` reads back what each credential names. A credential naming a permission its user's roles do not
+grant holds nothing by it: naming is a ceiling, and the grant itself comes from
+[the user's roles](#how-a-callers-grant-is-computed).
 
-**Naming no permission grants everything the mail surface publishes**, which is what makes a first deployment work
-before it is governed. That means *this surface* rather than the names published the day the credential was provisioned,
-so a permission added in a later release reaches an ungoverned credential on its own — the contact tools are the worked
-example, since a credential that named nothing gained `mailfathom.mail.contacts.read` and `mailfathom.mail.contacts.write`
-on upgrade alone, and with the second of those the ability to record, amend, and irreversibly erase what this deployment
-holds about identified third parties. `mailfathom.mail.send` is the same shape and the sharpest case of it: a credential
-that named nothing gains it on upgrade, and with it the ability to send mail from the user's address to anybody.
-`mailfathom.mail.drafts.write` arrived the same way and is milder for the reason it exists: what it adds is the ability to
-put a message in the user's own Drafts folder, which the user sees and can delete.
+**Naming no permission records every name the mail surface publishes when the credential is provisioned**, so the
+caller holds whatever of that list its user's roles grant. It is the list as it stood that day, not the surface: a
+permission a later release publishes is not on it, so it reaches the credential only once the credential is provisioned
+again *and* a role its user holds lists it. `mailfathom.mail.send` is the sharpest name such a credential keeps wherever
+the user's roles grant it, since with it comes the ability to send mail from the user's address to anybody;
+`mailfathom.mail.contacts.write` is the next, being the ability to record, amend, and irreversibly erase what this
+deployment holds about identified third parties. `mailfathom.mail.drafts.write` is milder for the reason it exists: what
+it adds is the ability to put a message in the user's own Drafts folder, which the user sees and can delete.
 
-**`--no-permissions` grants nothing**, which is how a credential is retired without deleting it: it still authenticates,
+**`--no-permissions` keeps nothing**, which is how a credential is retired without deleting it: it still authenticates,
 and it is served an empty tool list. `mfctl credential disable` is the other way to close one, and it is the one to reach
 for when the reason may turn out to be nothing.
 
 **There is no pattern here, deliberately.** A grant on a credential is written once, by somebody deciding what one client
 of one user may do, and read back from a listing that states names — so a shorthand that quietly widens on the next
-release would be answering a question nobody asked at the moment they provisioned. Where the whole surface is meant,
-name no permission; where part of it is, write the part out.
+release would be answering a question nobody asked at the moment they provisioned. Where the whole surface as it stands
+is meant, name no permission; where part of it is, write the part out.
 
 **Provisioning refuses a grant that says something impossible**, naming what was written: a name nothing publishes, and a
 name belonging to the administrative half — which grants nothing to a credential that reaches one user's mail, and is
 refused with the mail half's own names written back.
 
 **A surface accepting a method it has no provisioned credential for admits nobody**, which is not the same as an
-unauthenticated one. A surface with no `Authentication` entry at all grants the whole of the mail half to every caller it
-serves, because there is no credential for a grant to be recorded on; that is the unauthenticated posture the startup
-warning already reports.
+unauthenticated one. A surface with no `Authentication` entry at all serves every caller as the user the deployment
+serves, holding whatever of the mail half that user's roles grant, because there is no credential to narrow it with;
+that is the unauthenticated posture the startup warning already reports.
 
-**`PermissionsFromTokenScopes` makes the recorded grant a ceiling rather than a grant.** Written on an entry accepting
-`oauth-subject`, a token then holds the published names its scopes carry *and* its credential records, so the
-authorization server decides per session within a bound the provisioning fixed. A scope naming anything else — `openid`,
+**`PermissionsFromTokenScopes` narrows once more, by the token.** Written on an entry accepting `oauth-subject`, a token
+then holds the published names its scopes carry *and* its credential names *and* its user's roles grant, so the
+authorization server decides per session within a bound the provisioning and the roles fixed. A scope naming anything else — `openid`,
 `offline_access`, another resource's scope — is ignored, and a scope naming a permission the credential does not hold
 grants nothing. It is written only on that entry, since no other method carries a token to read a scope from. What the
 metadata document advertises there is the surface's whole published vocabulary rather than a configured ceiling, because
 there is no ceiling in the section to read — those are the scope names to create in the authorization server, and
-advertising them widens nothing, since a token holds only the intersection with its own credential's grant.
+advertising them widens nothing, since a token holds only the intersection with what its own credential names.
 [Connecting an MCP client through your identity provider](mcp-client-oauth.md) walks that setup.
 
 ### On the deployment's administrators
@@ -376,8 +401,9 @@ administrator.
 **Startup records what every administrator and entry resolved to**, one line each, so the posture is read on the first
 run rather than inferred later. An administrator's line names it, its grant, and the networks it may act from; one that
 wrote no grant says so rather than being reported as though somebody had chosen what it holds, and one granted nothing
-as `nothing`. A mail-serving entry reports the method it accepts and says
-where the grants behind it are read — `mfctl credential list` — because there is none in that section to report. Nothing
+as `nothing`. A mail-serving entry reports the method it accepts and says that
+each caller holds what its user's roles grant, kept to the names its credential carries, and that `mfctl credential
+list` reads those names — because there is no grant in that section to report. Nothing
 in the report names a key, a public key, a token, an authorization server, or a subject: what it states is what the
 deployment configured, never which credential was presented.
 [The MCP endpoint](mcp-endpoint.md#what-a-credential-may-do) and
@@ -385,8 +411,8 @@ deployment configured, never which credential was presented.
 
 ### Which names are published where
 
-A grant on a user's credential draws from the mail half, and a grant on the administrative endpoint from the
-administrative half. `mailfathom.mail.flags.write`, `mailfathom.mail.move`, `mailfathom.mail.delete`, and
+A credential's narrowing draws from the mail half, and a grant on the administrative endpoint from the administrative
+half. `mailfathom.mail.flags.write`, `mailfathom.mail.move`, `mailfathom.mail.delete`, and
 `mailfathom.mail.send` are the four worth naming rather than leaving to the ungoverned default: the first three write to
 the user's real mail server, the second of them being the one that can lose a message if it stops half way and the third
 the one that means to lose it, and the fourth is the only name in either half whose effect leaves the deployment and

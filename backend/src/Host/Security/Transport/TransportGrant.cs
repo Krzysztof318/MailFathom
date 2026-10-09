@@ -8,13 +8,14 @@ using MailFathom.Infrastructure.Security.OAuth;
 
 namespace MailFathom.Host.Security.Transport;
 
-/// <summary>How the permissions a credential was granted travel on the principal that credential produced.</summary>
+/// <summary>How what a credential admits travels on the principal it produced, and what its user holds travels on the request.</summary>
 /// <remarks>
 /// <para>
-/// The grant is resolved once, while the host is composed, from the configuration entry that admits the credential. It
-/// reaches a request as claims on the authenticated principal rather than as a lookup a policy performs, which is what
-/// keeps the decision where it was made: nothing per request re-reads a configuration section, and nothing downstream
-/// has to know which entry, which key, or which authorization server was involved.
+/// Two halves, written at two moments. The permissions a credential names are written as claims while the credential is
+/// judged: an administrator's grant from its configuration entry, and a user's credential's list from its record,
+/// narrowed again by a token's scopes where the entry says so. On a mail-serving surface those claims are a narrowing
+/// rather than a grant, because what a caller there holds is its user's grant — computed from roles, read once per
+/// request, and attached to the request through <see cref="Attach" /> — kept to the names the claims carry.
 /// </para>
 /// <para>
 /// A claim per permission rather than one carrying a joined list, because that is what a claims principal is for and it
@@ -22,10 +23,10 @@ namespace MailFathom.Host.Security.Transport;
 /// identities, so nothing here discloses a credential, a subject, or anything an authorization server sent.
 /// </para>
 /// <para>
-/// A principal carrying none of these claims holds nothing, which is a credential whose entry granted nothing rather
-/// than one whose grant was never read: every scheme that authenticates writes the resolved grant, including the empty
-/// one. What a caller admitted where the surface configures no credential at all holds is a different question, decided
-/// by the surface rather than by a principal, and answered where that posture is enforced.
+/// A principal carrying none of these claims is narrowed to nothing, which is a credential that named nothing rather
+/// than one whose list was never read: every scheme that authenticates writes what it read, including the empty list.
+/// What a caller admitted where the surface configures no credential at all holds is a different question, decided by
+/// the surface rather than by a principal, and answered where that posture is enforced.
 /// </para>
 /// </remarks>
 internal static class TransportGrant
@@ -37,6 +38,32 @@ internal static class TransportGrant
     /// kind, because the permission name already says which surface it belongs to and a principal never crosses one.
     /// </remarks>
     internal const string PermissionClaimType = "urn:mailfathom:permission";
+
+    private static readonly object UserGrantKey = new();
+
+    /// <summary>Attaches what the user a request acts for holds to that request.</summary>
+    /// <param name="context">The request.</param>
+    /// <param name="userGrant">What the user holds.</param>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <remarks>On the request rather than on a principal source, because one request may be answered from several scopes and each reads it from here.</remarks>
+    internal static void Attach(HttpContext context, ScopedGrant userGrant)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(userGrant);
+
+        context.Items[UserGrantKey] = userGrant;
+    }
+
+    /// <summary>Reports what the user a request acts for holds, where it was read for this request.</summary>
+    /// <param name="context">The request.</param>
+    /// <returns>The user's grant, or <see langword="null" /> where none was attached.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="context" /> is <see langword="null" />.</exception>
+    internal static ScopedGrant? AttachedTo(HttpContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        return context.Items.TryGetValue(UserGrantKey, out var attached) ? attached as ScopedGrant : null;
+    }
 
     /// <summary>Reports which of a credential's permissions one validated token holds.</summary>
     /// <param name="tokenIdentity">The minimal identity kept from the validated token.</param>

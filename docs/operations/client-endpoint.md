@@ -3890,10 +3890,11 @@ connection until it expires, thirty seconds after it was minted. And **this endp
 switch**, because a request presents nothing that names a user and every one is served as the single user the
 deployment holds; keeping somebody off it means configuring a credential for it, or disabling it.
 
-A grant is recorded on the credential rather than on the entry, and it draws from the mailbox half of the published set
-— a name reaching only the administrative half is refused where the credential is provisioned.
-[Writing a grant](permissions.md#writing-a-grant) is the whole of that rule; nothing about it is particular to this
-surface.
+What a caller here may do is what its user's roles grant, kept to the names its credential records rather than anything
+on the entry. Those names draw from the mailbox half of the published set — a name reaching only the administrative half
+is refused where the credential is provisioned. [Writing a grant](permissions.md#writing-a-grant) and
+[how a caller's grant is computed](permissions.md#how-a-callers-grant-is-computed) are the whole of that rule; nothing
+about it is particular to this surface.
 
 ## Signing a person in
 

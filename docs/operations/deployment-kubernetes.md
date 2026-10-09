@@ -296,7 +296,9 @@ of the Secret above. The mailbox is served from the moment the write commits, wi
 names no user, because the deployment then holds exactly one; once `mfctl user add` records a second person, `--user`
 says whom the account is created for.
 [Getting started § write down the mailbox](../users/getting-started.md#2-write-down-the-mailbox) is what goes in the
-file.
+file. Recording the person assigns them no role, so they reach no tool until they hold `Mail user` —
+[getting started § record the mailbox](../users/getting-started.md#6-record-the-mailbox) gives the statement that
+assigns it.
 
 **Every replica picks the record up.** A write reaches the replica that served the request at once; the others read it
 on their next user write or restart, so a deployment scaled past one serves a newly recorded mailbox from one replica

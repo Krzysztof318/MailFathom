@@ -386,7 +386,7 @@ public sealed class McpAttachmentDownloadEndpointTests
         var httpContextAccessor = Substitute.For<IHttpContextAccessor>();
         httpContextAccessor.HttpContext.Returns(context);
 
-        // No endpoint configures a credential, which is the posture whose whole-surface grant would otherwise reach
+        // No endpoint configures a credential, which is the posture whose served user's grant would otherwise reach
         // this route. Nothing about the transport hands it a caller even so, so what the use case is told is only what
         // the route states once the ticket has verified.
         return new TransportAuthorizedPrincipalSource(

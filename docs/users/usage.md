@@ -18,13 +18,13 @@ always offered to a caller granted them and refuse the call where the account be
 configuration, because whether a
 particular mailbox can send is a question about that account rather than about the deployment.
 
-Which of the twenty-one *you* are offered is a second question, and its answer is the grant on the credential you connected
-with. A tool that grant does not permit is absent from the listing, and calling it anyway is answered as though no such
+Which of the twenty-one *you* are offered is a second question, and its answer is what your roles grant, kept to what the
+credential you connected with names. A tool that grant does not permit is absent from the listing, and calling it anyway is answered as though no such
 tool existed — nothing names the permission that was missing, so a shorter tool list than this page describes is a
 question for whoever configured the deployment:
 [what a credential may do](../operations/mcp-endpoint.md#what-a-credential-may-do). A credential provisioned with no
-permission named, which is the default, reaches everything the deployment has, and the six contact tools are part of
-that everything.
+permission named, which is the default, keeps every name published the day it was provisioned, so it reaches whatever
+of those your roles grant — with the seeded `Mail user` role, the six contact tools among them.
 
 A grant is not the only reason your listing may be shorter than this page. Every tool belongs to exactly one kind —
 the mailbox, the flags, sending, drafts, answering, and the contact book — and a deployment may publish some of those

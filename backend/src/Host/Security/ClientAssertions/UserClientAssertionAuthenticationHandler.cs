@@ -99,7 +99,7 @@ internal sealed class UserClientAssertionAuthenticationHandler
 /// <summary>Which surface a user-facing assertion scheme protects, and therefore which audience it requires.</summary>
 /// <remarks>
 /// There is no key list here and no grant, unlike the configured scheme's options: the keys are rows in the
-/// deployment's own database and what each one grants is recorded beside the user it resolves. What is left is the
+/// deployment's own database and what each one keeps of its user's grant is recorded beside it. What is left is the
 /// surface, which names the audience an assertion must carry and the identity a success reports itself under.
 /// </remarks>
 internal sealed class UserClientAssertionAuthenticationSchemeOptions : AuthenticationSchemeOptions

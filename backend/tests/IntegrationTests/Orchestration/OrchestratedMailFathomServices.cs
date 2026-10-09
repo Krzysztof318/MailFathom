@@ -6,6 +6,7 @@ using MailFathom.AI;
 using MailFathom.AI.Chat;
 using MailFathom.AppHost;
 using MailFathom.Application.Access;
+using MailFathom.Application.Access.Grants;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Contacts.Collection;
@@ -486,6 +487,9 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         builder.Services.AddScoped(_ => new StatedAuthorizedPrincipalSource());
         builder.Services.AddScoped<IAuthorizedPrincipalSource>(provider =>
             provider.GetRequiredService<StatedAuthorizedPrincipalSource>());
+        // Registered by the composition root over the signal backplane rather than by AddInfrastructure. The suite runs
+        // one process, so forgetting what it computed is the whole of what an announcement has to do here.
+        builder.Services.AddSingleton<IGrantChangeAnnouncer, LocalGrantChanges>();
         // Registered by the composition root beside the database health checks rather than by AddInfrastructure, so
         // the resolver that reads a secret straight off the pool — a bare command rather than a unit of work — would
         // find nothing to bound itself by here. The shipped default, because nothing this suite asserts is about a

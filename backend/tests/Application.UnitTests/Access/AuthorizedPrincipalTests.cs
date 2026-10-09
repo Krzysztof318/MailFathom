@@ -36,6 +36,53 @@ public sealed class AuthorizedPrincipalTests
         Assert.Equal([MailFathomPermission.AdminRead], caller.Permissions);
     }
 
+    /// <summary>A mail permission's scope is never read: it reaches its holder's own mail whichever scope the assignment granting it named.</summary>
+    [Fact]
+    public void Holds_AMailPermissionHeldAtTheUsersOwnScope_IsHeld()
+    {
+        // Arrange
+        var caller = AuthorizedPrincipal.CallerActingFor(
+            SyntheticUser.Deployment,
+            "user-key",
+            ScopedGrant.Of([(MailFathomPermission.MailRead, AssignmentScope.User(SyntheticUser.Deployment))]));
+
+        // Act & Assert
+        Assert.True(caller.Holds(MailFathomPermission.MailRead));
+    }
+
+    /// <summary>
+    /// A question naming no target is the deployment's, so an administrative permission held only over one organization
+    /// answers it no — and is still carried, with its scope, for a check that does name a target inside it.
+    /// </summary>
+    [Fact]
+    public void Holds_AnAdministrativePermissionHeldOnlyOverOneOrganization_IsNotHeldForTheDeployment()
+    {
+        // Arrange
+        var organization = AssignmentScope.Organization(new Guid("0198f0aa-0000-7000-8000-0000000000d1"));
+        var caller = AuthorizedPrincipal.Caller(
+            "organization-administrator",
+            ScopedGrant.Of([(MailFathomPermission.AdminRead, organization)]));
+
+        // Act & Assert
+        Assert.False(caller.Holds(MailFathomPermission.AdminRead));
+        Assert.Equal([organization], caller.Grant.ScopesOf(MailFathomPermission.AdminRead));
+    }
+
+    [Fact]
+    public void Holds_AnAdministrativePermissionHeldOverTheDeployment_IsHeld()
+    {
+        // Arrange
+        var caller = AuthorizedPrincipal.Caller(
+            "administrator",
+            ScopedGrant.Of([
+                (MailFathomPermission.AdminRead, AssignmentScope.Organization(new Guid("0198f0aa-0000-7000-8000-0000000000d2"))),
+                (MailFathomPermission.AdminRead, AssignmentScope.Deployment),
+            ]));
+
+        // Act & Assert
+        Assert.True(caller.Holds(MailFathomPermission.AdminRead));
+    }
+
     /// <summary>A refusal has to name something an operator can act on, so an entry with no name is a defect rather than an anonymous caller.</summary>
     [Theory]
     [InlineData("")]

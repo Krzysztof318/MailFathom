@@ -256,7 +256,8 @@ Provisioned oauth-subject credential 41d7… for user 6f1c….
 ```
 
 The issuer is the one written in the entry below, byte for byte, because the pair is what resolves the record.
-`--permission` records what tokens admitted under it may do; naming none grants everything the MCP surface publishes.
+`--permission` records what tokens admitted under it keep of the user's grant; naming none records every name the MCP
+surface publishes.
 [User credentials](admin-endpoint.md#user-credentials) specifies the command, and the mapping takes effect at once —
 it is a record rather than a setting, so nothing restarts and closing one is `mfctl credential disable` or
 `mfctl credential delete` rather than an edit here.
@@ -306,8 +307,9 @@ opens the discovery document, and its `issuer` field is the value to copy.
 Nothing else about the server is configured here: MailFathom finds the discovery document itself, at addresses it derives
 from the issuer, and takes the key set address out of it.
 
-What each admitted token may do is the grant recorded on the credential step 6 wrote — `--permission` there, once per
-name, or none to hold everything the MCP surface publishes. To let the scopes you created in step 2 narrow that grant
+What each admitted token may do is what the user's roles grant, kept to what the credential step 6 wrote names —
+`--permission` there, once per name, or none to record every name the MCP surface publishes that day. To let the scopes you
+created in step 2 narrow that grant
 per session as well, add `"PermissionsFromTokenScopes": true` on this entry:
 
 ```json
@@ -318,8 +320,8 @@ per session as well, add `"PermissionsFromTokenScopes": true` on this entry:
 }
 ```
 
-A token then holds the published names its scopes carry *and* its credential records, so the authorization server
-decides per session within the bound the provisioning fixed. On this surface that is a bound rather than a statement,
+A token then holds the published names its scopes carry *and* its credential names *and* its user's roles grant, so the
+authorization server decides per session within the bound the provisioning and the roles fixed. On this surface that is a bound rather than a statement,
 for the reason [step 2](#2-register-mailfathom-as-a-resource-in-the-provider) gives: a token admitted without a mail
 permission is listed fewer tools and is answered about the rest as though they did not exist. The setting sits on the
 entry rather than inside the `OAuth` block, and it is written on no other method, since none of the other three carries

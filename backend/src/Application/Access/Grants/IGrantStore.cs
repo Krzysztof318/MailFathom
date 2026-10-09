@@ -162,6 +162,14 @@ public interface IGrantStore
         DateTimeOffset assignedAt,
         CancellationToken cancellationToken);
 
+    /// <summary>Reads what one user holds through every assignment naming them and every assignment naming a group they are a member of.</summary>
+    /// <param name="user">The user.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>Each permission those assignments' roles list paired with the scope of the assignment that gave it; empty for a user assigned nothing, and for nobody at all.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
+    /// <remarks>A stored name this build does not publish is granted to nobody, as <see cref="RolePermissions.Read" /> decides for every role.</remarks>
+    Task<ScopedGrant> ReadGrantOfAsync(UserId user, CancellationToken cancellationToken);
+
     /// <summary>Revokes one assignment.</summary>
     /// <param name="assignmentId">The assignment.</param>
     /// <param name="cancellationToken">Cancels the write.</param>

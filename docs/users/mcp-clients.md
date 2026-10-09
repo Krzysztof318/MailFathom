@@ -276,7 +276,8 @@ given client is one of them, and each has an answer above rather than a setting 
 
 ## What a working connection looks like
 
-Whichever client was configured, a connected one lists at least fourteen tools. Four of them — `list_accounts`,
+Whichever client was configured, a connected one whose user holds the seeded `Mail user` role lists at least fourteen
+tools; a user no role is assigned to is listed none. Four of them — `list_accounts`,
 `list_emails`, `get_email_content`, and `search_emails` — advertise themselves as read-only, non-destructive, and
 idempotent. Four of the rest are not read-only. `set_mail_flags`
 changes your mailbox on the mail server rather than MailFathom's copy of it, and it advertises itself as destructive too
@@ -315,8 +316,10 @@ dropped. They reach no mail server and touch no mail.
 absence is the deployment saying it cannot answer questions yet rather than a connection fault, and no client setting
 changes it.
 
-**A credential reaches the whole surface until its provisioning narrows it.** A credential provisioned with no
-`--permission` holds everything the MCP surface publishes, so the client connects with all of it. Narrowing that is a
+**A credential reaches what its user's roles grant, kept to what it was provisioned with.** A credential provisioned
+with no `--permission` records every name the MCP surface publishes that day, so the client connects with all of
+those its user holds; a name a later release adds reaches it once the credential is provisioned again and a role its
+user holds lists it. Narrowing that is a
 change to the credential rather than anything the client sets, and it is made with `mfctl credential create`:
 [what a credential may do](../operations/mcp-endpoint.md#what-a-credential-may-do). A client whose credential you narrow
 is listed fewer tools — the ones its grant does not permit are absent, and a call naming one is answered as an unknown
