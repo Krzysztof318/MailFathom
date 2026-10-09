@@ -295,16 +295,14 @@ $ mfctl credential create --method api-key --user 6f1c… \
 grant holds nothing by it: naming is a ceiling, and the grant itself comes from
 [the user's roles](#how-a-callers-grant-is-computed).
 
-**Naming no permission keeps everything the mail surface publishes**, so the caller holds whatever its user's roles grant
-on that half. That means *this surface* rather than the names published the day the credential was provisioned, so a
-permission added in a later release reaches an ungoverned credential as soon as a role its user holds lists it — the
-contact tools are the worked example, since a credential that named nothing gained `mailfathom.mail.contacts.read` and
-`mailfathom.mail.contacts.write` on upgrade alone, and with the second of those the ability to record, amend, and
-irreversibly erase what this deployment holds about identified third parties. `mailfathom.mail.send` is the same shape
-and the sharpest case of it: a credential that named nothing keeps it wherever the user's roles grant it, and with it the
-ability to send mail from the user's address to anybody. `mailfathom.mail.drafts.write` arrived the same way and is
-milder for the reason it exists: what it adds is the ability to put a message in the user's own Drafts folder, which the
-user sees and can delete.
+**Naming no permission records every name the mail surface publishes when the credential is provisioned**, so the
+caller holds whatever of that list its user's roles grant. It is the list as it stood that day, not the surface: a
+permission a later release publishes is not on it, so it reaches the credential only once the credential is provisioned
+again *and* a role its user holds lists it. `mailfathom.mail.send` is the sharpest name such a credential keeps wherever
+the user's roles grant it, since with it comes the ability to send mail from the user's address to anybody;
+`mailfathom.mail.contacts.write` is the next, being the ability to record, amend, and irreversibly erase what this
+deployment holds about identified third parties. `mailfathom.mail.drafts.write` is milder for the reason it exists: what
+it adds is the ability to put a message in the user's own Drafts folder, which the user sees and can delete.
 
 **`--no-permissions` keeps nothing**, which is how a credential is retired without deleting it: it still authenticates,
 and it is served an empty tool list. `mfctl credential disable` is the other way to close one, and it is the one to reach
@@ -312,8 +310,8 @@ for when the reason may turn out to be nothing.
 
 **There is no pattern here, deliberately.** A grant on a credential is written once, by somebody deciding what one client
 of one user may do, and read back from a listing that states names — so a shorthand that quietly widens on the next
-release would be answering a question nobody asked at the moment they provisioned. Where the whole surface is meant,
-name no permission; where part of it is, write the part out.
+release would be answering a question nobody asked at the moment they provisioned. Where the whole surface as it stands
+is meant, name no permission; where part of it is, write the part out.
 
 **Provisioning refuses a grant that says something impossible**, naming what was written: a name nothing publishes, and a
 name belonging to the administrative half — which grants nothing to a credential that reaches one user's mail, and is

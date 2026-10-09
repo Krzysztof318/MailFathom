@@ -114,8 +114,9 @@ implies another. `mailfathom.mail.send` is the one worth reading twice, because 
 this deployment and cannot be recalled. What a caller
 holds is what its user's roles grant, kept to what its credential names, and
 [the MCP endpoint](../operations/mcp-endpoint.md#what-a-credential-may-do) is where both are read; a deployment whose
-credentials were provisioned with no permission named serves every caller whatever its user's roles grant, which is
-what makes this invisible until an operator narrows something. An entry setting `PermissionsFromTokenScopes` is the one
+credentials were provisioned with no permission named serves every caller whatever its user's roles grant of the
+names published when the credential was provisioned, which is what makes this invisible until an operator narrows
+something. An entry setting `PermissionsFromTokenScopes` is the one
 place a further thing narrows it: a token then holds only the names its own scopes carry as well as what its credential
 keeps — so a token
 whose client received no scope is served an empty listing on a credential nobody narrowed.
