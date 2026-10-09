@@ -219,7 +219,10 @@ It answers with four fields: `service`, which is always `MailFathom`; `version`,
 published names the caller holds — its user's grant, kept to what the credential it presented names — in the order this
 project publishes them; and `telemetry`, how much of a client's own telemetry this deployment wants forwarded.
 `permissions` is computed on every read rather than copied from the credential, so a role assigned or revoked since the
-sign-in is already in it, and a credential naming no permission reports exactly what its user's roles grant.
+sign-in is already in it, and a credential naming no permission reports exactly what its user's roles grant. The one
+change a session meets only at its next sign-in is a mail permission a later release publishes: a session records what
+its credential narrows the grant to when it is minted, every renewal carries that forward, and a credential naming
+nothing is recorded as every mail name the release that minted it published.
 
 That is what a client needs before it has drawn a single message: that this is MailFathom rather than something else
 answering the port, which contract it speaks, and what the rest of the surface will serve it. It is also what lets

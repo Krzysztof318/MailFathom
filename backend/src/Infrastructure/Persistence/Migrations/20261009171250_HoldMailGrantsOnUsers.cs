@@ -30,7 +30,9 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
         //
         // The mail half is the eleven names as this release publishes them, stated literally rather than read from the
         // build, for the reason the seeding migration gives. The statements share temporary tables and therefore this
-        // migration's transaction; the role-writing one names no seeded role, which is the rule seeded roles are held to.
+        // migration's transaction. Writing roles at all is the one exception to the rule that no migration after the
+        // seeding one touches a role, and RoleSeedingMigrationTests names it: it widens no seeded role's list and nobody
+        // who already held a role.
 
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)

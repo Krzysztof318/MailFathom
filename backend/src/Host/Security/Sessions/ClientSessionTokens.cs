@@ -220,7 +220,9 @@ internal sealed class ClientSessionTokens
     /// replica each of them reaches, because the removal and the replacement are one transaction. What it carries
     /// forward is the narrowing the credential applied at the exchange — so a credential narrowed after somebody signed
     /// in reaches them at their next sign-in rather than at their next renewal, while a role assigned or revoked reaches
-    /// them at their next request, because the grant itself is read from the user's roles on every one.
+    /// them at their next request, because the grant itself is read from the user's roles on every one. A credential
+    /// naming nothing was stored as every mail name published at the exchange, so a name a later release publishes is
+    /// the one change that waits for the next sign-in on such a session too.
     /// </remarks>
     internal async Task<MintedClientSessionToken?> RenewAsync(string? presented, CancellationToken cancellationToken)
     {

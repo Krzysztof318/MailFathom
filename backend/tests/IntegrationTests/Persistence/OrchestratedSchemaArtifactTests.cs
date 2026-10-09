@@ -58,6 +58,9 @@ public sealed class OrchestratedSchemaArtifactTests(MailFathomOrchestrationFixtu
     /// <summary>The migration that carries each credential's grant onto its user's roles, which the mail-grant test applies across.</summary>
     private const string MailGrantMigrationName = "HoldMailGrantsOnUsers";
 
+    /// <summary>How the mail-grant test reads a credential list that names nothing, which no joined list of names can spell.</summary>
+    private const string NamesNothing = "(none)";
+
     private const string CarriedAccount = "artifact-carry-forward";
 
     [Fact]
@@ -202,9 +205,11 @@ public sealed class OrchestratedSchemaArtifactTests(MailFathomOrchestrationFixtu
     /// <summary>Proves the grant each credential named is carried onto its user's roles, and what was carried stops narrowing.</summary>
     /// <remarks>
     /// Like the case above, it is a claim about rows that exist while one migration runs, so the chain is applied in
-    /// two parts with the users and their credentials written between them. The four users are the four outcomes the
+    /// two parts with the users and their credentials written between them. The five users are the five outcomes the
     /// migration distinguishes: a credential naming the whole mail half, credentials whose union is narrower, no
-    /// credential at all, and a user whose roles were already assigned and whom the migration leaves alone.
+    /// credential at all, credentials that all name nothing, and a user whose roles were already assigned and whom the
+    /// migration leaves alone. Every credential's list is read back, because a list the migration widened is the one
+    /// outcome that would grant somebody more than they held before it.
     /// </remarks>
     [Fact]
     public async Task SchemaArtifact_AppliedOverCredentialsStoredBeforeGrantsMovedToUsers_CarriesEachGrantOntoItsUser()
@@ -242,6 +247,7 @@ public sealed class OrchestratedSchemaArtifactTests(MailFathomOrchestrationFixtu
             [[MailFathomPermission.MailSend.Name]],
             mailUser.Id,
             cancellationToken);
+        var namingNothing = await SeedUserAsync(connectionString, [[], []], assignedRole: null, cancellationToken);
 
         // Act
         await ApplyAsync(connectionString, GenerateSchemaArtifact(scope.ServiceProvider), cancellationToken);
@@ -266,12 +272,20 @@ public sealed class OrchestratedSchemaArtifactTests(MailFathomOrchestrationFixtu
                 .Select(permission => permission.Permission)
                 .OrderBy(permission => permission)
                 .ToListAsync(cancellationToken));
-        var wholeHalfCredentials = credentials
-            .Where(credential => credential.UserId == wholeHalf)
-            .Select(credential => credential.Permissions)
-            .ToArray();
-        Assert.Contains(null, wholeHalfCredentials);
-        Assert.Contains(wholeHalfCredentials, permissions => permissions is [var only] && only == MailFathomPermission.MailRead.Name);
+        Assert.DoesNotContain(assignments, assignment => assignment.PrincipalUserId == namingNothing);
+
+        Assert.Equal([NamesNothing, MailFathomPermission.MailRead.Name], ListsHeldBy(wholeHalf));
+        Assert.Equal([MailFathomPermission.MailAsk.Name, MailFathomPermission.MailRead.Name], ListsHeldBy(narrower));
+        Assert.Equal([MailFathomPermission.MailSend.Name], ListsHeldBy(alreadyAssigned));
+        Assert.Equal([string.Empty, string.Empty], ListsHeldBy(namingNothing));
+
+        string[] ListsHeldBy(Guid user) =>
+        [
+            .. credentials
+                .Where(credential => credential.UserId == user)
+                .Select(credential => credential.Permissions is { } names ? string.Join(',', names) : NamesNothing)
+                .Order(StringComparer.Ordinal),
+        ];
 
         await host.StopAsync(cancellationToken);
     }
