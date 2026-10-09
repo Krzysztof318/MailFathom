@@ -231,9 +231,9 @@ internal static class AdminApiEndpoints
 /// </para>
 /// <para>
 /// The scopes are reported beside the permissions because an administrator granted a role over one organization holds
-/// names that <see cref="Permissions" /> leaves out: that list answers what an operation naming no target admits, and
-/// such an operation is the deployment's alone. Reading the scopes is how an organization's administrator learns what
-/// they may administer before a refusal tells them.
+/// names that <see cref="Permissions" /> leaves out, and a grant somebody holds without being told of it reads as one
+/// the deployment lost. <see cref="Permissions" /> stays the answer to what this endpoint admits, since it asks every
+/// route's permission at the deployment scope; the scopes say what the caller is granted, not what it may do here.
 /// </para>
 /// </remarks>
 internal sealed record AdminSessionResponse(

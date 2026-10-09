@@ -89,12 +89,12 @@ internal static class StatusCommand
     private static string DescribeGrant(IReadOnlyList<string>? permissions, bool holdsNarrowerScopes) => permissions switch
     {
         null => "The deployment did not state what the credential may do.",
-        { Count: 0 } when holdsNarrowerScopes => "It holds no administrative permission over the whole deployment.",
+        { Count: 0 } when holdsNarrowerScopes => "It holds no administrative permission over the whole deployment, so every operation but this one is refused.",
         { Count: 0 } => "It holds no administrative permission, so every operation but this one is refused.",
         _ => $"It holds {string.Join(", ", permissions)}.",
     };
 
-    /// <summary>States what the credential holds over one organization or one user, which reaches only what that scope covers.</summary>
+    /// <summary>States what the credential is granted over one organization or one user, which is what it holds there rather than what the endpoint admits.</summary>
     /// <remarks>
     /// A name held there that no operation below the deployment covers is named apart, so an operator granted a role
     /// carrying it over one organization is not left to believe it acts there.
