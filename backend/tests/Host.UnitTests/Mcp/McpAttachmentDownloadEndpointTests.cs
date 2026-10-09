@@ -5,7 +5,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using MailFathom.Application.Access;
-using MailFathom.Application.Access.Grants;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Repair;
@@ -393,7 +392,6 @@ public sealed class McpAttachmentDownloadEndpointTests
         return new TransportAuthorizedPrincipalSource(
             httpContextAccessor,
             DeploymentUser(),
-            new UserGrantResolver(Substitute.For<IGrantStore>(), new UserGrantCache()),
             Options.Create(new McpEndpointOptions()),
             Options.Create(new AdminEndpointOptions()),
             Options.Create(new ClientEndpointOptions()));

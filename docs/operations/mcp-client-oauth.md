@@ -256,7 +256,8 @@ Provisioned oauth-subject credential 41d7… for user 6f1c….
 ```
 
 The issuer is the one written in the entry below, byte for byte, because the pair is what resolves the record.
-`--permission` records what tokens admitted under it may do; naming none grants everything the MCP surface publishes.
+`--permission` records what tokens admitted under it keep of the user's grant; naming none keeps everything the MCP
+surface publishes.
 [User credentials](admin-endpoint.md#user-credentials) specifies the command, and the mapping takes effect at once —
 it is a record rather than a setting, so nothing restarts and closing one is `mfctl credential disable` or
 `mfctl credential delete` rather than an edit here.
@@ -306,8 +307,9 @@ opens the discovery document, and its `issuer` field is the value to copy.
 Nothing else about the server is configured here: MailFathom finds the discovery document itself, at addresses it derives
 from the issuer, and takes the key set address out of it.
 
-What each admitted token may do is the grant recorded on the credential step 6 wrote — `--permission` there, once per
-name, or none to hold everything the MCP surface publishes. To let the scopes you created in step 2 narrow that grant
+What each admitted token may do is what the user's roles grant, kept to what the credential step 6 wrote names —
+`--permission` there, once per name, or none to keep everything the MCP surface publishes. To let the scopes you
+created in step 2 narrow that grant
 per session as well, add `"PermissionsFromTokenScopes": true` on this entry:
 
 ```json

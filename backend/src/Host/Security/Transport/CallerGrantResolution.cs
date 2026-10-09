@@ -2,6 +2,8 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access.Grants;
+
 namespace MailFathom.Host.Security.Transport;
 
 /// <summary>Reads, once per request, what the user it acts for holds, before any route asks.</summary>
@@ -26,7 +28,7 @@ internal static class CallerGrantResolution
         {
             await context.RequestServices
                 .GetRequiredService<TransportAuthorizedPrincipalSource>()
-                .ResolveGrantAsync(context.RequestAborted);
+                .ResolveGrantAsync(context.RequestServices.GetRequiredService<UserGrantResolver>(), context.RequestAborted);
 
             await next(context);
         });

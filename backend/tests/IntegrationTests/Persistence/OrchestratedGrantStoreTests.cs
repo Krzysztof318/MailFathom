@@ -439,6 +439,49 @@ public sealed class OrchestratedGrantStoreTests(MailFathomOrchestrationFixture o
         }
     }
 
+    /// <summary>
+    /// A grant this process remembered is forgotten by the revocation that ends it, so the next request reads what was
+    /// committed rather than what the cache held — the store announcing its own write is what makes that so.
+    /// </summary>
+    [Fact]
+    public async Task UserGrantResolver_AnAssignmentRevokedAfterTheGrantWasRemembered_ResolvesWithoutIt()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var user = Guid.CreateVersion7();
+        var role = Guid.CreateVersion7();
+        await ProvisionUserAsync(services, user, cancellationToken);
+
+        try
+        {
+            await CreateRoleAsync(services, role, $"role-{role:N}", cancellationToken);
+            await AssignAsync(services, role, AssignmentPrincipal.User(UserId.Create(user)), AssignmentScope.User(UserId.Create(user)), cancellationToken);
+            var before = await ResolveAsync(services, user, cancellationToken);
+
+            // Act
+            await RevokeEveryAssignmentOfRoleAsync(services, role);
+            var after = await ResolveAsync(services, user, cancellationToken);
+
+            // Assert
+            Assert.Equal([MailFathomPermission.MailRead], before.Permissions);
+            Assert.Empty(after.Permissions);
+        }
+        finally
+        {
+            await OrchestratedForeignUser.EraseAsync(services, user);
+            await RevokeEveryAssignmentOfRoleAsync(services, role);
+            await DeleteRoleAsync(services, role);
+        }
+    }
+
+    private static Task<ScopedGrant> ResolveAsync(
+        OrchestratedMailFathomServices services,
+        Guid user,
+        CancellationToken cancellationToken) => services.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<UserGrantResolver>().ResolveAsync(UserId.Create(user), token),
+            cancellationToken);
+
     private static IGrantStore Store(IServiceProvider scope) => scope.GetRequiredService<IGrantStore>();
 
     private static string[] ListedNames(IReadOnlyList<Role> roles, string name)

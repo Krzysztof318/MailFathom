@@ -832,8 +832,9 @@ The operational consequences are the ones that always applied to an unauthentica
 
 ### What a credential may do
 
-**A grant belongs to the credential rather than to the entry that accepts its method**, because it is a fact about who
-holds the credential and what they were provisioned to do. It is written where the credential is:
+**A grant belongs to the user, and a credential keeps part of it rather than the entry that accepts its method.** The
+user holds what their roles grant, and what one credential keeps of that is a fact about who holds the credential and
+what it was provisioned to do, so it is written where the credential is:
 
 ```console
 $ mfctl credential create --method api-key --user 6f1c… --permission mailfathom.mail.read
@@ -845,8 +846,8 @@ This surface's half of the published set is eleven names — `mailfathom.mail.re
 `mailfathom.mail.move`, `mailfathom.mail.delete`, `mailfathom.mail.drafts.write`, `mailfathom.mail.send`,
 `mailfathom.mail.accounts.write`, and `mailfathom.mail.folders.write` — and
 [what a credential may do](permissions.md) holds the model behind them in full: what each name reaches, which tool each
-one covers, how a grant is written, what naming no permission and naming `--no-permissions` each mean, what
-`PermissionsFromTokenScopes` turns the recorded grant into, and what is refused.
+one covers, how a caller's grant is computed from the user's roles, what naming no permission and naming
+`--no-permissions` each mean, what `PermissionsFromTokenScopes` narrows it to, and what is refused.
 
 Seven of the eleven publish a tool here. `mailfathom.mail.accounts.write`, `mailfathom.mail.move`,
 `mailfathom.mail.delete`, and `mailfathom.mail.folders.write` publish none: the first reaches [the client endpoint's
@@ -879,21 +880,23 @@ where the grants are instead:
 
 ```text
 info: MailFathom.Host.Hosting.Warnings.TransportGrantStartupReport
-      The MCP endpoint entry McpEndpoint:Authentication:0 accepts api-key, and what each credential of that method
-      grants is recorded beside the user it resolves rather than here. Read it with 'mfctl credential list'. A caller
-      here is served only the tools its grant permits, and a call naming any other is answered as a tool that does not
-      exist.
+      The MCP endpoint entry McpEndpoint:Authentication:0 accepts api-key, and each caller it admits holds what its
+      user's roles grant, kept to the permissions its credential names. Read a credential's names with 'mfctl
+      credential list'. A caller here is served only the tools its grant permits, and a call naming any other is
+      answered as a tool that does not exist.
 ```
 
 Every line closes with what a grant on that surface does, so an operator reading back the one entry they edited learns
 what a narrowing costs a caller without reading the rest of the report. An entry carrying `PermissionsFromTokenScopes`
-says instead that each token holds whichever of its credential's recorded permissions its own scopes carry. An endpoint
+says instead that each token holds what its user's roles grant, kept to the permissions its credential names and then to
+those its own scopes carry. An endpoint
 with no entry at all gets one line naming the section a method would be written under.
 
 ### What a credential decides, and what it does not
 
 **The endpoint asks whether this is a method the deployment accepts; the credential answers who is calling.** What an
-admitted caller may then do is the grant recorded on that credential, and that decides one thing: which of this
+admitted caller may then do is what its user's roles grant, kept to what that credential names, and that decides one
+thing: which of this
 surface's tools it is offered and may call. Which tool each name covers is
 [what a credential may do](permissions.md#which-tool-each-name-covers); a credential narrowed to the contact half
 therefore reaches the contact book and nothing else, and one granted no name that publishes a tool here is served an
@@ -2039,12 +2042,12 @@ client that speaks Streamable HTTP can list what it advertises; `tools/list` sho
 `list_emails`, `get_email_content`, and `search_emails`, each with `readOnlyHint` true, `destructiveHint` false,
 `idempotentHint` true, and `openWorldHint` false.
 
-The six contact tools are beside them whenever the credential holds the permission each one needs, which a credential
-provisioned with none named does: `list_contacts` and `get_contact` read like the four above, while `create_contact`,
+The six contact tools are beside them whenever the caller holds the permission each one needs, which a credential
+provisioned with none named does wherever its user's roles grant it: `list_contacts` and `get_contact` read like the four above, while `create_contact`,
 `update_contact`, `delete_contact`, and `promote_contact` report `readOnlyHint` false, and `update_contact` and
 `delete_contact` report `destructiveHint` true.
 A contact tool missing from the listing is the grant rather than a fault — [What a credential may
-do](#what-a-credential-may-do) is what decides it, and `mfctl credential list` says what the credential holds.
+do](#what-a-credential-may-do) is what decides it, and `mfctl credential list` says what the credential names.
 
 `set_mail_flags` is beside them under the same condition, and it is the one tool in the listing that reports
 `readOnlyHint` false with `openWorldHint` true: it changes the user's mailbox rather than MailFathom's copy of it, so

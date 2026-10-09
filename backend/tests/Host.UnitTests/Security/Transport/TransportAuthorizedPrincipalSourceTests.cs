@@ -128,15 +128,14 @@ public sealed class TransportAuthorizedPrincipalSourceTests
         string path)
     {
         // Arrange
-        var source = SourceOver(
-            RequestTo(path),
-            userGrant: ScopedGrant.Of([
-                (MailFathomPermission.MailRead, AssignmentScope.User(SyntheticUser.Deployment)),
-                (MailFathomPermission.AdminRead, AssignmentScope.Deployment),
-            ]));
+        var source = SourceOver(RequestTo(path));
+        var userGrant = ScopedGrant.Of([
+            (MailFathomPermission.MailRead, AssignmentScope.User(SyntheticUser.Deployment)),
+            (MailFathomPermission.AdminRead, AssignmentScope.Deployment),
+        ]);
 
         // Act
-        var principal = await ResolvedAsync(source);
+        var principal = await ResolvedAsync(source, userGrant);
 
         // Assert
         Assert.Equal(AuthorizedPrincipalKind.Caller, principal?.Kind);
@@ -149,10 +148,10 @@ public sealed class TransportAuthorizedPrincipalSourceTests
     public async Task Current_ARequestOnTheAdministrativeSurfaceConfiguringNoCredential_ReportsACallerHoldingThatWholeSurface()
     {
         // Arrange
-        var source = SourceOver(RequestTo(AdminEndpointOptions.RoutePrefix + "/session"), userGrant: ScopedGrant.None);
+        var source = SourceOver(RequestTo(AdminEndpointOptions.RoutePrefix + "/session"));
 
         // Act
-        var principal = await ResolvedAsync(source);
+        var principal = await ResolvedAsync(source, ScopedGrant.None);
 
         // Assert
         Assert.Equal(AuthorizedPrincipalKind.Caller, principal?.Kind);
@@ -176,14 +175,14 @@ public sealed class TransportAuthorizedPrincipalSourceTests
             RequestBy(
                 AuthenticatedUserHolding(SyntheticUser.Another, MailFathomPermission.MailRead, MailFathomPermission.MailSend),
                 McpEndpointRoute.Path),
-            mcpConfiguresACredential: true,
-            userGrant: ScopedGrant.Of([
-                (MailFathomPermission.MailRead, userScope),
-                (MailFathomPermission.MailAsk, userScope),
-            ]));
+            mcpConfiguresACredential: true);
+        var userGrant = ScopedGrant.Of([
+            (MailFathomPermission.MailRead, userScope),
+            (MailFathomPermission.MailAsk, userScope),
+        ]);
 
         // Act
-        var principal = await ResolvedAsync(source);
+        var principal = await ResolvedAsync(source, userGrant);
 
         // Assert
         Assert.NotNull(principal);
@@ -200,11 +199,10 @@ public sealed class TransportAuthorizedPrincipalSourceTests
             RequestBy(
                 AuthenticatedUserHolding(SyntheticUser.Another, MailFathomPermission.MailRead, MailFathomPermission.AdminRead),
                 ClientEndpointOptions.RoutePrefix + "/session"),
-            clientConfiguresACredential: true,
-            userGrant: ScopedGrant.AtDeployment([MailFathomPermission.MailRead, MailFathomPermission.AdminRead]));
+            clientConfiguresACredential: true);
 
         // Act
-        var principal = await ResolvedAsync(source);
+        var principal = await ResolvedAsync(source, ScopedGrant.AtDeployment([MailFathomPermission.MailRead, MailFathomPermission.AdminRead]));
 
         // Assert
         Assert.Equal([MailFathomPermission.MailRead], principal?.Permissions);
@@ -218,11 +216,10 @@ public sealed class TransportAuthorizedPrincipalSourceTests
         var store = StoreHolding(ScopedGrant.None);
         var source = SourceOver(
             RequestBy(AuthenticatedUserHolding(SyntheticUser.Another, MailFathomPermission.MailRead), McpEndpointRoute.Path),
-            mcpConfiguresACredential: true,
-            store: store);
+            mcpConfiguresACredential: true);
 
         // Act
-        await source.ResolveGrantAsync(TestContext.Current.CancellationToken);
+        await source.ResolveGrantAsync(GrantsOver(store), TestContext.Current.CancellationToken);
 
         // Assert
         await store.Received(1).ReadGrantOfAsync(SyntheticUser.Another, Arg.Any<CancellationToken>());
@@ -258,10 +255,10 @@ public sealed class TransportAuthorizedPrincipalSourceTests
     {
         // Arrange
         var store = StoreHolding(ScopedGrant.None);
-        var source = SourceOver(RequestTo(McpEndpointRoute.Path), store: store, deploymentUserResolves: false);
+        var source = SourceOver(RequestTo(McpEndpointRoute.Path), deploymentUserResolves: false);
 
         // Act
-        await source.ResolveGrantAsync(TestContext.Current.CancellationToken);
+        await source.ResolveGrantAsync(GrantsOver(store), TestContext.Current.CancellationToken);
 
         // Assert
         await store.DidNotReceiveWithAnyArgs().ReadGrantOfAsync(default, TestContext.Current.CancellationToken);
@@ -276,11 +273,10 @@ public sealed class TransportAuthorizedPrincipalSourceTests
         var store = StoreHolding(ScopedGrant.None);
         var source = SourceOver(
             RequestBy(AuthenticatedCallerHolding(MailFathomPermission.AdminRead), AdminEndpointOptions.RoutePrefix + "/session"),
-            adminConfiguresACredential: true,
-            store: store);
+            adminConfiguresACredential: true);
 
         // Act
-        await source.ResolveGrantAsync(TestContext.Current.CancellationToken);
+        await source.ResolveGrantAsync(GrantsOver(store), TestContext.Current.CancellationToken);
 
         // Assert
         await store.DidNotReceiveWithAnyArgs().ReadGrantOfAsync(default, TestContext.Current.CancellationToken);
@@ -423,14 +419,12 @@ public sealed class TransportAuthorizedPrincipalSourceTests
     }
 
     /// <summary>Composes the adapter over one request, and over endpoints that configure a credential or do not.</summary>
-    /// <remarks>Every endpoint defaults to configuring none, which is the posture whose grant the tests above are about; a test that needs the ordinary posture says so. The user holds the whole mail half unless a test states otherwise.</remarks>
+    /// <remarks>Every endpoint defaults to configuring none, which is the posture whose grant the tests above are about; a test that needs the ordinary posture says so.</remarks>
     private static TransportAuthorizedPrincipalSource SourceOver(
         HttpContext? context,
         bool mcpConfiguresACredential = false,
         bool adminConfiguresACredential = false,
         bool clientConfiguresACredential = false,
-        ScopedGrant? userGrant = null,
-        IGrantStore? store = null,
         bool deploymentUserResolves = true)
     {
         var httpContextAccessor = Substitute.For<IHttpContextAccessor>();
@@ -464,26 +458,28 @@ public sealed class TransportAuthorizedPrincipalSourceTests
             deploymentUser.User.Returns(_ => throw DeploymentUserUnresolvedException.NoSoleUserToActFor());
         }
 
-        var grants = new UserGrantResolver(
-            store ?? StoreHolding(userGrant ?? ScopedGrant.AtDeployment(MailFathomPermission.PublishedFor(ProtectedSurface.Mail))),
-            new UserGrantCache());
-
         return new TransportAuthorizedPrincipalSource(
             httpContextAccessor,
             deploymentUser,
-            grants,
             Options.Create(mcpEndpoint),
             Options.Create(adminEndpoint),
             Options.Create(clientEndpoint));
     }
 
     /// <summary>Resolves the grant as the pipeline does ahead of every route, then reads the principal.</summary>
-    private static async Task<AuthorizedPrincipal?> ResolvedAsync(TransportAuthorizedPrincipalSource source)
+    /// <remarks>The user holds the whole mail half unless a test states otherwise.</remarks>
+    private static async Task<AuthorizedPrincipal?> ResolvedAsync(
+        TransportAuthorizedPrincipalSource source,
+        ScopedGrant? userGrant = null)
     {
-        await source.ResolveGrantAsync(TestContext.Current.CancellationToken);
+        await source.ResolveGrantAsync(
+            GrantsOver(StoreHolding(userGrant ?? ScopedGrant.AtDeployment(MailFathomPermission.PublishedFor(ProtectedSurface.Mail)))),
+            TestContext.Current.CancellationToken);
 
         return source.Current;
     }
+
+    private static UserGrantResolver GrantsOver(IGrantStore store) => new(store, new UserGrantCache());
 
     private static IGrantStore StoreHolding(ScopedGrant grant)
     {

@@ -88,7 +88,6 @@ internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalS
 {
     private readonly IHttpContextAccessor httpContextAccessor;
     private readonly IDeploymentUserSource deploymentUser;
-    private readonly UserGrantResolver grants;
     private readonly McpEndpointOptions mcpEndpointSettings;
     private readonly AdminEndpointOptions adminEndpointSettings;
     private readonly ClientEndpointOptions clientEndpointSettings;
@@ -96,7 +95,6 @@ internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalS
     /// <summary>Initializes the adapter over the request being served, if there is one.</summary>
     /// <param name="httpContextAccessor">Reports the request this scope belongs to, or nothing outside one.</param>
     /// <param name="deploymentUser">Names the user a caller on a mail-serving surface is admitted to act for.</param>
-    /// <param name="grants">Computes what a user holds.</param>
     /// <param name="mcpEndpointSettings">The MCP endpoint settings startup was composed from.</param>
     /// <param name="adminEndpointSettings">The administrative endpoint settings startup was composed from.</param>
     /// <param name="clientEndpointSettings">The client endpoint settings startup was composed from.</param>
@@ -105,21 +103,18 @@ internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalS
     public TransportAuthorizedPrincipalSource(
         IHttpContextAccessor httpContextAccessor,
         IDeploymentUserSource deploymentUser,
-        UserGrantResolver grants,
         IOptions<McpEndpointOptions> mcpEndpointSettings,
         IOptions<AdminEndpointOptions> adminEndpointSettings,
         IOptions<ClientEndpointOptions> clientEndpointSettings)
     {
         ArgumentNullException.ThrowIfNull(httpContextAccessor);
         ArgumentNullException.ThrowIfNull(deploymentUser);
-        ArgumentNullException.ThrowIfNull(grants);
         ArgumentNullException.ThrowIfNull(mcpEndpointSettings);
         ArgumentNullException.ThrowIfNull(adminEndpointSettings);
         ArgumentNullException.ThrowIfNull(clientEndpointSettings);
 
         this.httpContextAccessor = httpContextAccessor;
         this.deploymentUser = deploymentUser;
-        this.grants = grants;
         this.mcpEndpointSettings = mcpEndpointSettings.Value;
         this.adminEndpointSettings = adminEndpointSettings.Value;
         this.clientEndpointSettings = clientEndpointSettings.Value;
@@ -140,6 +135,7 @@ internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalS
     }
 
     /// <summary>Reads what the user the request acts for holds, and attaches it to the request.</summary>
+    /// <param name="grants">Computes what a user holds. It is handed in rather than held, so composing this adapter — which every use case in every scope does — opens no database context.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>A task that completes once the grant is attached, or at once where the request acts for no user.</returns>
     /// <remarks>
@@ -148,8 +144,10 @@ internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalS
     /// Where the user cannot be named — the deployment serves several and the credential named none — nothing is read
     /// and <see cref="Current" /> raises the same refusal it raised before, which the route reports as unattributable.
     /// </remarks>
-    internal async Task ResolveGrantAsync(CancellationToken cancellationToken)
+    internal async Task ResolveGrantAsync(UserGrantResolver grants, CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(grants);
+
         if (this.httpContextAccessor.HttpContext is not { } context)
         {
             return;
@@ -168,7 +166,7 @@ internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalS
 
         if (user is { } served)
         {
-            TransportGrant.Attach(context, await this.grants.ResolveAsync(served, cancellationToken));
+            TransportGrant.Attach(context, await grants.ResolveAsync(served, cancellationToken));
         }
     }
 
