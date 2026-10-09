@@ -23,7 +23,7 @@ namespace MailFathom.Host.Configuration.Records;
 /// <para>
 /// What it can grow to is the records this replica has read rather than a bound of its own: at most one entry per user
 /// it has read, each with at most the accounts one user is assigned. Nothing accumulates beyond that, because each
-/// user's entry replaces the last and an erased user takes theirs with them.
+/// user's entry replaces the last, and a user this replica erases or lets go of takes theirs with them.
 /// </para>
 /// </remarks>
 internal sealed class HeldBackRecords

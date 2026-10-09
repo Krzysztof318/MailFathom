@@ -312,6 +312,29 @@ public sealed class MailAccountSensitiveContentPosturesTests : IDisposable
         Assert.Equal([SensitiveContentScannerKind.Secrets], after.Scanners);
     }
 
+    /// <summary>
+    /// A rebuild decides which rows are stale from the reading of every account and re-derives each through the answer
+    /// about one, so that reading replaces an answer held from before the account's last commit rather than leaving the
+    /// walk to stamp rows under the posture it has just moved past.
+    /// </summary>
+    [Fact]
+    public async Task ReadAccountsBeyondDeploymentAsync_AnAnswerHeldFromBeforeACommit_IsReplacedByWhatTheReadingFound()
+    {
+        // Arrange
+        this.Recording(SyntheticUser.Deployment, Work, null);
+        var postures = this.PosturesOver(new SensitiveContentOptions());
+        await postures.ForAccountAsync(Work, TestContext.Current.CancellationToken);
+        this.Recording(SyntheticUser.Deployment, Work, scanning => scanning.Secrets.Enabled = true);
+
+        // Act
+        var beyond = await postures.ReadAccountsBeyondDeploymentAsync(TestContext.Current.CancellationToken);
+        var held = await postures.ForAccountAsync(Work, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Same(Assert.Single(beyond).Posture, held);
+        await this.servedAccounts.Received(1).ReadScanningRequestAsync(Work, Arg.Any<CancellationToken>());
+    }
+
     /// <summary>One mailbox's write leaves every other mailbox's posture exactly where it was.</summary>
     [Fact]
     public async Task ForAccountAsync_OneAccountCommittingARecord_LeavesAnotherAccountsPostureAsItWas()

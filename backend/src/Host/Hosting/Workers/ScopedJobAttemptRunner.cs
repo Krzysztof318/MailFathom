@@ -45,18 +45,50 @@ internal sealed class ScopedJobAttemptRunner(IServiceScopeFactory scopeFactory, 
 
         await using var scope = scopeFactory.CreateAsyncScope();
 
-        if (job.AccountId is { } account)
-        {
-            await scope.ServiceProvider
-                .GetRequiredService<ScopedMailSynchronizationSettings>()
-                .UseAccountSettingsAsync(account, stoppingToken);
-        }
-
+        var preparationFailure = await PrepareAsync(scope.ServiceProvider, job, stoppingToken);
         var executor = scope.ServiceProvider.GetRequiredService<JobExecutor>();
-        var result = await executor.ExecuteAsync(job, stoppingToken);
+        var result = preparationFailure is null
+            ? await executor.ExecuteAsync(job, stoppingToken)
+            : await executor.RecordFailedPreparationAsync(job, preparationFailure, stoppingToken);
 
         attempt.Ended(result);
 
         return result;
+    }
+
+    /// <summary>Prepares the account's settings before anything in the scope is composed, and answers what that raised.</summary>
+    /// <remarks>
+    /// Nothing is read for a host already stopping, so the executor releases the job rather than this reading failing
+    /// it. A failure is answered rather than raised, because it belongs to this job alone and the executor records it
+    /// against the job; a cancellation by the stopping host is answered as nothing for the same reason, since the
+    /// executor sees the host stopping and releases the job.
+    /// </remarks>
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Whatever preparing one job raised is recorded against that job, so the jobs beside it in the batch still run.")]
+    private static async Task<Exception?> PrepareAsync(
+        IServiceProvider services,
+        LeasedJob job,
+        CancellationToken stoppingToken)
+    {
+        if (job.AccountId is not { } account || stoppingToken.IsCancellationRequested)
+        {
+            return null;
+        }
+
+        try
+        {
+            await services
+                .GetRequiredService<ScopedMailSynchronizationSettings>()
+                .UseAccountSettingsAsync(account, stoppingToken);
+
+            return null;
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            return null;
+        }
+        catch (Exception failure)
+        {
+            return failure;
+        }
     }
 }

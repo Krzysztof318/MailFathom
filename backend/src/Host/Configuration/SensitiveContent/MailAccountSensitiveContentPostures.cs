@@ -120,19 +120,29 @@ internal sealed class MailAccountSensitiveContentPostures : ISensitiveContentPos
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// The reading also replaces every answer held about one account, because a rebuild walks with both: it decides
+    /// which rows are stale against this list and re-derives each through <see cref="ForAccountAsync" />. An answer held
+    /// from before an account's last commit would re-derive a row under the posture the list has just moved past, stamp
+    /// it with the stamp the walk is leaving behind, and let the cursor step over it. An account the list leaves out is
+    /// held at the deployment's posture, which is what reading it alone would answer.
+    /// </remarks>
     public async Task<IReadOnlyList<MailAccountSensitiveContentPosture>> ReadAccountsBeyondDeploymentAsync(
         CancellationToken cancellationToken)
     {
         var declarations = await this.servedAccounts.ReadAccountsRequestingScanningAsync(cancellationToken);
+        var postures = declarations.ToDictionary(
+            static declared => declared.Account,
+            declared => this.PostureOf(this.Compose(declared.Request)));
+
+        this.HoldEveryAnswer(postures);
 
         return
         [
-            .. declarations
-                .Select(declared => new MailAccountSensitiveContentPosture(
-                    declared.Account,
-                    this.PostureOf(this.Compose(declared.Request))))
-                .Where(account => !ReferenceEquals(account.Posture, this.Deployment))
-                .OrderBy(account => account.Account.Value, StringComparer.Ordinal),
+            .. postures
+                .Where(entry => !ReferenceEquals(entry.Value, this.Deployment))
+                .Select(static entry => new MailAccountSensitiveContentPosture(entry.Key, entry.Value))
+                .OrderBy(static account => account.Account.Value, StringComparer.Ordinal),
         ];
     }
 
@@ -247,6 +257,22 @@ internal sealed class MailAccountSensitiveContentPostures : ISensitiveContentPos
     /// accounts than that within one interval sweeps on every miss, and a bounded cache with its own eviction is the
     /// upgrade if that ever shows up in a profile.
     /// </remarks>
+    /// <summary>Holds what one reading of every account answered, and the deployment's posture for every account it left out.</summary>
+    private void HoldEveryAnswer(Dictionary<MailAccountId, SensitiveContentPosture> postures)
+    {
+        var readAt = this.timeProvider.GetTimestamp();
+
+        foreach (var unlisted in this.byAccount.Keys.Where(account => !postures.ContainsKey(account)).ToArray())
+        {
+            this.byAccount[unlisted] = new HeldPosture(this.Deployment, readAt);
+        }
+
+        foreach (var (account, posture) in postures)
+        {
+            this.byAccount[account] = new HeldPosture(posture, readAt);
+        }
+    }
+
     private void LetGoOfExpiredAnswers()
     {
         if (this.byAccount.Count < HeldAccountsBeforeSweep)

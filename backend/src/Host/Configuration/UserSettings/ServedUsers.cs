@@ -55,7 +55,7 @@ internal sealed class ServedUsers(
     private DeploymentUserCount? count;
 
     /// <summary>The user an erasure is deciding about, who is served nothing until it ends.</summary>
-    private UserId? withheldUser;
+    private readonly Dictionary<UserId, int> withheld = [];
 
     /// <inheritdoc />
     /// <exception cref="InvalidOperationException">Thrown when the startup gate has not yet read how many users the deployment holds.</exception>
@@ -124,7 +124,7 @@ internal sealed class ServedUsers(
 
         lock (this.mutex)
         {
-            if (this.withheldUser == user)
+            if (this.withheld.ContainsKey(user))
             {
                 return null;
             }
@@ -153,7 +153,7 @@ internal sealed class ServedUsers(
     {
         lock (this.mutex)
         {
-            if (this.withheldUser == user || !this.held.TryGetValue(user, out var current))
+            if (this.withheld.ContainsKey(user) || !this.held.TryGetValue(user, out var current))
             {
                 return null;
             }
@@ -245,7 +245,9 @@ internal sealed class ServedUsers(
     /// them while the deletion runs: every reader of the assignment relation is answered through
     /// <see cref="WithholdingMailAccountAssignments" />, which gives a withheld user no mailbox although their rows are
     /// still there to be deleted, and this resolution answers nobody for them. But an erasure can still be refused, and a
-    /// person nothing erased must go on being served rather than disappear.
+    /// person nothing erased must go on being served rather than disappear. Each withholding is counted against its own
+    /// user, so two erasures deciding about two people at once each keep theirs withheld, and one disposed first never
+    /// serves the other again.
     /// </remarks>
     internal Withholding Withhold(UserId user)
     {
@@ -256,7 +258,7 @@ internal sealed class ServedUsers(
 
         lock (this.mutex)
         {
-            this.withheldUser = user;
+            this.withheld[user] = this.withheld.GetValueOrDefault(user) + 1;
         }
 
         return new Withholding(this, user);
@@ -269,8 +271,46 @@ internal sealed class ServedUsers(
     {
         lock (this.mutex)
         {
-            return this.withheldUser == user;
+            return this.withheld.ContainsKey(user);
         }
+    }
+
+    /// <summary>Answers which of a bounded set of users this replica serves, composing none of them.</summary>
+    /// <param name="users">The users asked about, at most <see cref="ComparedPerStatement" /> of them.</param>
+    /// <param name="cancellationToken">Cancels the reading.</param>
+    /// <returns>The users among <paramref name="users" /> this replica serves.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="users" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when more users are asked about than one statement compares.</exception>
+    /// <exception cref="UserSettingsUnreadableException">Thrown when the rows could not be read.</exception>
+    /// <remarks>
+    /// A held user is answered from what was composed, and a withheld one is served nothing. A user this replica holds
+    /// no answer for is served when their record exists, read for all of them in one statement, because composing each
+    /// would turn one listing into a read and a secret resolution per person; a record that turns out not to bind is
+    /// held back the first time somebody acts for them.
+    /// </remarks>
+    internal async Task<IReadOnlySet<UserId>> ReadServedAmongAsync(
+        IReadOnlyCollection<UserId> users,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(users);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(users.Count, ComparedPerStatement);
+
+        HashSet<UserId> served = [];
+        UserId[] unanswered;
+
+        lock (this.mutex)
+        {
+            served.UnionWith(users.Where(user =>
+                !this.withheld.ContainsKey(user) && this.held.TryGetValue(user, out var current) && current.Served is not null));
+            unanswered = [.. users.Where(user => !this.withheld.ContainsKey(user) && !this.held.ContainsKey(user))];
+        }
+
+        if (unanswered.Length > 0)
+        {
+            served.UnionWith((await documents.ReadVersionsAsync(unanswered, cancellationToken)).Select(static row => row.User));
+        }
+
+        return served;
     }
 
     /// <summary>Compares every held user against the version their record stands at, and recomposes or lets go of whoever moved.</summary>
@@ -279,7 +319,8 @@ internal sealed class ServedUsers(
     /// <exception cref="UserSettingsUnreadableException">Thrown when the rows could not be read, which leaves every held user as they were.</exception>
     /// <remarks>
     /// A user nobody has asked for over <see cref="IdleLifetime" /> is let go rather than compared, and a user whose row
-    /// is gone is let go together with what was reported about them. A user whose record moved is recomposed here rather
+    /// is gone is let go; either takes what was reported about them along, because a user nothing compares again would
+    /// otherwise leave their refusals listed after their record was repaired or erased. A user whose record moved is recomposed here rather
     /// than on their next request, because that is what keeps them served from the last version that bound while a newer
     /// one is refused.
     /// </remarks>
@@ -323,16 +364,27 @@ internal sealed class ServedUsers(
     private UserId[] LetGoOfIdleUsers()
     {
         var oldestKept = timeProvider.GetUtcNow() - IdleLifetime;
+        UserId[] idle;
+        UserId[] kept;
 
         lock (this.mutex)
         {
-            foreach (var idle in this.held.Where(entry => entry.Value.LastRead < oldestKept).Select(entry => entry.Key).ToArray())
+            idle = [.. this.held.Where(entry => entry.Value.LastRead < oldestKept).Select(entry => entry.Key)];
+
+            foreach (var user in idle)
             {
-                this.held.Remove(idle);
+                this.held.Remove(user);
             }
 
-            return [.. this.held.Keys];
+            kept = [.. this.held.Keys];
         }
+
+        foreach (var user in idle)
+        {
+            heldBackRecords.Cleared(user);
+        }
+
+        return kept;
     }
 
     /// <summary>Composes one user from their record and holds what it composed.</summary>
@@ -359,14 +411,14 @@ internal sealed class ServedUsers(
         {
             if (this.held.TryGetValue(user, out var current) && current.Version >= version)
             {
-                return this.withheldUser == user ? null : current.Served;
+                return this.withheld.ContainsKey(user) ? null : current.Served;
             }
 
             var served = composed ?? current?.Served;
 
             this.held[user] = new HeldUser(served, version) { LastRead = timeProvider.GetUtcNow() };
 
-            return this.withheldUser == user ? null : served;
+            return this.withheld.ContainsKey(user) ? null : served;
         }
     }
 
@@ -375,9 +427,13 @@ internal sealed class ServedUsers(
     {
         lock (this.mutex)
         {
-            if (this.withheldUser == user)
+            if (this.withheld.GetValueOrDefault(user) > 1)
             {
-                this.withheldUser = null;
+                this.withheld[user]--;
+            }
+            else
+            {
+                this.withheld.Remove(user);
             }
         }
 

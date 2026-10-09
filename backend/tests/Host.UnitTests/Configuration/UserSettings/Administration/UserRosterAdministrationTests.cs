@@ -73,14 +73,14 @@ public sealed class UserRosterAdministrationTests
         Assert.Equal(SyntheticUser.Deployment.Value, roster.ContinuesAfter);
     }
 
-    /// <summary>A user whose record could not be read is listed as unserved rather than failing the whole page.</summary>
+    /// <summary>Rows that could not be read list their users as unserved rather than failing the whole page.</summary>
     [Fact]
-    public async Task ReadRosterAsync_AUserWhoseRecordCannotBeRead_ListsThemAsUnserved()
+    public async Task ReadRosterAsync_RowsThatCannotBeRead_ListTheirUsersAsUnserved()
     {
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminRead);
         harness.Holding(new UserRecord(SyntheticUser.Another, "morgan"));
-        harness.UserRows.ReadAsync(SyntheticUser.Another, Arg.Any<CancellationToken>())
+        harness.UserRows.ReadVersionsAsync(Arg.Any<IReadOnlyCollection<UserId>>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new UserSettingsUnreadableException("The user records could not be read."));
 
         // Act
@@ -88,6 +88,31 @@ public sealed class UserRosterAdministrationTests
 
         // Assert
         Assert.False(Assert.Single(roster.Entries).Served);
+    }
+
+    /// <summary>
+    /// Whether a listed user is served is answered from what this replica holds and one reading of the page's rows, so a
+    /// page of a thousand people costs one statement rather than a read and a secret resolution for each of them.
+    /// </summary>
+    [Fact]
+    public async Task ReadRosterAsync_UsersThisReplicaHasNotComposed_AreListedFromTheirRowsWithoutReadingTheirRecords()
+    {
+        // Arrange
+        var harness = new RosterHarness(MailFathomPermission.AdminRead);
+        harness.Holding(
+            new UserRecord(SyntheticUser.Deployment, "alex"),
+            new UserRecord(SyntheticUser.Another, "morgan"));
+        harness.UserRows.ReadVersionsAsync(Arg.Any<IReadOnlyCollection<UserId>>(), Arg.Any<CancellationToken>())
+            .Returns([new UserSettingsDocumentVersion(SyntheticUser.Another, 1)]);
+
+        // Act
+        var roster = await harness.Roster.ReadRosterAsync(FirstPage, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            [("alex", false), ("morgan", true)],
+            roster.Entries.Select(entry => (entry.DisplayName, entry.Served)));
+        await harness.UserRows.DidNotReceive().ReadAsync(Arg.Any<UserId>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -798,6 +823,7 @@ public sealed class UserRosterAdministrationTests
             // No user's record is held unless a test states it, so "served" is a fact a test states rather than a default.
             this.UserRows = Substitute.For<IUserSettingsDocumentReader>();
             this.UserRows.ReadVersionsAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns([]);
+            this.UserRows.ReadVersionsAsync(Arg.Any<IReadOnlyCollection<UserId>>(), Arg.Any<CancellationToken>()).Returns([]);
             this.ServedUsers = ResolvedServedUsers.Over(this.UserRows);
 
             this.Roster = new UserRosterAdministration(

@@ -312,6 +312,23 @@ public sealed class ServedUsersTests
         Assert.Null(servedUsers.Peek(Alex));
     }
 
+    /// <summary>A user let go of is compared no more, so what was held back about them goes with them rather than staying listed after the record moved.</summary>
+    [Fact]
+    public async Task ConvergeAsync_AnIdleUserWhoseRecordWasHeldBack_StopsHoldingItBack()
+    {
+        // Arrange
+        this.records.Put(Record(Alex, UnbindableRecord, 3));
+        var servedUsers = this.Cache();
+        await servedUsers.ReadAsync(Alex, TestContext.Current.CancellationToken);
+        this.timeProvider.Advance(ServedUsers.IdleLifetime + TimeSpan.FromMinutes(1));
+
+        // Act
+        await servedUsers.ConvergeAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(this.heldBack.Current);
+    }
+
     /// <summary>Every read renews a user's hold, so work that keeps asking for them is never let go of halfway.</summary>
     [Fact]
     public async Task ConvergeAsync_AUserAskedForAgainWithinTheIdleLifetime_StaysHeld()
@@ -520,6 +537,30 @@ public sealed class ServedUsersTests
 
         // Assert
         Assert.Equal(Alex, servedUsers.Peek(Alex)?.User);
+    }
+
+    /// <summary>
+    /// Two administrators erasing two people at once each withhold their own, so the erasure decided first never serves
+    /// the other person again while that other deletion is still running.
+    /// </summary>
+    [Fact]
+    public async Task Withhold_TwoUsersWithheldAtOnce_ReleasingOneKeepsTheOtherWithheld()
+    {
+        // Arrange
+        this.records.Put(Record(Alex, EmptyRecord, 1));
+        this.records.Put(Record(Morgan, EmptyRecord, 1));
+        var servedUsers = this.Cache();
+        await servedUsers.ReadAsync(Alex, TestContext.Current.CancellationToken);
+        await servedUsers.ReadAsync(Morgan, TestContext.Current.CancellationToken);
+        using var alexWithheld = servedUsers.Withhold(Alex);
+
+        // Act
+        servedUsers.Withhold(Morgan).Dispose();
+
+        // Assert
+        Assert.True(servedUsers.IsWithheld(Alex));
+        Assert.Null(servedUsers.Peek(Alex));
+        Assert.Equal(Morgan, servedUsers.Peek(Morgan)?.User);
     }
 
     /// <summary>An erasure that committed leaves nobody to put back, whatever the withholding is disposed of after.</summary>

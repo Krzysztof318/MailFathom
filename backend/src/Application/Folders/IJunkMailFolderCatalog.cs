@@ -18,9 +18,8 @@ namespace MailFathom.Application.Folders;
 /// This is the answer about one folder, for classification, which holds one occurrence and asks about that
 /// occurrence's folder. A mailbox read narrows a table and needs the whole set as a value it can put into a predicate,
 /// which <see cref="IDeploymentMailFolders" /> answers as <see cref="MailFolderSelection.Junk" /> from the account
-/// records. This answer reads the settings its scope was prepared with until #2330 moves it, and those were read from
-/// the account records when the scope was prepared, so the two agree for every scope prepared after the account's last
-/// write committed.
+/// records. This answer reads the settings its scope was prepared with until #2330 moves it, so the two agree within
+/// one convergence interval of the account's last write committing, as <see cref="IDeploymentMailFolders" /> states.
 /// </para>
 /// </remarks>
 public interface IJunkMailFolderCatalog

@@ -174,9 +174,9 @@ internal sealed class PersistedServedMailAccounts(
     /// <para>
     /// It takes no ceiling on the number of accounts, for the reason <see cref="IMailAccountRecordStore.ReadSolelyAssignedAsync" />
     /// takes none: what asks is judging a rule set against every account it could reach, and a truncated answer would
-    /// pass a rule that names an account past the cut. What bounds it is the deployment — the accounts assigned to the
-    /// users it holds, at most <see cref="MailAccountRecord.MaximumAssignedPerUser" /> each — under that bound per
-    /// document.
+    /// pass a rule that names an account past the cut. Nothing bounds how many users a deployment records, so nothing
+    /// bounds how many accounts this answers with either; each document is still held to the bound above, and the read
+    /// runs once per configuration write or reload rather than per request.
     /// </para>
     /// </remarks>
     public async Task<IReadOnlyList<MailAccountRecord>> ReadServedRecordsAsync(CancellationToken cancellationToken)

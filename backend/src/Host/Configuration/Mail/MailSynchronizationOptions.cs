@@ -564,11 +564,11 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
         ? MachineAuthorshipProfile.Standard
         : MachineAuthorshipProfile.Disabled;
 
-    /// <summary>Gets every mailbox this deployment holds, which is every mailbox its users' records declare.</summary>
+    /// <summary>Gets every mailbox the users this snapshot was prepared for declare in their records.</summary>
     /// <remarks>
     /// A mailbox is one user's, so the set is the users' the snapshot was prepared for rather than a section's, and a
-    /// snapshot nobody serves from holds none. Every reader of the whole set asks here, so *which mailboxes exist* is one answer rather than
-    /// one per reader.
+    /// snapshot nobody serves from holds none. Every reader of the set asks here, so which mailboxes a piece of work can
+    /// reach is one answer rather than one per reader.
     /// </remarks>
     internal IEnumerable<MailSynchronizationAccountOptions> DeclaredAccounts =>
         this.DeclaredAccountsByOwner.SelectMany(static owned => owned);

@@ -108,6 +108,38 @@ public sealed class JobExecutor
     /// released even where its timeout had already elapsed: releasing work that would have failed only runs it again,
     /// while failing work a deployment interrupted records the operator's act against the job.
     /// </remarks>
+    /// <summary>Records an attempt whose handler could not be composed because what it reads failed to load first.</summary>
+    /// <param name="job">The job this attempt holds.</param>
+    /// <param name="failure">What preparing the attempt raised.</param>
+    /// <param name="stoppingToken">Reports that the host is stopping, in which case the job is released rather than failed.</param>
+    /// <returns>What the attempt did, in terms that carry no mail content.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="job" /> or <paramref name="failure" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// The failure is classified and recorded exactly as a handler's own would be, so a database that was briefly away
+    /// retries the job rather than failing the batch it was claimed in, and the exception is dropped once classified.
+    /// </remarks>
+    public async Task<JobExecutionResult> RecordFailedPreparationAsync(
+        LeasedJob job,
+        Exception failure,
+        CancellationToken stoppingToken)
+    {
+        ArgumentNullException.ThrowIfNull(job);
+        ArgumentNullException.ThrowIfNull(failure);
+
+        var startingTimestamp = this.timeProvider.GetTimestamp();
+
+        if (stoppingToken.IsCancellationRequested)
+        {
+            return await this.ReleaseAsync(job, startingTimestamp);
+        }
+
+        return await this.RecordFailureAsync(
+            job,
+            JobExecutionOutcome.HandlerFailed,
+            this.failureClassifier.Classify(failure),
+            startingTimestamp);
+    }
+
     [SuppressMessage(
         "Reliability",
         "CA2025:Ensure tasks using IDisposable instances complete before the instances are disposed",

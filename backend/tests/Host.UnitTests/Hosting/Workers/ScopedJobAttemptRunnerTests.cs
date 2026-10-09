@@ -8,9 +8,13 @@ using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.Execution;
 using MailFathom.Application.Jobs.Payloads;
 using MailFathom.Common.Observability;
+using MailFathom.Domain.Accounts;
+using MailFathom.Host.Configuration;
+using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Hosting.Workers;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Observability;
+using MailFathom.Infrastructure.Persistence.Users;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
@@ -25,6 +29,10 @@ public sealed class ScopedJobAttemptRunnerTests : IDisposable
     private const string EnqueuedTraceParent = $"00-{EnqueuedTraceId}-{EnqueuedSpanId}-01";
 
     private static readonly DateTimeOffset Noon = new(2026, 8, 13, 12, 0, 0, TimeSpan.Zero);
+
+    private static readonly MailAccountId Account = MailAccountId.Create("account-a");
+
+    private readonly IMailSynchronizationAccountSource accounts = Substitute.For<IMailSynchronizationAccountSource>();
 
     private readonly ConcurrentQueue<IJobStore> resolvedStores = new();
     private readonly ConcurrentQueue<string?> spansTheAttemptRanInside = new();
@@ -74,6 +82,52 @@ public sealed class ScopedJobAttemptRunnerTests : IDisposable
         // Assert
         Assert.Equal(job.JobId, result.JobId);
         Assert.Equal(JobExecutionOutcome.HandlerMissing, result.Outcome);
+    }
+
+    /// <summary>
+    /// The account's settings are read from the database before the job's handler is composed, so a read that fails is
+    /// this job's failure: it is recorded against the job rather than raised into the pass and the batch around it.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_AnAccountJobWhoseSettingsCannotBeRead_RecordsTheFailureAgainstTheJob()
+    {
+        // Arrange
+        this.accounts
+            .ReadRunSettingsAsync(Account, null, Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<MailSynchronizationOptions?>(new UserSettingsUnreadableException("unreadable")));
+        await using var services = this.ComposedServices();
+        var runner = new ScopedJobAttemptRunner(
+            services.GetRequiredService<IServiceScopeFactory>(),
+            new JobQueueTelemetry());
+        var job = LeasedJobFor(4) with { AccountId = Account };
+
+        // Act
+        var result = await runner.RunAsync(job, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(JobExecutionOutcome.HandlerFailed, result.Outcome);
+    }
+
+    /// <summary>A host already stopping reads nothing for the job, and the job goes back to the queue rather than waiting out its lease.</summary>
+    [Fact]
+    public async Task RunAsync_AnAccountJobWhileTheHostIsStopping_ReleasesItWithoutReadingItsSettings()
+    {
+        // Arrange
+        await using var services = this.ComposedServices();
+        var runner = new ScopedJobAttemptRunner(
+            services.GetRequiredService<IServiceScopeFactory>(),
+            new JobQueueTelemetry());
+        var job = LeasedJobFor(5) with { AccountId = Account };
+
+        // Act
+        var result = await runner.RunAsync(job, new CancellationToken(canceled: true));
+
+        // Assert
+        Assert.Equal(JobExecutionOutcome.ReleasedForShutdown, result.Outcome);
+        await this.accounts.DidNotReceive().ReadRunSettingsAsync(
+            Arg.Any<MailAccountId>(),
+            Arg.Any<MailSynchronizationOptions?>(),
+            Arg.Any<CancellationToken>());
     }
 
     /// <summary>Everything the attempt reaches for runs inside the attempt's own span, which is what makes it a parent.</summary>
@@ -221,6 +275,9 @@ public sealed class ScopedJobAttemptRunnerTests : IDisposable
                     Arg.Any<JobFailureRecord>(),
                     Arg.Any<CancellationToken>())
                 .Returns(true);
+            store
+                .ReleaseAsync(Arg.Any<JobId>(), Arg.Any<JobLeaseOwner>(), Arg.Any<CancellationToken>())
+                .Returns(true);
 
             this.resolvedStores.Enqueue(store);
             this.spansTheAttemptRanInside.Enqueue(Activity.Current?.OperationName);
@@ -228,7 +285,12 @@ public sealed class ScopedJobAttemptRunnerTests : IDisposable
             return store;
         });
         services.AddSingleton<TimeProvider>(new FakeTimeProvider(Noon));
-        services.AddSingleton(Substitute.For<IJobFailureClassifier>());
+        var classifier = Substitute.For<IJobFailureClassifier>();
+        classifier.Classify(Arg.Any<Exception>()).Returns(JobFailureRecord.HandlerMissing);
+        services.AddSingleton(classifier);
+        services.AddScoped(_ => new ScopedMailSynchronizationSettings(
+            Substitute.For<ISettingsSnapshot<MailSynchronizationOptions>>(),
+            this.accounts));
         services.AddSingleton(JobExecutionSettings.Create(
             batchSize: 5,
             TimeSpan.FromMinutes(5),

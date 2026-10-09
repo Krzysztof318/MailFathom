@@ -103,10 +103,10 @@ public sealed class MailboxScopeResolver
     /// folder MailFathom does not have, and it stays out by not being admitted. A tool that read the mailbox some other
     /// way would bypass this, which is why the two reads that reach an email by its identifier ask the folder mapping
     /// directly rather than building a scope. Until #2330 moves them, those two read the mapping in the settings the
-    /// work's own scope was prepared with while a scope reads the account's settings columns, and that mapping was read
-    /// from the account records when the work's scope was prepared, so the two agree for any work prepared after the
-    /// account's last write committed. Only work prepared before it can find a folder the write withheld readable by
-    /// identifier while it is already out of every scope.
+    /// work's own scope was prepared with while a scope reads the account's settings columns. A request's settings come
+    /// from the user this replica holds, which it brings to the committed version within one convergence interval — at
+    /// once on the replica that wrote it, and sooner wherever the announcement arrives — so for that long a folder a
+    /// write withheld can stay readable by identifier while it is already out of every scope.
     /// </para>
     /// <para>
     /// The junk folder is withheld here too, and it is a different kind of decision from the one above: an operator did
@@ -233,8 +233,8 @@ public sealed class MailboxScopeResolver
     /// same catalog here, so an account this caller is not assigned cannot be reachable by identifier while it is
     /// unreachable by name. The folder is a different matter until #2330 moves this read: it asks the mapping in the
     /// settings the work's own scope was prepared with, while a scope reads the account's settings columns, so a folder a
-    /// write withheld stays readable here only to work prepared before that write committed, while it is already out of
-    /// every scope. It is a mapping being asked to admit the folder
+    /// write withheld stays readable here for up to one convergence interval of the commit on every replica but the one
+    /// that wrote it, while it is already out of every scope. It is a mapping being asked to admit the folder
     /// rather than a list being asked whether it names it, so an email stored under an alias no mapping names is
     /// unreadable by the same answer that withholds a mapped folder. A caller that may not read the email is told it was
     /// not found rather than refused, for the reason an account this deployment no longer serves is: a refusal would

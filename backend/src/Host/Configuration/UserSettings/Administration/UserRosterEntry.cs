@@ -9,7 +9,7 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// <summary>One user a deployment holds, as an administrator reads a roster.</summary>
 /// <param name="User">The identifier every mail account and every stored message of theirs hangs on.</param>
 /// <param name="DisplayName">The label an operator tells this user apart by, which nothing resolves them by.</param>
-/// <param name="Served">Whether this process is serving them, which every user it holds is.</param>
+/// <param name="Served">Whether this process serves them, as far as what it holds and their row can tell.</param>
 /// <param name="EndpointAccess">Which of the two mail-serving endpoints they may be served on.</param>
 /// <remarks>
 /// <para>
@@ -18,8 +18,10 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// does first, and the identifier says nothing about who the person is.
 /// </para>
 /// <para>
-/// Every user this deployment holds is served, so <c>Served</c> answers whether their record composes on this process
-/// rather than whether anybody was left out of the deployment.
+/// Every user this deployment holds is served, so <c>Served</c> answers what this process does about them rather than
+/// whether anybody was left out of the deployment: a user it holds is served when their record bound, a user an erasure
+/// is deciding about is not, and a user it has not composed yet is served when their row exists. Composing every listed
+/// user to answer it would cost a read and a secret resolution per person.
 /// </para>
 /// </remarks>
 internal sealed record UserRosterEntry(

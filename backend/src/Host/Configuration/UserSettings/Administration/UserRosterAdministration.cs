@@ -86,21 +86,17 @@ internal sealed partial class UserRosterAdministration(
         authorization.RequirePermission(MailFathomPermission.AdminRead);
 
         var page = await directory.ReadUserPageAsync(query, cancellationToken);
-        var entries = new List<UserRosterEntry>(page.Entries.Count);
+        var served = await this.ReadServedAmongAsync([.. page.Entries.Select(static record => record.User)], cancellationToken);
 
-        // One read per entry rather than one for the page, because whether a user is served is whether their record
-        // composes, and that is the served-user cache's answer: a page is bounded, and every user on it is held
-        // afterwards for as long as somebody keeps asking.
-        foreach (var record in page.Entries)
-        {
-            entries.Add(new UserRosterEntry(
-                record.User,
-                record.DisplayName,
-                Served: await this.IsServedAsync(record.User, cancellationToken),
-                record.EndpointAccess));
-        }
-
-        return new AdministrativeListingPage<UserRosterEntry>(entries, page.ContinuesAfter);
+        return new AdministrativeListingPage<UserRosterEntry>(
+            [
+                .. page.Entries.Select(record => new UserRosterEntry(
+                    record.User,
+                    record.DisplayName,
+                    Served: served.Contains(record.User),
+                    record.EndpointAccess)),
+            ],
+            page.ContinuesAfter);
     }
 
     /// <summary>Records a user this deployment did not hold, under an identifier it mints.</summary>
@@ -137,8 +133,7 @@ internal sealed partial class UserRosterAdministration(
 
         if (outcome.IsProvisioned)
         {
-            await servedUsers.CountAsync(cancellationToken);
-            await announcements.AnnounceAsync();
+            await this.RecountAndAnnounceAsync(cancellationToken);
         }
 
         return outcome;
@@ -321,11 +316,47 @@ internal sealed partial class UserRosterAdministration(
 
         if (erased)
         {
-            await servedUsers.CountAsync(cancellationToken);
-            await announcements.AnnounceAsync();
+            await this.RecountAndAnnounceAsync(cancellationToken);
         }
 
         return new UserRosterErasureOutcome(erased, served);
+    }
+
+    /// <summary>Counts the users again after a committed write and tells every other replica about it, whatever the count does.</summary>
+    /// <remarks>
+    /// The write is committed whether or not the count can be read, so a count that fails leaves the caller answered with
+    /// what was committed rather than with a failure a retry would then refuse, and this replica's next comparison counts
+    /// the rows like every other replica's. The announcement goes out either way, so no replica waits a whole interval to
+    /// learn of a write that did happen.
+    /// </remarks>
+    private async Task RecountAndAnnounceAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await servedUsers.CountAsync(cancellationToken);
+        }
+        catch (UserSettingsUnreadableException)
+        {
+            // Answered by the remarks above: the committed write is the answer, and the next comparison recounts.
+        }
+        finally
+        {
+            await announcements.AnnounceAsync();
+        }
+    }
+
+    /// <summary>Reads which users of one page this replica serves, in one reading for the page.</summary>
+    /// <remarks>Rows that cannot be read answer nobody as served rather than failing the listing, since nothing can be served from them either.</remarks>
+    private async Task<IReadOnlySet<UserId>> ReadServedAmongAsync(UserId[] users, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await servedUsers.ReadServedAmongAsync(users, cancellationToken);
+        }
+        catch (UserSettingsUnreadableException)
+        {
+            return new HashSet<UserId>();
+        }
     }
 
     /// <summary>Reads whether this deployment serves one user, which is whether their record composes.</summary>
