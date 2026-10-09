@@ -52,10 +52,10 @@ internal static class RouteAuthorization
 
     /// <summary>The member a refusal carries, set to <see langword="true" />, when the caller holds the permission it names only over part of the deployment.</summary>
     /// <remarks>
-    /// An operation that is the deployment's alone is admitted only at the deployment scope, so an organization's or a
-    /// user's administrator holding its permission is refused all the same. Saying so keeps the operator from granting
-    /// a name the caller already holds: what is missing is the scope, and naming it discloses nothing about the
-    /// deployment, because the operation names no target to disclose.
+    /// A route that admits its permission only at the deployment scope refuses an organization's or a user's
+    /// administrator holding that permission all the same. Saying so keeps the operator from granting a name the caller
+    /// already holds: what is missing is the scope. Naming it discloses nothing about the deployment, because the answer
+    /// is the same whatever target the request names, so it says nothing about whether that target exists.
     /// </remarks>
     internal const string HeldBelowDeploymentExtension = "heldBelowDeployment";
 
@@ -223,7 +223,7 @@ internal static class RouteAuthorization
 
         var extensions = new Dictionary<string, object?>(StringComparer.Ordinal) { [PermissionExtension] = required.Name };
 
-        if (!context.RequestServices.GetRequiredService<AccessAuthorization>().PermitsOnlyBelowDeployment(required))
+        if (!context.RequestServices.GetRequiredService<AccessAuthorization>().HoldsOnlyBelowDeployment(required))
         {
             return TypedResults.Problem(
                 $"The credential is not granted '{required.Name}'.",
@@ -234,7 +234,7 @@ internal static class RouteAuthorization
         extensions[HeldBelowDeploymentExtension] = true;
 
         return TypedResults.Problem(
-            $"The credential holds '{required.Name}' only over an organization or a user, and this operation is the deployment's alone.",
+            $"The credential holds '{required.Name}' only over an organization or a user, and this operation is admitted only at the deployment scope.",
             statusCode: StatusCodes.Status403Forbidden,
             extensions: extensions);
     }

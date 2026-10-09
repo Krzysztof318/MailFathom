@@ -269,7 +269,7 @@ that [only the deployment scope grants](permissions.md#what-only-the-deployment-
 reads what they may administer before a refusal tells them:
 
 ```text
-It holds no administrative permission, so every operation but this one is refused.
+It holds no administrative permission over the whole deployment.
 Over organization 0198f0aa-… it holds mailfathom.admin.read, mailfathom.admin.operate. mailfathom.admin.spend reaches nothing there, because only the deployment scope grants it.
 ```
 
@@ -324,27 +324,31 @@ it out. Give the user an administrative role that holds it, provision a credenti
 an administrator who already holds it.
 ```
 
-A caller holding that permission only over an organization or a user is refused an operation that is the deployment's
-alone all the same, and the document says so, carrying `heldBelowDeployment` beside the name:
+A caller holding that permission only over an organization or a user is refused all the same wherever a route admits
+it only at the deployment scope — which is every route here — and the document says so, carrying
+`heldBelowDeployment` beside the name:
 
 ```json
 {
   "status": 403,
-  "detail": "The credential holds 'mailfathom.admin.read' only over an organization or a user, and this operation is the deployment's alone.",
+  "detail": "The credential holds 'mailfathom.admin.read' only over an organization or a user, and this operation is admitted only at the deployment scope.",
   "permission": "mailfathom.admin.read",
   "heldBelowDeployment": true
 }
 ```
 
-What is missing there is the scope rather than the name, so `mfctl` asks for that instead:
+What is missing there is the scope rather than the name, so `mfctl` says that instead, and does not prescribe a
+deployment-wide role for somebody meant to administer one organization:
 
 ```text
 The deployment refused the operation: this credential holds 'mailfathom.admin.read' only over an organization or a
-user, and the operation concerns the whole deployment. Assign the user a role holding it at the deployment scope, or
-sign in as an administrator who holds it there.
+user, and the deployment admits this operation only at the deployment scope. Sign in as an administrator who holds it
+there, or assign the user a role holding it at the deployment scope only if they should administer the whole
+deployment.
 ```
 
-Saying so discloses nothing about the deployment, because the operation names no target that could be somebody else's.
+Saying so discloses nothing about the deployment, because the answer is the same whatever target the request names, so
+it says nothing about whether that target exists.
 
 Naming the permission is a deliberate difference from the MCP surface, which discloses nothing to a refused caller.
 [ADR 0012](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0012-authorization-model-named-permissions-and-where-they-are-enforced.md)

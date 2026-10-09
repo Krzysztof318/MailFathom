@@ -206,9 +206,9 @@ published under — two, for the twelve commands that read something before they
 administrative permission at all is not an administrator, and every credential they hold is refused at sign-in. When a
 command is refused for want of one, it names the permission and says to give your user a role holding it, so the answer
 is to widen the user's roles rather than to replace the key. A role assigned over one organization or one user rather than
-the whole deployment is printed on a line of its own, and an operation that is the deployment's alone — the deployment's
-configuration, the embedding model, a content move, an organization's creation — is refused to it with a sentence saying
-the scope rather than the permission is what is missing.
+the whole deployment is printed on a line of its own. The endpoint admits every operation only at the deployment scope,
+so a command run under such a role is refused with a sentence saying the scope rather than the permission is what is
+missing.
 [What a credential may do](../operations/permissions.md) lists the names, what each covers, and which twelve commands need
 a second one; [what the endpoint serves](../operations/admin-endpoint.md#what-the-endpoint-serves) names the permission
 every route is published under.

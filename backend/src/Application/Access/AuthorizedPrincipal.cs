@@ -229,10 +229,10 @@ public sealed class AuthorizedPrincipal
     /// <param name="permission">The capability being asked about.</param>
     /// <returns><see langword="true" /> when the capability is held at a narrower scope and not at the deployment's.</returns>
     /// <remarks>
-    /// This is what tells a refusal of an operation that is the deployment's alone apart from a refusal for want of the
-    /// grant: the first is answered naming the permission and that it is held only below the deployment, because nothing
-    /// about the deployment is disclosed by saying so. A mail capability is never held this way, since its scope is
-    /// never read.
+    /// This is what tells a refusal of an operation admitted only at the deployment scope apart from a refusal for want
+    /// of the grant: the first is answered naming the permission and that it is held only below the deployment, because
+    /// that answer does not depend on any target the request names. A mail capability is never held this way, since its
+    /// scope is never read.
     /// </remarks>
     public bool HoldsOnlyBelowDeployment(MailFathomPermission permission) =>
         permission.Surface != ProtectedSurface.Mail

@@ -451,6 +451,8 @@ public sealed class LoginCommandTests : IDisposable
             this.console.Lines,
             line => line.Contains("Over organization 0198f0c4-0000-7000-8000-000000000001 it holds mailfathom.admin.read.", StringComparison.Ordinal)
                 && line.Contains("mailfathom.admin.spend reaches nothing there", StringComparison.Ordinal));
+        Assert.Contains(this.console.Lines, line => line == "It holds no administrative permission over the whole deployment.");
+        Assert.DoesNotContain(this.console.Lines, line => line.Contains("every operation but this one", StringComparison.Ordinal));
     }
 
     /// <summary>

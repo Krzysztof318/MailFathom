@@ -242,7 +242,7 @@ public sealed class JobCommandTests : IDisposable
         using var deployment = FakeJobDeployment.Serving(
             deadLetters: (
                 HttpStatusCode.Forbidden,
-                """{"detail":"The credential holds 'mailfathom.admin.read' only over an organization or a user, and this operation is the deployment's alone.","permission":"mailfathom.admin.read","heldBelowDeployment":true}"""));
+                """{"detail":"The credential holds 'mailfathom.admin.read' only over an organization or a user, and this operation is admitted only at the deployment scope.","permission":"mailfathom.admin.read","heldBelowDeployment":true}"""));
 
         // Act
         var exitCode = await this.RunAsync(deployment, "jobs", "dead-letters", "--endpoint", Endpoint);

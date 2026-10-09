@@ -61,9 +61,11 @@ internal static class StatusCommand
         context.Console.WriteLine(
             $"'{profile.Name}' ({profile.Endpoint.GetLeftPart(UriPartial.Authority)}) accepts the stored credential as '{session.Credential}' (MailFathom {session.Version}).");
 
-        context.Console.WriteLine(DescribeGrant(session.Permissions));
+        var narrowerScopes = (session.Scopes ?? []).Where(scope => scope.Target is not null).ToArray();
 
-        foreach (var scope in (session.Scopes ?? []).Where(scope => scope.Target is not null))
+        context.Console.WriteLine(DescribeGrant(session.Permissions, narrowerScopes.Length > 0));
+
+        foreach (var scope in narrowerScopes)
         {
             context.Console.WriteLine(DescribeScope(scope));
         }
@@ -80,11 +82,14 @@ internal static class StatusCommand
     /// <remarks>
     /// Reported here rather than left to be discovered one refusal at a time: an operator who has just signed in wants
     /// to know which commands are theirs before they run one. A credential granted nothing is the case worth stating
-    /// plainly, because it is how one is retired without its entry being deleted and its sign-in still succeeds.
+    /// plainly, because it is how one is retired without its entry being deleted and its sign-in still succeeds. A
+    /// credential holding names only over an organization or a user is told what it lacks over the whole deployment,
+    /// and the lines naming those scopes follow.
     /// </remarks>
-    private static string DescribeGrant(IReadOnlyList<string>? permissions) => permissions switch
+    private static string DescribeGrant(IReadOnlyList<string>? permissions, bool holdsNarrowerScopes) => permissions switch
     {
         null => "The deployment did not state what the credential may do.",
+        { Count: 0 } when holdsNarrowerScopes => "It holds no administrative permission over the whole deployment.",
         { Count: 0 } => "It holds no administrative permission, so every operation but this one is refused.",
         _ => $"It holds {string.Join(", ", permissions)}.",
     };

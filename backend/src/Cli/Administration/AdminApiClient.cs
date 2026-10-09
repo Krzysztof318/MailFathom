@@ -2499,7 +2499,7 @@ internal sealed class AdminApiClient
 
         if (problem is { Permission: { Length: > 0 } scopedPermission, HeldBelowDeployment: true })
         {
-            return $"The deployment refused the operation: this credential holds '{scopedPermission}' only over an organization or a user, and the operation concerns the whole deployment. Assign the user a role holding it at the deployment scope, or sign in as an administrator who holds it there.";
+            return $"The deployment refused the operation: this credential holds '{scopedPermission}' only over an organization or a user, and the deployment admits this operation only at the deployment scope. Sign in as an administrator who holds it there, or assign the user a role holding it at the deployment scope only if they should administer the whole deployment.";
         }
 
         if (problem?.Permission is { Length: > 0 } permission)
