@@ -404,15 +404,7 @@ internal sealed class PersistedMailAccountRecordStore(
             cancellationToken);
     }
 
-    /// <summary>Reads the organizations of an account and a user under their locks, and reports them where the two differ.</summary>
-    /// <returns>The two organizations where an assignment between them would straddle both, or <see langword="null" /> where they agree or either row is gone — which the insert after this settles.</returns>
-    /// <remarks>
-    /// The account is held against a move of its own and the user against a move of theirs until this transaction
-    /// commits, so the organizations compared here are the ones the assignment is written under: a move that commits
-    /// first is read here, and a move that comes after waits and then counts this assignment. The account is taken
-    /// first and shared, which is the order a save takes it in, so two assignments of one account never wait on each
-    /// other.
-    /// </remarks>
+    /// <summary>Tells why an assignment inserted nothing: the user already holds it, the account is assigned to as many users as it may be, or a row is gone.</summary>
     private static async Task<MailAccountWriteResult> WhyNotAssignedAsync(
         MailFathomDbContext context,
         Guid accountId,
@@ -431,6 +423,16 @@ internal sealed class PersistedMailAccountRecordStore(
             : MailAccountWriteResult.NotFound;
     }
 
+    /// <summary>Reads the organizations of an account and a user under their locks, and reports them where the two differ.</summary>
+    /// <returns>The two organizations where an assignment between them would straddle both, or <see langword="null" /> where they agree or either row is gone — which the insert after this settles.</returns>
+    /// <remarks>
+    /// The account is held against a move of its own and the user against a move of theirs until this transaction
+    /// commits, so the organizations compared here are the ones the assignment is written under: a move that commits
+    /// first is read here, and a move that comes after waits and then counts this assignment. The account is taken
+    /// first, which is the order a save takes it in, and exclusively against another assignment, so two assignments of
+    /// one account count its users one after the other and neither takes it past
+    /// <see cref="MailAccountRecord.MaximumUsersAssigned" />.
+    /// </remarks>
     private static async Task<StraddledOrganizations?> StraddledOrganizationsAsync(
         MailFathomDbContext context,
         Guid accountId,

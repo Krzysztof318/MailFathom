@@ -60,7 +60,7 @@ internal sealed class MailAccountSensitiveContentPostures : ISensitiveContentPos
     /// <summary>The answer about each account read within <see cref="Freshness" />, and the moment it was read.</summary>
     private readonly ConcurrentDictionary<MailAccountId, HeldPosture> byAccount = new();
 
-    /// <summary>The moment the latest reading of every account began; an answer whose read did not begin after it is read again rather than reused.</summary>
+    /// <summary>The moment the latest reading of every account finished; an answer whose read did not begin after it is read again rather than reused.</summary>
     private long everyAccountReadFrom;
 
     /// <summary>Initializes the postures of a deployment, whether or not anybody's mail is scanned.</summary>
@@ -124,20 +124,20 @@ internal sealed class MailAccountSensitiveContentPostures : ISensitiveContentPos
 
     /// <inheritdoc />
     /// <remarks>
-    /// The reading also retires every answer about one account read before it began, because a rebuild walks with
-    /// both: it decides which rows are stale against this list and re-derives each through
+    /// The reading also retires every answer about one account whose read began before it finished, because a rebuild
+    /// walks with both: it decides which rows are stale against this list and re-derives each through
     /// <see cref="ForAccountAsync" />. An answer held from before an account's last commit would re-derive a row under
     /// the posture the list has just moved past, stamp it with the stamp the walk is leaving behind, and let the cursor
-    /// step over it — and so would a read of one account that began before the list's and lands after it. Each such
-    /// account is read again the first time the walk asks, so the cache still holds only the accounts this replica works
-    /// on.
+    /// step over it — and so would a read of one account that began while the list was being read, whose statement may
+    /// have reached the database before a commit the list's statement saw. Each such account is read again the first
+    /// time the walk asks, so the cache still holds only the accounts this replica works on.
     /// </remarks>
     public async Task<IReadOnlyList<MailAccountSensitiveContentPosture>> ReadAccountsBeyondDeploymentAsync(
         CancellationToken cancellationToken)
     {
-        Interlocked.Exchange(ref this.everyAccountReadFrom, this.timeProvider.GetTimestamp());
-
         var declarations = await this.servedAccounts.ReadAccountsRequestingScanningAsync(cancellationToken);
+
+        Interlocked.Exchange(ref this.everyAccountReadFrom, this.timeProvider.GetTimestamp());
 
         return
         [
