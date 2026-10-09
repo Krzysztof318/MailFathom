@@ -108,9 +108,9 @@ internal sealed class BasicAuthenticationHandler : AuthenticationHandler<BasicAu
             return AuthenticateResult.Fail("The request presented no usable credential.");
         }
 
-        if (!this.Options.Surface.Admits(admitted.EndpointAccess))
+        if (await UserCredentialAdmission.FindRefusalAsync(this.Context, this.Options.Surface, admitted) is { } refusal)
         {
-            return AuthenticateResult.Fail("The credential's user is kept off this endpoint.");
+            return AuthenticateResult.Fail(refusal);
         }
 
         var identity = TransportGrant.IdentityFor(
@@ -118,7 +118,7 @@ internal sealed class BasicAuthenticationHandler : AuthenticationHandler<BasicAu
             BasicAuthentication.CredentialIdClaimType,
             BasicAuthentication.RoleClaimType,
             this.Options.Surface.BasicSchemeName,
-            admitted.Permissions);
+            UserCredentialAdmission.PermissionsPresentedOn(this.Options.Surface, admitted));
 
         // The user is what separates this method from every other one: the credential named a person, so the principal
         // carries them rather than leaving the surface to answer for whose mail the request acts on. The credential

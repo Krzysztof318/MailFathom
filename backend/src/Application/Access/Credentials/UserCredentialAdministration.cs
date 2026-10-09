@@ -126,6 +126,7 @@ public sealed class UserCredentialAdministration
     /// <param name="username">The canonical username it will be resolved by.</param>
     /// <param name="password">The plaintext, read within this call and never retained.</param>
     /// <param name="permissions">The names the credential narrows its user's grant to, or <see langword="null" /> to name none and hold what the user holds.</param>
+    /// <param name="reach">On which endpoints, and from which networks, the credential may be presented.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>What the act did, or why it did nothing.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody, <paramref name="username" /> is the unspecified struct default, the password breaks <see cref="UserPasswordPolicy" />, or the grant names something a user-facing credential cannot hold.</exception>
@@ -135,6 +136,7 @@ public sealed class UserCredentialAdministration
         UserCredentialUsername username,
         ReadOnlyMemory<char> password,
         IReadOnlyList<MailFathomPermission>? permissions,
+        UserCredentialReach reach,
         CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.AdminCredentialsWrite);
@@ -148,6 +150,7 @@ public sealed class UserCredentialAdministration
             UserCredentialLookup.ForUsername(username),
             passwordHash,
             grant,
+            reach,
             mintedKey: null,
             cancellationToken);
     }
@@ -155,6 +158,7 @@ public sealed class UserCredentialAdministration
     /// <summary>Draws a key one of a user's clients presents, and provisions the credential it resolves.</summary>
     /// <param name="user">The user the credential authenticates.</param>
     /// <param name="permissions">The names the credential narrows its user's grant to, or <see langword="null" /> to name none and hold what the user holds.</param>
+    /// <param name="reach">On which endpoints, and from which networks, the credential may be presented.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>What the act did, and the key to report where it was performed.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody or the grant names something a user-facing credential cannot hold.</exception>
@@ -163,6 +167,7 @@ public sealed class UserCredentialAdministration
     public Task<UserCredentialProvisioning> ProvisionApiKeyAsync(
         UserId user,
         IReadOnlyList<MailFathomPermission>? permissions,
+        UserCredentialReach reach,
         CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.AdminCredentialsWrite);
@@ -176,6 +181,7 @@ public sealed class UserCredentialAdministration
             minted.Lookup,
             material: null,
             grant,
+            reach,
             minted.Key,
             cancellationToken);
     }
@@ -184,6 +190,7 @@ public sealed class UserCredentialAdministration
     /// <param name="user">The user the credential authenticates.</param>
     /// <param name="writtenPublicKey">The client's public key as the operator supplied it.</param>
     /// <param name="permissions">The names the credential narrows its user's grant to, or <see langword="null" /> to name none and hold what the user holds.</param>
+    /// <param name="reach">On which endpoints, and from which networks, the credential may be presented.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>What the act did, and the fingerprint the client's assertions must name.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody, the written key is not one this deployment accepts, or the grant names something a user-facing credential cannot hold.</exception>
@@ -192,6 +199,7 @@ public sealed class UserCredentialAdministration
         UserId user,
         string? writtenPublicKey,
         IReadOnlyList<MailFathomPermission>? permissions,
+        UserCredentialReach reach,
         CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.AdminCredentialsWrite);
@@ -205,6 +213,7 @@ public sealed class UserCredentialAdministration
             publicKey.Lookup,
             publicKey.Material,
             grant,
+            reach,
             mintedKey: null,
             cancellationToken);
     }
@@ -214,6 +223,7 @@ public sealed class UserCredentialAdministration
     /// <param name="issuer">The issuer exactly as it is configured and as a token carries it.</param>
     /// <param name="subject">The subject claim the server issues for that person.</param>
     /// <param name="permissions">The names the mapping narrows its user's grant to, or <see langword="null" /> to name none and hold what the user holds.</param>
+    /// <param name="reach">On which endpoints, and from which networks, the credential may be presented.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>What the act did, or why it did nothing.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody, the pair cannot compose a lookup, or the grant names something a user-facing credential cannot hold.</exception>
@@ -224,6 +234,7 @@ public sealed class UserCredentialAdministration
         string? issuer,
         string? subject,
         IReadOnlyList<MailFathomPermission>? permissions,
+        UserCredentialReach reach,
         CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.AdminCredentialsWrite);
@@ -244,6 +255,7 @@ public sealed class UserCredentialAdministration
             lookup,
             material: null,
             grant,
+            reach,
             mintedKey: null,
             cancellationToken);
     }
@@ -471,9 +483,12 @@ public sealed class UserCredentialAdministration
         UserCredentialLookup lookup,
         string? material,
         IReadOnlyList<MailFathomPermission>? permissions,
+        UserCredentialReach reach,
         string? mintedKey,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(reach);
+
         var provisionedAt = this.timeProvider.GetUtcNow();
         var credentialId = Guid.CreateVersion7(provisionedAt);
 
@@ -484,6 +499,7 @@ public sealed class UserCredentialAdministration
             lookup,
             material,
             permissions,
+            reach,
             cancellationToken);
 
         await this.RecordAsync(outcome, UserCredentialAct.Provisioned, credentialId, user, method, cancellationToken);

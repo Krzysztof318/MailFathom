@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Security.Endpoints;
@@ -126,17 +127,17 @@ public sealed class AdminTransportSecurityExtensionsTests
             Resource = $"https://mail.example.test:8090{AdminEndpointOptions.RoutePrefix}",
         };
 
-        var authorizationServer = new AuthorizationServerOptions
+        oauthSettings.AuthorizationServers.Add(new AuthorizationServerOptions
         {
             Name = "workforce",
             Issuer = "https://sso.example.test",
-        };
-        authorizationServer.AuthorizedSubjects.Add("alice-subject");
-        oauthSettings.AuthorizationServers.Add(authorizationServer);
+        });
 
-        var administrator = new AdministratorOptions { Name = "alice" };
-        administrator.Credentials.Add(new AdministratorCredentialOptions { OAuth = oauthSettings });
-        endpointSettings.Administrators.Add(administrator);
+        endpointSettings.Authentication.Add(new UserFacingAuthenticationOptions
+        {
+            Method = UserCredentialMethod.OAuthSubject.Name,
+            OAuth = oauthSettings,
+        });
 
         services.AddAdminTransportSecurity(endpointSettings);
 

@@ -92,7 +92,7 @@ readonly admin_origin="http://$loopback:$admin_endpoint_port"
 readonly health_origin="http://$loopback:$health_endpoint_port"
 
 # Fabricated, and none of them outlives the run: the credential is provisioned into a database that is deleted with its
-# container, and the administrative key authenticates one process on loopback.
+# container, and the default administrator's password authenticates one process on loopback.
 # A mail account is a record in the database, and MailFathom persists a reference to a secret rather than the secret:
 # `plaintext:` names no place the material is kept, so it is refused into that column however fabricated the password
 # is. The environment block is the place this run keeps it — the scheme the documentation reserves for exactly this,
@@ -101,8 +101,9 @@ readonly mailbox_password_variable='MAILFATHOM_END_TO_END_MAILBOX_PASSWORD'
 
 readonly client_username='end-to-end'
 readonly client_password='end-to-end-password'
-readonly admin_api_key_name='end-to-end-admin'
-readonly admin_api_key='end-to-end-only-admin-api-key'
+# The default administrator this deployment records on its first start, signed in with the password the run gives it.
+readonly admin_password='end-to-end-only-admin-password'
+readonly admin_authorization="Basic $(printf 'admin:%s' "$admin_password" | base64 -w0)"
 
 readonly corpus_archive='backend/tools/SyntheticMail/corpora/office-en.zip'
 
@@ -331,9 +332,8 @@ env --chdir="$host_directory" \
   AdminEndpoint__Enabled='true' \
   AdminEndpoint__BindAddress="$loopback" \
   AdminEndpoint__Port="$admin_endpoint_port" \
-  AdminEndpoint__Administrators__0__Name="$admin_api_key_name" \
-  AdminEndpoint__Administrators__0__Credentials__0__ApiKey__Name="$admin_api_key_name" \
-  AdminEndpoint__Administrators__0__Credentials__0__ApiKey__SecretReference="plaintext:$admin_api_key" \
+  AdminEndpoint__Authentication__0__Method='password' \
+  MAILFATHOM_ADMIN_PASSWORD="$admin_password" \
   "$mailbox_password_variable"="$mailbox_password" \
   HealthEndpoints__BindAddress="$loopback" \
   HealthEndpoints__Port="$health_endpoint_port" \
@@ -352,7 +352,7 @@ step 'recording the mailbox'
 # and their mailbox are served without a restart.
 served_user="$(
   curl --fail --silent --show-error \
-    --header "Authorization: Bearer $admin_api_key" \
+    --header "Authorization: $admin_authorization" \
     --header 'Content-Type: application/json' \
     --data '{"displayName":"user"}' \
     "$admin_origin/api/admin/users" \
@@ -369,7 +369,7 @@ served_user="$(
 # composes the next attempt from. So the outcome is read rather than the status code.
 mailbox_declaration="$(
   curl --fail --silent --show-error \
-    --header "Authorization: Bearer $admin_api_key" \
+    --header "Authorization: $admin_authorization" \
     --header 'Content-Type: application/json' \
     --data "$(
       jq --null-input \
@@ -414,7 +414,7 @@ step 'provisioning the client credential'
 # Through the administrative API rather than through the database, so the credential this run signs in with was created
 # by the same route an operator creates one — the same password policy, the same hashing, the same audit record.
 curl --fail --silent --show-error --output /dev/null \
-  --header "Authorization: Bearer $admin_api_key" \
+  --header "Authorization: $admin_authorization" \
   --header 'Content-Type: application/json' \
   --data "$(
     jq --null-input --arg username "$client_username" --arg password "$client_password" \

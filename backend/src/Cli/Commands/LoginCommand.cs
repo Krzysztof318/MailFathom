@@ -5,6 +5,7 @@
 using System.CommandLine;
 using MailFathom.Cli.Administration;
 using MailFathom.Cli.Authorization;
+using MailFathom.Cli.Commands.Users;
 using MailFathom.Cli.Credentials;
 using MailFathom.Cli.Transport;
 using MailFathom.Common.OAuth;
@@ -43,6 +44,9 @@ internal static class LoginCommand
     /// </remarks>
     private const string DefaultRedirectAddress = "http://127.0.0.1:8765/";
 
+    /// <summary>The username a deployment's first start records its default administrator under.</summary>
+    private const string DefaultAdministratorLogin = "admin";
+
     /// <summary>Names how the operator produces the credential this deployment will accept.</summary>
     internal enum SignInMode
     {
@@ -57,6 +61,9 @@ internal static class LoginCommand
 
         /// <summary>A private key on this machine, which every command signs a short-lived assertion with rather than presenting a stored credential.</summary>
         KeyPair = 3,
+
+        /// <summary>A username and a password read from standard input, which is how the default administrator signs in first.</summary>
+        Password = 4,
     }
 
     /// <summary>Builds the <c>login</c> command.</summary>
@@ -72,8 +79,14 @@ internal static class LoginCommand
 
         Option<SignInMode> modeOption = new("--mode")
         {
-            Description = "How to sign in. Key reads an API key or an access token from standard input; key-pair signs each request with a private key on this machine; interactive opens a browser here and catches the redirect; device prints a code to enter on another device.",
+            Description = "How to sign in. Key reads an API key or an access token from standard input; key-pair signs each request with a private key on this machine; password reads a password for --username; interactive opens a browser here and catches the redirect; device prints a code to enter on another device.",
             DefaultValueFactory = _ => SignInMode.Key,
+        };
+
+        Option<string> usernameOption = new("--username")
+        {
+            Description = "Who the password mode signs in as: a username, or SHORTNAME/username for a member of an organization. The deployment's first start records 'admin', which is the default.",
+            DefaultValueFactory = _ => DefaultAdministratorLogin,
         };
 
         Option<string> privateKeyOption = new("--private-key")
@@ -114,6 +127,7 @@ internal static class LoginCommand
             endpointOption,
             nameOption,
             modeOption,
+            usernameOption,
             privateKeyOption,
             clientIdOption,
             issuerOption,
@@ -128,6 +142,7 @@ internal static class LoginCommand
             result.GetValue(nameOption),
             new SignInRequest(
                 result.GetValue(modeOption),
+                result.GetValue(usernameOption),
                 result.GetValue(privateKeyOption),
                 result.GetValue(clientIdOption),
                 result.GetValue(issuerOption),
@@ -234,7 +249,7 @@ internal static class LoginCommand
         _ => string.Empty,
     };
 
-    /// <summary>Produces the credential this sign-in verifies, in whichever of the four ways the operator asked for.</summary>
+    /// <summary>Produces the credential this sign-in verifies, in whichever of the five ways the operator asked for.</summary>
     /// <remarks>
     /// A key-pair sign-in returns both a credential to verify with and the key that produced it, because the two answer
     /// different questions: one proves the deployment accepts this client now, the other is what every later command
@@ -253,6 +268,16 @@ internal static class LoginCommand
         if (request.Mode == SignInMode.Key)
         {
             return (ReadPresentedCredential(context), null, null);
+        }
+
+        if (request.Mode == SignInMode.Password)
+        {
+            var login = request.Username is { Length: > 0 } written ? written : DefaultAdministratorLogin;
+
+            return (
+                PasswordCredential.Compose(login, UserCredentialOutput.ReadPassword(context, $"Password for '{login}': ")),
+                null,
+                null);
         }
 
         if (request.Mode == SignInMode.KeyPair)
@@ -493,6 +518,7 @@ internal static class LoginCommand
 
     /// <summary>What the operator asked of one sign-in, beyond which deployment it is against.</summary>
     /// <param name="Mode">How the credential is produced.</param>
+    /// <param name="Username">Who a password sign-in signs in as, absent to sign in as the default administrator.</param>
     /// <param name="PrivateKeyPath">The key a key-pair sign-in signs with, absent from every other mode.</param>
     /// <param name="ClientId">The client identifier for an OAuth sign-in, absent from a presented credential.</param>
     /// <param name="Issuer">Which authorization server to use, absent unless the deployment accepts several.</param>
@@ -501,6 +527,7 @@ internal static class LoginCommand
     /// <param name="AllowClearText">Whether the invocation stated up front that an unprotected connection to this deployment is acceptable.</param>
     private sealed record SignInRequest(
         SignInMode Mode,
+        string? Username,
         string? PrivateKeyPath,
         string? ClientId,
         string? Issuer,

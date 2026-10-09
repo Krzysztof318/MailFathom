@@ -64,9 +64,9 @@ internal sealed class UserClientAssertionAuthenticationHandler
             return AuthenticateResult.Fail("The request presented no usable credential.");
         }
 
-        if (!this.Options.Surface.Admits(admitted.EndpointAccess))
+        if (await UserCredentialAdmission.FindRefusalAsync(this.Context, this.Options.Surface, admitted) is { } refusal)
         {
-            return AuthenticateResult.Fail("The credential's user is kept off this endpoint.");
+            return AuthenticateResult.Fail(refusal);
         }
 
         var identity = TransportGrant.IdentityFor(
@@ -74,7 +74,7 @@ internal sealed class UserClientAssertionAuthenticationHandler
             ClientAssertionAuthentication.KeyNameClaimType,
             ClientAssertionAuthentication.RoleClaimType,
             this.Options.Surface.ClientAssertionSchemeName,
-            admitted.Permissions);
+            UserCredentialAdmission.PermissionsPresentedOn(this.Options.Surface, admitted));
 
         // The user is what the registered key resolved, so the principal carries them rather than leaving the surface
         // to answer for whose mail the request acts on. The credential travels beside them because a session minted

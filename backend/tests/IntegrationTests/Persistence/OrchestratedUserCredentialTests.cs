@@ -68,6 +68,7 @@ public sealed class OrchestratedUserCredentialTests(MailFathomOrchestrationFixtu
                 lookup,
                 StoredHash,
                 WholeMailSurface,
+                UserCredentialReach.Default,
                 token),
             cancellationToken);
 
@@ -135,6 +136,7 @@ public sealed class OrchestratedUserCredentialTests(MailFathomOrchestrationFixtu
                 lookup,
                 StoredHash,
                 WholeMailSurface,
+                UserCredentialReach.Default,
                 token),
             cancellationToken);
 
@@ -166,6 +168,7 @@ public sealed class OrchestratedUserCredentialTests(MailFathomOrchestrationFixtu
                 shared,
                 StoredHash,
                 WholeMailSurface,
+                UserCredentialReach.Default,
                 token),
             cancellationToken);
 
@@ -199,6 +202,7 @@ public sealed class OrchestratedUserCredentialTests(MailFathomOrchestrationFixtu
                 lookup,
                 StoredHash,
                 WholeMailSurface,
+                UserCredentialReach.Default,
                 token),
             cancellationToken);
 
@@ -245,6 +249,7 @@ public sealed class OrchestratedUserCredentialTests(MailFathomOrchestrationFixtu
                             UserCredentialUsername.Create($"orchestrated-ceiling-race-{contenderId:N}-{ordinal}")),
                         StoredHash,
                         WholeMailSurface,
+                        UserCredentialReach.Default,
                         inner),
                     token),
                 cancellationToken);
@@ -547,6 +552,7 @@ public sealed class OrchestratedUserCredentialTests(MailFathomOrchestrationFixtu
                 lookup,
                 method.StoresMaterial ? StoredHash : null,
                 WholeMailSurface,
+                UserCredentialReach.Default,
                 token),
             cancellationToken);
 
@@ -618,6 +624,7 @@ public sealed class OrchestratedUserCredentialTests(MailFathomOrchestrationFixtu
                 lookup,
                 method.StoresMaterial ? StoredHash : null,
                 WholeMailSurface,
+                UserCredentialReach.Default,
                 token),
             cancellationToken);
 

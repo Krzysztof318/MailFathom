@@ -78,9 +78,16 @@ internal sealed class ClientSessionTokenAuthenticationHandler
 
         // Read beside the session rather than stored on it, so a user switched off this surface after they signed in
         // is refused on their next request, with the answer a session nobody holds receives.
-        if (!this.Options.Surface.Admits(admitted.EndpointAccess))
+        if (!this.Options.Surface.Admits(admitted))
         {
             return AuthenticateResult.Fail("The session's user is kept off this endpoint.");
+        }
+
+        // A network restriction holds on every request the session admits rather than only on the exchange that minted
+        // it, or a session would carry a restricted credential to any address.
+        if (!admitted.Reach.AdmitsSource(this.Context.Connection.RemoteIpAddress))
+        {
+            return AuthenticateResult.Fail("The session's credential is not accepted from the network this request arrived from.");
         }
 
         var identity = TransportGrant.IdentityFor(

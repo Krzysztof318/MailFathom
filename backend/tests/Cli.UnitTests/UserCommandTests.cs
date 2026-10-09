@@ -267,6 +267,35 @@ public sealed class UserCommandTests : IDisposable
         Assert.Single(deployment.UserRequestsTo(HttpMethod.Get, AdminEndpointRoutes.UserRecordPath(User)));
     }
 
+    /// <summary>The default administrator is on every roster with both endpoints off, so it neither resolves an invocation naming nobody nor makes the one served user ambiguous.</summary>
+    [Fact]
+    public async Task Show_ADeploymentHoldingTheDefaultAdministratorBesideOneServedUser_ResolvesTheServedUser()
+    {
+        // Arrange
+        using var deployment = FakeUserRecordDeployment.HoldingServedOn((AnotherUser, false, false), (User, true, false));
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "user", "show", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Single(deployment.UserRequestsTo(HttpMethod.Get, AdminEndpointRoutes.UserRecordPath(User)));
+    }
+
+    [Fact]
+    public async Task Show_ADeploymentHoldingOnlyTheDefaultAdministrator_RefusesRatherThanActingForIt()
+    {
+        // Arrange
+        using var deployment = FakeUserRecordDeployment.HoldingServedOn((User, false, false));
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "user", "show", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Failure, exitCode);
+        Assert.Empty(deployment.UserRequestsTo(HttpMethod.Get, AdminEndpointRoutes.UserRecordPath(User)));
+    }
+
     /// <summary>Composing a caller against whichever user came first is how one person is handed another's mail, so the command refuses to guess.</summary>
     [Fact]
     public async Task Show_ADeploymentHoldingSeveralUsers_RefusesToGuessWhichOneWasMeant()

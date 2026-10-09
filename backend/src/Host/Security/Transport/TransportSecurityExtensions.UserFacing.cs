@@ -16,11 +16,11 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace MailFathom.Host.Security.Transport;
 
-/// <summary>Registers the methods a mail-serving surface accepts, every one of which resolves the user it acts for.</summary>
+/// <summary>Registers the methods a surface accepts, every one of which resolves the user it acts for.</summary>
 /// <remarks>
 /// <para>
-/// The schemes, the routing, and the policy are the same shape the configured surface registers, and one difference
-/// runs through all of them: nothing here is handed a credential or a grant. A key, a public key, a password, and a
+/// The schemes, the routing, and the policy are one shape on every surface, the administrative one included, and one
+/// property runs through all of them: nothing here is handed a credential or a grant. A key, a public key, a password, and a
 /// validated subject each resolve a record beside a user row, and the user and the permissions both arrive from that
 /// record — so what a registration carries is which methods the deployment turned on and nothing that could
 /// authenticate anybody.
@@ -34,7 +34,7 @@ namespace MailFathom.Host.Security.Transport;
 /// </remarks>
 internal static partial class TransportSecurityExtensions
 {
-    /// <summary>Adds one mail-serving surface's authentication schemes and its authorization requirement.</summary>
+    /// <summary>Adds one surface's authentication schemes and its authorization requirement.</summary>
     /// <param name="services">The container to add to.</param>
     /// <param name="surface">The surface being protected, which names every scheme and the policy.</param>
     /// <param name="methods">The methods the surface accepts, in configuration order.</param>
@@ -120,10 +120,9 @@ internal static partial class TransportSecurityExtensions
 
         if (acceptsPublicKey)
         {
-            // The replay store is one for the deployment, as it is on the configured axis: an identifier spent on
-            // either surface, and on any replica, is spent, which is the safe direction and costs a client nothing,
-            // since one is minted per request. The authenticator is scoped rather than shared, because the credential
-            // store it reads through is.
+            // The replay store is one for the deployment: an identifier spent on any surface, and on any replica, is
+            // spent, which is the safe direction and costs a client nothing, since one is minted per request. The
+            // authenticator is scoped rather than shared, because the credential store it reads through is.
             services.TryAddSingleton<ClientAssertionReplayStore>();
             services.TryAddScoped<UserClientAssertionAuthenticator>();
             authentication.AddScheme<UserClientAssertionAuthenticationSchemeOptions, UserClientAssertionAuthenticationHandler>(
@@ -168,9 +167,9 @@ internal static partial class TransportSecurityExtensions
     /// <summary>Reduces a validated token to the user its subject resolves, and writes the grant that user's record holds.</summary>
     /// <remarks>
     /// <para>
-    /// The identity is minimised first, exactly as it is on the configured axis, so nothing downstream can read a name,
-    /// an address, or a group the authorization server chose to include. What is added afterwards is what this axis
-    /// establishes: the user the request acts for, and the permissions recorded beside them.
+    /// The identity is minimised first, so nothing downstream can read a name, an address, or a group the authorization
+    /// server chose to include. What is added afterwards is what the credential record establishes: the user the request
+    /// acts for, and the permissions recorded beside them.
     /// </para>
     /// <para>
     /// A token whose subject no enabled record maps fails authentication rather than being admitted with an empty
@@ -210,29 +209,31 @@ internal static partial class TransportSecurityExtensions
             return;
         }
 
-        // Asked of every token, including one minted before an administrator turned the switch off, because the
-        // switch is read with the mapping on each request rather than carried by the token.
-        if (!surface.Admits(admitted.EndpointAccess))
+        // Asked of every token, including one minted before an administrator turned the switch off or removed the
+        // assignment, because both are read with the mapping on each request rather than carried by the token.
+        if (await UserCredentialAdmission.FindRefusalAsync(context.HttpContext, surface, admitted) is { } refusal)
         {
-            context.Fail("The validated token names a user kept off this endpoint.");
+            context.Fail(refusal);
 
             return;
         }
 
-        identity.AddClaims(
-            TransportGrant.ClaimsFor(TransportGrant.HeldByToken(identity, admitted.Permissions, narrowedByTokenScopes)));
+        identity.AddClaims(TransportGrant.ClaimsFor(TransportGrant.HeldByToken(
+            identity,
+            UserCredentialAdmission.PermissionsPresentedOn(surface, admitted),
+            narrowedByTokenScopes)));
         identity.AddClaim(TransportCallerUser.ClaimFor(admitted.User));
         identity.AddClaim(TransportCallerCredential.ClaimFor(admitted.CredentialId));
 
         context.Principal = new ClaimsPrincipal(identity);
     }
 
-    /// <summary>Registers the requirement this mail-serving surface's routes carry.</summary>
+    /// <summary>Registers the requirement this surface's routes carry.</summary>
     /// <remarks>
-    /// It names only this surface's routing scheme, for the reason the configured policy does. What it asks beyond that
-    /// is the user claim rather than a list of authorized identities: who this deployment serves is a set of records
-    /// rather than a configured set of subjects, so the question the policy can still usefully ask is whether the
-    /// credential resolved one at all.
+    /// It names only this surface's routing scheme, so a credential another surface accepts is never judged here. What
+    /// it asks beyond that is the user claim rather than a list of authorized identities: who this deployment serves is
+    /// a set of records rather than a configured set of subjects, so the question the policy can still usefully ask is
+    /// whether the credential resolved one at all.
     /// </remarks>
     private static void AddUserFacingAuthorizationPolicy(
         IServiceCollection services,

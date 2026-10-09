@@ -3,10 +3,8 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Net;
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
-using MailFathom.AppHost;
 using MailFathom.IntegrationTests.Orchestration;
 using Xunit;
 
@@ -39,12 +37,6 @@ public sealed class ComposedOutboxEndpointTests
     /// <summary>The route one page of the recorded sends is read from.</summary>
     private const string OutboxRoute = "/api/admin/outbox";
 
-    /// <summary>The permission both decisions publish, which is what a reading credential is refused them under.</summary>
-    private const string OperatePermission = "mailfathom.admin.operate";
-
-    /// <summary>The permission the one reading that names people publishes, which the other two do not.</summary>
-    private const string AuditReadPermission = "mailfathom.admin.audit.read";
-
     private readonly MailFathomOrchestrationFixture orchestration;
 
     /// <summary>Initializes the tests against the assembly's orchestration.</summary>
@@ -72,76 +64,11 @@ public sealed class ComposedOutboxEndpointTests
 
         // Assert
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-        Assert.Equal("Bearer", Assert.Single(response.Headers.WwwAuthenticate).Scheme);
+        Assert.Contains(response.Headers.WwwAuthenticate, challenge => challenge.Scheme == "Bearer");
         Assert.DoesNotContain(
             "stage",
             await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken),
             StringComparison.OrdinalIgnoreCase);
-    }
-
-    /// <summary>
-    /// The grant split, in one test because it is one claim: the credential this deployment admits for reading reaches
-    /// the two readings that name nobody, and is refused the reading that names people and both decisions, each under
-    /// the permission it publishes.
-    /// </summary>
-    [Fact]
-    public async Task OutboxRoutes_ACredentialHoldingTheReadingGrantAlone_ReadsTheCountsAndIsRefusedEverythingNamingAPerson()
-    {
-        // Arrange
-        using var client = await this.orchestration.OpenAdminEndpointClientAsync(TestContext.Current.CancellationToken);
-        var send = Guid.CreateVersion7();
-
-        // Act
-        using var summary = await SendAsync(
-            client,
-            HttpMethod.Get,
-            $"{OutboxRoute}/summary",
-            OrchestrationContract.AdminNarrowedApiKey);
-        using var listing = await SendAsync(
-            client,
-            HttpMethod.Get,
-            OutboxRoute,
-            OrchestrationContract.AdminNarrowedApiKey);
-        using var singleRecord = await SendAsync(
-            client,
-            HttpMethod.Get,
-            $"{OutboxRoute}/{send:D}",
-            OrchestrationContract.AdminNarrowedApiKey);
-        using var cancellation = await SendAsync(
-            client,
-            HttpMethod.Post,
-            $"{OutboxRoute}/cancellation",
-            OrchestrationContract.AdminNarrowedApiKey,
-            JsonContent.Create(new { outgoingEmail = send }));
-        using var requeue = await SendAsync(
-            client,
-            HttpMethod.Post,
-            $"{OutboxRoute}/requeue",
-            OrchestrationContract.AdminNarrowedApiKey,
-            JsonContent.Create(new { outgoingEmail = send, refusalRestated = true }));
-
-        // Assert
-        Assert.Equal(HttpStatusCode.OK, summary.StatusCode);
-        Assert.Equal(HttpStatusCode.OK, listing.StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, singleRecord.StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, cancellation.StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, requeue.StatusCode);
-
-        Assert.Equal(AuditReadPermission, await PermissionRefusedUnder(singleRecord));
-        Assert.Equal(OperatePermission, await PermissionRefusedUnder(cancellation));
-        Assert.Equal(OperatePermission, await PermissionRefusedUnder(requeue));
-
-        // The listing names no person, which is the reason it exists as a separate reading from the single record.
-        using var page = JsonDocument.Parse(
-            await listing.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
-
-        Assert.All(
-            page.RootElement.GetProperty("sends").EnumerateArray(),
-            entry =>
-            {
-                Assert.False(entry.TryGetProperty("recipients", out _));
-                Assert.False(entry.TryGetProperty("subject", out _));
-            });
     }
 
     /// <summary>
@@ -161,13 +88,11 @@ public sealed class ComposedOutboxEndpointTests
             client,
             HttpMethod.Post,
             $"{OutboxRoute}/cancellation",
-            OrchestrationContract.AdminApiKey,
             JsonContent.Create(new { outgoingEmail = send }));
         using var reading = await SendAsync(
             client,
             HttpMethod.Get,
-            $"{OutboxRoute}/{send:D}",
-            OrchestrationContract.AdminApiKey);
+            $"{OutboxRoute}/{send:D}");
 
         // Assert
         Assert.Equal(HttpStatusCode.OK, cancellation.StatusCode);
@@ -180,25 +105,15 @@ public sealed class ComposedOutboxEndpointTests
         Assert.Equal(HttpStatusCode.NotFound, reading.StatusCode);
     }
 
-    /// <summary>Reads the permission a refusal names, failing the test where it named none.</summary>
-    private static async Task<string?> PermissionRefusedUnder(HttpResponseMessage response)
-    {
-        using var problem = JsonDocument.Parse(
-            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
-
-        return problem.RootElement.GetProperty("permission").GetString();
-    }
-
     /// <summary>Sends one credentialed request to the administrative endpoint.</summary>
     private static async Task<HttpResponseMessage> SendAsync(
         HttpClient client,
         HttpMethod method,
         string route,
-        string apiKey,
         HttpContent? content = null)
     {
         using var request = new HttpRequestMessage(method, new Uri(route, UriKind.Relative)) { Content = content };
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+        request.Headers.Authorization = ComposedHostAdministration.AdministratorAuthorization();
 
         return await client.SendAsync(request, TestContext.Current.CancellationToken);
     }

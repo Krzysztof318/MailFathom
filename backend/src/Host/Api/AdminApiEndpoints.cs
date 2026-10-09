@@ -208,12 +208,12 @@ internal static class AdminApiEndpoints
 /// <summary>What the administrative endpoint reports back about an authenticated caller.</summary>
 /// <param name="Service">The product this is, so a client can tell it reached MailFathom rather than something else answering the port.</param>
 /// <param name="Version">The running version, which is what an operator checks before reporting behavior.</param>
-/// <param name="Credential">The name of the credential that authenticated, or <c>anonymous</c> where the endpoint requires none.</param>
+/// <param name="Credential">The administrator and the credential that admitted them, by identifier — the default administrator and none where the endpoint requires no credential — or <c>anonymous</c> where no administrator was admitted.</param>
 /// <param name="Permissions">The published names of what this caller's grant carries, in the order this repository publishes them, and empty for a credential granted nothing.</param>
 /// <remarks>
 /// <para>
-/// The credential's *name* is MailFathom's own configured identity for it — never the material, and never a claim an
-/// authorization server supplied beyond the subject the deployment already authorized. A response that echoed more
+/// The caller is named by identifiers this deployment assigned — the user and the credential record — never by the
+/// material, and never by a claim an authorization server supplied. A response that echoed more
 /// would be a way to read a token's contents back out of the service.
 /// </para>
 /// <para>
@@ -246,7 +246,7 @@ internal sealed record AdminSessionResponse(
         return new AdminSessionResponse(
             "MailFathom",
             StampedAssemblyVersion.ReadFrom(typeof(AdminSessionResponse).Assembly).Version,
-            NameOf(caller),
+            principal?.Identity ?? NameOf(caller),
             GrantOf(principal));
     }
 
@@ -256,8 +256,8 @@ internal sealed record AdminSessionResponse(
         ? []
         : [.. MailFathomPermission.All.Where(principal.Holds).Select(permission => permission.Name)];
 
-    /// <summary>Reports the configured name of whatever authenticated, or that nothing did.</summary>
-    /// <remarks>The naming rule is the transport's own, shared with what the application layer is told the work is running for, so this response and a record of a refusal cannot call one caller two things.</remarks>
+    /// <summary>Reports the name of whatever authenticated where no principal was established, or that nothing did.</summary>
+    /// <remarks>A principal's own identity is preferred above, because it is what every administrative act and audit record carries — the user and the credential — so this response and a record of a refusal cannot call one caller two things.</remarks>
     private static string NameOf(ClaimsPrincipal caller) =>
         TransportCallerIdentity.NameOf(caller) ?? TransportCallerIdentity.AnonymousCaller;
 }

@@ -14,8 +14,8 @@ namespace MailFathom.Host.Security.Endpoints;
 /// <remarks>
 /// There is almost nothing here about credentials, which is the point. Every rule about which ones are accepted and
 /// what makes a caller authorized already exists once, in <see cref="TransportSecurityExtensions" />, and this hands
-/// it the administrative surface and that surface's own settings. Nothing about API-key comparison or token
-/// validation is restated, so a change to either reaches every endpoint.
+/// it the administrative surface and that surface's own methods — the same registration the two mail-serving surfaces
+/// use, because every caller on every surface is a user resolved from a credential record.
 /// <para>
 /// The CORS policy is this surface's own, named separately from the MCP and client policies, because an endpoint
 /// resolves exactly one and two surfaces sharing one would let either deployment's origins decide what the other
@@ -60,33 +60,30 @@ internal static class AdminTransportSecurityExtensions
             return services;
         }
 
-        services.AddTransportAuthentication(
+        // No exchange: a session is what the client surface mints for a page that must not keep a credential, and
+        // mfctl keeps its own credential in the operator's profile instead.
+        services.AddUserFacingTransportAuthentication(
             TransportSurface.Admin,
-            [.. endpointSettings.Administrators],
-            ChallengeSchemeFor(endpointSettings));
+            [.. endpointSettings.Authentication],
+            ChallengeSchemeFor(endpointSettings),
+            exchangesCredentialsForSessions: false);
 
         return services;
     }
 
     /// <summary>Names the registered scheme that answers a request presenting no credential at all.</summary>
     /// <remarks>
-    /// <para>
-    /// It has to be a scheme this surface actually registered, or the challenge forwards to nothing. The API key scheme
-    /// is the natural answer and produces the bare bearer challenge, which is all this endpoint has to say. RFC 9728
-    /// lets a challenge point at the metadata document, and this one does not need to: a client here reaches the
-    /// document by appending the route prefix it is already calling, which is what the resource identifier is validated
-    /// against at startup, so nothing about authorizing depends on the wording of a refusal.
-    /// </para>
-    /// <para>
-    /// With API keys turned off the client assertion scheme answers, and with both turned off the first authorization
-    /// server's validator does. All three challenge identically, which is what makes the order here a matter of which
-    /// scheme is certain to exist rather than of what a client is told. One of them always does: an endpoint reaching
-    /// this point configured at least one method, and configuration validation refuses OAuth with no authorization
-    /// server behind it.
-    /// </para>
+    /// Chosen as the client surface chooses it and for the same reasons: Basic first where a password is accepted, since
+    /// a person is only asked for one by a Basic challenge, and otherwise whichever of the three bearer schemes is
+    /// certain to exist. One always does: an endpoint reaching this point configured at least one method.
     /// </remarks>
     private static string ChallengeSchemeFor(AdminEndpointOptions endpointSettings)
     {
+        if (endpointSettings.AllowsBasic)
+        {
+            return TransportSurface.Admin.BasicSchemeName;
+        }
+
         if (endpointSettings.AllowsApiKey)
         {
             return TransportSurface.Admin.ApiKeySchemeName;

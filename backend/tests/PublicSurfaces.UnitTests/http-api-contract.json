@@ -10304,6 +10304,15 @@
       },
       "UserCredentialProvisioningRequest": {
         "properties": {
+          "allowedSourceNetworks": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          },
           "issuer": {
             "type": [
               "null",
@@ -10343,6 +10352,15 @@
               "string"
             ]
           },
+          "surfaces": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          },
           "username": {
             "type": [
               "null",
@@ -10363,6 +10381,12 @@
       },
       "UserCredentialResponse": {
         "properties": {
+          "allowedSourceNetworks": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "createdAt": {
             "format": "date-time",
             "type": "string"
@@ -10408,6 +10432,12 @@
               "array"
             ]
           },
+          "surfaces": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "version": {
             "format": "int64",
             "pattern": "^-?(?:0|[1-9]\\d*)$",
@@ -10427,7 +10457,9 @@
           "version",
           "createdAt",
           "materialChangedAt",
-          "login"
+          "login",
+          "surfaces",
+          "allowedSourceNetworks"
         ],
         "type": "object"
       },

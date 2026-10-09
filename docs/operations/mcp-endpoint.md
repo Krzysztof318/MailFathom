@@ -683,8 +683,9 @@ A request arriving over clear text is likewise **authenticated rather than refus
 for one would be a surface no browser client could sign in to, which is a way of refusing the arrangement rather than
 of protecting it.
 
-The one refusal of a password that remains is [the administrative endpoint's](configuration-endpoints.md#adminendpoint),
-and it is a different rule under a different reason: that surface answers for the deployment rather than for a person.
+The administrative endpoint accepts a password on the same terms, from a credential that lists it —
+[who administers the deployment](admin-endpoint.md#who-administers-the-deployment) — and it is how the default
+administrator signs in first.
 
 None of this reaches an OAuth bearer token, which is **still refused per request** on a hop this process reads as
 unencrypted, before the token is read at all — see [what the default costs](#behind-a-tls-terminating-reverse-proxy).
@@ -755,9 +756,9 @@ where it has one, exactly as the forwarded-headers policy reads the same list, s
 IPv4 proxy as `::ffff:10.0.0.5` still recognizes the `10.0.0.5` the operator wrote. Every other peer is the client that
 reached this process, whether or not anything is named in front, and both axes apply to it.
 
-**The method is refused on the administrative endpoint**, at startup, naming the section. That surface answers for the
-deployment rather than for a person, so a credential naming a user has nothing there to act for —
-[the administrative endpoint](admin-endpoint.md) states what it accepts instead.
+**The administrative endpoint accepts the method too**, in an `AdminEndpoint:Authentication` entry of its own with a
+`Basic` block of its own, from a password credential that lists `admin` — which is how
+[the default administrator](admin-endpoint.md#the-default-administrator) signs in.
 
 ### Requiring no credential
 
@@ -1541,7 +1542,7 @@ fired on it would be a line you learn to scroll past before it ever mattered.
 **The client address is read only from a proxy you named.** `X-Forwarded-For` is applied beside the scheme and the
 host when `TrustedProxies` names at least one proxy and none of its entries covers a whole address family; the address
 it carries then replaces the peer as the client address, which is what the password bound partitions by and what
-[an administrator's network restriction](admin-endpoint.md#where-an-administrator-may-act-from) compares. An
+[a credential's network restriction](admin-endpoint.md#where-a-credential-may-be-presented-from) compares. An
 unconfigured section, or one trusting `0.0.0.0/0` or `::/0`, reads the scheme and the host and never the client
 address, because believing every peer about who it is would let any client choose the address those two read. Each
 header is read right to left, and `MaximumForwardedHops` says how

@@ -15,6 +15,8 @@ namespace MailFathom.Host.Api;
 /// <param name="Issuer">The authorization server's issuer identifier, where the method maps a validated subject.</param>
 /// <param name="Subject">That server's own identifier for the person, where the method maps a validated subject.</param>
 /// <param name="Permissions">The published permission names the credential narrows its user's grant to, or <see langword="null" /> to name none and hold what the user holds.</param>
+/// <param name="Surfaces">The endpoints the credential may be presented on — <c>mcp</c>, <c>client</c>, <c>admin</c> — or <see langword="null" /> for the two mail-serving ones.</param>
+/// <param name="AllowedSourceNetworks">The addresses or CIDR networks the credential is accepted from, or <see langword="null" /> for any.</param>
 /// <remarks>
 /// <para>
 /// One request shape for four methods, with the method named rather than inferred from which fields arrived. Inferring
@@ -35,7 +37,9 @@ internal sealed record UserCredentialProvisioningRequest(
     string? PublicKey,
     string? Issuer,
     string? Subject,
-    IReadOnlyList<string>? Permissions)
+    IReadOnlyList<string>? Permissions,
+    IReadOnlyList<string>? Surfaces = null,
+    IReadOnlyList<string>? AllowedSourceNetworks = null)
 {
     /// <inheritdoc />
     public override string ToString() => nameof(UserCredentialProvisioningRequest);
@@ -84,6 +88,8 @@ internal sealed record UserCredentialEnablementRequest(bool? Enabled);
 /// <param name="CreatedAt">When the credential was provisioned.</param>
 /// <param name="MaterialChangedAt">When what it is presented as was last replaced.</param>
 /// <param name="Login">What a person types to sign in with a password credential — <c>SHORTNAME/username</c> for a member of an organization, the username otherwise — or <see langword="null" /> for every other method.</param>
+/// <param name="Surfaces">The published names of the endpoints the credential may be presented on.</param>
+/// <param name="AllowedSourceNetworks">The networks the credential is accepted from, in CIDR form, empty for any.</param>
 /// <remarks>
 /// There is no password here, no hash, and no key digest, and the absence is what makes the listing safe to serve:
 /// every field is a fact about the record rather than about the secret. The one field that could have been both is
@@ -101,7 +107,9 @@ internal sealed record UserCredentialResponse(
     long Version,
     DateTimeOffset CreatedAt,
     DateTimeOffset MaterialChangedAt,
-    string? Login)
+    string? Login,
+    IReadOnlyList<string> Surfaces,
+    IReadOnlyList<string> AllowedSourceNetworks)
 {
     /// <summary>Describes one credential for a caller.</summary>
     /// <param name="credential">The credential as the deployment holds it.</param>
@@ -123,7 +131,9 @@ internal sealed record UserCredentialResponse(
             credential.Version,
             credential.CreatedAt,
             credential.MaterialChangedAt,
-            LoginOf(credential.Method, credential.Lookup, credential.Organization));
+            LoginOf(credential.Method, credential.Lookup, credential.Organization),
+            [.. credential.Reach.Surfaces.Select(surface => surface.Name)],
+            [.. credential.Reach.AllowedSourceNetworks.Select(network => network.ToString())]);
     }
 
     /// <summary>Composes what a person types to sign in with a password credential.</summary>

@@ -16,12 +16,14 @@ namespace MailFathom.IntegrationTests.Hosting;
 /// <param name="User">Whose mail it reaches, which is also the rate-limit partition it spends.</param>
 /// <param name="Permissions">What it may do, which is everything a mail surface publishes unless the shape narrows it.</param>
 /// <param name="EndpointAccess">Which of the two mail-serving endpoints the user may be served on, which is where a surface's isolation from another now lives: the credentials are rows one store answers, so a key reaching only one surface is a switch on its user rather than a second key list.</param>
+/// <param name="Reach">Which surfaces the credential is presented on, which is the MCP and the client endpoint unless the shape names the administrative one.</param>
 /// <remarks><see cref="ToString" /> is redacted, because the key is the whole of the credential and a test failure prints whatever a record's own formatting produces.</remarks>
 internal sealed record ProvisionedUserApiKey(
     string Key,
     UserId User,
     IReadOnlyList<MailFathomPermission>? Permissions = null,
-    UserEndpointAccess? EndpointAccess = null)
+    UserEndpointAccess? EndpointAccess = null,
+    UserCredentialReach? Reach = null)
 {
     /// <inheritdoc />
     public override string ToString() => $"{nameof(ProvisionedUserApiKey)} {{ {this.User.Value:D} }}";
@@ -79,7 +81,10 @@ internal static class ProvisionedUserApiKeys
                 key.Permissions ?? MailFathomPermission.PublishedFor(ProtectedSurface.Mail),
                 Enabled: true,
                 Material: null,
-                key.EndpointAccess ?? UserEndpointAccess.Everywhere),
+                key.EndpointAccess ?? UserEndpointAccess.Everywhere)
+            {
+                Reach = key.Reach ?? UserCredentialReach.Default,
+            },
             StringComparer.Ordinal);
 
         credentials.FindAsync(Arg.Any<UserCredentialMethod>(), Arg.Any<UserCredentialLookup>(), Arg.Any<CancellationToken>())

@@ -4,28 +4,29 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Net.Quic;
+using MailFathom.Application.Access.DefaultAdministrator;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Access;
-using MailFathom.Infrastructure.Secrets.Discovery;
+using MailFathom.Host.Hosting.Startup;
 using MailFathom.Mcp;
 
 namespace MailFathom.Host.Configuration.Endpoints;
 
-/// <summary>Configures whether the administrative surface is served, and what a client must present to reach it.</summary>
+/// <summary>Configures whether the administrative surface is served, and which methods a client may sign in to it with.</summary>
 /// <remarks>
 /// <para>
 /// This is where an operator administers a running deployment from their own machine: signing in, and the operations
 /// that follow. It is deliberately not the MCP endpoint with more routes on it. Reading a mailbox and administering the
-/// service that reads it are different authorities, and keeping them on separate listeners with separate credentials is
-/// what makes that a fact rather than a convention — an API key provisioned for an agent authenticates nothing here.
+/// service that reads it are different authorities, and keeping them on separate listeners is what makes that a fact
+/// rather than a convention — a credential provisioned for an agent states the mail-serving endpoints alone and
+/// authenticates nothing here.
 /// </para>
 /// <para>
 /// The endpoint is disabled by default, so a deployment that configures nothing serves no administrative surface at
-/// all. What guards an enabled one is the list of <see cref="Administrators" />, which starts empty, so authentication
-/// is something an operator turns on; leaving it off is announced at startup rather than assumed to be intended. Each
-/// administrator is a name with credentials, a grant, and the networks it may act from, and the spellings that could
-/// have meant to turn one on — a misspelled key, a credential naming no method, a value written where the list belongs
-/// — fail startup instead.
+/// all. An enabled one accepts the methods <see cref="Authentication" /> names, in the shape the MCP and client
+/// endpoints use: the method and its transport conditions here, the person in the database. Every administrator is a
+/// user, admitted while their grant holds an administrative permission at some scope; leaving the list empty serves
+/// every caller as the default administrator, which startup announces rather than assumes was intended.
 /// </para>
 /// <para>
 /// There is no client-certificate profile here, which is not an omission: the trust question a certificate answers is
@@ -39,9 +40,7 @@ namespace MailFathom.Host.Configuration.Endpoints;
 /// </para>
 /// <para>
 /// The value is read once, while the host is being composed, because whether an endpoint exists and what guards it are
-/// part of the application's routing rather than something a request re-reads. A change takes effect on restart. The
-/// material behind a configured key is a different matter and is resolved per request, so a key can be rotated in place
-/// without one.
+/// part of the application's routing rather than something a request re-reads. A change takes effect on restart.
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The options framework materializes this type during configuration binding.")]
@@ -51,7 +50,7 @@ internal sealed class AdminEndpointOptions
     public const string SectionName = "AdminEndpoint";
 
     /// <summary>The half of the published permission vocabulary a grant on this endpoint draws from.</summary>
-    /// <remarks>Stated once here rather than derived wherever a grant is read, so a permission belonging to the other surface is refused by the same rule everywhere the section is judged.</remarks>
+    /// <remarks>Stated once here rather than derived wherever a grant is read, so the half this surface reads of a user's grant is one decision.</remarks>
     public const ProtectedSurface GrantedSurface = ProtectedSurface.Administration;
 
     /// <summary>The path every administrative route is served beneath.</summary>
@@ -69,6 +68,11 @@ internal sealed class AdminEndpointOptions
     /// </remarks>
     public const string RoutePrefix = "/api/admin";
 
+    /// <summary>The setting that once declared the administrators in configuration, which a start now refuses.</summary>
+    internal const string WithdrawnAdministratorsSetting = "Administrators";
+
+    private IReadOnlyList<string> withdrawnSettings = [];
+
     /// <summary>Gets or sets whether the administrative surface is served at all.</summary>
     /// <remarks>Disabled unless a deployment states otherwise, so administering this service over the network is always something an operator turned on.</remarks>
     public bool Enabled { get; set; }
@@ -85,15 +89,16 @@ internal sealed class AdminEndpointOptions
     /// <remarks>The same setting the MCP endpoint carries, read the same way. Clear text unless a deployment states otherwise, which is the right posture behind a TLS-terminating reverse proxy and wrong anywhere else, so startup warns about it.</remarks>
     public EndpointTransport Transport { get; set; } = EndpointTransport.Http;
 
-    /// <summary>Gets the people and systems that may administer this deployment, each with its credentials, its grant, and the networks it may act from.</summary>
+    /// <summary>Gets the methods a client may sign in with, one entry per method with that method's own settings.</summary>
     /// <remarks>
-    /// Empty by default, which is the unauthenticated posture. A request is served when one of an administrator's
-    /// credentials admits it, and it is then attributed to that administrator by name. These are this endpoint's own
-    /// credentials, configured separately from the other surfaces' even where both name one authorization server: an
-    /// administrator here says nothing about those endpoints and consults none of their credentials, and the resource a
-    /// token is issued for is what separates administering this service from reading a mailbox through it.
+    /// Empty by default, which is the unauthenticated posture: every caller is served as the default administrator. A
+    /// request is served when a credential of one of these methods resolves a user, the credential lists this endpoint
+    /// among its surfaces, and the user's grant holds an administrative permission at some scope. These are this
+    /// endpoint's own methods, configured separately from the other endpoints' even where all of them name one
+    /// authorization server, and the resource a token is issued for is what separates administering this service from
+    /// reading a mailbox through it.
     /// </remarks>
-    public IList<AdministratorOptions> Administrators { get; } = [];
+    public IList<UserFacingAuthenticationOptions> Authentication { get; } = [];
 
     /// <summary>Gets or sets which browser origins the endpoint answers.</summary>
     /// <remarks>
@@ -127,17 +132,20 @@ internal sealed class AdminEndpointOptions
     /// <remarks>The same section the MCP endpoint carries and configured separately, with the same default. An administrative request reaches no AI provider, so it is the one this can be narrowed on without asking what a tool call needs.</remarks>
     public TransportRequestTimeoutOptions RequestTimeout { get; set; } = new();
 
-    /// <summary>Gets whether a client may authenticate with one of the configured API keys.</summary>
-    public bool AllowsApiKey => this.ApiKeys().Count > 0;
+    /// <summary>Gets whether a client may authenticate with an API key provisioned for its user.</summary>
+    public bool AllowsApiKey => this.Accepts(UserCredentialMethod.ApiKey);
 
     /// <summary>Gets whether a client may authenticate with an access token from one of the configured authorization servers.</summary>
-    public bool AllowsOAuth => this.OAuthMethods().Count > 0;
+    public bool AllowsOAuth => this.Accepts(UserCredentialMethod.OAuthSubject);
 
-    /// <summary>Gets whether a client may authenticate with an assertion signed by one of the configured public keys.</summary>
-    public bool AllowsClientAssertion => this.PublicKeys().Count > 0;
+    /// <summary>Gets whether a client may authenticate with an assertion signed by a public key registered for its user.</summary>
+    public bool AllowsClientAssertion => this.Accepts(UserCredentialMethod.PublicKey);
+
+    /// <summary>Gets whether a client may authenticate with a user's own username and password.</summary>
+    public bool AllowsBasic => this.Accepts(UserCredentialMethod.Password);
 
     /// <summary>Gets whether a request must present a credential naming who is calling.</summary>
-    public bool RequiresAuthentication => this.Administrators.Count > 0;
+    public bool RequiresAuthentication => this.Authentication.Count > 0;
 
     /// <summary>Gets whether Kestrel terminates TLS for this endpoint.</summary>
     public bool TerminatesTls => TransportListenerConfiguration.TerminatesTls(this.Transport);
@@ -162,6 +170,27 @@ internal sealed class AdminEndpointOptions
         ArgumentNullException.ThrowIfNull(configuration);
 
         var section = configuration.GetSection(SectionName);
+
+        // Read before the strict bind rather than after it, for the reason the client section gives: a withdrawn key is
+        // a key this type no longer declares, and the framework's own message about an unknown property says nothing
+        // about what replaced it, which is the whole of what an operator upgrading has to be told.
+        IReadOnlyList<string> withdrawnSettings =
+        [
+            .. FindWithdrawnAdministratorsErrors(section),
+            .. UserFacingAuthenticationConfiguration.FindRetiredSettingErrors(SectionName, section),
+        ];
+
+        if (withdrawnSettings.Count > 0)
+        {
+            // Enabled is read beside the refusal, for the reason the client section reads it: whether any surface is
+            // served is judged before a section answers for itself.
+            return new AdminEndpointOptions
+            {
+                Enabled = section.GetValue<bool>(nameof(Enabled)),
+                withdrawnSettings = withdrawnSettings,
+            };
+        }
+
         var settings = section.Get<AdminEndpointOptions>(binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
             ?? new AdminEndpointOptions();
 
@@ -182,33 +211,22 @@ internal sealed class AdminEndpointOptions
             settings.Https.Redirect.MarkStated();
         }
 
-        // Each administrator's grant is read the same way and for the same reason.
-        AdministratorConfiguration.ReadWhatTheBinderCannotSay(section, [.. settings.Administrators]);
+        UserFacingAuthenticationConfiguration.ReadWhatTheBinderCannotSay(section, [.. settings.Authentication]);
 
         return settings;
     }
 
-    /// <summary>Reports every key a client may authenticate with, in configuration order.</summary>
-    /// <returns>The configured keys, empty when the endpoint accepts none.</returns>
-    /// <remarks>
-    /// A method rather than a property, as <see cref="OAuthMethods" /> is, because it reads the same objects the list
-    /// already holds. The secret machinery discovers what to resolve by walking this graph's readable properties, and a
-    /// property here would offer it a second path to every configured key — leaving which of the two a refusal names
-    /// decided by the order reflection happens to report them in.
-    /// </remarks>
-    public IReadOnlyList<ConfiguredSecret> ApiKeys() =>
-        AdministratorConfiguration.ApiKeysIn(this.Administrators);
-
-    /// <summary>Reports every client public key a signed assertion may be verified against, in configuration order.</summary>
-    /// <returns>The configured public keys, empty when the endpoint accepts no assertion.</returns>
-    /// <remarks>A method rather than a property, for the reason <see cref="ApiKeys" /> is one.</remarks>
-    public IReadOnlyList<ConfiguredSecret> PublicKeys() =>
-        AdministratorConfiguration.PublicKeysIn(this.Administrators);
-
-    /// <summary>Reports what an access token must prove, once per credential that states OAuth.</summary>
+    /// <summary>Reports what an access token must prove, once per entry that accepts one.</summary>
     /// <returns>The configured OAuth blocks, empty when the endpoint accepts no token.</returns>
+    /// <remarks>A method rather than a property, because it reads the same objects the list already holds and a second path to them would leave which one a refusal names decided by the order reflection reports them in.</remarks>
     public IReadOnlyList<OAuthValidationOptions> OAuthMethods() =>
-        AdministratorConfiguration.OAuthMethodsIn(this.Administrators);
+        UserFacingAuthenticationConfiguration.OAuthMethodsIn(this.Authentication);
+
+    /// <summary>Reports the entry that accepts a user's username and password, where the endpoint accepts one.</summary>
+    /// <returns>The entry, or <see langword="null" /> when the endpoint accepts no password.</returns>
+    /// <remarks>A method rather than a property, for the reason <see cref="OAuthMethods" /> is one.</remarks>
+    public UserFacingAuthenticationOptions? BasicMethod() =>
+        UserFacingAuthenticationConfiguration.BasicMethodIn(this.Authentication);
 
     /// <summary>Describes every socket this endpoint asks for.</summary>
     /// <returns>One declaration per socket, empty when the endpoint is not served.</returns>
@@ -228,14 +246,22 @@ internal sealed class AdminEndpointOptions
     /// <returns>One message per faulty setting, each naming its configuration path, empty when the settings are usable.</returns>
     public IReadOnlyList<string> FindConfigurationErrors()
     {
+        // Before the enabled question rather than after it, because a withdrawn key is what stopped the section being read
+        // at all, and a deployment that turned the endpoint off while leaving its administrators written has still not
+        // recorded them as users.
+        if (this.withdrawnSettings.Count > 0)
+        {
+            return this.withdrawnSettings;
+        }
+
         if (!this.Enabled)
         {
             return [];
         }
 
-        var authenticationErrors = AdministratorConfiguration.FindConfigurationErrors(
+        var authenticationErrors = UserFacingAuthenticationConfiguration.FindConfigurationErrors(
             SectionName,
-            [.. this.Administrators]);
+            [.. this.Authentication]);
 
         var errors = new List<string>(authenticationErrors);
 
@@ -263,70 +289,53 @@ internal sealed class AdminEndpointOptions
             this.Https,
             QuicListener.IsSupported));
 
-
         return errors;
     }
 
-
-    /// <summary>Finds the administrators confined to networks this process cannot tell a client's address for.</summary>
-    /// <param name="reverseProxySettings">The reverse-proxy settings the same start reads, already free of their own errors.</param>
-    /// <returns>One message per restricted administrator, empty when every restriction can be enforced.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="reverseProxySettings" /> is <see langword="null" />.</exception>
-    /// <exception cref="FormatException">Thrown when the reverse-proxy settings have not passed their own configuration errors.</exception>
+    /// <summary>Refuses a configuration that still declares administrators, which nothing imports.</summary>
     /// <remarks>
-    /// A restriction compares the client's address, and this process believes a forwarded one only from a proxy the
-    /// reverse-proxy section names narrower than a whole address family. Without one, the address a request reports is
-    /// either whatever proxy stands in front — so every request passes or fails together — or one any client could
-    /// write. Both would leave a restriction written in configuration and absent in effect, so the start is refused
-    /// instead. A deployment clients reach directly is refused as well, because the section cannot tell it apart from
-    /// one whose proxy nobody named, and a restriction is only as good as that statement.
+    /// An administrator in configuration has no user to become: which person it was is the operator's to say, and an
+    /// import guessing it would hand an administrative grant to whichever user the guess landed on. So the start stops
+    /// and names what replaces the section instead.
     /// </remarks>
-    public IReadOnlyList<string> FindSourceNetworkTrustErrors(ReverseProxyOptions reverseProxySettings)
+    private static IEnumerable<string> FindWithdrawnAdministratorsErrors(IConfigurationSection section)
     {
-        ArgumentNullException.ThrowIfNull(reverseProxySettings);
-
-        if (!this.Enabled || reverseProxySettings.ForwardsTheClientAddress())
+        if (!section.GetSection(WithdrawnAdministratorsSetting).Exists())
         {
-            return [];
+            yield break;
         }
 
-        return
-        [
-            .. this.Administrators
-                .Index()
-                .Where(indexed => indexed.Item.RestrictsSourceNetworks)
-                .Select(indexed => $"{AdministratorConfiguration.SettingPathOf(SectionName, indexed.Item, indexed.Index)}:{nameof(AdministratorOptions.AllowedSourceNetworks)} — a network restriction compares the client's address, and this process believes a forwarded client address only from a proxy '{ReverseProxyOptions.SectionName}:{nameof(ReverseProxyOptions.TrustedProxies)}' names, narrower than every address of a family. Name the proxy standing in front of this process there, or remove the restriction."),
-        ];
+        yield return $"{SectionName}:{WithdrawnAdministratorsSetting} is no longer read: every administrator is a user holding an administrative role, and nothing imports what the section declared. Replace it with '{SectionName}:{UserFacingAuthenticationConfiguration.SettingName}' entries naming the methods this endpoint accepts — 'password' among them to sign in as the default administrator '{DefaultAdministratorBootstrap.Username}', whose password {DefaultAdministratorStartupGate.PasswordVariableName} sets on the first start — then provision each user who holds an administrative role a credential with 'mfctl credential create --surface {UserCredentialSurface.Administration.Name}', carry each entry's AllowedSourceNetworks onto it with '--source-network', and remove the section. Never remove it without writing those entries, because an endpoint accepting no method serves every caller as '{DefaultAdministratorBootstrap.Username}'.";
     }
 
-    /// <summary>Reports the OAuth credentials whose resource does not name the path these routes answer at.</summary>
+    /// <summary>Reports the OAuth entries whose resource does not name the path these routes answer at.</summary>
     /// <remarks>
     /// A resource identifier is a name rather than an address to fetch, so nothing about OAuth requires it to match a
     /// route. What requires it here is discovery: <c>mfctl</c> is handed a host and a port and has to find the protected
     /// resource metadata document before it has read anything at all, which it can only do by appending the prefix it is
     /// about to call. That composition reaches the document's RFC 9728 location exactly when the resource names the same
-    /// prefix, so a deployment whose resource says something else would publish a document nothing could find. Refused at
-    /// startup rather than discovered by an operator whose sign-in reports that a deployment serves no metadata. It is
-    /// the one thing this endpoint asks of a resource that no other surface does, which is why it belongs here rather
-    /// than in the block itself.
+    /// prefix, so a deployment whose resource says something else would publish a document nothing could find.
     /// <para>
     /// Read only once the shared rules have found nothing, because a resource this reads has to be one that parsed.
     /// </para>
     /// </remarks>
     private IEnumerable<string> FindResourcePrefixErrors()
     {
-        foreach (var (settingPath, credential) in AdministratorConfiguration.CredentialsWithPathsIn(SectionName, this.Administrators))
+        foreach (var (index, method) in this.Authentication.Index())
         {
-            if (credential.OAuth is not { } oauth || NamesTheRoutePrefix(oauth))
+            if (method.OAuth is not { } oauth || NamesTheRoutePrefix(oauth))
             {
                 continue;
             }
 
-            yield return $"{settingPath}:{nameof(AdministratorCredentialOptions.OAuth)}:{nameof(OAuthValidationOptions.Resource)} — the path must be '{RoutePrefix}', because that is where the endpoint's routes answer and it is what a client appends to the address it was given. Write the absolute https URL clients reach this endpoint at, ending in that prefix.";
+            yield return $"{UserFacingAuthenticationConfiguration.SettingPathOf(SectionName, method, index)}:{nameof(UserFacingAuthenticationOptions.OAuth)}:{nameof(OAuthValidationOptions.Resource)} — the path must be '{RoutePrefix}', because that is where the endpoint's routes answer and it is what a client appends to the address it was given. Write the absolute https URL clients reach this endpoint at, ending in that prefix.";
         }
     }
 
     private static bool NamesTheRoutePrefix(OAuthValidationOptions oauth) =>
         Uri.TryCreate(oauth.CanonicalResource(), UriKind.Absolute, out var resource)
         && string.Equals(resource.AbsolutePath.TrimEnd('/'), RoutePrefix, StringComparison.Ordinal);
+
+    private bool Accepts(UserCredentialMethod method) =>
+        UserFacingAuthenticationConfiguration.Accepts(this.Authentication, method);
 }

@@ -97,7 +97,7 @@ internal static class UserFacingAuthenticationConfiguration
     /// <param name="methods">The configured entries, in configuration order.</param>
     /// <returns>The OAuth blocks, in configuration order, empty when the endpoint accepts no token.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="methods" /> is <see langword="null" />.</exception>
-    /// <remarks>Several blocks rather than one, because each states its own required scopes and its own authorization servers. What they may not disagree about is the resource, for the reason <see cref="AdministratorConfiguration" /> gives about the same rule.</remarks>
+    /// <remarks>Several blocks rather than one, because each states its own required scopes and its own authorization servers. What they may not disagree about is the resource: a surface publishes one protected resource metadata document, at an address derived from that resource.</remarks>
     internal static IReadOnlyList<OAuthValidationOptions> OAuthMethodsIn(
         IEnumerable<UserFacingAuthenticationOptions> methods)
     {

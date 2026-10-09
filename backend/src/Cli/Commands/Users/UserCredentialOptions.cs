@@ -86,6 +86,22 @@ internal static class UserCredentialOptions
             "A permission the credential keeps of what its user holds, repeatable; it narrows the user's grant and never adds to it. Written nowhere at all, the credential holds whatever the user's roles grant.",
     };
 
+    /// <summary>Builds the repeatable option naming the endpoints the credential may be presented on.</summary>
+    /// <returns>The option.</returns>
+    internal static Option<string[]> Surface() => new("--surface")
+    {
+        Description =
+            $"An endpoint the credential may be presented on, repeatable: {string.Join(", ", UserCredentialSurface.All.Select(surface => $"'{surface.Name}'"))}. Written nowhere at all, it is presented on '{UserCredentialSurface.Mcp.Name}' and '{UserCredentialSurface.Client.Name}'; '{UserCredentialSurface.Administration.Name}' is reached only by a credential that names it, and only by a user holding an administrative role.",
+    };
+
+    /// <summary>Builds the repeatable option naming the networks the credential is accepted from.</summary>
+    /// <returns>The option.</returns>
+    internal static Option<string[]> SourceNetwork() => new("--source-network")
+    {
+        Description =
+            "An IP address or CIDR network the credential is accepted from, repeatable. Written nowhere at all, it is accepted from anywhere. Refused while the deployment names no reverse proxy narrower than an address family.",
+    };
+
     /// <summary>Builds the flag stating that the credential authenticates and may do nothing.</summary>
     /// <returns>The option.</returns>
     /// <remarks>Separate from an empty <c>--permission</c>, because a repeatable option written zero times is indistinguishable from one nobody wrote — and those are the two opposite grants. Stating the empty one takes a word of its own so it cannot be reached by accident.</remarks>

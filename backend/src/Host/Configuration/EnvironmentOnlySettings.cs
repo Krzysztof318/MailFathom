@@ -2,6 +2,8 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Host.Hosting.Startup;
+
 namespace MailFathom.Host.Configuration;
 
 /// <summary>Refuses a value written for a setting that only the process environment can deliver.</summary>
@@ -53,9 +55,12 @@ internal static class EnvironmentOnlySettings
     /// <summary>The individual variables belonging to no family above.</summary>
     /// <remarks>
     /// <c>OPENSSL_CONF</c> is OpenSSL's own name rather than MailFathom's, which is why it carries no product prefix
-    /// and why it stands alone here.
+    /// and why it stands alone here. The default administrator's password is MailFathom's own and is read through
+    /// configuration, and it is still the environment's alone: it is a credential applied once on a first start, and a
+    /// value that could arrive from a mounted file or the persisted document would be one more place a password sits
+    /// in clear text long after it stopped deciding anything.
     /// </remarks>
-    private static readonly string[] EnvironmentOnlyKeys = ["OPENSSL_CONF"];
+    private static readonly string[] EnvironmentOnlyKeys = ["OPENSSL_CONF", DefaultAdministratorStartupGate.PasswordVariableName];
 
     /// <summary>The variables matching a family above that belong to another rule entirely.</summary>
     /// <remarks>

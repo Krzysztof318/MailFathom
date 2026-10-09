@@ -81,4 +81,6 @@ public sealed record UserCredential(
 
         return [.. MailFathomPermission.PublishedFor(ProtectedSurface.Mail).Where(narrowed.Permissions.Contains)];
     }
+    /// <summary>Gets where the credential may be presented: on which endpoints, and from which networks.</summary>
+    public UserCredentialReach Reach { get; init; } = UserCredentialReach.Default;
 }

@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Net;
 using MailFathom.Application.Access.Credentials;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Access;
@@ -40,6 +41,9 @@ internal sealed class PersistedUserCredentials(MailFathomDbContext dbContext, Ti
     /// <summary>How many credentials one user may hold, which is the bound the listing reads under.</summary>
     /// <remarks>Named here as well as on the listing so the statement that enforces it and the query that assumes it cannot come to disagree.</remarks>
     private const int Ceiling = UserCredential.MaximumListedPerUser;
+
+    /// <summary>The network a stored entry this build cannot parse is read as: the one host address nothing presents from.</summary>
+    private static readonly IPNetwork Unreachable = new(IPAddress.IPv6None, 128);
 
     /// <inheritdoc />
     public async Task<ResolvedUserCredential?> FindAsync(
@@ -127,6 +131,8 @@ internal sealed class PersistedUserCredentials(MailFathomDbContext dbContext, Ti
                     credential.Enabled,
                     credential.Permissions,
                     credential.Material,
+                    credential.Surfaces,
+                    credential.AllowedSourceNetworks,
                     userAccount.McpEndpointEnabled,
                     userAccount.ClientEndpointEnabled,
                 })
@@ -141,8 +147,15 @@ internal sealed class PersistedUserCredentials(MailFathomDbContext dbContext, Ti
                 NarrowingAdmittedBy(stored.Permissions),
                 stored.Enabled,
                 stored.Material,
-                new UserEndpointAccess(stored.McpEndpointEnabled, stored.ClientEndpointEnabled));
+                new UserEndpointAccess(stored.McpEndpointEnabled, stored.ClientEndpointEnabled))
+            {
+                Reach = ReachOf(stored.Surfaces, stored.AllowedSourceNetworks),
+            };
     }
+
+    /// <inheritdoc />
+    public Task<bool> AnyRestrictedToSourceNetworksAsync(CancellationToken cancellationToken) =>
+        dbContext.UserCredentials.AnyAsync(credential => credential.AllowedSourceNetworks.Length > 0, cancellationToken);
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<UserCredential>> ReadForUserAsync(
@@ -167,6 +180,8 @@ internal sealed class PersistedUserCredentials(MailFathomDbContext dbContext, Ti
                 credential.Version,
                 credential.CreatedAt,
                 credential.MaterialChangedAt,
+                credential.Surfaces,
+                credential.AllowedSourceNetworks,
                 OrganizationShortName = dbContext.Organizations
                     .Where(organization => organization.Id == credential.OrganizationId)
                     .Select(organization => organization.ShortName)
@@ -190,7 +205,10 @@ internal sealed class PersistedUserCredentials(MailFathomDbContext dbContext, Ti
                     credential.MaterialChangedAt,
                     credential.OrganizationShortName is null
                         ? default
-                        : OrganizationShortName.Create(credential.OrganizationShortName))),
+                        : OrganizationShortName.Create(credential.OrganizationShortName))
+                {
+                    Reach = ReachOf(credential.Surfaces, credential.AllowedSourceNetworks),
+                }),
         ];
     }
 
@@ -222,14 +240,19 @@ internal sealed class PersistedUserCredentials(MailFathomDbContext dbContext, Ti
         UserCredentialLookup lookup,
         string? material,
         IReadOnlyList<MailFathomPermission>? permissions,
+        UserCredentialReach reach,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(reach);
+
         var storedUserId = RequireUser(user);
         var storedCredentialId = RequireCredential(credentialId);
         var storedMethod = RequireMethod(method);
         var storedLookup = RequireLookup(lookup);
         var storedMaterial = RequireMaterialAgreesWithMethod(method, material);
         var storedPermissions = StoredGrant(permissions);
+        var storedSurfaces = StoredSurfaces(reach.Surfaces);
+        var storedNetworks = StoredNetworks(reach.AllowedSourceNetworks);
         var scopedToTheUsersOrganization = method == UserCredentialMethod.Password;
         var provisionedAt = timeProvider.GetUtcNow();
 
@@ -248,10 +271,10 @@ internal sealed class PersistedUserCredentials(MailFathomDbContext dbContext, Ti
         var written = await dbContext.Database.ExecuteSqlAsync(
             $"""
              INSERT INTO user_credentials
-                 ("Id", "UserId", "Method", "OrganizationId", "Lookup", "Material", "Permissions", "Enabled", "Version", "CreatedAt", "MaterialChangedAt")
+                 ("Id", "UserId", "Method", "OrganizationId", "Lookup", "Material", "Permissions", "Surfaces", "AllowedSourceNetworks", "Enabled", "Version", "CreatedAt", "MaterialChangedAt")
              SELECT {storedCredentialId}, {storedUserId}, {storedMethod},
                     CASE WHEN {scopedToTheUsersOrganization} THEN (SELECT "OrganizationId" FROM settings_accounts WHERE "Id" = {storedUserId}) END,
-                    {storedLookup}, {storedMaterial}, CAST({storedPermissions} AS text[]), TRUE, 1, {provisionedAt}, {provisionedAt}
+                    {storedLookup}, {storedMaterial}, CAST({storedPermissions} AS text[]), {storedSurfaces}, {storedNetworks}, TRUE, 1, {provisionedAt}, {provisionedAt}
              WHERE EXISTS (SELECT 1 FROM settings_accounts WHERE "Id" = {storedUserId})
                AND (SELECT COUNT(*) FROM user_credentials WHERE "UserId" = {storedUserId}) < {Ceiling}
              ON CONFLICT DO NOTHING
@@ -533,6 +556,23 @@ internal sealed class PersistedUserCredentials(MailFathomDbContext dbContext, Ti
                     "A credential narrows to published permissions.",
                     nameof(permissions))),
         ];
+
+    /// <summary>Reads where a stored credential may be presented, dropping a name or a network this build cannot read.</summary>
+    /// <remarks>
+    /// A surface a later release publishes is one this build does not serve, so dropping it narrows the credential rather
+    /// than widening it. A network that no longer parses is different: dropping it would turn a restriction into none, so
+    /// it is kept as a network nothing falls inside, and the credential is refused everywhere until it is rewritten.
+    /// </remarks>
+    internal static UserCredentialReach ReachOf(string[] storedSurfaces, string[] storedNetworks) => new(
+        UserCredentialSurface.ParseKnown(storedSurfaces),
+        [.. storedNetworks.Select(stored => IPNetwork.TryParse(stored, out var network) ? network : Unreachable)]);
+
+    private static string[] StoredSurfaces(IReadOnlyList<UserCredentialSurface> surfaces) => surfaces.Count > 0
+        ? [.. UserCredentialSurface.All.Where(surfaces.Contains).Select(surface => surface.Name)]
+        : throw new ArgumentException("A credential may be presented on at least one surface.", nameof(surfaces));
+
+    private static string[] StoredNetworks(IReadOnlyList<IPNetwork> networks) =>
+        [.. networks.Select(network => network.ToString())];
 
     private static UserCredentialMethod MethodOf(string storedMethod) =>
         UserCredentialMethod.TryParse(storedMethod, out var method)

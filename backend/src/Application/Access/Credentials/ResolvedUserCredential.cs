@@ -41,6 +41,9 @@ public sealed record ResolvedUserCredential(
     string? Material,
     UserEndpointAccess EndpointAccess)
 {
+    /// <summary>Gets where the credential may be presented, which the surface judging the request asks of it.</summary>
+    public UserCredentialReach Reach { get; init; } = UserCredentialReach.Default;
+
     /// <inheritdoc />
     public override string ToString() => $"{nameof(ResolvedUserCredential)} {{ {this.Id} }}";
 }

@@ -73,6 +73,12 @@ public interface IUserCredentialStore
     /// <remarks>Bounded by that ceiling rather than by what an administrator happened to provision, and never read across users. There is no cursor past it, for the reason the ceiling states.</remarks>
     Task<IReadOnlyList<UserCredential>> ReadForUserAsync(UserId user, CancellationToken cancellationToken);
 
+    /// <summary>Reports whether any credential this deployment holds is restricted to source networks.</summary>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns><see langword="true" /> when at least one credential names a network it is accepted from.</returns>
+    /// <remarks>What a start asks when the reverse proxy section no longer forwards the client address, because a restriction judged against a proxy's own address admits every client behind it.</remarks>
+    Task<bool> AnyRestrictedToSourceNetworksAsync(CancellationToken cancellationToken);
+
     /// <summary>Provisions a new credential for one user.</summary>
     /// <param name="credentialId">The identifier the new credential is to carry.</param>
     /// <param name="user">The user the credential authenticates.</param>
@@ -80,9 +86,11 @@ public interface IUserCredentialStore
     /// <param name="lookup">The value it is resolved by.</param>
     /// <param name="material">The stored representation of what is judged, or <see langword="null" /> for a method that keeps none.</param>
     /// <param name="permissions">The names the credential narrows its user's grant to, or <see langword="null" /> where it names none and holds what its user holds.</param>
+    /// <param name="reach">On which endpoints, and from which networks, the credential may be presented.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>What the act did, or why it did nothing.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody, <paramref name="method" /> or <paramref name="lookup" /> is the unspecified struct default, <paramref name="credentialId" /> is the empty identifier, or <paramref name="material" /> disagrees with what <paramref name="method" /> stores.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="reach" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody, <paramref name="method" /> or <paramref name="lookup" /> is the unspecified struct default, <paramref name="credentialId" /> is the empty identifier, <paramref name="material" /> disagrees with what <paramref name="method" /> stores, or <paramref name="reach" /> names no surface.</exception>
     Task<UserCredentialWriteOutcome> CreateAsync(
         Guid credentialId,
         UserId user,
@@ -90,6 +98,7 @@ public interface IUserCredentialStore
         UserCredentialLookup lookup,
         string? material,
         IReadOnlyList<MailFathomPermission>? permissions,
+        UserCredentialReach reach,
         CancellationToken cancellationToken);
 
     /// <summary>Replaces what one credential is presented as, leaving its user, its identifier, and its grant where they are.</summary>

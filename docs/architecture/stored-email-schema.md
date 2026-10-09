@@ -649,12 +649,12 @@ column and another in the group.
 ## What a user signs in with
 
 `user_credentials` holds every credential a user authenticates to
-[the client](../operations/client-endpoint.md) and [the MCP endpoint](../operations/mcp-endpoint.md#authentication)
-with. Those are records rather than settings, which is why they are a table at all: a credential reaching one person's
-mail belongs to that person and is provisioned, rotated, suspended, and removed while the deployment runs, where a
-credential answering for the deployment itself is written in a section and rotated by editing one. The
-[administrative endpoint](../operations/admin-endpoint.md#user-credentials) keeps the second shape and is the surface
-these rows are administered through.
+[the client](../operations/client-endpoint.md), [the MCP endpoint](../operations/mcp-endpoint.md#authentication), and
+[the administrative endpoint](../operations/admin-endpoint.md#who-administers-the-deployment) with. Those are records
+rather than settings, which is why they are a table at all: a credential belongs to one person and is provisioned,
+rotated, suspended, and removed while the deployment runs. The
+[administrative endpoint](../operations/admin-endpoint.md#user-credentials) is the surface these rows are administered
+through.
 
 | Column | What it records |
 |---|---|
@@ -665,6 +665,8 @@ these rows are administered through.
 | `OrganizationId` | The organization a password credential is scoped to, nullable, and a foreign key onto `organizations` that restricts deletion. It is null for somebody in no organization and for every other method, which a check constraint holds: only a password is scoped to one. It names the organization by identifier rather than by short name, so changing a short name moves every member's login and rewrites no credential, and moving a user between organizations rewrites it for their passwords in the same transaction |
 | `Material` | What a presented secret is verified against, and nothing a client could present. For a password that is the versioned hash record — the format version, the algorithm, the work parameters, the salt, and the derived key, as one string, so a later release moves to another algorithm without rewriting anything; for a key pair it is the registered public half. An API key has none, because the digest in `Lookup` is the whole verifier, and neither does a mapped subject, which states whose token this is rather than holding anything to check |
 | `Permissions` | The names this credential keeps of its user's grant, as published permission names, or null where it names none and holds exactly what its user's roles grant. An empty set keeps nothing and reaches no tool. A name the user's roles do not grant is kept and grants nothing |
+| `Surfaces` | The endpoints the credential may be presented on, as a `text[]` of published names — `mcp`, `client`, `admin` — defaulting to `mcp` and `client`, so a credential reaches the administrative endpoint only where it was provisioned to. A request presenting it anywhere else is refused as an unknown credential is |
+| `AllowedSourceNetworks` | The networks a request presenting it must arrive from, as a `text[]` of addresses and CIDR networks, at most 32, and empty — the default — for anywhere. Compared with the client address the forwarded-headers policy resolved, an IPv4-mapped address in its IPv4 form |
 | `Enabled` | Whether it still authenticates requests. A disabled credential keeps everything about it, so the value it is resolved by stays claimed and the decision is one command away from being reversed |
 | `Version` | A counter every write to the row increments. It is what a listing reports so an administrator can see that a credential changed since they last read it; nothing reads it back to decide whether a write may proceed, so it orders the writes to one row rather than excluding any of them |
 | `CreatedAt` | When the credential was provisioned |
@@ -756,6 +758,27 @@ reads; each of the other four foreign keys has an index of its own, which its ca
 
 **Removing a user or an organization takes every membership and assignment naming it with it**, in the statement that
 removes it: an organization is removed only once nobody belongs to it, so its groups are empty and leave with it.
+
+## The default administrator
+
+`default_administrator` records that this deployment created its
+[default administrator](../operations/admin-endpoint.md#the-default-administrator) and whether the password setting
+was ever applied to it. It holds one row at most, which `ck_default_administrator_single_row` keeps by allowing `Id` to
+be `1` alone, so every replica starting at once contends for the same key: the one whose insert wins records the user,
+its endpoint switches turned off, and its `Administrator` assignment at deployment scope in the same transaction, and
+every other reads what it wrote.
+
+| Column | What it records |
+|---|---|
+| `Id` | A `smallint` primary key, always `1` |
+| `UserId` | The default administrator, a nullable `uuid` foreign key onto `settings_accounts` with `ON DELETE SET NULL`. Null means the user was removed, which is final: the row stays, so no later start records the user again |
+| `RecordedAt` | When the first start recorded it |
+| `PasswordSettingAppliedAt` | When a start applied `MAILFATHOM_ADMIN_PASSWORD`, or found the user already holding a password credential and recorded the setting as applied instead; null until then. Once set, every later start ignores the setting |
+
+`IX_default_administrator_UserId` indexes `UserId`, which the foreign key reads when a user is removed.
+
+Clearing `PasswordSettingAppliedAt` and deleting the user's password credential row is the recovery an operator locked
+out of every administrative account performs by hand, and deliberately the only one: no route reaches either column.
 
 ## The assertions this deployment has already served
 

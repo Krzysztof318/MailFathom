@@ -74,7 +74,7 @@ internal sealed class PersistedUserSettingsDocumentReader(
         """
         SELECT "Id", "Version"
         FROM settings_accounts
-        WHERE @everyUser OR "Id" = ANY(@users)
+        WHERE (@everyUser AND ("McpEndpointEnabled" OR "ClientEndpointEnabled")) OR "Id" = ANY(@users)
         ORDER BY "CreatedAt", "Id"
         LIMIT @limit;
         """;

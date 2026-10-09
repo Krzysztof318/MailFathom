@@ -60,13 +60,12 @@ public sealed class OAuthValidationOptionsTests
         {
             Name = "workforce",
             Issuer = "https://sso.example.test/realms/mailfathom",
-            AuthorizedSubjects = { "9f2c" },
         });
         oauth.RequiredScopes.Add("mailfathom.read");
         oauth.RequiredScopes.Add("mailfathom.read");
 
         // Act
-        var error = Assert.Single(oauth.FindConfigurationErrors(OAuthSubjectAdmission.ConfiguredSubjects));
+        var error = Assert.Single(oauth.FindConfigurationErrors());
 
         // Assert
         Assert.StartsWith("RequiredScopes:1", error, StringComparison.Ordinal);
@@ -82,7 +81,7 @@ public sealed class OAuthValidationOptionsTests
         oauth.AdvertisedScopes.Add("two scopes");
 
         // Act
-        var error = Assert.Single(oauth.FindConfigurationErrors(OAuthSubjectAdmission.ConfiguredSubjects));
+        var error = Assert.Single(oauth.FindConfigurationErrors());
 
         // Assert
         Assert.StartsWith("AdvertisedScopes:1", error, StringComparison.Ordinal);
@@ -97,7 +96,7 @@ public sealed class OAuthValidationOptionsTests
         oauth.AdvertisedScopes.Add("offline_access");
 
         // Act
-        var error = Assert.Single(oauth.FindConfigurationErrors(OAuthSubjectAdmission.ConfiguredSubjects));
+        var error = Assert.Single(oauth.FindConfigurationErrors());
 
         // Assert
         Assert.StartsWith("AdvertisedScopes:1", error, StringComparison.Ordinal);
@@ -116,7 +115,7 @@ public sealed class OAuthValidationOptionsTests
         oauth.AdvertisedScopes.Add("mailfathom.read");
 
         // Act
-        var error = Assert.Single(oauth.FindConfigurationErrors(OAuthSubjectAdmission.ConfiguredSubjects));
+        var error = Assert.Single(oauth.FindConfigurationErrors());
 
         // Assert
         Assert.StartsWith("AdvertisedScopes:0", error, StringComparison.Ordinal);
@@ -132,7 +131,7 @@ public sealed class OAuthValidationOptionsTests
         oauth.AdvertisedScopes.Add("offline_access");
 
         // Act, Assert
-        Assert.Empty(oauth.FindConfigurationErrors(OAuthSubjectAdmission.ConfiguredSubjects));
+        Assert.Empty(oauth.FindConfigurationErrors());
     }
 
     /// <summary>A section carrying nothing but an advertised scope was still written, so it is reported rather than treated as an OAuth block nobody meant to configure.</summary>
@@ -159,17 +158,15 @@ public sealed class OAuthValidationOptionsTests
         {
             Name = "workforce",
             Issuer = "https://sso.example.test/realms/mailfathom",
-            AuthorizedSubjects = { "9f2c" },
         });
         oauth.AuthorizationServers.Add(new AuthorizationServerOptions
         {
             Name = "Workforce",
             Issuer = "https://partners.example.test",
-            AuthorizedSubjects = { "4b81" },
         });
 
         // Act
-        var error = Assert.Single(oauth.FindConfigurationErrors(OAuthSubjectAdmission.ConfiguredSubjects));
+        var error = Assert.Single(oauth.FindConfigurationErrors());
 
         // Assert
         Assert.StartsWith("AuthorizationServers:1:Name", error, StringComparison.Ordinal);
@@ -184,7 +181,6 @@ public sealed class OAuthValidationOptionsTests
         {
             Name = "workforce",
             Issuer = "https://sso.example.test/realms/mailfathom",
-            AuthorizedSubjects = { "9f2c" },
         });
 
         return oauth;

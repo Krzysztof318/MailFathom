@@ -6,6 +6,7 @@ using MailFathom.Application.Access;
 using MailFathom.Application.Access.Grants;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Endpoints;
+using MailFathom.Host.Hosting.Startup;
 using MailFathom.Host.Mcp;
 using Microsoft.Extensions.Options;
 
@@ -26,7 +27,7 @@ namespace MailFathom.Host.Security.Transport;
 /// <item>
 /// <description>
 /// A request an authentication scheme validated is a caller, named by what this deployment configured or recorded and
-/// holding what <see cref="HeldOnAMailSurface" /> or the administrator's entry says. The credential's claims were
+/// holding what <see cref="HeldOnAMailSurface" /> or <see cref="HeldOnTheAdministrativeSurface" /> says. The credential's claims were
 /// written when it was judged, so nothing here learns which scheme was involved.
 /// </description>
 /// </item>
@@ -58,8 +59,8 @@ namespace MailFathom.Host.Security.Transport;
 /// <para>
 /// A request that authenticated nothing is a caller only where the surface it reached configures no credential at all.
 /// On a mail-serving surface that caller acts for the user the deployment serves and holds what that user holds, with
-/// no credential to narrow it; on the administrative surface it holds everything that surface publishes, which the
-/// startup report states. Where the surface does configure a credential, a request that authenticated nothing is none
+/// no credential to narrow it; on the administrative surface it is the default administrator and holds what that user's
+/// assignments hold, which the startup report states — and nothing at all once that user was removed. Where the surface does configure a credential, a request that authenticated nothing is none
 /// of the three.
 /// </para>
 /// <para>
@@ -72,9 +73,10 @@ namespace MailFathom.Host.Security.Transport;
 /// Whose mail a caller is acting on is decided here too, and it is decided by the surface rather than by the credential.
 /// The MCP and client surfaces serve one person their own mail, so a caller either reaches them acting for the user
 /// this deployment serves or is not admitted; the administrative surface serves the deployment rather than a person, so
-/// a caller there acts for no user and every user-scoped use case refuses it. That is the whole of the distinction
-/// between an ordinary caller and the deployment administrator, and it holds on both postures, because it is the path
-/// that decides it rather than what the request carried.
+/// a caller there acts for no user and every user-scoped use case refuses it, even though the credential admitting it
+/// named one: the administrator is named in the caller's identity, which every administrative act and audit record
+/// carries, and their administrative assignments are what the caller holds. That holds on both postures, because it
+/// is the path that decides it rather than what the request carried.
 /// </para>
 /// <para>
 /// One credential answers that question for itself. A credential recorded for a user is that user's own, so a
@@ -91,6 +93,7 @@ internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalS
     private readonly McpEndpointOptions mcpEndpointSettings;
     private readonly AdminEndpointOptions adminEndpointSettings;
     private readonly ClientEndpointOptions clientEndpointSettings;
+    private readonly RecordedDefaultAdministrator defaultAdministrator;
 
     /// <summary>Initializes the adapter over the request being served, if there is one.</summary>
     /// <param name="httpContextAccessor">Reports the request this scope belongs to, or nothing outside one.</param>
@@ -98,6 +101,7 @@ internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalS
     /// <param name="mcpEndpointSettings">The MCP endpoint settings startup was composed from.</param>
     /// <param name="adminEndpointSettings">The administrative endpoint settings startup was composed from.</param>
     /// <param name="clientEndpointSettings">The client endpoint settings startup was composed from.</param>
+    /// <param name="defaultAdministrator">The default administrator an administrative endpoint authenticating nobody serves its callers as.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     /// <remarks>The settings are the startup snapshot the schemes were registered from, which is the same one the startup report states the posture out of; reading a reloaded value here would answer for a posture no scheme was composed against.</remarks>
     public TransportAuthorizedPrincipalSource(
@@ -105,19 +109,22 @@ internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalS
         IDeploymentUserSource deploymentUser,
         IOptions<McpEndpointOptions> mcpEndpointSettings,
         IOptions<AdminEndpointOptions> adminEndpointSettings,
-        IOptions<ClientEndpointOptions> clientEndpointSettings)
+        IOptions<ClientEndpointOptions> clientEndpointSettings,
+        RecordedDefaultAdministrator defaultAdministrator)
     {
         ArgumentNullException.ThrowIfNull(httpContextAccessor);
         ArgumentNullException.ThrowIfNull(deploymentUser);
         ArgumentNullException.ThrowIfNull(mcpEndpointSettings);
         ArgumentNullException.ThrowIfNull(adminEndpointSettings);
         ArgumentNullException.ThrowIfNull(clientEndpointSettings);
+        ArgumentNullException.ThrowIfNull(defaultAdministrator);
 
         this.httpContextAccessor = httpContextAccessor;
         this.deploymentUser = deploymentUser;
         this.mcpEndpointSettings = mcpEndpointSettings.Value;
         this.adminEndpointSettings = adminEndpointSettings.Value;
         this.clientEndpointSettings = clientEndpointSettings.Value;
+        this.defaultAdministrator = defaultAdministrator;
     }
 
     /// <inheritdoc />
@@ -157,7 +164,9 @@ internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalS
 
         try
         {
-            user = this.UserActedForBy(context);
+            user = TransportSurface.Admin.Serves(context.Request.Path)
+                ? this.AdministratorActingIn(context)
+                : this.UserActedForBy(context);
         }
         catch (DeploymentUserUnresolvedException)
         {
@@ -184,6 +193,15 @@ internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalS
             .NarrowedTo(MailFathomPermission.PublishedFor(ProtectedSurface.Mail))
             .NarrowedTo(narrowing);
 
+    /// <summary>Reports what a caller on the administrative surface holds: its user's grant, narrowed to the administrative half and to what admitted it.</summary>
+    /// <param name="userGrant">What the administrator holds, or <see langword="null" /> where it was never read for this request.</param>
+    /// <param name="narrowing">The names the credential admitting the caller keeps, which a token's scopes narrow where the entry says so.</param>
+    /// <returns>The grant the caller holds.</returns>
+    internal static ScopedGrant HeldOnTheAdministrativeSurface(ScopedGrant? userGrant, IEnumerable<MailFathomPermission> narrowing) =>
+        (userGrant ?? ScopedGrant.None)
+            .NarrowedTo(MailFathomPermission.PublishedFor(ProtectedSurface.Administration))
+            .NarrowedTo(narrowing);
+
     private AuthorizedPrincipal? FromTransport()
     {
         if (this.httpContextAccessor.HttpContext is not { } context)
@@ -194,9 +212,19 @@ internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalS
         var path = context.Request.Path;
         var userGrant = TransportGrant.AttachedTo(context);
 
+        if (TransportSurface.Admin.Serves(path))
+        {
+            return this.AdministratorIn(context, userGrant);
+        }
+
+        // A path neither surface serves admits nobody; no route this host maps is one.
+        if (!ServesOneUsersMail(path))
+        {
+            return null;
+        }
+
         return TransportCallerIdentity.NameOf(context.User) is { } identity
             ? this.AdmittedCallerOn(
-                path,
                 identity,
                 TransportGrant.PermissionsCarriedBy(context.User),
                 TransportCallerUser.CarriedBy(context.User),
@@ -223,42 +251,66 @@ internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalS
         return this.RequiresAuthentication(path) ? null : this.deploymentUser.User;
     }
 
-    /// <summary>Describes a caller a scheme validated, acting for the user its credential named or the one the surface it reached serves.</summary>
+    /// <summary>Describes a caller a scheme validated on a mail-serving surface, acting for the user its credential named or the one the deployment serves.</summary>
     /// <remarks>
     /// The two mail-serving surfaces answer one person about their own mail, so a caller admitted there is admitted for
-    /// a user: the one their credential named where it named one, and otherwise the one this deployment serves. The
-    /// administrative surface answers for the deployment, so a caller admitted there acts for no user and is refused
-    /// by every use case scoped to one — which is what makes the deployment administrator a principal rather than a
-    /// grant, and why a credential naming a user does not turn one into a user's caller there. An administrator holds
-    /// what its configured entry granted, over the whole deployment. A path neither surface serves is neither, and a
-    /// caller cannot reach one: the routes this host maps all belong to a surface.
+    /// a user: the one their credential named where it named one, and otherwise the one this deployment serves.
     /// </remarks>
     private AuthorizedPrincipal AdmittedCallerOn(
-        PathString path,
         string identity,
         IEnumerable<MailFathomPermission> narrowing,
         UserId? credentialUser,
         ScopedGrant? userGrant) =>
-        ServesOneUsersMail(path)
-            ? AuthorizedPrincipal.CallerActingFor(
-                credentialUser ?? this.deploymentUser.User,
-                identity,
-                HeldOnAMailSurface(userGrant, narrowing))
-            : AuthorizedPrincipal.Caller(identity, narrowing);
+        AuthorizedPrincipal.CallerActingFor(
+            credentialUser ?? this.deploymentUser.User,
+            identity,
+            HeldOnAMailSurface(userGrant, narrowing));
+
+    /// <summary>Names the administrator a request on the administrative surface acts as, or nobody where it was admitted as none.</summary>
+    /// <remarks>
+    /// A credential names its user, and every scheme on this surface resolves one. A request that authenticated nothing
+    /// is the default administrator where the surface authenticates nobody, and nobody where it does or where that user
+    /// was removed.
+    /// </remarks>
+    private UserId? AdministratorActingIn(HttpContext context)
+    {
+        if (TransportCallerIdentity.NameOf(context.User) is not null)
+        {
+            return TransportCallerUser.CarriedBy(context.User);
+        }
+
+        return this.adminEndpointSettings.RequiresAuthentication ? null : this.defaultAdministrator.User;
+    }
+
+    /// <summary>Describes the caller on the administrative surface, named by its user and the credential it presented.</summary>
+    private AuthorizedPrincipal? AdministratorIn(HttpContext context, ScopedGrant? userGrant)
+    {
+        if (this.AdministratorActingIn(context) is not { } administrator)
+        {
+            return null;
+        }
+
+        var authenticated = TransportCallerIdentity.NameOf(context.User) is not null;
+
+        return AuthorizedPrincipal.Caller(
+            TransportCallerIdentity.OfAdministrator(
+                administrator,
+                authenticated ? TransportCallerCredential.CarriedBy(context.User) : null),
+            HeldOnTheAdministrativeSurface(
+                userGrant,
+                authenticated
+                    ? TransportGrant.PermissionsCarriedBy(context.User)
+                    : MailFathomPermission.PublishedFor(ProtectedSurface.Administration)));
+    }
 
     /// <summary>Reports whether a surface answers one person about their own mail rather than answering for the deployment.</summary>
     private static bool ServesOneUsersMail(PathString path) =>
         TransportSurface.Client.Serves(path) || TransportSurface.Mcp.Serves(path);
 
     /// <summary>Reports whether the surface serving a path admits only a caller that authenticated.</summary>
-    /// <remarks>The two prefixed surfaces are asked first because theirs are the narrower paths.</remarks>
+    /// <remarks>The client surface is asked first because its prefix is the narrower path.</remarks>
     private bool RequiresAuthentication(PathString path)
     {
-        if (TransportSurface.Admin.Serves(path))
-        {
-            return this.adminEndpointSettings.RequiresAuthentication;
-        }
-
         if (TransportSurface.Client.Serves(path))
         {
             return this.clientEndpointSettings.RequiresAuthentication;
@@ -280,12 +332,9 @@ internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalS
             return null;
         }
 
-        var surface = TransportSurface.Admin.Serves(path) ? TransportSurface.Admin
-            : TransportSurface.Client.Serves(path) ? TransportSurface.Client
-            : TransportSurface.Mcp;
+        var surface = TransportSurface.Client.Serves(path) ? TransportSurface.Client : TransportSurface.Mcp;
 
         return this.AdmittedCallerOn(
-            path,
             TransportCallerIdentity.AnonymousCaller,
             MailFathomPermission.PublishedFor(surface.GrantedSurface),
             credentialUser: null,

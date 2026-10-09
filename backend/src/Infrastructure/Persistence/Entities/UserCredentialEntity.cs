@@ -53,6 +53,9 @@ internal sealed class UserCredentialEntity
     /// <summary>The column saying whether the credential still authenticates requests, named here for the same reason the table is.</summary>
     internal const string EnabledColumnName = "Enabled";
 
+    /// <summary>The column holding the networks the credential is accepted from, named here because a session's read joins it so a restriction reaches every request the session admits.</summary>
+    internal const string AllowedSourceNetworksColumnName = "AllowedSourceNetworks";
+
     /// <summary>The longest stored material this column holds.</summary>
     /// <remarks>
     /// Bounded by the largest of the two methods that keep any: a password's record is under a hundred characters and
@@ -119,6 +122,17 @@ internal sealed class UserCredentialEntity
     /// </para>
     /// </remarks>
     public string[]? Permissions { get; set; }
+
+    /// <summary>The published names of the endpoints the credential may be presented on.</summary>
+    /// <remarks>
+    /// A row written before a credential carried its endpoints reads as the two mail-serving ones, which is the column's
+    /// default and exactly where such a credential could already be presented: the administrative endpoint never resolved
+    /// a credential from this table until it could be written here.
+    /// </remarks>
+    public required string[] Surfaces { get; set; }
+
+    /// <summary>The networks a request presenting the credential must come from, each in its canonical CIDR form, empty for no restriction.</summary>
+    public required string[] AllowedSourceNetworks { get; set; }
 
     /// <summary>Whether the credential currently authenticates requests.</summary>
     /// <remarks>

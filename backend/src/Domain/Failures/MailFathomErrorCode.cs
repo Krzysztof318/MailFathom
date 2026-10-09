@@ -188,6 +188,14 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode DeploymentUserUnresolved { get; } = new(14002);
 
+    /// <summary>Gets subcategory 4, principal authorization: a start cannot give the default administrator the password it was started with.</summary>
+    /// <remarks>
+    /// Raised at startup rather than at a request, and stopping it, because carrying on would leave the deployment's
+    /// first sign-in either refused for a password the operator believes they set or granted to somebody else's
+    /// credential under the same username. The operator resolves it in the environment or in the user records.
+    /// </remarks>
+    public static MailFathomErrorCode DefaultAdministratorUnusable { get; } = new(14003);
+
     #endregion
 
     #region Category 2 — Mail protocol
@@ -1132,6 +1140,7 @@ public readonly record struct MailFathomErrorCode
         MailboxAuthorizationFailed,
         PrincipalNotAuthorized,
         DeploymentUserUnresolved,
+        DefaultAdministratorUnusable,
         MailAuthenticationMechanismUnavailable,
         MailboxCredentialRefused,
         MailboxUnavailable,

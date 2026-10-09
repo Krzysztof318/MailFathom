@@ -112,6 +112,11 @@ Environment=CREDENTIALS_DIRECTORY=/etc/mailfathom/credentials
 # own configuration section.
 Environment=McpEndpoint__Port=8080
 Environment=ConfigurationSources__Directory=/etc/mailfathom/config
+# The password the default administrator `admin` is given on the first start, and on no later one: changing it here
+# afterwards changes nothing, and `mfctl credential rotate` is how the password changes. The shipped value is safe only
+# while the administrative port stays on loopback, and every start warns while `admin` still signs in with it. Any
+# other value has to meet the password policy, twelve characters at least, or the start stops and says so.
+Environment=MAILFATHOM_ADMIN_PASSWORD=admin
 
 # Composed here from parts that are not secret, so the password stays a credential: only it arrives through
 # Persistence__Password, as a reference systemd resolved.
@@ -294,7 +299,6 @@ StopTimeout=60
 # systemd 258. docs/operations/deployment-quadlet.md states what an older systemd leaves available and what it gives up.
 LoadCredentialEncrypted=mailfathom-database-password:%h/.config/credstore.encrypted/mailfathom-database-password
 LoadCredentialEncrypted=imap-primary-password:%h/.config/credstore.encrypted/imap-primary-password
-LoadCredentialEncrypted=admin-api-key:%h/.config/credstore.encrypted/admin-api-key
 # Only when a mailbox authenticates with OAuth. See config/10-mailfathom.json.example.
 #LoadCredentialEncrypted=mailfathom-data-key:%h/.config/credstore.encrypted/mailfathom-data-key
 # Only when message content is stored in a bucket — uncommented together with the ContentStorage lines above. The third

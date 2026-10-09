@@ -23,8 +23,8 @@ namespace MailFathom.Host.UnitTests.Security.ClientAssertions;
 
 /// <summary>Covers the key-pair method on a surface whose credentials are records beside the user they admit.</summary>
 /// <remarks>
-/// The rules an assertion is judged by are the ones the configured path applies and are covered there. What is new here
-/// is the resolution in front of them: the fingerprint the client names in its own <c>kid</c> selects one credential
+/// Two things are covered: the rules an assertion is judged by — its lifetime, its identifier, its signature — and the
+/// resolution in front of them: the fingerprint the client names in its own <c>kid</c> selects one credential
 /// row, and everything that fails to select an enabled row is refused as an unrecognized signature — so a key nobody
 /// registered, a credential somebody disabled, and a fingerprint naming a row this deployment does not hold are one
 /// answer. The successful result is the other half: it names the user, which is what makes the request act for a
@@ -195,6 +195,97 @@ public sealed class UserClientAssertionAuthenticatorTests
         // Assert
         Assert.Null(result.Admitted);
         Assert.Equal(ClientAssertionRejection.ClaimsUnacceptable, result.Rejection);
+    }
+
+    /// <summary>Two assertions differing only in their identifier are two credentials, so refusing a replay must not refuse the client's next request.</summary>
+    [Fact]
+    public async Task AuthenticateAsync_TwoAssertionsFromOneClient_AdmitsBoth()
+    {
+        // Arrange
+        using var clientKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var harness = HarnessHolding(clientKey);
+
+        // Act
+        var first = await harness.AuthenticateAsync(Presenting(clientKey, identifier: "first"));
+        var second = await harness.AuthenticateAsync(Presenting(clientKey, identifier: "second"));
+
+        // Assert
+        Assert.Equal(User, first.Admitted?.User);
+        Assert.Equal(User, second.Admitted?.User);
+    }
+
+    [Fact]
+    public async Task AuthenticateAsync_AnAssertionThatHasExpired_IsRefused()
+    {
+        // Arrange
+        using var clientKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var harness = HarnessHolding(clientKey);
+
+        // Act
+        var result = await harness.AuthenticateAsync(
+            Presenting(clientKey, expiresAt: VerifiedAt - TimeSpan.FromHours(1)));
+
+        // Assert
+        Assert.Null(result.Admitted);
+        Assert.Equal(ClientAssertionRejection.ClaimsUnacceptable, result.Rejection);
+    }
+
+    /// <summary>The identifier is what the endpoint remembers, so one no assertion could reasonably carry is refused before it is stored.</summary>
+    [Fact]
+    public async Task AuthenticateAsync_AnAssertionCarryingAnOverlongIdentifier_IsRefused()
+    {
+        // Arrange
+        using var clientKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var harness = HarnessHolding(clientKey);
+
+        // Act
+        var result = await harness.AuthenticateAsync(
+            Presenting(clientKey, identifier: new string('x', ClientAssertion.IdentifierLengthLimit + 1)));
+
+        // Assert
+        Assert.Null(result.Admitted);
+        Assert.Equal(ClientAssertionRejection.ClaimsUnacceptable, result.Rejection);
+    }
+
+    /// <summary>
+    /// A control character in the identifier is refused as an unacceptable claim rather than reaching the replay store,
+    /// where it would surface as a provider failure where every other unacceptable claim leaves it as the same empty refusal.
+    /// </summary>
+    [Fact]
+    public async Task AuthenticateAsync_AnAssertionCarryingAControlCharacterInItsIdentifier_IsRefused()
+    {
+        // Arrange
+        using var clientKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var harness = HarnessHolding(clientKey);
+
+        // Act
+        var result = await harness.AuthenticateAsync(
+            Presenting(clientKey, identifier: @"\u0000an-identifier"));
+
+        // Assert
+        Assert.Null(result.Admitted);
+        Assert.Equal(ClientAssertionRejection.ClaimsUnacceptable, result.Rejection);
+    }
+
+    /// <summary>An unsigned document is not a weaker credential, it is no credential, and the permitted algorithms have to say so.</summary>
+    [Fact]
+    public async Task AuthenticateAsync_AnUnsignedAssertion_IsRefused()
+    {
+        // Arrange
+        using var clientKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var harness = HarnessHolding(clientKey);
+
+        var header = Encode(Utf8(
+            $$"""{"alg":"none","typ":"{{ClientAssertion.DeclaredType}}","kid":"{{FingerprintOf(clientKey)}}"}"""));
+        var payload = Encode(Utf8(
+            $$"""{"aud":"{{ClientAssertion.McpAudience}}","exp":{{(VerifiedAt + TimeSpan.FromSeconds(60)).ToUnixTimeSeconds()}},"jti":"unsigned"}"""));
+
+        // Act
+        var result = await harness.AuthenticateAsync($"{header}.{payload}.");
+
+        // Assert
+        Assert.Null(result.Admitted);
+        Assert.NotNull(result.Rejection);
     }
 
     /// <summary>An opaque credential reaching this scheme is refused before any row is read, so a wrong-shaped credential costs the host no query.</summary>

@@ -69,6 +69,16 @@ internal sealed class UserCredentialConfiguration : IEntityTypeConfiguration<Use
         // nullable because a credential naming nothing is a different statement from one naming the empty list.
         entity.Property(credential => credential.Permissions).IsRequired(false);
 
+        // Defaults rather than a backfill, so a row an older build inserts during a rolling upgrade — one that names
+        // neither column — is the credential that build meant: good on the two mail-serving endpoints, from anywhere.
+        entity.Property(credential => credential.Surfaces)
+            .IsRequired()
+            .HasDefaultValueSql("ARRAY['mcp','client']::text[]");
+
+        entity.Property(credential => credential.AllowedSourceNetworks)
+            .IsRequired()
+            .HasDefaultValueSql("ARRAY[]::text[]");
+
         // Every listing an administrator reads is one user's, and so is every write, so the index that answers them is
         // the user's rather than the primary key's.
         entity.HasIndex(credential => new { credential.UserId, credential.CreatedAt })

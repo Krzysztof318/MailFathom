@@ -123,8 +123,10 @@ internal sealed partial class UserRosterAdministration(
 
         var label = displayName!.Trim();
 
+        // Counted among the users a mail-serving endpoint may serve rather than among every user, so the default
+        // administrator, recorded with both switches off, does not stand in the way of the one person such a surface serves.
         if (admission.AdmitsACallerNamingNoUser
-            && (await directory.ReadUsersAsync(1, cancellationToken)).Count > 0)
+            && await servedUsers.CountAsync(cancellationToken) > 0)
         {
             return UserProvisioningOutcome.Refused(admission.Refusal);
         }

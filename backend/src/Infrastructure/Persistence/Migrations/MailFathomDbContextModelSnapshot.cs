@@ -561,6 +561,30 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.DefaultAdministratorEntity", b =>
+                {
+                    b.Property<short>("Id")
+                        .HasColumnType("smallint");
+
+                    b.Property<DateTimeOffset?>("PasswordSettingAppliedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("RecordedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("default_administrator", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_default_administrator_single_row", "\"Id\" = 1");
+                        });
+                });
+
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.DiscoveryRunEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3961,6 +3985,12 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
+                    b.PrimitiveCollection<string[]>("AllowedSourceNetworks")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasDefaultValueSql("ARRAY[]::text[]");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -3989,6 +4019,12 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
                     b.PrimitiveCollection<string[]>("Permissions")
                         .HasColumnType("text[]");
+
+                    b.PrimitiveCollection<string[]>("Surfaces")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasDefaultValueSql("ARRAY['mcp','client']::text[]");
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
@@ -4208,6 +4244,14 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade);
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.DefaultAdministratorEntity", b =>
+                {
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.UserAccountEntity", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.DiscoveryRunEntity", b =>

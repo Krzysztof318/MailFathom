@@ -11,7 +11,7 @@ using Microsoft.Extensions.Options;
 
 namespace MailFathom.Host.Hosting.Warnings;
 
-/// <summary>States at startup what every configured administrator and credential entry may do, and what a surface with no entry grants.</summary>
+/// <summary>States at startup what every credential entry admits, and what a surface with no entry grants.</summary>
 /// <remarks>
 /// <para>
 /// A grant nobody wrote down reaches the whole of its surface, which is what makes a deployment work before it is
@@ -20,20 +20,12 @@ namespace MailFathom.Host.Hosting.Warnings;
 /// inferring it later from what a credential turned out to be able to do.
 /// </para>
 /// <para>
-/// Every configured endpoint is reported by one service and each administrator separately, because an operator who
-/// narrowed one administrator has to be able to read back that they narrowed the one they meant, and confined the one
-/// they meant to the networks they meant. An administrator is named by the name every act of theirs is attributed to
-/// and by its configuration path, which is the position they would edit; nothing here names a key, a public key, a
-/// token, an authorization server, or a subject, because a grant is what the deployment wrote and never what somebody
-/// presented.
-/// </para>
-/// <para>
-/// The two mail-serving endpoints are reported differently, because their entries hold no grant to read back: what a
-/// caller there holds is what its user's roles grant, kept to what the credential an administrator provisioned names.
-/// Their lines state which method each entry accepts and where the grant behind it is kept, which is the part an
-/// operator cannot infer from the section. The one line they share in shape with the administrative endpoint is the one
-/// about configuring no entry at all, and it differs in what it says: a caller there holds whatever of the surface the
-/// served user's roles grant, where the administrative endpoint grants the whole of itself.
+/// No entry holds a grant to read back: what a caller holds is what its user's roles grant, kept to what the credential
+/// an administrator provisioned names — on the administrative endpoint, to the administrative half of those roles. So
+/// each line states which method an entry accepts and where the grant behind it is kept, which is the part an operator
+/// cannot infer from the section, and nothing here names a key, a public key, a token, an authorization server, or a
+/// subject. The one line that differs per surface is the one about configuring no entry at all: a mail-serving surface
+/// then serves the user the deployment serves, and the administrative one serves the default administrator.
 /// </para>
 /// <para>
 /// It records rather than warns, including for the surface that configures no entry at all. That posture is already a
@@ -52,8 +44,6 @@ namespace MailFathom.Host.Hosting.Warnings;
 internal sealed partial class TransportGrantStartupReport : IHostedService
 {
     private const string McpEndpointName = "MCP";
-
-    private const string AdminEndpointName = "administrative";
 
     private const string ClientEndpointName = "client";
 
@@ -101,7 +91,7 @@ internal sealed partial class TransportGrantStartupReport : IHostedService
 
         if (this.adminEndpointSettings.Enabled)
         {
-            this.ReportAdministrators([.. this.adminEndpointSettings.Administrators]);
+            this.ReportAdministrative([.. this.adminEndpointSettings.Authentication]);
         }
 
         if (this.clientEndpointSettings.Enabled)
@@ -120,55 +110,36 @@ internal sealed partial class TransportGrantStartupReport : IHostedService
     /// <inheritdoc />
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
-    /// <summary>States what each administrator holds and where from, or what a caller holds where the endpoint names none.</summary>
-    private void ReportAdministrators(IReadOnlyList<AdministratorOptions> administrators)
+    /// <summary>States which methods the administrative endpoint accepts, or who its callers are where it accepts none.</summary>
+    private void ReportAdministrative(IReadOnlyList<UserFacingAuthenticationOptions> methods)
     {
         const string sectionName = AdminEndpointOptions.SectionName;
         var enforcement = EnforcementOn(AdminEndpointOptions.GrantedSurface);
 
-        if (administrators.Count == 0)
+        if (methods.Count == 0)
         {
-            var wholeSurface = Describe(MailFathomPermission.PublishedFor(AdminEndpointOptions.GrantedSurface));
-
-            this.LogSurfaceGrantedWithoutAnyAdministrator(
-                AdminEndpointName,
+            this.LogAdministrativeSurfaceServedAsTheDefaultAdministrator(
                 AdminEndpointOptions.RoutePrefix,
-                wholeSurface,
-                $"{sectionName}:{AdministratorConfiguration.SettingName}",
+                $"{sectionName}:{UserFacingAuthenticationConfiguration.SettingName}",
                 enforcement);
 
             return;
         }
 
-        foreach (var (index, administrator) in administrators.Index())
+        foreach (var (index, method) in methods.Index())
         {
-            var name = administrator.ValidatedName();
-            var administratorPath = AdministratorConfiguration.SettingPathOf(sectionName, administrator, index);
-            var grant = Describe(administrator.GrantedPermissions());
-            var sources = DescribeSources(administrator);
+            var entryPath = UserFacingAuthenticationConfiguration.SettingPathOf(sectionName, method, index);
 
-            // The narrowing setting is asked first because it holds whether or not a list was written: an administrator
-            // signing in by token alone may set it and state no ceiling, and what each token holds is still its own
-            // scopes rather than the whole surface the line would otherwise report.
-            if (administrator.PermissionsFromTokenScopes)
+            if (method.PermissionsFromTokenScopes)
             {
-                this.LogAdministratorGrantNarrowedByTokenScopes(name, administratorPath, grant, sources, enforcement);
-            }
-            else if (administrator.GrantsTheWholeSurface)
-            {
-                this.LogAdministratorGrantedWithoutBeingNarrowed(name, administratorPath, grant, sources, enforcement);
+                this.LogAdministrativeEntryNarrowedByTokenScopes(entryPath, method.AcceptedMethod.Name, enforcement);
             }
             else
             {
-                this.LogAdministratorGrant(name, administratorPath, grant, sources, enforcement);
+                this.LogAdministrativeEntry(entryPath, method.AcceptedMethod.Name, enforcement);
             }
         }
     }
-
-    /// <summary>Renders where an administrator may act from, naming the absence of a restriction rather than printing nothing.</summary>
-    private static string DescribeSources(AdministratorOptions administrator) => administrator.RestrictsSourceNetworks
-        ? $"only from {string.Join(", ", administrator.SourceNetworks())}"
-        : "from any network";
 
     /// <summary>States which methods a mail-serving endpoint accepts, and where the grant behind each of them lives.</summary>
     /// <remarks>
@@ -177,12 +148,6 @@ internal sealed partial class TransportGrantStartupReport : IHostedService
     /// that change while the process runs, so a report that printed a ceiling would be printing a number this section
     /// does not hold. What is worth stating is which methods are open and where to go and read what each credential
     /// names.
-    /// <para>
-    /// The no-entry line is this surface's own rather than the configured one's, because the two remedies differ: an
-    /// entry added here carries no <c>Permissions</c> at all — the key is retired and a section carrying it is refused
-    /// at startup — so an operator following the configured wording would add the entry, write the grant it promised,
-    /// and meet a process that will not start.
-    /// </para>
     /// </remarks>
     private void ReportUserFacing(
         string endpointName,
@@ -253,38 +218,22 @@ internal sealed partial class TransportGrantStartupReport : IHostedService
 
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "The administrative endpoint administrator {AdministratorName} ({AdministratorSettingPath}) holds "
-            + "{GrantedPermissions} on every credential it presents, and may act {AllowedSources}. {GrantEnforcement}")]
-    private partial void LogAdministratorGrant(
-        string administratorName,
-        string administratorSettingPath,
-        string grantedPermissions,
-        string allowedSources,
+        Message = "The administrative endpoint entry {EntrySettingPath} accepts {AcceptedMethod} from a credential "
+            + "listing the 'admin' surface, and each caller it admits is that credential's user, holding what their "
+            + "administrative roles grant. A user holding none is refused. {GrantEnforcement}")]
+    private partial void LogAdministrativeEntry(
+        string entrySettingPath,
+        string acceptedMethod,
         string grantEnforcement);
 
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "The administrative endpoint administrator {AdministratorName} ({AdministratorSettingPath}) holds at "
-            + "most {GrantedPermissions}, each token holding whichever of those its own scopes carry, and may act "
-            + "{AllowedSources}. {GrantEnforcement}")]
-    private partial void LogAdministratorGrantNarrowedByTokenScopes(
-        string administratorName,
-        string administratorSettingPath,
-        string grantedPermissions,
-        string allowedSources,
-        string grantEnforcement);
-
-    [LoggerMessage(
-        Level = LogLevel.Information,
-        Message = "The administrative endpoint administrator {AdministratorName} ({AdministratorSettingPath}) writes "
-            + "down no grant, so it holds {GrantedPermissions} — everything this surface publishes — and may act "
-            + "{AllowedSources}. Write a 'Permissions' list on the administrator to narrow it, or an empty one to grant "
-            + "nothing. {GrantEnforcement}")]
-    private partial void LogAdministratorGrantedWithoutBeingNarrowed(
-        string administratorName,
-        string administratorSettingPath,
-        string grantedPermissions,
-        string allowedSources,
+        Message = "The administrative endpoint entry {EntrySettingPath} accepts {AcceptedMethod} from a credential "
+            + "listing the 'admin' surface, and each token holds what its user's administrative roles grant, kept to "
+            + "those its own scopes carry. A user holding none is refused. {GrantEnforcement}")]
+    private partial void LogAdministrativeEntryNarrowedByTokenScopes(
+        string entrySettingPath,
+        string acceptedMethod,
         string grantEnforcement);
 
     [LoggerMessage(
@@ -325,13 +274,12 @@ internal sealed partial class TransportGrantStartupReport : IHostedService
 
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "The {EndpointName} endpoint on {EndpointPath} names no administrator, so every caller it serves "
-            + "holds {GrantedPermissions} — everything this surface publishes. There is no administrator for a grant to "
-            + "be written on until one is added under {AdministratorsSettingPath}. {GrantEnforcement}")]
-    private partial void LogSurfaceGrantedWithoutAnyAdministrator(
-        string endpointName,
+        Message = "The administrative endpoint on {EndpointPath} configures no credential entry, so every caller it "
+            + "serves acts as the default administrator 'admin' and holds what that user's administrative roles "
+            + "grant. Add an entry under {AuthenticationSettingPath} naming a method this endpoint accepts. "
+            + "{GrantEnforcement}")]
+    private partial void LogAdministrativeSurfaceServedAsTheDefaultAdministrator(
         string endpointPath,
-        string grantedPermissions,
-        string administratorsSettingPath,
+        string authenticationSettingPath,
         string grantEnforcement);
 }

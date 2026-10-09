@@ -684,6 +684,69 @@ public sealed class UserCredentialCommandTests : IDisposable
             ReadStrings(provisioning.ContentAsUtf8String(), "permissions"));
     }
 
+    /// <summary>Where a credential may be presented and from where are written where it is provisioned, so the invocation carries both and the deployment judges them.</summary>
+    [Fact]
+    public async Task Create_TheEndpointsAndNetworksTheInvocationNamed_SendsExactlyThose()
+    {
+        // Arrange
+        using var deployment = FakeUserCredentialDeployment.Provisioning([User], "mfk_not…", "mfk_a-key");
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "credential",
+            "create",
+            "--method",
+            "api-key",
+            "--surface",
+            "admin",
+            "--source-network",
+            "10.20.0.0/16",
+            "--source-network",
+            "192.0.2.7",
+            "--endpoint",
+            Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+
+        var provisioning = Assert.Single(deployment.RequestsTo(
+            HttpMethod.Post,
+            AdminEndpointRoutes.UserCredentialsPath(User)));
+
+        Assert.Equal(["admin"], ReadStrings(provisioning.ContentAsUtf8String(), "surfaces"));
+        Assert.Equal(["10.20.0.0/16", "192.0.2.7"], ReadStrings(provisioning.ContentAsUtf8String(), "allowedSourceNetworks"));
+    }
+
+    /// <summary>Unwritten endpoints are sent as no list rather than an empty one, because an empty list is a credential presented nowhere and the deployment refuses it.</summary>
+    [Fact]
+    public async Task Create_NoEndpointWritten_SendsNoListSoTheDeploymentAppliesItsDefault()
+    {
+        // Arrange
+        using var deployment = FakeUserCredentialDeployment.Provisioning([User], "mfk_not…", "mfk_a-key");
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "credential",
+            "create",
+            "--method",
+            "api-key",
+            "--endpoint",
+            Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+
+        var provisioning = Assert.Single(deployment.RequestsTo(
+            HttpMethod.Post,
+            AdminEndpointRoutes.UserCredentialsPath(User)));
+
+        Assert.Equal(
+            JsonValueKind.Null,
+            JsonDocument.Parse(provisioning.ContentAsUtf8String()).RootElement.GetProperty("surfaces").ValueKind);
+    }
+
     /// <summary>
     /// An empty grant and an absent one are opposite instructions the deployment reads from the same field — an empty
     /// array grants nothing and no array at all grants the whole mail surface — so the flag that says which is meant is

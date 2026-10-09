@@ -37,9 +37,9 @@ the contract.
 
 ## Before it can answer
 
-The administrative endpoint is off unless a deployment turns it on, and it has credentials of its own. An API key that
-works against the MCP endpoint authenticates nothing here, deliberately: reading a mailbox and administering the
-service that reads it are different authorities.
+The administrative endpoint is off unless a deployment turns it on, and a credential reaches it only where it was
+provisioned to. An API key handed to an MCP client authenticates nothing here, deliberately: reading a mailbox and
+administering the service that reads it are different authorities.
 
 ```jsonc
 {
@@ -47,13 +47,9 @@ service that reads it are different authorities.
     "Enabled": true,
     "BindAddress": "127.0.0.1",
     "Port": 8090,
-    "Administrators": [
-      {
-        "Name": "alice",
-        "Credentials": [
-          { "ApiKey": { "Name": "alice-workstation", "SecretReference": "systemd-credential:admin-workstation-key" } }
-        ]
-      }
+    "Authentication": [
+      { "Method": "password" },
+      { "Method": "api-key" }
     ]
   }
 }
@@ -61,9 +57,12 @@ service that reads it are different authorities.
 
 Six things about that block are worth understanding before you copy it:
 
-- **An administrator is a named person or system, and its credentials are how it signs in.** `alice` is what
-  `mfctl status` prints and what every act is attributed to; give each person their own entry, with their own
-  `Permissions` and, where it helps, the `AllowedSourceNetworks` they may act from.
+- **An administrator is a user holding an administrative role, and `Authentication` only says how they may sign in.**
+  The first start records the default administrator, `admin`, with the password `MAILFATHOM_ADMIN_PASSWORD` carries —
+  `admin` in the Compose and Quadlet assets — and that is your first sign-in; change it at once with
+  `mfctl credential rotate`. Anybody else signs in with a credential of their own provisioned with
+  `--surface admin`, restricted with `--source-network` where it helps, and every act is attributed to their user and
+  that credential.
   [Who administers the deployment](../operations/admin-endpoint.md#who-administers-the-deployment) is the whole of it.
 
 - **It binds a socket of its own.** `127.0.0.1` above is the safe starting point — reachable from the machine the
@@ -71,8 +70,8 @@ Six things about that block are worth understanding before you copy it:
   default. The keys are in the [endpoint configuration](../operations/configuration-endpoints.md#adminendpoint), and
   how it relates to the port your MCP clients use is
   [where each surface is served](../operations/configuration-endpoints.md#where-each-surface-is-served).
-- **`SecretReference` is a pointer, not a secret.** Where the material actually lives, and how it gets there, is
-  [secret provisioning](../operations/secret-provisioning.md). Never write a key into a configuration file.
+- **No credential is written into the configuration.** Every one of them is a record beside a user in the running
+  deployment, provisioned with [`mfctl credential create`](../operations/admin-endpoint.md#user-credentials).
 - **A clear-text endpoint is warned about at startup, not refused.** It is the right posture behind a TLS-terminating
   proxy or on a loopback bind, and the wrong one anywhere else; only you know which you have. Configure
   `AdminEndpoint:Https:Endpoints` to have MailFathom terminate TLS itself.
@@ -104,10 +103,20 @@ is the rule in full.
 
 ## Signing in
 
+The first sign-in to a new deployment is the default administrator's, with its password:
+
+```console
+$ mfctl login --endpoint http://127.0.0.1:8090 --name local --mode password
+Password for 'admin':
+Signed in to http://127.0.0.1:8090 as 'user 3f1d... credential 0198f0c4-...' (MailFathom 0.2.0), saved as profile 'local' and selected.
+```
+
+`--username` names anybody else who signs in with a password. With an API key instead:
+
 ```console
 $ mfctl login --endpoint https://mail.example.test:8443 --name production
 Administrative credential (an API key, or an access token from the configured authorization server):
-Signed in to https://mail.example.test:8443 as 'alice' (MailFathom 0.2.0), saved as profile 'production' and selected.
+Signed in to https://mail.example.test:8443 as 'user 3f1d... credential 41d7e2b0-...' (MailFathom 0.2.0), saved as profile 'production' and selected.
 ```
 
 The credential is typed at the prompt or piped in, never passed as an argument — an argument reaches your shell
@@ -128,7 +137,8 @@ token is then renewed for you until the sign-in genuinely ends, and how long tha
 the one setting that shortens it.
 
 For a scheduled job there is a third way, and it is the one to prefer there. Generate a key pair, give the deployment
-the public half only, and sign in with the private one:
+the public half only — provisioned as a credential of your user with `--surface admin` — and sign in with the private
+one:
 
 ```console
 $ mfctl login --endpoint https://mail.example.test:8443 --mode keypair --private-key ~/.config/MailFathom/production.key
@@ -136,8 +146,8 @@ $ mfctl login --endpoint https://mail.example.test:8443 --mode keypair --private
 
 Nothing reusable is stored and nothing reusable reaches the deployment: the command signs a fresh credential per
 request, each good for about a minute, and the only thing the service holds is a public key.
-[Signing in with a key pair](../operations/admin-endpoint.md#with-a-key-pair) has the `openssl` commands and the entry
-to add.
+[Signing in with a key pair](../operations/admin-endpoint.md#with-a-key-pair) has the `openssl` commands and the command
+that provisions it.
 
 If your deployment serves a certificate your workstation does not trust — self-signed, or issued by an authority only
 your organization carries — the sign-in shows you that certificate and asks once whether to trust it, the way an SSH
@@ -186,17 +196,16 @@ it, so a lost laptop is a reason to rotate the key on the server rather than to 
 
 ```console
 $ mfctl status
-'production' (https://mail.example.test:8443) accepts the stored credential as 'alice' (MailFathom 0.2.0).
+'production' (https://mail.example.test:8443) accepts the stored credential as 'user 3f1d... credential 41d7e2b0-...' (MailFathom 0.2.0).
 It holds mailfathom.admin.read, mailfathom.admin.operate.
 Documentation for that version: https://krzysztof318.github.io/MailFathom/docs/v0.2.0/
 ```
 
-A credential is granted a set of named permissions on the deployment, and each command needs the one its operation is
-published under — two, for the twelve commands that read something before they change it. Signing in
-needs none, so a key that reads `It holds no administrative permission` still signs in and is refused everywhere else —
-which is how a credential is retired without its entry being removed. When a command is refused for want of one, it
-names the permission to add and where it is written, so the answer is to widen that credential's grant rather than to
-replace the key.
+What you hold is what the roles assigned to your user grant, and each command needs the one permission its operation is
+published under — two, for the twelve commands that read something before they change it. A user whose roles grant no
+administrative permission at all is not an administrator, and every credential they hold is refused at sign-in. When a
+command is refused for want of one, it names the permission and says to give your user a role holding it, so the answer
+is to widen the user's roles rather than to replace the key.
 [What a credential may do](../operations/permissions.md) lists the names, what each covers, and which twelve commands need
 a second one; [what the endpoint serves](../operations/admin-endpoint.md#what-the-endpoint-serves) names the permission
 every route is published under.

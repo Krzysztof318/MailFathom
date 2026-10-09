@@ -35,11 +35,9 @@ namespace MailFathom.Host.Configuration.Access;
 /// <para>
 /// A permission joins that list from every entry whose grant a token's own scopes narrow, and from no other, which
 /// follows from the same reading of the field: a permission the deployment grants without consulting the token is not
-/// something any client can ask for. What that set is depends on which axis the entry belongs to. On the administrative
-/// surface it is the union of those administrators' own configured ceilings, which is exactly what an operator has to create
-/// as scopes in their authorization server. On a mail-serving surface there is no configured ceiling to read — each
-/// credential record carries its own — so the whole published vocabulary of that surface is advertised, and a token
-/// still holds only the intersection of its scopes with the record that resolved its user.
+/// something any client can ask for. There is no configured ceiling to read — each user's grant is their own — so the
+/// whole published vocabulary of the surface is advertised, and a token still holds only the intersection of its scopes
+/// with what the user it resolved holds.
 /// </para>
 /// </remarks>
 internal sealed record PublishedOAuthMetadata(
@@ -47,40 +45,7 @@ internal sealed record PublishedOAuthMetadata(
     IReadOnlyList<string> AuthorizationServers,
     IReadOnlyList<string> ScopesSupported)
 {
-    /// <summary>Composes what the configured administrators publish between them.</summary>
-    /// <param name="administrators">The configured administrators, in configuration order.</param>
-    /// <returns>The published metadata.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="administrators" /> is <see langword="null" />.</exception>
-    /// <exception cref="ArgumentException">Thrown when no credential states OAuth, which is a surface accepting no token at all.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when the settings have not passed their configuration errors.</exception>
-    /// <remarks>
-    /// The whole administrator rather than its OAuth blocks, because the grant belongs to the administrator and the
-    /// document has to carry it. Reading the blocks alone would leave the two halves of one administrator consulted in
-    /// two places, which is how a document comes to advertise a ceiling nobody granted.
-    /// </remarks>
-    internal static PublishedOAuthMetadata For(IReadOnlyList<AdministratorOptions> administrators)
-    {
-        ArgumentNullException.ThrowIfNull(administrators);
-
-        var oauthMethods = AdministratorConfiguration.OAuthMethodsIn(administrators);
-
-        if (oauthMethods.Count == 0)
-        {
-            throw new ArgumentException(
-                "A protected resource metadata document describes the configured OAuth methods, and none was configured.",
-                nameof(administrators));
-        }
-
-        var advertisedPermissions = administrators
-            .Where(administrator => administrator.PermissionsFromTokenScopes
-                && administrator.Credentials.Any(credential => credential.OAuth is not null))
-            .SelectMany(administrator => administrator.GrantedPermissions())
-            .Select(permission => permission.Name);
-
-        return Compose(oauthMethods, advertisedPermissions);
-    }
-
-    /// <summary>Composes what a mail-serving surface's entries publish between them.</summary>
+    /// <summary>Composes what a surface's entries publish between them.</summary>
     /// <param name="methods">The methods the endpoint accepts, in configuration order.</param>
     /// <param name="surface">The surface these entries guard, whose whole vocabulary an entry narrowed by token scopes advertises.</param>
     /// <returns>The published metadata.</returns>

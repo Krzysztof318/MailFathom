@@ -43,6 +43,7 @@ public sealed class UserCredentialAdministrationTests
             UserCredentialUsername.Create("user"),
             AcceptablePassword.AsMemory(),
             permissions: null,
+            UserCredentialReach.Default,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -58,6 +59,7 @@ public sealed class UserCredentialAdministrationTests
             Arg.Is<UserCredentialLookup>(lookup => lookup.Value == "user"),
             AdministrationHarness.StoredHash,
             Arg.Any<IReadOnlyList<MailFathomPermission>>(),
+            Arg.Any<UserCredentialReach>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -74,6 +76,7 @@ public sealed class UserCredentialAdministrationTests
             UserCredentialUsername.Create("user"),
             AcceptablePassword.AsMemory(),
             permissions: null,
+            UserCredentialReach.Default,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -84,6 +87,7 @@ public sealed class UserCredentialAdministrationTests
             Arg.Any<UserCredentialLookup>(),
             Arg.Is<string>(stored => stored != null && stored.Contains(AcceptablePassword, StringComparison.Ordinal)),
             Arg.Any<IReadOnlyList<MailFathomPermission>>(),
+            Arg.Any<UserCredentialReach>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -104,6 +108,7 @@ public sealed class UserCredentialAdministrationTests
                 UserCredentialUsername.Create("user"),
                 "short".AsMemory(),
                 permissions: null,
+                UserCredentialReach.Default,
                 TestContext.Current.CancellationToken));
 
         // Assert
@@ -122,6 +127,7 @@ public sealed class UserCredentialAdministrationTests
         var provisioning = await harness.Administration.ProvisionApiKeyAsync(
             User,
             permissions: null,
+            UserCredentialReach.Default,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -135,6 +141,7 @@ public sealed class UserCredentialAdministrationTests
             Arg.Is<UserCredentialLookup>(lookup => lookup.Value == StatedApiKeyMinter.Digest),
             null,
             Arg.Any<IReadOnlyList<MailFathomPermission>>(),
+            Arg.Any<UserCredentialReach>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -150,6 +157,7 @@ public sealed class UserCredentialAdministrationTests
         var provisioning = await harness.Administration.ProvisionApiKeyAsync(
             User,
             permissions: null,
+            UserCredentialReach.Default,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -168,6 +176,7 @@ public sealed class UserCredentialAdministrationTests
             User,
             WrittenPublicKey,
             permissions: null,
+            UserCredentialReach.Default,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -181,6 +190,7 @@ public sealed class UserCredentialAdministrationTests
             Arg.Is<UserCredentialLookup>(lookup => lookup.Value == StatedPublicKeyReader.Fingerprint),
             WrittenPublicKey,
             Arg.Any<IReadOnlyList<MailFathomPermission>>(),
+            Arg.Any<UserCredentialReach>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -197,6 +207,7 @@ public sealed class UserCredentialAdministrationTests
                 User,
                 "not a key",
                 permissions: null,
+                UserCredentialReach.Default,
                 TestContext.Current.CancellationToken));
 
         // Assert
@@ -216,6 +227,7 @@ public sealed class UserCredentialAdministrationTests
             "https://login.example/",
             "subject-1",
             permissions: null,
+            UserCredentialReach.Default,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -230,6 +242,7 @@ public sealed class UserCredentialAdministrationTests
             Arg.Any<UserCredentialLookup>(),
             null,
             Arg.Any<IReadOnlyList<MailFathomPermission>>(),
+            Arg.Any<UserCredentialReach>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -251,6 +264,7 @@ public sealed class UserCredentialAdministrationTests
             issuer,
             subject,
             permissions: null,
+            UserCredentialReach.Default,
             TestContext.Current.CancellationToken));
 
         // Assert
@@ -272,6 +286,7 @@ public sealed class UserCredentialAdministrationTests
         await harness.Administration.ProvisionApiKeyAsync(
             User,
             permissions: null,
+            UserCredentialReach.Default,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -290,6 +305,7 @@ public sealed class UserCredentialAdministrationTests
         await harness.Administration.ProvisionApiKeyAsync(
             User,
             [MailFathomPermission.MailSend, MailFathomPermission.MailRead, MailFathomPermission.MailSend],
+            UserCredentialReach.Default,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -304,7 +320,7 @@ public sealed class UserCredentialAdministrationTests
         var harness = new AdministrationHarness(MailFathomPermission.AdminCredentialsWrite);
 
         // Act
-        await harness.Administration.ProvisionApiKeyAsync(User, [], TestContext.Current.CancellationToken);
+        await harness.Administration.ProvisionApiKeyAsync(User, [], UserCredentialReach.Default, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.NotNull(harness.WrittenGrant);
@@ -369,6 +385,7 @@ public sealed class UserCredentialAdministrationTests
         await Assert.ThrowsAsync<ArgumentException>(() => harness.Administration.ProvisionApiKeyAsync(
             User,
             [MailFathomPermission.AdminOperate],
+            UserCredentialReach.Default,
             TestContext.Current.CancellationToken));
 
         // Assert
@@ -387,6 +404,7 @@ public sealed class UserCredentialAdministrationTests
             UserCredentialUsername.Create("user"),
             AcceptablePassword.AsMemory(),
             permissions: null,
+            UserCredentialReach.Default,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -420,6 +438,7 @@ public sealed class UserCredentialAdministrationTests
             UserCredentialUsername.Create("user"),
             AcceptablePassword.AsMemory(),
             permissions: null,
+            UserCredentialReach.Default,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -633,18 +652,21 @@ public sealed class UserCredentialAdministrationTests
                 UserCredentialUsername.Create("user"),
                 AcceptablePassword.AsMemory(),
                 permissions: null,
+                UserCredentialReach.Default,
                 cancellationToken)),
-            RefusalOf(() => harness.Administration.ProvisionApiKeyAsync(User, permissions: null, cancellationToken)),
+            RefusalOf(() => harness.Administration.ProvisionApiKeyAsync(User, permissions: null, UserCredentialReach.Default, cancellationToken)),
             RefusalOf(() => harness.Administration.ProvisionPublicKeyAsync(
                 User,
                 WrittenPublicKey,
                 permissions: null,
+                UserCredentialReach.Default,
                 cancellationToken)),
             RefusalOf(() => harness.Administration.ProvisionOAuthSubjectAsync(
                 User,
                 "https://login.example/",
                 "subject-1",
                 permissions: null,
+                UserCredentialReach.Default,
                 cancellationToken)));
 
         // Assert
@@ -710,6 +732,7 @@ public sealed class UserCredentialAdministrationTests
                 Arg.Any<UserCredentialLookup>(),
                 Arg.Any<string>(),
                 Arg.Any<IReadOnlyList<MailFathomPermission>?>(),
+                Arg.Any<UserCredentialReach>(),
                 Arg.Any<CancellationToken>())
             .Returns(UserCredentialWriteOutcome.Written);
         harness.Credentials.ReadForUserAsync(User, Arg.Any<CancellationToken>())
@@ -734,6 +757,7 @@ public sealed class UserCredentialAdministrationTests
             UserCredentialUsername.Create("user"),
             AcceptablePassword.AsMemory(),
             permissions: null,
+            UserCredentialReach.Default,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -874,6 +898,7 @@ public sealed class UserCredentialAdministrationTests
                     this.WrittenGrant = grant;
                     this.GrantWasWritten = true;
                 }),
+                Arg.Any<UserCredentialReach>(),
                 Arg.Any<CancellationToken>())
             .Returns(outcome);
 

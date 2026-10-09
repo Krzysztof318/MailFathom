@@ -3,7 +3,6 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Host.Configuration.Access;
-using MailFathom.Infrastructure.Security.OAuth;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Configuration.Access;
@@ -11,8 +10,6 @@ namespace MailFathom.Host.UnitTests.Configuration.Access;
 /// <summary>Covers one authorization server profile: what it must state, whose tokens it serves, and where it then looks for that server.</summary>
 public sealed class AuthorizationServerOptionsTests
 {
-    private const string UserSubject = "9f2c";
-
     [Fact]
     public void FindConfigurationErrors_ANamedProfileWithAnIssuer_IsAccepted()
     {
@@ -20,7 +17,7 @@ public sealed class AuthorizationServerOptionsTests
         var profile = Profile("workforce", "https://sso.example.test/realms/mailfathom");
 
         // Act, Assert
-        Assert.Empty(profile.FindConfigurationErrors(OAuthSubjectAdmission.ConfiguredSubjects));
+        Assert.Empty(profile.FindConfigurationErrors());
     }
 
     /// <summary>A startup message and a log line identify a profile by its name rather than by its issuer, which names the operator's identity provider.</summary>
@@ -34,7 +31,7 @@ public sealed class AuthorizationServerOptionsTests
         var profile = Profile(name, "https://sso.example.test/realms/mailfathom");
 
         // Act
-        var error = Assert.Single(profile.FindConfigurationErrors(OAuthSubjectAdmission.ConfiguredSubjects));
+        var error = Assert.Single(profile.FindConfigurationErrors());
 
         // Assert
         Assert.StartsWith("Name", error, StringComparison.Ordinal);
@@ -51,7 +48,7 @@ public sealed class AuthorizationServerOptionsTests
         var profile = Profile("workforce", issuer);
 
         // Act
-        var error = Assert.Single(profile.FindConfigurationErrors(OAuthSubjectAdmission.ConfiguredSubjects));
+        var error = Assert.Single(profile.FindConfigurationErrors());
 
         // Assert
         Assert.StartsWith("Issuer", error, StringComparison.Ordinal);
@@ -120,7 +117,7 @@ public sealed class AuthorizationServerOptionsTests
         profile.MetadataAddress = metadataAddress;
 
         // Act
-        var error = Assert.Single(profile.FindConfigurationErrors(OAuthSubjectAdmission.ConfiguredSubjects));
+        var error = Assert.Single(profile.FindConfigurationErrors());
 
         // Assert
         Assert.StartsWith("MetadataAddress", error, StringComparison.Ordinal);
@@ -138,83 +135,12 @@ public sealed class AuthorizationServerOptionsTests
         var profile = Profile("workforce", "https://operator:s3cret@sso.example.test/realms/mailfathom?token=abc");
 
         // Act
-        var error = Assert.Single(profile.FindConfigurationErrors(OAuthSubjectAdmission.ConfiguredSubjects));
+        var error = Assert.Single(profile.FindConfigurationErrors());
 
         // Assert
         Assert.StartsWith("Issuer", error, StringComparison.Ordinal);
         Assert.DoesNotContain("s3cret", error, StringComparison.Ordinal);
         Assert.DoesNotContain("sso.example.test", error, StringComparison.Ordinal);
-    }
-
-    /// <summary>
-    /// A tenant holds whoever the operator's identity platform holds, and every subject able to obtain a token for this
-    /// resource would otherwise read the configured user's mail. The profile therefore states whose tokens it serves.
-    /// </summary>
-    [Fact]
-    public void FindConfigurationErrors_AProfileNamingNoSubject_IsRefused()
-    {
-        // Arrange
-        var profile = new AuthorizationServerOptions
-        {
-            Name = "workforce",
-            Issuer = "https://sso.example.test/realms/mailfathom",
-        };
-
-        // Act
-        var error = Assert.Single(profile.FindConfigurationErrors(OAuthSubjectAdmission.ConfiguredSubjects));
-
-        // Assert
-        Assert.StartsWith("AuthorizedSubjects", error, StringComparison.Ordinal);
-    }
-
-    [Theory]
-    [InlineData("")]
-    [InlineData("   ")]
-    public void FindConfigurationErrors_ABlankSubject_IsRefusedByItsPosition(string subject)
-    {
-        // Arrange
-        var profile = Profile("workforce", "https://sso.example.test/realms/mailfathom");
-        profile.AuthorizedSubjects.Add(subject);
-
-        // Act
-        var error = Assert.Single(profile.FindConfigurationErrors(OAuthSubjectAdmission.ConfiguredSubjects));
-
-        // Assert
-        Assert.StartsWith("AuthorizedSubjects:1", error, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void FindConfigurationErrors_ARepeatedSubject_IsRefused()
-    {
-        // Arrange
-        var profile = Profile("workforce", "https://sso.example.test/realms/mailfathom");
-        profile.AuthorizedSubjects.Add(UserSubject);
-
-        // Act
-        var error = Assert.Single(profile.FindConfigurationErrors(OAuthSubjectAdmission.ConfiguredSubjects));
-
-        // Assert
-        Assert.StartsWith("AuthorizedSubjects:1", error, StringComparison.Ordinal);
-    }
-
-    /// <summary>A subject is unique only within the server that issued it, so what the policy compares is the pair.</summary>
-    [Fact]
-    public void AuthorizedIdentities_AConfiguredSubject_IsPairedWithTheProfilesIssuer()
-    {
-        // Arrange
-        var profile = Profile("workforce", "https://sso.example.test/realms/mailfathom");
-        profile.AuthorizedSubjects.Add("  4b81  ");
-
-        // Act
-        var identities = profile.AuthorizedIdentities();
-
-        // Assert
-        Assert.Equal(
-            [
-                OAuthIdentity.IdentityOf("https://sso.example.test/realms/mailfathom", UserSubject),
-                OAuthIdentity.IdentityOf("https://sso.example.test/realms/mailfathom", "4b81"),
-            ],
-            identities);
     }
 
     [Fact]
@@ -225,20 +151,6 @@ public sealed class AuthorizationServerOptionsTests
 
         // Assert
         Assert.False(profile.IsConfigured);
-    }
-
-    /// <summary>A profile carrying only subjects is a profile an operator started writing, so it is validated rather than skipped.</summary>
-    [Fact]
-    public void IsConfigured_AProfileCarryingOnlySubjects_ReportsSomethingWasWritten()
-    {
-        // Arrange
-        var profile = new AuthorizationServerOptions();
-
-        // Act
-        profile.AuthorizedSubjects.Add(UserSubject);
-
-        // Assert
-        Assert.True(profile.IsConfigured);
     }
 
     /// <summary>A deployment serving agents alone offers a browser nothing, which is the posture rather than something to turn off.</summary>
@@ -277,7 +189,7 @@ public sealed class AuthorizationServerOptionsTests
 
         // Act
         profile.ClientId = clientId;
-        var error = Assert.Single(profile.FindConfigurationErrors(OAuthSubjectAdmission.ConfiguredSubjects));
+        var error = Assert.Single(profile.FindConfigurationErrors());
 
         // Assert
         Assert.StartsWith("ClientId", error, StringComparison.Ordinal);
@@ -293,7 +205,7 @@ public sealed class AuthorizationServerOptionsTests
 
         // Act
         profile.DisplayName = displayName;
-        var error = Assert.Single(profile.FindConfigurationErrors(OAuthSubjectAdmission.ConfiguredSubjects));
+        var error = Assert.Single(profile.FindConfigurationErrors());
 
         // Assert
         Assert.StartsWith("DisplayName", error, StringComparison.Ordinal);
@@ -350,5 +262,5 @@ public sealed class AuthorizationServerOptionsTests
     }
 
     private static AuthorizationServerOptions Profile(string? name, string? issuer) =>
-        new() { Name = name, Issuer = issuer, AuthorizedSubjects = { UserSubject } };
+        new() { Name = name, Issuer = issuer };
 }

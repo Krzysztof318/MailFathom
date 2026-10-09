@@ -132,7 +132,7 @@ internal sealed class UserFacingAuthenticationOptions
             }
             else
             {
-                foreach (var error in oauth.FindConfigurationErrors(OAuthSubjectAdmission.ResolvedUserCredentials))
+                foreach (var error in oauth.FindConfigurationErrors())
                 {
                     yield return $"{settingPath}:{nameof(this.OAuth)}:{error}";
                 }

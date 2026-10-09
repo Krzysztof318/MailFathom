@@ -34,23 +34,6 @@ internal static class ProtectedResourceMetadataEndpoint
 {
     /// <summary>Maps one surface's document at the address its resource identifier places it.</summary>
     /// <param name="endpoints">The route builder.</param>
-    /// <param name="administrators">The endpoint's configured administrators, in configuration order.</param>
-    /// <returns>The mapped route, so a surface can attach what only its own document needs.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="endpoints" /> or <paramref name="administrators" /> is <see langword="null" />.</exception>
-    /// <exception cref="ArgumentException">Thrown when no credential states OAuth, which is a surface accepting no token at all.</exception>
-    /// <remarks>The administrative endpoint maps this one; a mail-serving surface maps <see cref="MapUserFacingProtectedResourceMetadata" /> beside it, because a token admitted there resolves a user's credential rather than a configured administrator.</remarks>
-    internal static RouteHandlerBuilder MapAdministrativeProtectedResourceMetadata(
-        this IEndpointRouteBuilder endpoints,
-        IReadOnlyList<AdministratorOptions> administrators)
-    {
-        ArgumentNullException.ThrowIfNull(endpoints);
-        ArgumentNullException.ThrowIfNull(administrators);
-
-        return endpoints.Map(PublishedOAuthMetadata.For(administrators));
-    }
-
-    /// <summary>Maps a mail-serving surface's document at the address its resource identifier places it.</summary>
-    /// <param name="endpoints">The route builder.</param>
     /// <param name="methods">The methods the endpoint accepts, in configuration order.</param>
     /// <param name="grantedSurface">The half of the permission vocabulary the endpoint's credentials draw from, which decides what an entry narrowed by token scopes advertises.</param>
     /// <returns>The mapped route, so a surface can attach what only its own document needs.</returns>

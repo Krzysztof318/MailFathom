@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text;
+using MailFathom.Application.Access.Credentials;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Security.Transport;
 using MailFathom.IntegrationTests.Orchestration;
@@ -50,11 +51,7 @@ public sealed class ComposedPipelineOrderTests
 
     private const string SecondMcpKey = "not-a-real-second-mcp-key";
 
-    private const string AdminKeyName = "operator";
-
     private const string AdminKey = "not-a-real-admin-key";
-
-    private const string SecondAdminKeyName = "deputy";
 
     private const string SecondAdminKey = "not-a-real-second-admin-key";
 
@@ -67,6 +64,14 @@ public sealed class ComposedPipelineOrderTests
     /// <summary>The user <see cref="SecondMcpKey" /> was provisioned for, told apart from the one above so the two spend separate allowances.</summary>
     private static readonly UserId Laptop =
         UserId.Create(new Guid("22222222-2222-2222-2222-222222222222"));
+
+    /// <summary>The administrator <see cref="AdminKey" /> was provisioned for.</summary>
+    private static readonly UserId Operator =
+        UserId.Create(new Guid("33333333-3333-3333-3333-333333333333"));
+
+    /// <summary>The administrator <see cref="SecondAdminKey" /> was provisioned for.</summary>
+    private static readonly UserId Deputy =
+        UserId.Create(new Guid("44444444-4444-4444-4444-444444444444"));
 
     private const string AuthorizationServerName = "workforce";
 
@@ -470,11 +475,11 @@ public sealed class ComposedPipelineOrderTests
         Assert.Equal(StatusCodes.Status429TooManyRequests, second.StatusCode);
     }
 
-    /// <summary>Starts a shape with the two MCP keys this class presents already provisioned against their users.</summary>
+    /// <summary>Starts a shape with every key this class presents already provisioned against its user.</summary>
     /// <remarks>
-    /// A key a user's client presents is a row rather than a configured value, so the shape names the method and this
-    /// supplies the credentials. The administrative keys stay configured, because that surface's credentials are the
-    /// operator's own and are still written in its section.
+    /// A key is a row rather than a configured value on every surface, so the shape names the method and this supplies
+    /// the credentials. The administrative keys list that endpoint alone and belong to users served on neither mail
+    /// endpoint, which is how a deployment provisions an operator.
     /// </remarks>
     private static Task<InProcessComposedHost> StartAsync(IReadOnlyList<KeyValuePair<string, string?>> shape) =>
         InProcessComposedHost.StartAsync(
@@ -482,7 +487,9 @@ public sealed class ComposedPipelineOrderTests
             TestContext.Current.CancellationToken,
             ProvisionedUserApiKeys.Holding(
                 new ProvisionedUserApiKey(McpKey, Workstation),
-                new ProvisionedUserApiKey(SecondMcpKey, Laptop)));
+                new ProvisionedUserApiKey(SecondMcpKey, Laptop),
+                new ProvisionedUserApiKey(AdminKey, Operator, EndpointAccess: new UserEndpointAccess(McpEndpoint: false, ClientEndpoint: false), Reach: new UserCredentialReach([UserCredentialSurface.Administration], [])),
+                new ProvisionedUserApiKey(SecondAdminKey, Deputy, EndpointAccess: new UserEndpointAccess(McpEndpoint: false, ClientEndpoint: false), Reach: new UserCredentialReach([UserCredentialSurface.Administration], []))));
 
     /// <summary>One token per caller and an hour before the next one, so no replenishment can land between two requests a test sends back to back.</summary>
     private static IReadOnlyList<KeyValuePair<string, string?>> OneRequestPerCaller =>
@@ -512,12 +519,7 @@ public sealed class ComposedPipelineOrderTests
         .. adminAuthenticates
             ?
             [
-                new("AdminEndpoint:Administrators:0:Name", "administrator-0"),
-                new("AdminEndpoint:Administrators:0:Credentials:0:ApiKey:Name", AdminKeyName),
-                new("AdminEndpoint:Administrators:0:Credentials:0:ApiKey:SecretReference", $"plaintext:{AdminKey}"),
-                new("AdminEndpoint:Administrators:1:Name", "administrator-1"),
-                new("AdminEndpoint:Administrators:1:Credentials:0:ApiKey:Name", SecondAdminKeyName),
-                new KeyValuePair<string, string?>("AdminEndpoint:Administrators:1:Credentials:0:ApiKey:SecretReference", $"plaintext:{SecondAdminKey}"),
+                new KeyValuePair<string, string?>("AdminEndpoint:Authentication:0:Method", "api-key"),
             ]
             : Array.Empty<KeyValuePair<string, string?>>(),
     ];
@@ -536,11 +538,10 @@ public sealed class ComposedPipelineOrderTests
         new("AdminEndpoint:Enabled", "true"),
         new("AdminEndpoint:Port", "8082"),
         .. McpOAuthEntry,
-        new("AdminEndpoint:Administrators:0:Name", "administrator-0"),
-        new("AdminEndpoint:Administrators:0:Credentials:0:OAuth:Resource", "https://mail.example.test/api/admin"),
-        new("AdminEndpoint:Administrators:0:Credentials:0:OAuth:AuthorizationServers:0:Name", AuthorizationServerName),
-        new("AdminEndpoint:Administrators:0:Credentials:0:OAuth:AuthorizationServers:0:Issuer", Issuer),
-        new("AdminEndpoint:Administrators:0:Credentials:0:OAuth:AuthorizationServers:0:AuthorizedSubjects:0", "someone"),
+        new("AdminEndpoint:Authentication:0:Method", "oauth-subject"),
+        new("AdminEndpoint:Authentication:0:OAuth:Resource", "https://mail.example.test/api/admin"),
+        new("AdminEndpoint:Authentication:0:OAuth:AuthorizationServers:0:Name", AuthorizationServerName),
+        new("AdminEndpoint:Authentication:0:OAuth:AuthorizationServers:0:Issuer", Issuer),
     ];
 
     /// <summary>The MCP endpoint's one OAuth entry, stated once because two shapes carry it.</summary>

@@ -70,9 +70,9 @@ internal sealed class UserApiKeyAuthenticationHandler : AuthenticationHandler<Us
             return AuthenticateResult.Fail("The request presented no usable credential.");
         }
 
-        if (!this.Options.Surface.Admits(admitted.EndpointAccess))
+        if (await UserCredentialAdmission.FindRefusalAsync(this.Context, this.Options.Surface, admitted) is { } refusal)
         {
-            return AuthenticateResult.Fail("The credential's user is kept off this endpoint.");
+            return AuthenticateResult.Fail(refusal);
         }
 
         var identity = TransportGrant.IdentityFor(
@@ -80,7 +80,7 @@ internal sealed class UserApiKeyAuthenticationHandler : AuthenticationHandler<Us
             ApiKeyAuthentication.ApiKeyNameClaimType,
             ApiKeyAuthentication.RoleClaimType,
             this.Options.Surface.ApiKeySchemeName,
-            admitted.Permissions);
+            UserCredentialAdmission.PermissionsPresentedOn(this.Options.Surface, admitted));
 
         // The user is what the credential resolved, so the principal carries them rather than leaving the surface to
         // answer for whose mail the request acts on. The credential travels beside them because a session minted from

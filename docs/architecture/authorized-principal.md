@@ -1,6 +1,6 @@
 # Who a use case is running for
 
-<!-- describes: backend/src/Application/Access/**, backend/src/Host/Security/Transport/TransportAuthorizedPrincipalSource.cs, backend/src/Host/Security/Transport/TransportCallerIdentity.cs, backend/src/Host/Security/Transport/TransportCallerUser.cs, backend/src/Host/Mcp/McpAttachmentDownloadEndpoint.cs, backend/src/Application/Emails/DownloadAttachment/** -->
+<!-- describes: backend/src/Application/Access/**, backend/src/Host/Security/Transport/TransportAuthorizedPrincipalSource.cs, backend/src/Host/Security/Transport/TransportCallerIdentity.cs, backend/src/Host/Security/Transport/TransportCallerUser.cs, backend/src/Host/Security/Transport/UserCredentialAdmission.cs, backend/src/Host/Mcp/McpAttachmentDownloadEndpoint.cs, backend/src/Application/Emails/DownloadAttachment/** -->
 
 A use case can be reached by more than one thing. Today an MCP tool, an administrative route, a background worker, and
 the attachment download link all end at application-layer code, and each of them arrives by a different path with
@@ -46,7 +46,7 @@ There are three kinds of principal, and none of them is a weaker version of anot
 
 | Kind | What it is | What it holds |
 | --- | --- | --- |
-| Caller | Somebody who presented a credential a configured entry admits, or — where the surface configures no entry at all — somebody who presented nothing | On a mail surface, what the user's roles grant kept to what the credential names, each permission at the scopes it was granted at; on the administrative surface, what the administrator was configured with, or everything that surface publishes where it configures no entry |
+| Caller | Somebody who presented a credential a configured entry admits, or — where the surface configures no entry at all — somebody who presented nothing | On a mail surface, what the user's roles grant kept to what the credential names, each permission at the scopes it was granted at; on the administrative surface, the administrative half of what the user's roles grant, kept to a token's own scopes on an entry that reads them — or, where the surface configures no entry, what the default administrator's roles grant on that half |
 | Process identity | MailFathom itself, running work no caller requested | Nothing, by construction |
 | Signed capability | A ticket this deployment signed for one object | Nothing; the ticket is the authorization |
 
@@ -101,13 +101,14 @@ The host composes one `IAuthorizedPrincipalSource` per scope, which for a served
 
 - **A request an authentication scheme validated** becomes a caller, named by what this deployment authorized — the
   identifier of the user credential the presented value resolved to on a mail-serving surface, and on the
-  administrative surface the `Name` of the configured administrator the key, public key, or token's issuer and subject
-  belongs to — whichever of its credentials was presented. What the credential names travels as claims the scheme
-  wrote when it was judged, so nothing per request re-reads a configuration section or the credential's row. On a
-  mail-serving surface those claims are a narrowing rather than the grant: a step after authorization reads the user's
-  own grant through `UserGrantResolver`, which each replica remembers per user until a change to what users are granted
-  makes it forget, and the caller holds that grant kept to the names the claims carry. A request that step never reached
-  holds nothing.
+  administrative surface the user and that credential together, as `user <user id> credential <credential id>`, which
+  is what every administrative act, log scope, and audit record names. What the credential names travels as claims the
+  scheme wrote when it was judged, so nothing per request re-reads a configuration section or the credential's row.
+  Those claims are a narrowing rather than the grant: a step after authorization reads the user's own grant through
+  `UserGrantResolver`, which each replica remembers per user until a change to what users are granted makes it forget,
+  and the caller holds that grant kept to the names the claims carry — on a mail-serving surface the credential's own
+  names, and on the administrative surface the whole administrative half, kept to a token's scopes where its entry reads
+  them. A request that step never reached holds nothing.
 - **A scope with no request behind it** is the process's own identity. Work reached outside a request in this process is
   work no caller asked for.
 - **A route that verified a capability** states that principal onto its own scope before it reaches the use case. The
@@ -118,7 +119,9 @@ configures no `Authentication` entry at all, the caller is served anyway — the
 which is the posture ADR 0012 settled and the startup record already states, so reporting no principal there would have
 a use case refuse every call on a deployment whose own record says it serves somebody. On the MCP or client surface that
 caller acts for the user the deployment serves and holds what that user's roles grant on the mail half; on the
-administrative surface it acts for no user and holds everything that surface publishes. Where the
+administrative surface it acts for no user, is named `user <the default administrator> credential none`, and holds what
+the default administrator's roles grant on the administrative half — and where the default administrator was removed,
+it is no principal at all, so such an endpoint serves nobody. Where the
 surface does configure a credential, such a request is none of the three.
 
 **The download route is withheld from that grant on either posture.** The MCP surface serves it beside the protocol
@@ -161,10 +164,13 @@ every mailbox read answers a caller with their own half of a deployment serving 
 [The health endpoints](../operations/health-endpoints.md#the-three-probes) record what each refusal means to an
 operator.
 
-The claim is read on the two mail-serving surfaces alone. A request admitted on the administrative surface acts for no
-user whether or not it carried one, which is why the method that produces the claim
-[is refused there at startup](../operations/mcp-endpoint.md#passwords): a credential naming a person would otherwise be
-admitted to a surface with nowhere to put them, and what it authorized would be the deployment's own authority.
+The claim decides whose mail a request reaches on the two mail-serving surfaces alone. On the administrative surface it
+decides whose grant the caller holds and whom an act is attributed to, and the principal still acts for no user: an
+administrator signed in with a credential of their own is not thereby acting on their own mailbox, and a user-scoped use
+case refuses them however broad their grant. Every administrative route about one user names that user instead.
+Admission there asks one more thing of the user than a mail-serving surface does — that their roles grant at least one
+administrative permission at some scope — and a credential whose user holds none is refused at authentication with the
+answer an unknown credential gets.
 
 **The client surface reaches the same adapter and is no third case.** It is the third surface a request can arrive on,
 and its grant is resolved exactly as the MCP surface's is — the user's roles, kept to what the credential names, or
@@ -186,7 +192,10 @@ about. A deployment that cannot resolve its own user never reaches a use case at
 `14002 DeploymentUserUnresolved` in the two places that reading is taken. Several users behind a surface that admits
 a caller naming none is a refusal to start, so nothing serves. Several users otherwise is a start that succeeds, and the
 code is then answered per request, as `409` on the handful of acts above that resolve the sole user and name none
-themselves.
+themselves. `14003 DefaultAdministratorUnusable` is the third code of the family and is answered at startup alone: a
+`MAILFATHOM_ADMIN_PASSWORD` the password policy refuses, or a default administrator whose username another user's
+password credential already holds, stops the start naming which —
+[the default administrator](../operations/admin-endpoint.md#the-default-administrator) is the page.
 
 A use case reached under no principal at all is refused the same way. That is the case an entrypoint produces by
 omission — it never said what admitted the work — and refusing it is what "fails rather than defaulting to permitted"

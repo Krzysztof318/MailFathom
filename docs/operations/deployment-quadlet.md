@@ -158,16 +158,17 @@ openssl rand -base64 33 | tr -d '\n' \
 systemd-ask-password -n \
   | systemd-creds --user encrypt --name=imap-primary-password - \
       ~/.config/credstore.encrypted/imap-primary-password
-
-openssl rand -base64 33 | tr -d '\n' \
-  | systemd-creds --user encrypt --name=admin-api-key - \
-      ~/.config/credstore.encrypted/admin-api-key
 ```
 
 The mailbox password arrives through `systemd-ask-password -n` so that it is neither a shell-history entry nor a file
-you have to remember to delete. `-n` is what keeps a trailing newline out of the material. `admin-api-key` is the key
-the example configuration's administrative endpoint takes; nothing but the encrypted file holds it, and
-`systemd-creds --user decrypt` reads it back for `mfctl login` below.
+you have to remember to delete. `-n` is what keeps a trailing newline out of the material.
+
+No credential is encrypted here for the administrative endpoint either. The first start records
+[the default administrator](admin-endpoint.md#the-default-administrator), `admin`, with the password
+`MAILFATHOM_ADMIN_PASSWORD` carries, and `mailfathom.container` sets it to `admin` — safe only while that port stays on
+loopback. Edit that line before the first start to give it another; the value is read on the first start alone, and any
+value but `admin` has to meet the password policy — twelve characters at least — or the start stops and says so. Every
+start warns while `admin` still signs in with the shipped value.
 
 No credential is provisioned here for the MCP endpoint. What a client presents there resolves a record beside the user
 whose mail it reaches, so the key is minted by the running deployment with
@@ -226,9 +227,9 @@ Read [configuration sources](configuration-sources.md) for the precedence and
 than by this file, so it is deliberately absent from the example — and so is the mailbox, which belongs to a user's
 record rather than to any configuration source.
 
-**The example enables the administrative endpoint**, on port 8090 with the `admin-api-key` credential above, because
-both of the acts this deployment still needs go through it: declaring the mailbox it reads, and minting the key an MCP
-client presents. `mailfathom.container` publishes that port on loopback and loads the credential.
+**The example enables the administrative endpoint**, on port 8090 accepting a password and an API key, because both of
+the acts this deployment still needs go through it: declaring the mailbox it reads, and minting the key an MCP client
+presents. `mailfathom.container` publishes that port on loopback.
 [The administrative endpoint](admin-endpoint.md#what-the-endpoint-serves) is the rest of what it serves.
 
 ## Starting
@@ -272,12 +273,13 @@ that runs it becomes the user of everything it creates, and what each startup fa
 ### Recording the mailbox
 
 The started deployment holds no user, and reads no mailbox. Who it serves and which mailboxes it reads are rows it
-keeps rather than settings it reads, so each is recorded over the administrative endpoint enabled above, signed in with
-the key encrypted beside the other credentials:
+keeps rather than settings it reads, so each is recorded over the administrative endpoint enabled above, signed in as
+the default administrator — then change its password:
 
 ```bash
-systemd-creds --user decrypt ~/.config/credstore.encrypted/admin-api-key - \
-  | mfctl login --endpoint http://127.0.0.1:8090
+mfctl login --endpoint http://127.0.0.1:8090 --mode password
+mfctl credential list
+mfctl credential rotate --method password --id <its credential> --username admin
 mfctl user add --display-name Alex
 mfctl account add --from-file mailbox.json
 ```

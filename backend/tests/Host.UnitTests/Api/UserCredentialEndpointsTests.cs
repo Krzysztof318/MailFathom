@@ -3,14 +3,17 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Globalization;
+using System.Net;
 using MailFathom.Application.Access;
 using MailFathom.Application.Access.Credentials;
 using MailFathom.Application.Access.Grants;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Api;
+using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -201,6 +204,7 @@ public sealed class UserCredentialEndpointsTests
             PasswordRequest("User", Password),
             harness.Administration,
             harness.PublicKeys,
+            harness.ReverseProxy,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -224,6 +228,7 @@ public sealed class UserCredentialEndpointsTests
             PasswordRequest("  User@Example.Test  ", Password),
             harness.Administration,
             harness.PublicKeys,
+            harness.ReverseProxy,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -234,6 +239,7 @@ public sealed class UserCredentialEndpointsTests
             Arg.Is<UserCredentialLookup>(lookup => lookup.Value == "user@example.test"),
             Arg.Any<string>(),
             Arg.Any<IReadOnlyList<MailFathomPermission>>(),
+            Arg.Any<UserCredentialReach>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -257,6 +263,7 @@ public sealed class UserCredentialEndpointsTests
                 Permissions: null),
             harness.Administration,
             harness.PublicKeys,
+            harness.ReverseProxy,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -264,6 +271,147 @@ public sealed class UserCredentialEndpointsTests
 
         Assert.Equal(StatedApiKeyMinter.Key, provisioned.Key);
         Assert.Null(provisioned.Lookup);
+    }
+
+    /// <summary>A credential nobody wrote endpoints for is presented on the two mail-serving endpoints, from anywhere.</summary>
+    [Fact]
+    public async Task ProvisionAsync_ARequestNamingNoReach_StoresTheDefaultReach()
+    {
+        // Arrange
+        var harness = new EndpointHarness(MailFathomPermission.AdminCredentialsWrite);
+
+        // Act
+        await ProvisionApiKeyReachingAsync(harness, surfaces: null, networks: null);
+
+        // Assert
+        await harness.Credentials.Received(1).CreateAsync(
+            Arg.Any<Guid>(),
+            Arg.Any<UserId>(),
+            Arg.Any<UserCredentialMethod>(),
+            Arg.Any<UserCredentialLookup>(),
+            Arg.Any<string>(),
+            Arg.Any<IReadOnlyList<MailFathomPermission>>(),
+            Arg.Is<UserCredentialReach>(reach =>
+                reach!.Surfaces.SequenceEqual(UserCredentialSurface.Default) && reach.AllowedSourceNetworks.Count == 0),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProvisionAsync_ARequestNamingTheAdministrativeEndpoint_StoresACredentialPresentedThereAlone()
+    {
+        // Arrange
+        var harness = new EndpointHarness(MailFathomPermission.AdminCredentialsWrite);
+
+        // Act
+        await ProvisionApiKeyReachingAsync(harness, surfaces: ["admin"], networks: null);
+
+        // Assert
+        await harness.Credentials.Received(1).CreateAsync(
+            Arg.Any<Guid>(),
+            Arg.Any<UserId>(),
+            Arg.Any<UserCredentialMethod>(),
+            Arg.Any<UserCredentialLookup>(),
+            Arg.Any<string>(),
+            Arg.Any<IReadOnlyList<MailFathomPermission>>(),
+            Arg.Is<UserCredentialReach>(reach => reach!.Surfaces.SequenceEqual(new[] { UserCredentialSurface.Administration })),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("webmail")]
+    [InlineData("")]
+    public async Task ProvisionAsync_ARequestNamingAnEndpointNothingPublishes_IsRefusedWithoutAWrite(string surface)
+    {
+        // Arrange
+        var harness = new EndpointHarness(MailFathomPermission.AdminCredentialsWrite);
+
+        // Act
+        var result = await ProvisionApiKeyReachingAsync(harness, surfaces: [surface], networks: null);
+
+        // Assert
+        Assert.IsType<ProblemHttpResult>(result.Result);
+        await harness.Credentials.DidNotReceiveWithAnyArgs().CreateAsync(default, default, default, default!, default, default!, default!, TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>An empty list is a credential presented nowhere, which is never what was meant, so it is refused rather than stored.</summary>
+    [Fact]
+    public async Task ProvisionAsync_ARequestNamingAnEmptyListOfEndpoints_IsRefused()
+    {
+        // Arrange
+        var harness = new EndpointHarness(MailFathomPermission.AdminCredentialsWrite);
+
+        // Act
+        var result = await ProvisionApiKeyReachingAsync(harness, surfaces: [], networks: null);
+
+        // Assert
+        Assert.IsType<ProblemHttpResult>(result.Result);
+    }
+
+    /// <summary>Without a named proxy the address compared is whoever opened the connection, so a restriction would be judged against the wrong address.</summary>
+    [Fact]
+    public async Task ProvisionAsync_ASourceNetworkWhileNoProxyIsNamed_IsRefusedNamingTheSection()
+    {
+        // Arrange
+        var harness = new EndpointHarness(MailFathomPermission.AdminCredentialsWrite);
+
+        // Act
+        var result = await ProvisionApiKeyReachingAsync(harness, surfaces: null, networks: ["10.20.0.0/16"]);
+
+        // Assert
+        var problem = Assert.IsType<ProblemHttpResult>(result.Result);
+        Assert.Contains(ReverseProxyOptions.SectionName, problem.ProblemDetails.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ProvisionAsync_ASourceNetworkBehindANamedProxy_StoresTheNetwork()
+    {
+        // Arrange
+        var harness = new EndpointHarness(MailFathomPermission.AdminCredentialsWrite);
+        harness.ReverseProxy = BehindANamedProxy();
+
+        // Act
+        await ProvisionApiKeyReachingAsync(harness, surfaces: null, networks: ["10.20.0.0/16"]);
+
+        // Assert
+        await harness.Credentials.Received(1).CreateAsync(
+            Arg.Any<Guid>(),
+            Arg.Any<UserId>(),
+            Arg.Any<UserCredentialMethod>(),
+            Arg.Any<UserCredentialLookup>(),
+            Arg.Any<string>(),
+            Arg.Any<IReadOnlyList<MailFathomPermission>>(),
+            Arg.Is<UserCredentialReach>(reach => reach!.AllowedSourceNetworks.SequenceEqual(new[] { IPNetwork.Parse("10.20.0.0/16") })),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A network with bits set past its prefix was almost certainly meant as something narrower, so it is refused rather than widened.</summary>
+    [Fact]
+    public async Task ProvisionAsync_ASourceNetworkWithHostBitsSet_IsRefused()
+    {
+        // Arrange
+        var harness = new EndpointHarness(MailFathomPermission.AdminCredentialsWrite);
+        harness.ReverseProxy = BehindANamedProxy();
+
+        // Act
+        var result = await ProvisionApiKeyReachingAsync(harness, surfaces: null, networks: ["10.20.30.0/16"]);
+
+        // Assert
+        Assert.IsType<ProblemHttpResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task ProvisionAsync_MoreSourceNetworksThanACredentialHolds_IsRefused()
+    {
+        // Arrange
+        var harness = new EndpointHarness(MailFathomPermission.AdminCredentialsWrite);
+        harness.ReverseProxy = BehindANamedProxy();
+        string[] networks = [.. Enumerable.Range(0, UserCredentialReach.MaximumAllowedSourceNetworks + 1).Select(index => $"10.{index}.0.0/16")];
+
+        // Act
+        var result = await ProvisionApiKeyReachingAsync(harness, surfaces: null, networks);
+
+        // Assert
+        Assert.IsType<ProblemHttpResult>(result.Result);
     }
 
     /// <summary>A client's key is answered with the fingerprint its assertions must name, which nothing else reports.</summary>
@@ -286,6 +434,7 @@ public sealed class UserCredentialEndpointsTests
                 Permissions: null),
             harness.Administration,
             harness.PublicKeys,
+            harness.ReverseProxy,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -314,6 +463,7 @@ public sealed class UserCredentialEndpointsTests
                 Permissions: null),
             harness.Administration,
             harness.PublicKeys,
+            harness.ReverseProxy,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -347,6 +497,7 @@ public sealed class UserCredentialEndpointsTests
                 Permissions: null),
             harness.Administration,
             harness.PublicKeys,
+            harness.ReverseProxy,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -359,6 +510,7 @@ public sealed class UserCredentialEndpointsTests
             default,
             default,
             default!,
+            UserCredentialReach.Default,
             TestContext.Current.CancellationToken);
     }
 
@@ -387,6 +539,7 @@ public sealed class UserCredentialEndpointsTests
                 Permissions: null),
             harness.Administration,
             harness.PublicKeys,
+            harness.ReverseProxy,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -410,6 +563,7 @@ public sealed class UserCredentialEndpointsTests
             PasswordRequest("user", Password, ["mailfathom.mail.read", "mailfathom.mail.teleport"]),
             harness.Administration,
             harness.PublicKeys,
+            harness.ReverseProxy,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -431,6 +585,7 @@ public sealed class UserCredentialEndpointsTests
             PasswordRequest("user", Password, [MailFathomPermission.AdminErase.Name]),
             harness.Administration,
             harness.PublicKeys,
+            harness.ReverseProxy,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -451,6 +606,7 @@ public sealed class UserCredentialEndpointsTests
             PasswordRequest("user", Password, [MailFathomPermission.MailRead.Name]),
             harness.Administration,
             harness.PublicKeys,
+            harness.ReverseProxy,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -462,6 +618,7 @@ public sealed class UserCredentialEndpointsTests
             Arg.Any<string>(),
             Arg.Is<IReadOnlyList<MailFathomPermission>>(grant =>
                 grant != null && grant.Count == 1 && grant[0] == MailFathomPermission.MailRead),
+            Arg.Any<UserCredentialReach>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -479,6 +636,7 @@ public sealed class UserCredentialEndpointsTests
             PasswordRequest("user", Password),
             harness.Administration,
             harness.PublicKeys,
+            harness.ReverseProxy,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -501,6 +659,7 @@ public sealed class UserCredentialEndpointsTests
             PasswordRequest("user", Password),
             harness.Administration,
             harness.PublicKeys,
+            harness.ReverseProxy,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -526,6 +685,7 @@ public sealed class UserCredentialEndpointsTests
             PasswordRequest("user", Password),
             harness.Administration,
             harness.PublicKeys,
+            harness.ReverseProxy,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -549,6 +709,7 @@ public sealed class UserCredentialEndpointsTests
             PasswordRequest("user", password),
             harness.Administration,
             harness.PublicKeys,
+            harness.ReverseProxy,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -579,6 +740,7 @@ public sealed class UserCredentialEndpointsTests
             PasswordRequest(username, Password),
             harness.Administration,
             harness.PublicKeys,
+            harness.ReverseProxy,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -737,6 +899,7 @@ public sealed class UserCredentialEndpointsTests
                 Permissions: null),
             harness.Administration,
             harness.PublicKeys,
+            harness.ReverseProxy,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -749,6 +912,7 @@ public sealed class UserCredentialEndpointsTests
             Arg.Any<UserCredentialLookup>(),
             Arg.Any<string?>(),
             Arg.Any<IReadOnlyList<MailFathomPermission>>(),
+            Arg.Any<UserCredentialReach>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -923,6 +1087,34 @@ public sealed class UserCredentialEndpointsTests
         Subject: null,
         permissions);
 
+    private static Task<Results<Ok<UserCredentialProvisionedResponse>, ProblemHttpResult>> ProvisionApiKeyReachingAsync(
+        EndpointHarness harness,
+        IReadOnlyList<string>? surfaces,
+        IReadOnlyList<string>? networks) => UserCredentialEndpoints.ProvisionAsync(
+        SyntheticUser.Deployment.Value,
+        new UserCredentialProvisioningRequest(
+            UserCredentialMethod.ApiKey.Name,
+            Username: null,
+            Password: null,
+            PublicKey: null,
+            Issuer: null,
+            Subject: null,
+            Permissions: null,
+            surfaces,
+            networks),
+        harness.Administration,
+        harness.PublicKeys,
+        harness.ReverseProxy,
+        TestContext.Current.CancellationToken);
+
+    private static IOptions<ReverseProxyOptions> BehindANamedProxy()
+    {
+        var settings = new ReverseProxyOptions();
+        settings.TrustedProxies.Add("192.0.2.10");
+
+        return Options.Create(settings);
+    }
+
     private static UserCredential AHeldCredential(UserCredentialMethod method, string lookup) => new(
         CredentialId,
         SyntheticUser.Deployment,
@@ -1046,6 +1238,8 @@ public sealed class UserCredentialEndpointsTests
 
         internal IClientPublicKeyReader PublicKeys { get; } = new StatedPublicKeyReader();
 
+        internal IOptions<ReverseProxyOptions> ReverseProxy { get; set; } = Options.Create(new ReverseProxyOptions());
+
         internal IUserCredentialStore Credentials { get; }
 
         internal RecordingPasswordHasher PasswordHasher { get; }
@@ -1064,6 +1258,7 @@ public sealed class UserCredentialEndpointsTests
                 Arg.Any<UserCredentialLookup>(),
                 Arg.Any<string>(),
                 Arg.Any<IReadOnlyList<MailFathomPermission>?>(),
+                Arg.Any<UserCredentialReach>(),
                 Arg.Any<CancellationToken>())
             .Returns(outcome);
 

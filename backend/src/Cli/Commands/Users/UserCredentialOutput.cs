@@ -41,6 +41,8 @@ internal static class UserCredentialOutput
             "Resolved by",
             "Narrows to",
             "Holds",
+            "Endpoints",
+            "Accepted from",
             "State",
             "Provisioned",
             "Material changed");
@@ -53,6 +55,8 @@ internal static class UserCredentialOutput
                 credential.Login ?? credential.Lookup ?? WithheldLookup,
                 DescribeNarrowing(credential.Permissions),
                 DescribeHeld(credential.EffectivePermissions),
+                credential.Surfaces is { Count: > 0 } surfaces ? string.Join(", ", surfaces) : "unreported",
+                credential.AllowedSourceNetworks is { Count: > 0 } networks ? string.Join(", ", networks) : "anywhere",
                 credential.Enabled ? "enabled" : "disabled",
                 $"{credential.CreatedAt:u}",
                 $"{credential.MaterialChangedAt:u}");

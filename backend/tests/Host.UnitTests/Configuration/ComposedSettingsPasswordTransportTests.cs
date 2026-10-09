@@ -67,25 +67,22 @@ public sealed class ComposedSettingsPasswordTransportTests
         Assert.Empty(refusals);
     }
 
-    /// <summary>
-    /// The administrative endpoint's refusal of a password is a different rule under a different reason — that surface
-    /// answers for the deployment rather than for a person — and nothing about the transport withdrawal reaches it.
-    /// </summary>
+    /// <summary>The administrative endpoint accepts a password on the same terms, which is how the default administrator signs in first.</summary>
     [Fact]
-    public void FindSurfaceRefusals_APasswordOnTheAdministrativeEndpoint_IsStillRefused()
+    public void FindSurfaceRefusals_APasswordOnTheAdministrativeEndpoint_IsAccepted()
     {
         // Arrange
         var configuration = Settings(
             new("AdminEndpoint:Enabled", "true"),
-            new("AdminEndpoint:Administrators:0:Name", "administrator-0"),
-            new("AdminEndpoint:Administrators:0:Credentials:0:Basic:AttemptsPerMinute", "10"));
+            new("AdminEndpoint:Port", "8090"),
+            new("AdminEndpoint:Authentication:0:Method", "password"),
+            new("AdminEndpoint:Authentication:0:Basic:AttemptsPerMinute", "10"));
 
         // Act
         var refusals = ComposedSettings.FindSurfaceRefusals(configuration);
 
         // Assert
-        var refusal = Assert.Single(refusals, candidate => candidate.SectionName == AdminEndpointOptions.SectionName);
-        Assert.Contains(refusal.Errors, error => error.Contains("Basic", StringComparison.Ordinal));
+        Assert.Empty(refusals);
     }
 
     /// <summary>A section that is wrong in its own right still answers for itself, which is what the composition order was always for.</summary>

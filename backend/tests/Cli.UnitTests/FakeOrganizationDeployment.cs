@@ -117,5 +117,5 @@ internal static class FakeOrganizationDeployment
     }
 
     private static string Roster(Guid user) =>
-        $$"""{"id":"{{user:D}}","displayName":"user-{{user:D}}","served":true}""";
+        $$"""{"id":"{{user:D}}","displayName":"user-{{user:D}}","served":true,"mcpEndpoint":true,"clientEndpoint":true}""";
 }

@@ -70,6 +70,9 @@ cp .env.example .env
 # checkout, which is deliberate — nothing is ever pulled by accident — so this is the step that runs this image.
 #   MAILFATHOM_IMAGE=docker.io/krzysztof318/mailfathom:<version>   # an immutable tag, never latest and never a nightly
 #   MAILFATHOM_PULL_POLICY=missing
+# And, before the first start, the password the default administrator `admin` signs in to the administrative endpoint
+# with — `admin` when unset, and read on the first start alone:
+#   MAILFATHOM_ADMIN_PASSWORD=<twelve characters or more>
 
 mkdir -p secrets/mailfathom
 chmod 700 secrets                # not mounted anywhere; this is what keeps other host users out

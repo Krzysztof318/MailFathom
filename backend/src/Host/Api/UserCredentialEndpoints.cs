@@ -2,11 +2,14 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Access.Credentials;
 using MailFathom.Domain.Access;
+using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Security.Endpoints;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 
 namespace MailFathom.Host.Api;
 
@@ -46,6 +49,11 @@ namespace MailFathom.Host.Api;
 /// </remarks>
 internal static class UserCredentialEndpoints
 {
+    private static readonly ConfiguredAddressRangeWording SourceNetworkWording = new(
+        "source",
+        "accept",
+        "A credential is restricted by the address a request arrives from, so a DNS name cannot stand in for one.");
+
     /// <summary>The route one user's credentials are listed and provisioned at, relative to the administrative prefix.</summary>
     internal const string UserCredentialsRoute = "/users/{userId:guid}/credentials";
 
@@ -128,6 +136,7 @@ internal static class UserCredentialEndpoints
     /// <param name="request">The method and whatever that method requires, as the client sent them.</param>
     /// <param name="credentials">Performs the write, for a caller the use case's own grant admits.</param>
     /// <param name="publicKeys">Decides whether a written public key is one this deployment accepts, so the refusal is a request the operator can correct.</param>
+    /// <param name="reverseProxySettings">Whether the client address a source restriction is judged against is the client's own rather than a proxy's.</param>
     /// <param name="cancellationToken">Cancels the write when the client disconnects.</param>
     /// <returns><c>200</c> with the new credential, <c>409</c> when what it would be resolved by is taken or the user already holds as many credentials as one user may, or <c>400</c> naming what was wrong with the request.</returns>
     /// <remarks>
@@ -141,10 +150,12 @@ internal static class UserCredentialEndpoints
         [FromBody] UserCredentialProvisioningRequest? request,
         [FromServices] UserCredentialAdministration credentials,
         [FromServices] IClientPublicKeyReader publicKeys,
+        [FromServices] IOptions<ReverseProxyOptions> reverseProxySettings,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(credentials);
         ArgumentNullException.ThrowIfNull(publicKeys);
+        ArgumentNullException.ThrowIfNull(reverseProxySettings);
 
         if (!TryReadUser(userId, out var user))
         {
@@ -161,17 +172,22 @@ internal static class UserCredentialEndpoints
             return Refused(grantRefusal!);
         }
 
+        if (!TryReadReach(request, reverseProxySettings.Value, out var reach, out var reachRefusal))
+        {
+            return Refused(reachRefusal!);
+        }
+
         if (method == UserCredentialMethod.ApiKey)
         {
             return AnswerProvisioning(
                 method,
                 userId,
-                await credentials.ProvisionApiKeyAsync(user, permissions, cancellationToken));
+                await credentials.ProvisionApiKeyAsync(user, permissions, reach, cancellationToken));
         }
 
         if (method == UserCredentialMethod.Password)
         {
-            return await ProvisionPasswordAsync(user, userId, request!, permissions, credentials, cancellationToken);
+            return await ProvisionPasswordAsync(user, userId, request!, permissions, reach, credentials, cancellationToken);
         }
 
         if (method == UserCredentialMethod.PublicKey)
@@ -188,10 +204,11 @@ internal static class UserCredentialEndpoints
                     user,
                     request.PublicKey!,
                     permissions,
+                    reach,
                     cancellationToken));
         }
 
-        return await ProvisionOAuthSubjectAsync(user, userId, request!, permissions, credentials, cancellationToken);
+        return await ProvisionOAuthSubjectAsync(user, userId, request!, permissions, reach, credentials, cancellationToken);
     }
 
     /// <summary>Provisions the username and password one user signs in with, refusing each half by the rule it broke.</summary>
@@ -200,6 +217,7 @@ internal static class UserCredentialEndpoints
         Guid userId,
         UserCredentialProvisioningRequest request,
         IReadOnlyList<MailFathomPermission>? permissions,
+        UserCredentialReach reach,
         UserCredentialAdministration credentials,
         CancellationToken cancellationToken)
     {
@@ -221,6 +239,7 @@ internal static class UserCredentialEndpoints
                 username,
                 request.Password.AsMemory(),
                 permissions,
+                reach,
                 cancellationToken));
     }
 
@@ -230,6 +249,7 @@ internal static class UserCredentialEndpoints
         Guid userId,
         UserCredentialProvisioningRequest request,
         IReadOnlyList<MailFathomPermission>? permissions,
+        UserCredentialReach reach,
         UserCredentialAdministration credentials,
         CancellationToken cancellationToken)
     {
@@ -248,6 +268,7 @@ internal static class UserCredentialEndpoints
                 request.Issuer,
                 request.Subject,
                 permissions,
+                reach,
                 cancellationToken));
     }
 
@@ -491,6 +512,72 @@ internal static class UserCredentialEndpoints
         }
 
         permissions = parsed;
+
+        return true;
+    }
+
+    /// <summary>Reads where a request said the credential may be presented, or reports the sentence naming what to write instead.</summary>
+    /// <remarks>
+    /// Unwritten surfaces are the two mail-serving endpoints, which is what every credential provisioned before a
+    /// credential carried its surfaces holds; the administrative endpoint is reached only by a credential that names it.
+    /// A source restriction is refused while the reverse proxy section names no proxy narrower than an address family,
+    /// because the address it would be judged against is then whatever opened the connection — behind a proxy, the
+    /// proxy's own, which every client shares.
+    /// </remarks>
+    private static bool TryReadReach(
+        UserCredentialProvisioningRequest? request,
+        ReverseProxyOptions reverseProxy,
+        [NotNullWhen(true)] out UserCredentialReach? reach,
+        out string? refusal)
+    {
+        reach = null;
+        refusal = null;
+
+        var surfaces = UserCredentialSurface.Default;
+
+        if (request?.Surfaces is { } writtenSurfaces)
+        {
+            if (writtenSurfaces.FirstOrDefault(name => !UserCredentialSurface.TryParse(name, out _)) is { } unknown)
+            {
+                refusal = $"'{unknown}' is not an endpoint a credential is presented on; write any of {string.Join(", ", UserCredentialSurface.All.Select(surface => $"'{surface.Name}'"))}.";
+
+                return false;
+            }
+
+            surfaces = UserCredentialSurface.ParseKnown(writtenSurfaces);
+
+            if (surfaces.Count == 0)
+            {
+                refusal = "The request names no endpoint, so the credential could be presented nowhere; name at least one, or leave the list out for the two mail-serving endpoints.";
+
+                return false;
+            }
+        }
+
+        var writtenNetworks = request?.AllowedSourceNetworks ?? [];
+
+        if (writtenNetworks.Count > UserCredentialReach.MaximumAllowedSourceNetworks)
+        {
+            refusal = $"A credential is restricted to at most {UserCredentialReach.MaximumAllowedSourceNetworks} networks.";
+
+            return false;
+        }
+
+        if (writtenNetworks.Count > 0 && !reverseProxy.ForwardsTheClientAddress())
+        {
+            refusal = $"A credential is restricted to source networks only where this deployment reads the client's own address, and {ReverseProxyOptions.SectionName} names no proxy narrower than an address family. Name the proxy in front of this deployment under {ReverseProxyOptions.SectionName}:{nameof(ReverseProxyOptions.TrustedProxies)} first.";
+
+            return false;
+        }
+
+        if (ConfiguredAddressRanges.FindErrors(writtenNetworks, nameof(request.AllowedSourceNetworks), SourceNetworkWording).FirstOrDefault() is { } networkRefusal)
+        {
+            refusal = networkRefusal;
+
+            return false;
+        }
+
+        reach = new UserCredentialReach(surfaces, ConfiguredAddressRanges.ToNetworks(writtenNetworks));
 
         return true;
     }

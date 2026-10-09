@@ -3,10 +3,8 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Net;
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
-using MailFathom.AppHost;
 using MailFathom.IntegrationTests.Orchestration;
 using Xunit;
 
@@ -62,7 +60,7 @@ public sealed class ComposedContactEndpointTests
 
         // Assert
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-        Assert.Equal("Bearer", Assert.Single(response.Headers.WwwAuthenticate).Scheme);
+        Assert.Contains(response.Headers.WwwAuthenticate, challenge => challenge.Scheme == "Bearer");
         Assert.DoesNotContain(
             "contacts",
             await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken),
@@ -154,7 +152,7 @@ public sealed class ComposedContactEndpointTests
         HttpContent? content = null)
     {
         using var request = new HttpRequestMessage(method, new Uri(route, UriKind.Relative)) { Content = content };
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", OrchestrationContract.AdminApiKey);
+        request.Headers.Authorization = ComposedHostAdministration.AdministratorAuthorization();
 
         return await client.SendAsync(request, TestContext.Current.CancellationToken);
     }
