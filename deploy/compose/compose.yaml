@@ -102,6 +102,11 @@ services:
       # The directory of JSON files below becomes ordinary configuration, layered under the environment block. See
       # docs/operations/configuration-sources.md for the precedence and for what a directory contributes.
       ConfigurationSources__Directory: /etc/mailfathom/config
+      # The password the default administrator `admin` is given on the first start, and on no later one: changing it
+      # here afterwards changes nothing, and `mfctl credential rotate` is how the password changes. It is `admin` until
+      # .env says otherwise, which is safe only while the administrative port stays on loopback, and every start warns
+      # while `admin` still signs in with it.
+      MAILFATHOM_ADMIN_PASSWORD: ${MAILFATHOM_ADMIN_PASSWORD:-admin}
       # Composed here from parts the operator configures separately, so the file holding the password stays a file:
       # only the password arrives through Persistence__Password, as a reference to the mounted secret.
       ConnectionStrings__mailfathom: "Host=postgres;Port=5432;Database=${MAILFATHOM_DATABASE:-mailfathom};Username=${MAILFATHOM_DATABASE_ROLE:-mailfathom}"

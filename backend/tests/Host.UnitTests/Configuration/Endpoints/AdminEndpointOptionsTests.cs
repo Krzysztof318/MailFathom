@@ -3,10 +3,10 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text;
-using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Security.Transport;
+using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Certificates;
 using MailFathom.Infrastructure.Secrets.Discovery;
 using MailFathom.Infrastructure.Security.Transport;
@@ -114,172 +114,63 @@ public sealed class AdminEndpointOptionsTests
     }
 
     [Fact]
-    public void ReadFrom_TheAdministratorsList_BindsEachAdministratorWithItsCredentialsAndNetworks()
+    public void ReadFrom_TheAuthenticationList_BindsEachMethodTheEndpointAccepts()
     {
         // Arrange
         var configuration = Configuration(new Dictionary<string, string?>
         {
             ["AdminEndpoint:Enabled"] = "true",
-            ["AdminEndpoint:Administrators:0:Name"] = "alice",
-            ["AdminEndpoint:Administrators:0:Credentials:0:ApiKey:Name"] = "alice-workstation",
-            ["AdminEndpoint:Administrators:0:Credentials:0:ApiKey:SecretReference"] = "systemd-credential:admin-key",
-            ["AdminEndpoint:Administrators:0:AllowedSourceNetworks:0"] = "10.0.0.0/8",
-            ["AdminEndpoint:Administrators:1:Name"] = "bob",
-            ["AdminEndpoint:Administrators:1:Credentials:0:OAuth:Resource"] = "https://mail.example.test:8090/api/admin",
-            ["AdminEndpoint:Administrators:1:Credentials:0:OAuth:AuthorizationServers:0:Name"] = "workforce",
-            ["AdminEndpoint:Administrators:1:Credentials:0:OAuth:AuthorizationServers:0:Issuer"] = "https://sso.example.test/realms/mailfathom",
-            ["AdminEndpoint:Administrators:1:Credentials:0:OAuth:AuthorizationServers:0:AuthorizedSubjects:0"] = "bob-subject",
+            ["AdminEndpoint:Authentication:0:Method"] = "password",
+            ["AdminEndpoint:Authentication:1:Method"] = "api-key",
+            ["AdminEndpoint:Authentication:2:Method"] = "oauth-subject",
+            ["AdminEndpoint:Authentication:2:OAuth:Resource"] = "https://mail.example.test:8090/api/admin",
+            ["AdminEndpoint:Authentication:2:OAuth:AuthorizationServers:0:Name"] = "workforce",
+            ["AdminEndpoint:Authentication:2:OAuth:AuthorizationServers:0:Issuer"] = "https://sso.example.test/realms/mailfathom",
         });
 
         // Act
         var settings = AdminEndpointOptions.ReadFrom(configuration);
 
         // Assert
-        Assert.Equal(["alice", "bob"], settings.Administrators.Select(administrator => administrator.Name));
-        Assert.Equal(["10.0.0.0/8"], settings.Administrators[0].AllowedSourceNetworks);
+        Assert.True(settings.AllowsBasic);
         Assert.True(settings.AllowsApiKey);
         Assert.True(settings.AllowsOAuth);
         Assert.True(settings.RequiresAuthentication);
         Assert.Empty(settings.FindConfigurationErrors());
     }
 
-    /// <summary>The section this replaced is refused by name rather than silently ignored, so an upgraded deployment cannot start open.</summary>
-    [Fact]
-    public void ReadFrom_TheRetiredAuthenticationList_FailsRatherThanStartingWithoutAnAdministrator()
+    /// <summary>
+    /// A deployment still carrying the withdrawn section is stopped rather than started with the section ignored, because
+    /// an endpoint whose only authentication was that section would otherwise start serving every caller as the default
+    /// administrator. The refusal names what replaced it.
+    /// </summary>
+    [Theory]
+    [InlineData("true")]
+    [InlineData("false")]
+    public void FindConfigurationErrors_TheWithdrawnAdministratorsSection_IsRefusedNamingWhatReplacedIt(string enabled)
     {
         // Arrange
         var configuration = Configuration(new Dictionary<string, string?>
         {
-            ["AdminEndpoint:Enabled"] = "true",
-            ["AdminEndpoint:Authentication:0:ApiKey:Name"] = "workstation",
-            ["AdminEndpoint:Authentication:0:ApiKey:SecretReference"] = "systemd-credential:admin-key",
+            ["AdminEndpoint:Enabled"] = enabled,
+            ["AdminEndpoint:Administrators:0:Name"] = "alice",
+            ["AdminEndpoint:Administrators:0:Credentials:0:ApiKey:Name"] = "alice-workstation",
+            ["AdminEndpoint:Administrators:0:Credentials:0:ApiKey:SecretReference"] = "systemd-credential:admin-key",
         });
 
-        // Act, Assert
-        Assert.ThrowsAny<InvalidOperationException>(() => AdminEndpointOptions.ReadFrom(configuration));
-    }
-
-    /// <summary>
-    /// The pair that decides everything about a grant — an absent key against an emptied list — has to be told apart
-    /// from configuration, because the binder reads the two identically and they mean the whole surface and nothing.
-    /// </summary>
-    [Fact]
-    public void ReadFrom_TheGrantOnEachAdministrator_TellsAnAbsentKeyFromAnEmptiedList()
-    {
-        // Arrange
-        var configuration = ConfigurationFromJson("""
-            {
-              "AdminEndpoint": {
-                "Enabled": true,
-                "Administrators": [
-                  {
-                    "Name": "alice",
-                    "Credentials": [ { "ApiKey": { "Name": "workstation", "SecretReference": "plaintext:a-key" } } ]
-                  },
-                  {
-                    "Name": "suspended",
-                    "Credentials": [ { "ApiKey": { "Name": "retired", "SecretReference": "plaintext:another-key" } } ],
-                    "Permissions": []
-                  },
-                  {
-                    "Name": "auditor",
-                    "Credentials": [ { "ApiKey": { "Name": "reporting-job", "SecretReference": "plaintext:a-third-key" } } ],
-                    "Permissions": ["mailfathom.admin.read"]
-                  }
-                ]
-              }
-            }
-            """);
-
         // Act
-        var settings = AdminEndpointOptions.ReadFrom(configuration);
+        var reported = Assert.Single(AdminEndpointOptions.ReadFrom(configuration).FindConfigurationErrors());
 
         // Assert
-        Assert.Equal(
-            MailFathomPermission.PublishedFor(AdminEndpointOptions.GrantedSurface),
-            settings.Administrators[0].GrantedPermissions());
-        Assert.Empty(settings.Administrators[1].GrantedPermissions());
-        Assert.Equal(
-            [MailFathomPermission.AdminRead],
-            settings.Administrators[2].GrantedPermissions());
-        Assert.Empty(settings.FindConfigurationErrors());
+        Assert.StartsWith("AdminEndpoint:Administrators is no longer read", reported, StringComparison.Ordinal);
+        Assert.Contains("AdminEndpoint:Authentication", reported, StringComparison.Ordinal);
+        Assert.Contains("mfctl credential create --surface admin", reported, StringComparison.Ordinal);
+        Assert.Contains("MAILFATHOM_ADMIN_PASSWORD", reported, StringComparison.Ordinal);
     }
 
-    /// <summary>The setting decides whether a token holds the entry's whole ceiling or only what its own scopes carry, and nothing else in the suite would notice it silently ceasing to bind.</summary>
+    /// <summary>A value where the list stood is the same withdrawn section, so it is refused the same way rather than reaching the binder.</summary>
     [Fact]
-    public void ReadFrom_AnAdministratorNarrowingByTokenScopes_BindsTheSetting()
-    {
-        // Arrange
-        var configuration = ConfigurationFromJson("""
-            {
-              "AdminEndpoint": {
-                "Enabled": true,
-                "Administrators": [
-                  {
-                    "Name": "alice",
-                    "Credentials": [
-                      {
-                        "OAuth": {
-                          "Resource": "https://mail.example.test/api/admin",
-                          "AuthorizationServers": [
-                            {
-                              "Name": "workforce",
-                              "Issuer": "https://sso.example.test/realms/mailfathom",
-                              "AuthorizedSubjects": [ "alice-subject" ]
-                            }
-                          ]
-                        }
-                      }
-                    ],
-                    "Permissions": ["mailfathom.admin.read"],
-                    "PermissionsFromTokenScopes": true
-                  }
-                ]
-              }
-            }
-            """);
-
-        // Act
-        var settings = AdminEndpointOptions.ReadFrom(configuration);
-
-        // Assert
-        var entry = Assert.Single(settings.Administrators);
-        Assert.True(entry.PermissionsFromTokenScopes);
-        Assert.Empty(settings.FindConfigurationErrors());
-    }
-
-    /// <summary>The half a grant draws from is the endpoint's own, so a mail permission written here grants nothing and is refused rather than left in the file.</summary>
-    [Fact]
-    public void FindConfigurationErrors_AGrantNamingAMailPermission_IsRefusedAsBelongingToTheOtherSurface()
-    {
-        // Arrange
-        var configuration = ConfigurationFromJson("""
-            {
-              "AdminEndpoint": {
-                "Enabled": true,
-                "Administrators": [
-                  {
-                    "Name": "alice",
-                    "Credentials": [ { "ApiKey": { "Name": "workstation", "SecretReference": "plaintext:a-key" } } ],
-                    "Permissions": ["mailfathom.mail.read"]
-                  }
-                ]
-              }
-            }
-            """);
-
-        // Act
-        var errors = AdminEndpointOptions.ReadFrom(configuration).FindConfigurationErrors();
-
-        // Assert
-        var reported = Assert.Single(errors);
-        Assert.Contains("AdminEndpoint:Administrators:0:Permissions", reported, StringComparison.Ordinal);
-        Assert.Contains("mailfathom.mail.read", reported, StringComparison.Ordinal);
-    }
-
-    /// <summary>A value where the list belongs must never read as an unauthenticated deployment, which is what makes the binder raising on it a contract rather than an accident.</summary>
-    [Fact]
-    public void ReadFrom_AdministratorsWrittenAsAValue_FailsRatherThanReadingAsRequiringNothing()
+    public void FindConfigurationErrors_TheWithdrawnSectionWrittenAsAValue_IsRefusedTheSameWay()
     {
         // Arrange
         var configuration = Configuration(new Dictionary<string, string?>
@@ -288,95 +179,32 @@ public sealed class AdminEndpointOptionsTests
             ["AdminEndpoint:Administrators"] = "alice",
         });
 
-        // Act, Assert
-        Assert.ThrowsAny<InvalidOperationException>(() => AdminEndpointOptions.ReadFrom(configuration));
-    }
-
-    /// <summary>An administrator stating no credential could never be admitted, so it is refused rather than left to read as a configured one.</summary>
-    [Fact]
-    public void FindConfigurationErrors_AnAdministratorStatingNoCredential_IsRefusedRatherThanOpeningTheEndpoint()
-    {
-        // Arrange
-        var settings = EnabledEndpoint();
-        settings.Administrators.Add(new AdministratorOptions { Name = "alice" });
-
-        // Act, Assert
-        Assert.Contains(
-            settings.FindConfigurationErrors(),
-            error => error.StartsWith("AdminEndpoint:Administrators:0:Credentials — this administrator states no credential", StringComparison.Ordinal));
-    }
-
-    /// <summary>A restriction compares the client's address, which this process believes only from a named proxy, so a restriction without one is refused rather than written and absent.</summary>
-    [Theory]
-    [InlineData("")]
-    [InlineData("0.0.0.0/0")]
-    [InlineData("10.0.0.1 ::/0")]
-    public void FindSourceNetworkTrustErrors_ARestrictedAdministratorWithoutANarrowTrustedProxy_IsRefused(string trustedProxies)
-    {
-        // Arrange
-        var settings = EnabledEndpoint();
-        settings.Administrators.Add(new AdministratorOptions { Name = "unrestricted" });
-        var restricted = new AdministratorOptions { Name = "alice" };
-        restricted.AllowedSourceNetworks.Add("10.0.0.0/8");
-        settings.Administrators.Add(restricted);
-
-        var reverseProxy = new ReverseProxyOptions();
-
-        foreach (var trustedProxy in trustedProxies.Split(' ', StringSplitOptions.RemoveEmptyEntries))
-        {
-            reverseProxy.TrustedProxies.Add(trustedProxy);
-        }
-
         // Act
-        var errors = settings.FindSourceNetworkTrustErrors(reverseProxy);
+        var reported = Assert.Single(AdminEndpointOptions.ReadFrom(configuration).FindConfigurationErrors());
 
         // Assert
-        var reported = Assert.Single(errors);
-        Assert.StartsWith(
-            "AdminEndpoint:Administrators:1:AllowedSourceNetworks — a network restriction compares the client's address",
-            reported,
-            StringComparison.Ordinal);
-        Assert.Contains("'ReverseProxy:TrustedProxies'", reported, StringComparison.Ordinal);
+        Assert.StartsWith("AdminEndpoint:Administrators is no longer read", reported, StringComparison.Ordinal);
     }
 
+    /// <summary>A credential naming no endpoint is presented on the MCP and client ones alone, so the shared remedy followed here would mint one this endpoint refuses.</summary>
     [Fact]
-    public void FindSourceNetworkTrustErrors_ARestrictedAdministratorBehindANamedProxy_ReportsNothing()
+    public void FindConfigurationErrors_ARetiredKeyUnderTheAuthenticationList_NamesTheAdministrativeSurfaceInItsRemedy()
     {
         // Arrange
-        var settings = EnabledEndpoint();
-        var restricted = new AdministratorOptions { Name = "alice" };
-        restricted.AllowedSourceNetworks.Add("10.0.0.0/8");
-        settings.Administrators.Add(restricted);
-
-        var reverseProxy = new ReverseProxyOptions();
-        reverseProxy.TrustedProxies.Add("172.16.0.0/12");
-
-        // Act, Assert
-        Assert.Empty(settings.FindSourceNetworkTrustErrors(reverseProxy));
-    }
-
-    /// <summary>An unrestricted administrator reads no client address, and a disabled endpoint reads nothing at all, so neither needs a proxy named.</summary>
-    [Theory]
-    [InlineData(true, false)]
-    [InlineData(false, true)]
-    public void FindSourceNetworkTrustErrors_NothingReadingTheClientAddress_ReportsNothing(bool enabled, bool restricted)
-    {
-        // Arrange
-        var settings = new AdminEndpointOptions { Enabled = enabled };
-        var administrator = new AdministratorOptions { Name = "alice" };
-
-        if (restricted)
+        var configuration = Configuration(new Dictionary<string, string?>
         {
-            administrator.AllowedSourceNetworks.Add("10.0.0.0/8");
-        }
+            ["AdminEndpoint:Enabled"] = "true",
+            ["AdminEndpoint:Authentication:0:Method"] = "api-key",
+            ["AdminEndpoint:Authentication:0:ApiKey:SecretReference"] = "systemd-credential:admin-key",
+        });
 
-        settings.Administrators.Add(administrator);
+        // Act
+        var reported = Assert.Single(AdminEndpointOptions.ReadFrom(configuration).FindConfigurationErrors());
 
-        // Act, Assert
-        Assert.Empty(settings.FindSourceNetworkTrustErrors(new ReverseProxyOptions()));
+        // Assert
+        Assert.StartsWith("AdminEndpoint:Authentication:0:ApiKey", reported, StringComparison.Ordinal);
+        Assert.Contains("--surface admin", reported, StringComparison.Ordinal);
     }
-
-
 
     [Theory]
     [InlineData("not-an-address")]
@@ -460,14 +288,11 @@ public sealed class AdminEndpointOptionsTests
             .AddInMemoryCollection(new Dictionary<string, string?>(StringComparer.Ordinal)
             {
                 ["AdminEndpoint:Enabled"] = "true",
-                ["AdminEndpoint:Administrators:0:Name"] = "alice",
-                ["AdminEndpoint:Administrators:0:Credentials:0:ApiKey:Name"] = "workstation",
-                ["AdminEndpoint:Administrators:0:Credentials:0:ApiKey:SecretReference"] = "plaintext:a-key",
-                ["AdminEndpoint:Administrators:2:Name"] = "bob",
-                ["AdminEndpoint:Administrators:2:Credentials:5:OAuth:Resource"] = "https://mail.example.test:8090/admin",
-                ["AdminEndpoint:Administrators:2:Credentials:5:OAuth:AuthorizationServers:0:Name"] = "workforce",
-                ["AdminEndpoint:Administrators:2:Credentials:5:OAuth:AuthorizationServers:0:Issuer"] = "https://sso.example.test/realms/mailfathom",
-                ["AdminEndpoint:Administrators:2:Credentials:5:OAuth:AuthorizationServers:0:AuthorizedSubjects:0"] = "bob-subject",
+                ["AdminEndpoint:Authentication:0:Method"] = "api-key",
+                ["AdminEndpoint:Authentication:5:Method"] = "oauth-subject",
+                ["AdminEndpoint:Authentication:5:OAuth:Resource"] = "https://mail.example.test:8090/admin",
+                ["AdminEndpoint:Authentication:5:OAuth:AuthorizationServers:0:Name"] = "workforce",
+                ["AdminEndpoint:Authentication:5:OAuth:AuthorizationServers:0:Issuer"] = "https://sso.example.test/realms/mailfathom",
             })
             .Build();
 
@@ -476,7 +301,7 @@ public sealed class AdminEndpointOptionsTests
 
         // Assert
         var reported = Assert.Single(errors);
-        Assert.Contains("AdminEndpoint:Administrators:2:Credentials:5:OAuth:Resource", reported, StringComparison.Ordinal);
+        Assert.Contains("AdminEndpoint:Authentication:5:OAuth:Resource", reported, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -711,20 +536,7 @@ public sealed class AdminEndpointOptionsTests
     private static AdminEndpointOptions OAuthEndpoint(string resource)
     {
         AdminEndpointOptions settings = new() { Enabled = true };
-
-        var oauth = new OAuthValidationOptions { Resource = resource };
-
-        oauth.AuthorizationServers.Add(new AuthorizationServerOptions
-        {
-            Name = "workforce",
-            Issuer = "https://sso.example.test/realms/mailfathom",
-        });
-
-        oauth.AuthorizationServers[0].AuthorizedSubjects.Add("alice-subject");
-
-        var administrator = new AdministratorOptions { Name = "alice" };
-        administrator.Credentials.Add(new AdministratorCredentialOptions { OAuth = oauth });
-        settings.Administrators.Add(administrator);
+        settings.Authentication.Add(ConfiguredAuthentication.AcceptingSubjectsFrom(resource));
 
         return settings;
     }

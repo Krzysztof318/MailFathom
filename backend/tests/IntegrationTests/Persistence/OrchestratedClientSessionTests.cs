@@ -428,6 +428,7 @@ public sealed class OrchestratedClientSessionTests(MailFathomOrchestrationFixtur
                 UserCredentialLookup.ForUsername(UserCredentialUsername.Create($"session-{lookup}")),
                 StoredHash,
                 WholeMailSurface,
+                UserCredentialReach.Default,
                 token),
             cancellationToken);
 

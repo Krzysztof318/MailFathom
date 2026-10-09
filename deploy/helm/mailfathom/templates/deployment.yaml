@@ -257,6 +257,18 @@ spec:
             - name: SpamClassification__Scanner__MaximumConcurrentScans
               value: {{ .Values.spamScanning.scanner.maximumConcurrentScans | quote }}
             {{- end }}
+            {{- with .Values.secrets.defaultAdministratorPasswordKey }}
+            {{- /*
+              From the Secret rather than from config.extraEnvironment, which refuses a name that reads like a
+              credential: the password is applied once, on the first start, and an environment value written into the
+              chart's own values would sit in every revision of the release.
+            */}}
+            - name: MAILFATHOM_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Values.secrets.existingSecret }}
+                  key: {{ . }}
+            {{- end }}
             {{- range $name, $value := .Values.config.extraEnvironment }}
             - name: {{ $name }}
               value: {{ $value | quote }}

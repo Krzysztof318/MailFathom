@@ -2,8 +2,6 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Common.ClientAssertions;
-using MailFathom.Common.OAuth;
 using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Configuration.DataEncryption;
 using MailFathom.Host.Configuration.Endpoints;
@@ -21,7 +19,6 @@ using MailFathom.Infrastructure.Secrets.Discovery;
 using MailFathom.Infrastructure.Secrets.References;
 using MailFathom.Infrastructure.Secrets.Resolution;
 using MailFathom.Infrastructure.Secrets.Sources;
-using MailFathom.Infrastructure.Security.OAuth;
 
 namespace MailFathom.Host.Configuration;
 
@@ -359,19 +356,7 @@ internal sealed partial class SecretConfigurationValidator
             return [];
         }
 
-        var errors = new List<string>(
-            await this.FindSecretReferenceErrorsAsync(AdminEndpointOptions.SectionName, candidate, null, cancellationToken));
-
-        errors.AddRange(await this.FindClientPublicKeyErrorsAsync(
-            AdminEndpointOptions.SectionName,
-            [.. candidate.Administrators],
-            cancellationToken));
-        errors.AddRange(await this.FindUnreachableApiKeyErrorsAsync(
-            AdminEndpointOptions.SectionName,
-            [.. candidate.Administrators],
-            cancellationToken));
-
-        return errors;
+        return await this.FindSecretReferenceErrorsAsync(AdminEndpointOptions.SectionName, candidate, null, cancellationToken);
     }
 
     /// <summary>Finds everything an operator must fix before the client endpoint's secrets can be used.</summary>
@@ -459,187 +444,6 @@ internal sealed partial class SecretConfigurationValidator
             candidate,
             null,
             cancellationToken);
-    }
-
-    /// <summary>Reads every configured client public key and reports the material no assertion could be verified against.</summary>
-    /// <remarks>
-    /// <para>
-    /// Resolving the reference is not enough, for the reason a trust anchor is loaded rather than merely resolved:
-    /// material that resolves but is not a public key would pass a reference check and then refuse every client the
-    /// entry exists to serve, which is exactly the failure startup validation exists to move forward.
-    /// </para>
-    /// <para>
-    /// One of the faults is worth more than an operator's time. Material carrying a private key parses cleanly and would
-    /// verify signatures correctly, so nothing about a running deployment would ever report it — while the host held the
-    /// one thing key-pair authentication exists to keep off it. That is the case this refusal is written for, and it is
-    /// named separately from every other kind of unusable material.
-    /// </para>
-    /// <para>
-    /// The key is named by its configuration position and by nothing else. The material never appears, and neither does
-    /// the name the operator gave it, because a message that named a key would be a message an unusable configuration
-    /// prints about a credential.
-    /// </para>
-    /// </remarks>
-    private async Task<IReadOnlyList<string>> FindClientPublicKeyErrorsAsync(
-        string sectionName,
-        IReadOnlyList<AdministratorOptions> administrators,
-        CancellationToken cancellationToken)
-    {
-        var errors = new List<string>();
-
-        // The loop stays because each step awaits a retrieval, and the path is part of the report.
-        foreach (var (credentialPath, configuredKey) in AdministratorConfiguration
-            .CredentialsWithPathsIn(sectionName, administrators)
-            .Where(entry => entry.Credential.PublicKey is not null)
-            .Select(entry => (entry.SettingPath, Key: entry.Credential.PublicKey!)))
-        {
-            var configurationPath = $"{credentialPath}:{nameof(AdministratorCredentialOptions.PublicKey)}";
-
-            var resolution = await this.secretReferenceResolver.ResolveAsync(
-                configuredKey.SecretReference,
-                cancellationToken);
-
-            // A reference that does not resolve is already reported by the reference check, which every section runs.
-            if (resolution.Secret is not { } material)
-            {
-                continue;
-            }
-
-            using (material)
-            {
-                if (DescribeUnusablePublicKey(material) is { } fault)
-                {
-                    errors.Add($"{configurationPath} — {fault}");
-                }
-            }
-        }
-
-        return errors;
-    }
-
-    /// <summary>Reports what is wrong with resolved public key material, or nothing when it is usable.</summary>
-    /// <remarks>The material is revealed into a pinned buffer and cleared here, on the same terms as every other reading of provisioned material in this process — which matters more than usual for the one case where what was provisioned turns out to be a private key.</remarks>
-    private static string? DescribeUnusablePublicKey(ResolvedSecret material)
-    {
-        var revealedText = GC.AllocateArray<char>(material.TextLength, pinned: true);
-
-        try
-        {
-            material.RevealTextInto(revealedText);
-
-            using var publicKey = ClientAssertionKeyMaterial.ReadPublicKey(revealedText, out var fault);
-
-            return publicKey is null ? DescribeKeyFault(fault) : null;
-        }
-        finally
-        {
-            revealedText.AsSpan().Clear();
-        }
-    }
-
-    private static string DescribeKeyFault(ClientAssertionKeyFault fault) => fault switch
-    {
-        ClientAssertionKeyFault.WrongHalf =>
-            "the material is a private key. This setting registers the public half of a client's key pair, and holding the private half is exactly what this deployment must not do; write the output of 'openssl pkey -in <key> -pubout' and keep the key itself on the client.",
-        ClientAssertionKeyFault.ModulusTooShort =>
-            $"the material is an RSA public key shorter than {ClientAssertionKeyMaterial.ShortestRsaModulusInBits} bits, which is not a signature this deployment accepts; generate the client a new key pair.",
-        ClientAssertionKeyFault.UnsupportedAlgorithm =>
-            "the material is a public key of a kind no permitted signature algorithm covers; generate the client an RSA or an elliptic-curve key pair over P-256, P-384, or P-521.",
-        _ =>
-            "the material is not a PEM public key; write the output of 'openssl pkey -in <key> -pubout', including its BEGIN and END lines.",
-    };
-
-    /// <summary>Reports every configured API key that no request could ever authenticate with.</summary>
-    /// <remarks>
-    /// <para>
-    /// Both credentials arrive as a bearer credential, and the endpoint tells them apart by shape: a credential that is
-    /// a JSON Web Token naming a configured authorization server reaches that server's token validator, and everything
-    /// else reaches the API key comparison. A configured key that happens to have that shape therefore never reaches
-    /// the comparison it exists for, and no client can authenticate with it however correctly it is presented.
-    /// </para>
-    /// <para>
-    /// Only the overlap is refused rather than every token-shaped key, because the shape alone decides nothing: a key
-    /// naming an issuer this deployment does not configure selects no validator and is compared like any other opaque
-    /// credential. What makes the reported case unusable is that the deployment configured both sides of it.
-    /// </para>
-    /// <para>
-    /// The key is named by its configuration position and by nothing else. Neither the material nor the issuer it names
-    /// appears, because a key is a credential and the issuer was read out of one.
-    /// </para>
-    /// <para>
-    /// It takes the section's name and its administrators rather than the endpoint's settings, because the shape it
-    /// reports is a property of the credentials those administrators hold rather than of the surface serving them.
-    /// </para>
-    /// </remarks>
-    private async Task<IReadOnlyList<string>> FindUnreachableApiKeyErrorsAsync(
-        string sectionName,
-        IReadOnlyList<AdministratorOptions> administrators,
-        CancellationToken cancellationToken)
-    {
-        var oauthMethods = AdministratorConfiguration.OAuthMethodsIn(administrators);
-
-        if (AdministratorConfiguration.ApiKeysIn(administrators).Count == 0 || oauthMethods.Count == 0)
-        {
-            return [];
-        }
-
-        // Composed from the profiles that are well formed rather than from all of them, because this runs beside the
-        // structural rules rather than after them: a malformed issuer is already being reported by its own check, and
-        // asking it for a validated value here would raise instead of adding to that report.
-        var configuredIssuers = oauthMethods
-            .SelectMany(oauthMethod => oauthMethod.AuthorizationServers)
-            .Where(authorizationServer => OAuthIdentifierUri.IsWellFormed(authorizationServer.Issuer))
-            .Select(authorizationServer => authorizationServer.ValidatedIssuer())
-            .ToHashSet(StringComparer.Ordinal);
-
-        var errors = new List<string>();
-
-        // The loop stays because each step awaits a retrieval, and the path is part of the report.
-        foreach (var (credentialPath, configuredKey) in AdministratorConfiguration
-            .CredentialsWithPathsIn(sectionName, administrators)
-            .Where(entry => entry.Credential.ApiKey is not null)
-            .Select(entry => (entry.SettingPath, Key: entry.Credential.ApiKey!)))
-        {
-            var resolution = await this.secretReferenceResolver.ResolveAsync(
-                configuredKey.SecretReference,
-                cancellationToken);
-
-            // A reference that does not resolve is already reported by the reference check, which every section runs.
-            if (resolution.Secret is not { } material)
-            {
-                continue;
-            }
-
-            using (material)
-            {
-                if (NamesAConfiguredIssuer(material, configuredIssuers))
-                {
-                    errors.Add(
-                        $"{credentialPath}:{nameof(AdministratorCredentialOptions.ApiKey)} — this key is a JSON Web Token naming one of the configured authorization servers, so every request presenting it is judged as an access token by that server and the key itself is never compared; issue an opaque key instead.");
-                }
-            }
-        }
-
-        return errors;
-    }
-
-    /// <summary>Reports whether resolved key material is a token naming one of the configured authorization servers.</summary>
-    /// <remarks>The material is revealed into a pinned buffer and cleared here, on the same terms as every other reading of a secret in this process.</remarks>
-    private static bool NamesAConfiguredIssuer(ResolvedSecret material, HashSet<string> configuredIssuers)
-    {
-        var revealedText = GC.AllocateArray<char>(material.TextLength, pinned: true);
-
-        try
-        {
-            material.RevealTextInto(revealedText);
-
-            return UnverifiedJsonWebToken.TryReadClaimedIssuer(revealedText, out var claimedIssuer)
-                && configuredIssuers.Contains(claimedIssuer);
-        }
-        finally
-        {
-            revealedText.AsSpan().Clear();
-        }
     }
 
     /// <summary>Loads every trust anchor a client certificate profile names and reports the ones no request could use.</summary>

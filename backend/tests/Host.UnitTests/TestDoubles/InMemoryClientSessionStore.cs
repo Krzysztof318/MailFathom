@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Collections.Concurrent;
+using System.Net;
 using MailFathom.Application.Access.Sessions;
 using MailFathom.Domain.Access;
 
@@ -32,6 +33,9 @@ internal sealed class InMemoryClientSessionStore : IClientSessionStore
 
     /// <summary>Gets or sets the endpoint switches of the user behind every session, as a read finds them on the user row.</summary>
     internal UserEndpointAccess EndpointAccess { get; set; } = UserEndpointAccess.Everywhere;
+
+    /// <summary>Gets or sets the networks the credential behind every held session is accepted from, read beside each session as the switches are.</summary>
+    internal IReadOnlyList<IPNetwork> AllowedSourceNetworks { get; set; } = [];
 
     /// <summary>Gets or sets what every operation raises instead of answering, so a test can state an unreachable store.</summary>
     internal Exception? Unreachable { get; set; }
@@ -87,7 +91,7 @@ internal sealed class InMemoryClientSessionStore : IClientSessionStore
         // statement joining the user row reads them.
         return Task.FromResult(
             this.held.GetValueOrDefault(identifier) is { } session
-                ? session with { EndpointAccess = this.EndpointAccess }
+                ? session with { EndpointAccess = this.EndpointAccess, AllowedSourceNetworks = this.AllowedSourceNetworks }
                 : null);
     }
 

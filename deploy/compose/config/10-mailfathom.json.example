@@ -73,18 +73,18 @@
   // The administrative endpoint, which is how the mailbox above is recorded: `mfctl account add` is a client of this
   // surface, and nothing else creates a mail account for somebody else. It is on for that reason rather than as an
   // extra. Its own default port is 8080, which is the socket the endpoints below are served on, so it states 8090 — the port
-  // compose.yaml publishes for it, on loopback. The key is a reference like every credential here: write a long random
-  // value into ./secrets/mailfathom/admin-api-key before the first start, and give it to `mfctl login` when it asks.
+  // compose.yaml publishes for it, on loopback.
+  //
+  // The first start records the default administrator, `admin`, and gives it the password MAILFATHOM_ADMIN_PASSWORD in
+  // .env carries — `admin` unless you changed it. Sign in with `mfctl login --mode password`, then change the password
+  // with `mfctl credential rotate`; every start warns while it is still the shipped one. The `api-key` entry is there for
+  // the key you provision next, with `mfctl credential create --method api-key --surface admin`.
   "AdminEndpoint": {
     "Enabled": true,
     "Port": 8090,
-    "Administrators": [
-      {
-        "Name": "admin",
-        "Credentials": [
-          { "ApiKey": { "Name": "admin", "SecretReference": "file:/etc/mailfathom/secrets/admin-api-key" } }
-        ]
-      }
+    "Authentication": [
+      { "Method": "password" },
+      { "Method": "api-key" }
     ]
   },
   // The surface MailFathom's own client calls, and the listeners its page is served from. It shares the container's

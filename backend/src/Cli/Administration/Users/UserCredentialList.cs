@@ -20,6 +20,8 @@ internal sealed record UserCredentialList(Guid User, IReadOnlyList<UserCredentia
 /// <param name="CreatedAt">When the credential was provisioned.</param>
 /// <param name="MaterialChangedAt">When what it is presented as was last replaced.</param>
 /// <param name="Login">What a password credential is typed as — <c>SHORTNAME/username</c> for a member of an organization, the username alone for a user in none — or <see langword="null" /> for every other method.</param>
+/// <param name="Surfaces">The published names of the endpoints the credential may be presented on, or <see langword="null" /> where the deployment reported none.</param>
+/// <param name="AllowedSourceNetworks">The networks the credential is accepted from, empty or <see langword="null" /> for any.</param>
 /// <remarks>
 /// No password, no hash, and no key digest, because the deployment publishes none of them. Every field here is a fact
 /// about the record rather than about the secret, which is what makes a listing safe to print into a terminal, a
@@ -35,4 +37,6 @@ internal sealed record UserCredential(
     long Version,
     DateTimeOffset CreatedAt,
     DateTimeOffset MaterialChangedAt,
-    string? Login);
+    string? Login,
+    IReadOnlyList<string>? Surfaces = null,
+    IReadOnlyList<string>? AllowedSourceNetworks = null);

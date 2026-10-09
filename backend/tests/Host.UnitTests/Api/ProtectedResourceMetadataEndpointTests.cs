@@ -7,7 +7,6 @@ using MailFathom.Domain.Access;
 using MailFathom.Host.Api;
 using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Security.Transport;
-using MailFathom.Host.UnitTests.TestDoubles;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Api;
@@ -32,7 +31,7 @@ public sealed class ProtectedResourceMetadataEndpointTests
 
         // Act
         var document = ProtectedResourceMetadataDocument.For(
-            PublishedOAuthMetadata.For([ConfiguredAuthentication.Administrator("alice", new AdministratorCredentialOptions { OAuth = oauthSettings })]));
+            Published(oauthSettings));
 
         // Assert
         Assert.Equal(Resource, document.Resource);
@@ -65,8 +64,7 @@ public sealed class ProtectedResourceMetadataEndpointTests
 
         // Act
         var document = ProtectedResourceMetadataDocument.For(
-            PublishedOAuthMetadata.For(
-                [ConfiguredAuthentication.Administrator("alice", new AdministratorCredentialOptions { OAuth = Configured() }), ConfiguredAuthentication.Administrator("partner", new AdministratorCredentialOptions { OAuth = partners })]));
+            Published(Configured(), partners));
 
         // Assert
         Assert.Equal(Resource, document.Resource);
@@ -90,7 +88,7 @@ public sealed class ProtectedResourceMetadataEndpointTests
 
         // Act
         var document = ProtectedResourceMetadataDocument.For(
-            PublishedOAuthMetadata.For([ConfiguredAuthentication.Administrator("alice", new AdministratorCredentialOptions { OAuth = oauthSettings })]));
+            Published(oauthSettings));
 
         // Assert
         Assert.Equal(["mailfathom.admin", "mailfathom.read", "offline_access"], document.ScopesSupported);
@@ -102,7 +100,7 @@ public sealed class ProtectedResourceMetadataEndpointTests
     {
         // Act
         var document = ProtectedResourceMetadataDocument.For(
-            PublishedOAuthMetadata.For([ConfiguredAuthentication.Administrator("alice", new AdministratorCredentialOptions { OAuth = Configured() })]));
+            Published(Configured()));
 
         // Assert
         Assert.Equal(["header"], document.BearerMethodsSupported);
@@ -117,12 +115,12 @@ public sealed class ProtectedResourceMetadataEndpointTests
     public void For_AnEntryNarrowedByTokenScopes_PublishesTheAdministrativeHalfOfTheVocabulary()
     {
         // Arrange
-        var administrator = ConfiguredAuthentication.Administrator("alice", new AdministratorCredentialOptions { OAuth = Configured() });
-        administrator.PermissionsFromTokenScopes = true;
-        administrator.GrantTheWholeSurface();
+        var entry = Accepting(Configured());
+        entry.PermissionsFromTokenScopes = true;
 
         // Act
-        var document = ProtectedResourceMetadataDocument.For(PublishedOAuthMetadata.For([administrator]));
+        var document = ProtectedResourceMetadataDocument.For(
+            PublishedOAuthMetadata.ForUserFacing([entry], ProtectedSurface.Administration));
 
         // Assert
         Assert.Equal(
@@ -136,7 +134,7 @@ public sealed class ProtectedResourceMetadataEndpointTests
     {
         // Arrange
         var document = ProtectedResourceMetadataDocument.For(
-            PublishedOAuthMetadata.For([ConfiguredAuthentication.Administrator("alice", new AdministratorCredentialOptions { OAuth = Configured() })]));
+            Published(Configured()));
 
         // Act
         using var serialized = JsonDocument.Parse(JsonSerializer.Serialize(document));
@@ -186,4 +184,10 @@ public sealed class ProtectedResourceMetadataEndpointTests
 
         return oauthSettings;
     }
+
+    private static PublishedOAuthMetadata Published(params OAuthValidationOptions[] oauthMethods) =>
+        PublishedOAuthMetadata.ForUserFacing([.. oauthMethods.Select(Accepting)], ProtectedSurface.Administration);
+
+    private static UserFacingAuthenticationOptions Accepting(OAuthValidationOptions oauth) =>
+        new() { Method = UserCredentialMethod.OAuthSubject.Name, OAuth = oauth };
 }

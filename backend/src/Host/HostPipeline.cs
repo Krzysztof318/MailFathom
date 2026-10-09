@@ -397,7 +397,9 @@ internal static class HostPipeline
         {
             // Outside the group the requirement was attached to, and deliberately: its reader is a client that has no
             // credential yet and is reading this to find out where to obtain one.
-            app.MapAdministrativeProtectedResourceMetadata([.. composition.Admin.Administrators])
+            app.MapUserFacingProtectedResourceMetadata(
+                    [.. composition.Admin.Authentication],
+                    AdminEndpointOptions.GrantedSurface)
                 .RequireCors(AdminTransportSecurityExtensions.CorsPolicyName);
         }
     }

@@ -42,6 +42,8 @@ internal static class CreateUserCredentialCommand
         var subjectOption = UserCredentialOptions.Subject();
         var permissionOption = UserCredentialOptions.Permission();
         var noPermissionsOption = UserCredentialOptions.NoPermissions();
+        var surfaceOption = UserCredentialOptions.Surface();
+        var sourceNetworkOption = UserCredentialOptions.SourceNetwork();
 
         Command command = new("create", "Provision a credential for one user, holding what the user's roles grant unless '--permission' narrows it. A password is asked for, never passed; a key is printed once.")
         {
@@ -52,6 +54,8 @@ internal static class CreateUserCredentialCommand
             subjectOption,
             permissionOption,
             noPermissionsOption,
+            surfaceOption,
+            sourceNetworkOption,
             userOption,
             endpointOption,
         };
@@ -66,7 +70,9 @@ internal static class CreateUserCredentialCommand
                 result.GetValue(subjectOption),
                 UserCredentialOptions.ResolveGrant(
                     result.GetValue(permissionOption),
-                    result.GetValue(noPermissionsOption))),
+                    result.GetValue(noPermissionsOption)),
+                WrittenOrNull(result.GetValue(surfaceOption)),
+                WrittenOrNull(result.GetValue(sourceNetworkOption))),
             result.GetValue(userOption),
             CliOptions.RequestedDeployment(result.GetValue(endpointOption), context.Variable(CliOptions.EndpointVariable)),
             cancellationToken));
@@ -94,7 +100,11 @@ internal static class CreateUserCredentialCommand
             requestedUser,
             cancellationToken);
 
-        var request = Compose(context, method, requested);
+        var request = Compose(context, method, requested) with
+        {
+            Surfaces = requested.Surfaces,
+            AllowedSourceNetworks = requested.SourceNetworks,
+        };
 
         var provisioned = await deployment.ProvisionUserCredentialAsync(
             profile.Token,
@@ -164,6 +174,9 @@ internal static class CreateUserCredentialCommand
             requested.Permissions);
     }
 
+    /// <summary>Reads a repeatable option written zero times as unwritten, which the deployment answers with its default.</summary>
+    private static string[]? WrittenOrNull(string[]? written) => written is { Length: > 0 } ? written : null;
+
     private static string RequiredValue(string? written, string optionName) => written is { Length: > 0 } value
         ? value
         : throw new CliFailure($"Mapping an authorization server's subject onto a user needs '{optionName}'.");
@@ -176,5 +189,7 @@ internal static class CreateUserCredentialCommand
         FileInfo? PublicKeyFile,
         string? Issuer,
         string? Subject,
-        IReadOnlyList<string>? Permissions);
+        IReadOnlyList<string>? Permissions,
+        IReadOnlyList<string>? Surfaces,
+        IReadOnlyList<string>? SourceNetworks);
 }

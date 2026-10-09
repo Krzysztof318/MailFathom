@@ -80,10 +80,10 @@ internal sealed partial class ServedUsersStartupGate(
     /// <inheritdoc />
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
-    /// <remarks>Reached on the first start of a fresh database, which holds no user, and on any start of a deployment whose every user was erased.</remarks>
+    /// <remarks>Reached on the first start of a fresh database, which holds only the default administrator, kept off both mail endpoints, and on any start of a deployment serving nobody since.</remarks>
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "This deployment holds no user and therefore serves nobody. Record one with 'mfctl user add', then give them a mailbox with 'mfctl account add'.")]
+        Message = "This deployment serves no user and therefore reads nobody's mail. Record one with 'mfctl user add', then give them a mailbox with 'mfctl account add'.")]
     private partial void LogNoUserHeld();
 
     /// <remarks>A report rather than a refusal, because a deployment with the switch on and nothing recorded yet is the ordinary shape of a first run.</remarks>

@@ -25,6 +25,7 @@ using MailFathom.Host.Api;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Configuration.Mail;
+using MailFathom.Host.Hosting.Startup;
 using MailFathom.Host.Mcp;
 using MailFathom.Host.Security.Endpoints;
 using MailFathom.Host.Security.Transport;
@@ -394,7 +395,8 @@ public sealed class McpAttachmentDownloadEndpointTests
             DeploymentUser(),
             Options.Create(new McpEndpointOptions()),
             Options.Create(new AdminEndpointOptions()),
-            Options.Create(new ClientEndpointOptions()));
+            Options.Create(new ClientEndpointOptions()),
+            new RecordedDefaultAdministrator());
     }
 
     /// <summary>Names the user this deployment serves, which is the user a redeemed capability acts for.</summary>

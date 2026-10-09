@@ -16,13 +16,22 @@ namespace MailFathom.Infrastructure.Persistence.Users;
 /// </remarks>
 public interface IUserSettingsDocumentReader
 {
-    /// <summary>Reads the version every user's record stands at, without any record.</summary>
+    /// <summary>Reads the version the record of every user a mail-serving endpoint may serve stands at, without any record.</summary>
     /// <param name="limit">The greatest number of versions to read.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>Each held user and the version of their record, in the order the users were recorded in, and no more than <paramref name="limit" /> of them.</returns>
+    /// <returns>Each such user and the version of their record, in the order the users were recorded in, and no more than <paramref name="limit" /> of them.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="limit" /> is not positive.</exception>
     /// <exception cref="UserSettingsUnreadableException">Thrown when the database declined the read.</exception>
-    /// <remarks>What says whether a deployment holds nobody, one user, or several, so it is one statement and sends no document.</remarks>
+    /// <remarks>
+    /// What says whether a deployment serves nobody, one user, or several, so it is one statement and sends no document. A
+    /// user with both mail endpoint switches off — the default administrator, recorded that way — is one no caller naming
+    /// no user could mean, so it is not counted.
+    /// <para>
+    /// ponytail: counts a user whose switch is on for either surface, where the rule is per surface; a user served on the
+    /// client alone still counts against an unauthenticated MCP endpoint. Split the count by surface when a deployment
+    /// needs that combination.
+    /// </para>
+    /// </remarks>
     Task<IReadOnlyList<UserSettingsDocumentVersion>> ReadVersionsAsync(int limit, CancellationToken cancellationToken);
 
     /// <summary>Reads the version the record of each named user stands at, without any record.</summary>

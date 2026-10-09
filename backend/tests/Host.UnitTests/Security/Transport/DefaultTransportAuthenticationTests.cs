@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text.Encodings.Web;
+using MailFathom.Domain.Access;
 using MailFathom.Host.Security.Transport;
 using MailFathom.Host.UnitTests.TestDoubles;
 using Microsoft.AspNetCore.Authentication;
@@ -178,10 +179,11 @@ public sealed class DefaultTransportAuthenticationTests
     }
 
     private static void AddApiKeyAuthentication(IServiceCollection services, TransportSurface surface) =>
-        services.AddTransportAuthentication(
+        services.AddUserFacingTransportAuthentication(
             surface,
-            [ConfiguredAuthentication.AdministratorWithApiKey("workstation")],
-            surface.ApiKeySchemeName);
+            [ConfiguredAuthentication.Accepting(UserCredentialMethod.ApiKey)],
+            surface.ApiKeySchemeName,
+            exchangesCredentialsForSessions: false);
 
     /// <summary>Hands the handler the one options instance it is built with, which is all the framework's monitor does for a scheme nothing reconfigures.</summary>
     private sealed class StaticOptionsMonitor : IOptionsMonitor<AuthenticationSchemeOptions>

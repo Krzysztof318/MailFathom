@@ -3,20 +3,20 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Security.Claims;
+using MailFathom.Domain.Access;
 using MailFathom.Host.Security.ApiKeys;
 using MailFathom.Host.Security.Basic;
-using MailFathom.Host.Security.ClientAssertions;
 using MailFathom.Host.Security.Transport;
 using MailFathom.Infrastructure.Security.OAuth;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Security.Transport;
 
-/// <summary>Covers what an authenticated caller must satisfy before a tool runs.</summary>
+/// <summary>Covers what an authenticated caller must satisfy before a route serves it.</summary>
 /// <remarks>
-/// The endpoint asks two questions of a token — whose it is, and what it was issued for — so what is worth stating here
-/// is that neither substitutes for the other, that a subject is only meaningful together with the issuer that named it,
-/// and that neither is ever asked of a key that could not carry one.
+/// Every caller acts for a user, so a principal naming none is refused whatever else it carries. Beyond that a token is
+/// asked what its issuer requires of it, and a credential this deployment holds a row for is not: the row is the
+/// authorization, and nothing could ever put a scope in a key or a password.
 /// </remarks>
 public sealed class TransportAccessPolicyTests
 {
@@ -24,191 +24,100 @@ public sealed class TransportAccessPolicyTests
 
     private const string Issuer = "https://sso.example.test/realms/mailfathom";
 
-    private const string UserSubject = "9f2c";
-
-    /// <summary>The scopes asked of the one administrator's token, keyed by the issuer and subject it is bound by, which is how the policy looks them up.</summary>
-    private static Dictionary<string, IReadOnlyCollection<string>> ScopesRequiredOfTheAdministrator(params string[] scopes) =>
-        new(StringComparer.Ordinal) { [OAuthIdentity.IdentityOf(Issuer, UserSubject)] = scopes };
+    private static readonly UserId User = UserId.Create(Guid.Parse("3c9a5e1f-2b4d-4c6e-8f0a-1b2c3d4e5f6a"));
 
     [Fact]
-    public void IsAuthorized_AnAnonymousCaller_IsRefused()
+    public void IsUserAuthorized_AnAnonymousCaller_IsRefused()
     {
         // Arrange
         var anonymous = new ClaimsPrincipal(new ClaimsIdentity());
 
         // Act, Assert
-        Assert.False(TransportAccessPolicy.IsAuthorized(anonymous, ScopesRequiredOfTheAdministrator()));
+        Assert.False(TransportAccessPolicy.IsUserAuthorized(anonymous, ScopesRequiredBy()));
     }
 
+    /// <summary>A caller acts for a user, so an authenticated principal naming nobody is refused rather than served as unrestricted.</summary>
     [Fact]
-    public void IsAuthorized_AnAuthorizedSubjectWhereNoScopeIsRequired_IsAllowed()
+    public void IsUserAuthorized_AnAuthenticatedPrincipalNamingNoUser_IsRefused()
     {
         // Arrange
-        var caller = TokenPrincipal();
+        var caller = new ClaimsPrincipal(new ClaimsIdentity(
+            [new Claim(ApiKeyAuthentication.ApiKeyNameClaimType, "nightly-digest")],
+            TransportSurface.Mcp.ApiKeySchemeName));
 
         // Act, Assert
-        Assert.True(TransportAccessPolicy.IsAuthorized(caller, ScopesRequiredOfTheAdministrator()));
+        Assert.False(TransportAccessPolicy.IsUserAuthorized(caller, ScopesRequiredBy()));
+    }
+
+    /// <summary>A key carries no scope and nothing could put one in it, so requiring one would refuse every non-interactive client.</summary>
+    [Fact]
+    public void IsUserAuthorized_AnApiKeyWhereScopesAreRequired_IsAllowedBecauseAKeyCannotCarryOne()
+    {
+        // Arrange
+        var caller = PrincipalCarrying(ApiKeyAuthentication.ApiKeyNameClaimType, "nightly-digest", TransportSurface.Mcp.ApiKeySchemeName);
+
+        // Act, Assert
+        Assert.True(TransportAccessPolicy.IsUserAuthorized(caller, ScopesRequiredBy("mailfathom.read")));
     }
 
     [Fact]
-    public void IsAuthorized_AnAuthorizedSubjectCarryingEveryRequiredScope_IsAllowed()
+    public void IsUserAuthorized_APasswordWhereScopesAreRequired_IsAllowed()
+    {
+        // Arrange
+        var caller = PrincipalCarrying(
+            BasicAuthentication.CredentialIdClaimType,
+            "0197c0de-0000-7000-8000-000000000001",
+            TransportSurface.Admin.BasicSchemeName);
+
+        // Act, Assert
+        Assert.True(TransportAccessPolicy.IsUserAuthorized(caller, ScopesRequiredBy("mailfathom.read")));
+    }
+
+    [Fact]
+    public void IsUserAuthorized_ATokenCarryingEveryScopeItsIssuerRequires_IsAllowed()
     {
         // Arrange
         var caller = TokenPrincipal("mailfathom.read", "mailfathom.search");
 
         // Act, Assert
-        Assert.True(TransportAccessPolicy.IsAuthorized(caller, ScopesRequiredOfTheAdministrator("mailfathom.read")));
+        Assert.True(TransportAccessPolicy.IsUserAuthorized(caller, ScopesRequiredBy("mailfathom.read")));
     }
 
     [Fact]
-    public void IsAuthorized_AnAuthorizedSubjectMissingARequiredScope_IsRefused()
+    public void IsUserAuthorized_ATokenMissingAScopeItsIssuerRequires_IsRefused()
     {
         // Arrange
         var caller = TokenPrincipal("mailfathom.read");
 
         // Act, Assert
-        Assert.False(TransportAccessPolicy.IsAuthorized(caller, ScopesRequiredOfTheAdministrator("mailfathom.search")));
-    }
-
-    /// <summary>
-    /// A tenant holds whoever the operator's identity platform holds. A colleague who can obtain a token for this
-    /// resource is therefore refused by the subject alone, whatever the authorization server was willing to put in it.
-    /// </summary>
-    [Fact]
-    public void IsAuthorized_AValidTokenNamingAnotherSubjectOfTheSameTenant_IsRefused()
-    {
-        // Arrange
-        var colleague = TokenPrincipalFor(Issuer, "4b81", "mailfathom.read");
-
-        // Act, Assert
-        Assert.False(TransportAccessPolicy.IsAuthorized(colleague, ScopesRequiredOfTheAdministrator("mailfathom.read")));
-    }
-
-    /// <summary>A subject is unique only within the server that issued it, so the pair is compared rather than the subject alone.</summary>
-    [Fact]
-    public void IsAuthorized_TheAuthorizedSubjectNamedByAnotherIssuer_IsRefused()
-    {
-        // Arrange
-        var caller = TokenPrincipalFor("https://sso.other.test/realms/mailfathom", UserSubject);
-
-        // Act, Assert
-        Assert.False(TransportAccessPolicy.IsAuthorized(caller, ScopesRequiredOfTheAdministrator()));
-    }
-
-    /// <summary>
-    /// A key is a credential the operator provisioned by writing it into this deployment's configuration, so the
-    /// authorization it carries is that decision. Requiring a scope of it would ask a credential for something nothing
-    /// can ever put in it, and would turn a configured scope into an outage for every non-interactive client.
-    /// </summary>
-    [Fact]
-    public void IsAuthorized_AnApiKeyWhereScopesAreRequired_IsAllowedBecauseAKeyCannotCarryOne()
-    {
-        // Arrange
-        var caller = ApiKeyPrincipal("nightly-digest");
-
-        // Act, Assert
-        Assert.True(TransportAccessPolicy.IsAuthorized(caller, ScopesRequiredOfTheAdministrator("mailfathom.read")));
-    }
-
-    /// <summary>A key names no subject and is not expected to, so the subject list constrains tokens alone.</summary>
-    [Fact]
-    public void IsAuthorized_AnApiKeyWhereSubjectsAreAuthorized_IsAllowedBecauseAKeyNamesNone()
-    {
-        // Arrange
-        var caller = ApiKeyPrincipal("nightly-digest");
-
-        // Act, Assert
-        Assert.True(TransportAccessPolicy.IsAuthorized(caller, ScopesRequiredOfTheAdministrator()));
-    }
-
-    /// <summary>
-    /// A client public key is a configured credential exactly as a key is: the operator registered it, and that
-    /// registration is the authorization. An assertion carries no scope and names no subject an authorization server
-    /// vouched for, so asking either of it would refuse every scheduled job the method exists to serve.
-    /// </summary>
-    [Fact]
-    public void IsAuthorized_AClientAssertionWhereScopesAndSubjectsAreRequired_IsAllowed()
-    {
-        // Arrange
-        var caller = ClientAssertionPrincipal("nightly-digest");
-
-        // Act, Assert
-        Assert.True(TransportAccessPolicy.IsAuthorized(caller, ScopesRequiredOfTheAdministrator("mailfathom.read")));
-    }
-
-    /// <summary>
-    /// A password is a configured credential in the same sense a key is — an administrator provisioned it against a
-    /// user this deployment serves — so it is admitted on that provisioning rather than sent back to a subject list it
-    /// names nothing in. Nothing else would admit it: a password names no issuer and carries no scope, so a principal
-    /// this method authenticated would be refused on every route of both surfaces.
-    /// </summary>
-    [Fact]
-    public void IsAuthorized_AUserPasswordWhereScopesAndSubjectsAreRequired_IsAllowed()
-    {
-        // Arrange
-        var caller = UserPasswordPrincipal();
-
-        // Act, Assert
-        Assert.True(TransportAccessPolicy.IsAuthorized(caller, ScopesRequiredOfTheAdministrator("mailfathom.read")));
+        Assert.False(TransportAccessPolicy.IsUserAuthorized(caller, ScopesRequiredBy("mailfathom.search")));
     }
 
     /// <summary>The bypass follows what the principal carries rather than which scheme named it, so a token cannot claim it by naming a scheme.</summary>
     [Fact]
-    public void IsAuthorized_ATokenAuthenticatedUnderTheApiKeySchemeName_StillHasItsScopesChecked()
+    public void IsUserAuthorized_ATokenAuthenticatedUnderTheApiKeySchemeName_StillHasItsScopesChecked()
     {
         // Arrange
-        var claims = new[] { new Claim("iss", Issuer), new Claim("sub", UserSubject) };
-        var identity = OAuthIdentity.FromValidatedToken(claims, "MailFathomApiKey");
-        var caller = new ClaimsPrincipal(identity!);
+        var identity = OAuthIdentity.FromValidatedToken([new Claim("iss", Issuer), new Claim("sub", "9f2c")], "MailFathomApiKey")!;
+        identity.AddClaim(TransportCallerUser.ClaimFor(User));
 
         // Act, Assert
-        Assert.False(TransportAccessPolicy.IsAuthorized(caller, ScopesRequiredOfTheAdministrator("mailfathom.read")));
+        Assert.False(TransportAccessPolicy.IsUserAuthorized(new ClaimsPrincipal(identity), ScopesRequiredBy("mailfathom.read")));
     }
 
-    /// <summary>An authenticated principal carrying no identity at all is refused rather than treated as unrestricted.</summary>
-    [Fact]
-    public void IsAuthorized_AnAuthenticatedPrincipalCarryingNoSubject_IsRefused()
+    private static Dictionary<string, IReadOnlyCollection<string>> ScopesRequiredBy(params string[] scopes) =>
+        new(StringComparer.Ordinal) { [Issuer] = scopes };
+
+    private static ClaimsPrincipal TokenPrincipal(params string[] scopes)
     {
-        // Arrange
-        var caller = new ClaimsPrincipal(new ClaimsIdentity(claims: [], OAuthScheme));
+        var identity = OAuthIdentity.FromValidatedToken(
+            [new Claim("iss", Issuer), new Claim("sub", "9f2c"), new Claim("scope", string.Join(' ', scopes))],
+            OAuthScheme)!;
+        identity.AddClaim(TransportCallerUser.ClaimFor(User));
 
-        // Act, Assert
-        Assert.False(TransportAccessPolicy.IsAuthorized(caller, ScopesRequiredOfTheAdministrator()));
+        return new ClaimsPrincipal(identity);
     }
 
-    private static ClaimsPrincipal TokenPrincipal(params string[] scopes) =>
-        TokenPrincipalFor(Issuer, UserSubject, scopes);
-
-    private static ClaimsPrincipal TokenPrincipalFor(string issuer, string subject, params string[] scopes)
-    {
-        Claim[] claims =
-        [
-            new("iss", issuer),
-            new("sub", subject),
-            new("scope", string.Join(' ', scopes)),
-        ];
-
-        return new ClaimsPrincipal(OAuthIdentity.FromValidatedToken(claims, OAuthScheme)!);
-    }
-
-    private static ClaimsPrincipal ApiKeyPrincipal(string keyName) => new(
-        new ClaimsIdentity(
-            [new Claim(ApiKeyAuthentication.ApiKeyNameClaimType, keyName)],
-            TransportSurface.Mcp.ApiKeySchemeName,
-            ApiKeyAuthentication.ApiKeyNameClaimType,
-            roleType: string.Empty));
-
-    private static ClaimsPrincipal UserPasswordPrincipal() => new(
-        new ClaimsIdentity(
-            [new Claim(BasicAuthentication.CredentialIdClaimType, "0197c0de-0000-7000-8000-000000000001")],
-            TransportSurface.Client.BasicSchemeName,
-            BasicAuthentication.CredentialIdClaimType,
-            BasicAuthentication.RoleClaimType));
-
-    private static ClaimsPrincipal ClientAssertionPrincipal(string publicKeyName) => new(
-        new ClaimsIdentity(
-            [new Claim(ClientAssertionAuthentication.KeyNameClaimType, publicKeyName)],
-            TransportSurface.Mcp.ClientAssertionSchemeName,
-            ClientAssertionAuthentication.KeyNameClaimType,
-            ClientAssertionAuthentication.RoleClaimType));
+    private static ClaimsPrincipal PrincipalCarrying(string claimType, string value, string scheme) => new(
+        new ClaimsIdentity([new Claim(claimType, value), TransportCallerUser.ClaimFor(User)], scheme));
 }

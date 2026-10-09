@@ -116,8 +116,9 @@ carries is who they are believed from, and **an unconfigured section believes ev
 `X-Forwarded-For` is read only when `TrustedProxies` names a proxy and no entry covers a whole address family, and
 then only from a peer it names; otherwise the peer MailFathom observes stays the one that opened the connection. The
 client address it yields is what the password bound and
-[an administrator's `AllowedSourceNetworks`](admin-endpoint.md#where-an-administrator-may-act-from) compare, which is
-why a restriction is refused at startup while no proxy is named. The configured OAuth `Resource` stays a value you
+[a credential's source networks](admin-endpoint.md#where-a-credential-may-be-presented-from) compare, which is why
+provisioning a restriction is refused while no proxy is named, and why a start warns once restrictions exist and the
+section stops naming one. The configured OAuth `Resource` stays a value you
 wrote rather than anything derived from a header.
 
 ## `ConnectionLimits`
@@ -182,8 +183,8 @@ credentials themselves are records beside the user each resolves, provisioned ov
 [the administrative endpoint](admin-endpoint.md#user-credentials), so nothing here names a key, a public key, a subject,
 or a grant. Each method is accepted at most once — `oauth-subject` excepted, since an entry states one authorization
 server's terms — and an entry naming no published method, or carrying a block another method owns, fails startup named by
-its position. The MCP and client endpoints take these entries; the administrative endpoint takes
-[credentials of its own](#adminendpoint), which is a different shape.
+its position. All three request-serving endpoints take these entries, each its own list; a credential is presented
+on an endpoint only where it lists that endpoint, and the administrative one only where it was provisioned to.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
@@ -347,8 +348,8 @@ configured: a request queued for its caller's tokens already holds a concurrency
 ## `AdminEndpoint`
 
 Whether the administrative surface the `mfctl` command reaches is served, and what a client must present. Its own
-listener, its own credentials, and its own authorization servers: a key configured under `McpEndpoint` authenticates
-nothing here, and the reverse holds. The whole section is **restart**, while key and certificate material is read per
+listener, its own accepted methods, and its own authorization servers: a credential is presented here only where it
+lists `admin`, so a key provisioned for the MCP endpoint authenticates nothing here, and the reverse holds. The whole section is **restart**, while key and certificate material is read per
 request or per handshake. [Administering a deployment](admin-endpoint.md) is the page.
 
 | Key | Type | Default | Constraint | Change |
@@ -357,12 +358,8 @@ request or per handshake. [Administering a deployment](admin-endpoint.md) is the
 | `AdminEndpoint:BindAddress` | string | `0.0.0.0` | An IP address; binds the clear-text socket, which `HttpsOnly` does not open | restart |
 | `AdminEndpoint:Port` | int | `8080` | 1–65535. The MCP and client endpoints' default as well, so enabling several without stating a port publishes one shared socket — see [sharing a socket](#sharing-a-socket) | restart |
 | `AdminEndpoint:Transport` | enum | `Http` | `Http`, `HttpAndHttps`, `HttpsOnly` — the same setting the MCP endpoint carries, read the same way | restart |
-| `AdminEndpoint:Administrators:<n>` | list of administrators | empty, which serves every caller the whole surface | The people and systems that administer the deployment — see [who administers the deployment](admin-endpoint.md#who-administers-the-deployment). This is a different shape from the two mail-serving endpoints, and deliberately: a deployment administrator is not a user, so they are configured here rather than provisioned as a record beside somebody's mail | restart |
-| `AdminEndpoint:Administrators:<n>:Name` | string | — | Required; unique ignoring case; not `anonymous`; no control characters. The identity every act the administrator performs is attributed to | restart |
-| `AdminEndpoint:Administrators:<n>:Credentials:<m>` | list of credentials | — | At least one. Each entry carries an `ApiKey` block, a `PublicKey` block, an `OAuth` block, or any combination of them; a `Basic` block is refused at startup. Key and public key names are unique across the section. Every `OAuth` block's `Resource` must end in `/api/admin`, because that is where these routes answer and what `mfctl` appends to find the metadata document; a client assertion presented here names the audience `urn:mailfathom:admin`; `AuthorizedSubjects` names whose tokens bind to this administrator, at least one is required, and a subject may belong to only one administrator at one issuer | restart; material per request |
-| `AdminEndpoint:Administrators:<n>:Permissions` | string list | absent = the whole surface | Draws from the administrative half of [the published set](permissions.md#the-published-set), so a name or a pattern reaching only the mail half fails startup here; an empty list grants nothing | restart |
-| `AdminEndpoint:Administrators:<n>:PermissionsFromTokenScopes` | bool | `false` | Narrows `Permissions` by each token's own scopes; refused on an administrator that also carries an `ApiKey` or `PublicKey` credential, since neither carries a scope | restart |
-| `AdminEndpoint:Administrators:<n>:AllowedSourceNetworks` | string list | empty = any network | Each entry an IP address or a CIDR network whose host bits are clear — not a DNS name — compared with IPv4-mapped addresses in their IPv4 form. Refused while `ReverseProxy:TrustedProxies` names no proxy narrower than a whole family. A request from elsewhere is answered `401` | restart |
+| `AdminEndpoint:Authentication` | list of methods | empty, which serves every caller as the default administrator `admin` | One entry per accepted method, in [the shape the MCP and client endpoints take](#the-accepted-methods--mcpendpointauthenticationn): `password`, `api-key`, `public-key`, and `oauth-subject` are all accepted. A caller is admitted when a credential listing `admin` resolves its user and that user holds an administrative role — see [who administers the deployment](admin-endpoint.md#who-administers-the-deployment). Every `OAuth` block's `Resource` must end in `/api/admin`, because that is where these routes answer and what `mfctl` appends to find the metadata document; a client assertion presented here names the audience `urn:mailfathom:admin`. Empty warns at startup | restart; material per request |
+| `AdminEndpoint:Administrators` | — | — | Not read. A configuration carrying it fails startup naming what replaces it | — |
 | `AdminEndpoint:Cors:AllowedOrigins` | string list | absent = every origin | `*` for every origin, a list for exactly those, an empty list for none. The same setting the MCP and client endpoints carry, configured separately | restart |
 | `AdminEndpoint:Https:Endpoints:<n>` | list of profiles | empty | Same shape and rules as `McpEndpoint:Https:Endpoints:<n>`, read under the two `Transport` modes that terminate TLS | restart; material per handshake |
 | `AdminEndpoint:Https:Redirect` | block | on | Same shape and rules as `McpEndpoint:Https:Redirect`; its socket is this surface's own `BindAddress` and `Port`, so terminating TLS on both surfaces opens two clear-text ports that do not collide | restart |

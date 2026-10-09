@@ -183,7 +183,8 @@ public sealed partial class UserPasswordAuthenticator
             credential.Id,
             credential.User,
             credential.Permissions,
-            credential.EndpointAccess);
+            credential.EndpointAccess,
+            credential.Reach);
     }
 
     /// <summary>Rewrites a record whose work parameters are behind the current policy, while the plaintext is still here.</summary>

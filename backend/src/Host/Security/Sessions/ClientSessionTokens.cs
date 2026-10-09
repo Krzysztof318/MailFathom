@@ -205,7 +205,10 @@ internal sealed class ClientSessionTokens
             return null;
         }
 
-        return AdmittedBy(held.Grant, held.EndpointAccess);
+        return AdmittedBy(held.Grant, held.EndpointAccess) with
+        {
+            Reach = UserCredentialReach.Default with { AllowedSourceNetworks = held.AllowedSourceNetworks },
+        };
     }
 
     /// <summary>Replaces a live session with a fresh token, so a client renews without anybody typing a password.</summary>

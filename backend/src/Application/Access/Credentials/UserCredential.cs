@@ -66,19 +66,29 @@ public sealed record UserCredential(
 
     /// <summary>Reports what a request this credential admits holds under its user's current grant.</summary>
     /// <param name="userGrant">What the credential's user holds.</param>
-    /// <returns>The mail permissions both the user holds and the credential keeps, in the published order.</returns>
+    /// <returns>The permissions both the user holds and the credential keeps, of each half an endpoint it is presented on reads, in the published order.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="userGrant" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// The same intersection a request is answered with, before a token's scopes narrow it further: the user's grant
-    /// kept to the mail half and then to the credential's names. A listed name the user does not hold yields nothing,
-    /// which is why an operator is shown both this and <see cref="Permissions" /> rather than either alone.
+    /// kept to the half each surface reads and then to the credential's names. The mail half counts where the credential
+    /// is presented on the MCP or the client endpoint and the administrative half where it is presented on the
+    /// administrative one, so a credential that administers is reported holding what it administers with. A listed name
+    /// the user does not hold yields nothing, which is why an operator is shown both this and <see cref="Permissions" />
+    /// rather than either alone.
     /// </remarks>
     public IReadOnlyList<MailFathomPermission> HeldUnder(ScopedGrant userGrant)
     {
         ArgumentNullException.ThrowIfNull(userGrant);
 
-        var narrowed = userGrant.NarrowedTo(this.Permissions ?? MailFathomPermission.PublishedFor(ProtectedSurface.Mail));
+        var narrowed = userGrant.NarrowedTo(this.Permissions ?? MailFathomPermission.All);
 
-        return [.. MailFathomPermission.PublishedFor(ProtectedSurface.Mail).Where(narrowed.Permissions.Contains)];
+        return [.. MailFathomPermission.All.Where(permission =>
+            narrowed.Permissions.Contains(permission) && this.ReadsTheHalfOf(permission))];
     }
+
+    private bool ReadsTheHalfOf(MailFathomPermission permission) => permission.Surface == ProtectedSurface.Administration
+        ? this.Reach.Lists(UserCredentialSurface.Administration)
+        : this.Reach.Lists(UserCredentialSurface.Mcp) || this.Reach.Lists(UserCredentialSurface.Client);
+    /// <summary>Gets where the credential may be presented: on which endpoints, and from which networks.</summary>
+    public UserCredentialReach Reach { get; init; } = UserCredentialReach.Default;
 }

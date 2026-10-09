@@ -35,4 +35,8 @@ internal enum HostStartupGate
     /// <summary>This deployment knows whether it holds nobody, one user, or several, and serves no surface that could not tell several apart.</summary>
     /// <remarks>Expected on every deployment, because a caller a mail-reading surface admits without naming a user acts for the sole one.</remarks>
     ServedUsers = 4,
+
+    /// <summary>The default administrator is recorded, or known to have been removed, and its password setting applied where it ever will be.</summary>
+    /// <remarks>Expected on every deployment, because an administrative endpoint authenticating nobody serves its callers as that user.</remarks>
+    DefaultAdministrator = 5,
 }

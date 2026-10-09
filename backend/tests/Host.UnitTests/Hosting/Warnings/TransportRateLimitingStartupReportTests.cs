@@ -224,7 +224,7 @@ public sealed class TransportRateLimitingStartupReportTests
         mcpEndpointSettings.Authentication.Add(ConfiguredAuthentication.Accepting(UserCredentialMethod.ApiKey));
 
         var adminEndpointSettings = EnabledAdminEndpoint(new TransportRateLimitingOptions());
-        adminEndpointSettings.Administrators.Add(ConfiguredAuthentication.AdministratorWithApiKey("operator-laptop"));
+        adminEndpointSettings.Authentication.Add(ConfiguredAuthentication.Accepting(UserCredentialMethod.ApiKey));
 
         var report = ReportFor(mcpEndpointSettings, adminEndpointSettings, logs);
 

@@ -10,10 +10,9 @@ namespace MailFathom.Host.Configuration.Access;
 /// <summary>One method a user-facing endpoint accepts, and the conditions it requires of it.</summary>
 /// <remarks>
 /// <para>
-/// An entry here states a method and nothing that could authenticate anybody. That is the whole difference between the
-/// two mail-serving surfaces and the administrative one: a credential that reaches somebody's mail names the user
-/// whose mail it reaches, and a user is a record in this deployment's database rather than a value in an operator's
-/// file — so the deployment states which methods it accepts and the database states who may use them. An entry
+/// An entry here states a method and nothing that could authenticate anybody. A credential names the user it signs in,
+/// on whichever surface it is presented, and a user is a record in this deployment's database rather than a value in
+/// an operator's file — so the deployment states which methods it accepts and the database states who may use them. An entry
 /// therefore carries no key, no public key, no subject, and no grant, and there is nothing in an endpoint section for a
 /// backup, a deployment tool, or a support transcript to leak.
 /// </para>
@@ -132,7 +131,7 @@ internal sealed class UserFacingAuthenticationOptions
             }
             else
             {
-                foreach (var error in oauth.FindConfigurationErrors(OAuthSubjectAdmission.ResolvedUserCredentials))
+                foreach (var error in oauth.FindConfigurationErrors())
                 {
                     yield return $"{settingPath}:{nameof(this.OAuth)}:{error}";
                 }

@@ -89,7 +89,7 @@ kubectl create namespace mailfathom
 
 kubectl --namespace mailfathom create secret generic mailfathom-secrets \
   --from-literal=mailfathom-database-password='…' \
-  --from-literal=admin-api-key='…' \
+  --from-literal=admin-password='…' \
   --from-file=imap-primary-password=./imap-primary-password \
   --from-file=mailfathom-data-key=./mailfathom-data-key
 
@@ -105,10 +105,16 @@ afterwards changes what is presented rather than what the server accepts — rot
 The Secret is mounted read-only at `/etc/mailfathom/secrets`, one file per key, so every credential is a `file:`
 reference — the same path and the same references the Compose deployment uses.
 
-The administrative key is in that list because a deployment that cannot be administered cannot be given a mailbox:
-every mail account is a record of its own assigned to the users it serves, and [recording the
-mailbox](#recording-the-mailbox) below is the write that puts one there. The mailbox password beside it is
-what that record's declaration will reference; nothing in the ConfigMap names it.
+The administrative password is in that list because a deployment that cannot be administered cannot be given a
+mailbox: every mail account is a record of its own assigned to the users it serves, and [recording the
+mailbox](#recording-the-mailbox) below is the write that puts one there. The first start records
+[the default administrator](admin-endpoint.md#the-default-administrator), `admin`, and `secrets.defaultAdministratorPasswordKey`
+names the key of this Secret its password is read from, passed to the process as `MAILFATHOM_ADMIN_PASSWORD`. The chart
+sets none: `/api/admin` is served on the Service every pod in the cluster reaches, so a shipped value would admit any
+workload in the cluster, and unset, `admin` holds no password and nobody can sign in as it. The value has to meet the
+password policy — twelve characters at least — or the start stops and says so, and it is read on the first start alone:
+changing the Secret afterwards changes nothing, and `mfctl credential rotate` is how the password changes. The mailbox
+password beside it is what that record's declaration will reference; nothing in the ConfigMap names it.
 
 **The encrypted systemd credentials the native installation uses do not reach a pod**, and they would work against this
 shape if they did: nothing schedules a systemd unit here, and that encryption binds material to one machine while every
@@ -152,6 +158,7 @@ database:
 
 secrets:
   existingSecret: mailfathom-secrets
+  defaultAdministratorPasswordKey: admin-password
 
 config:
   files:
@@ -163,13 +170,9 @@ config:
         },
         "AdminEndpoint": {
           "Enabled": true,
-          "Administrators": [
-            {
-              "Name": "admin",
-              "Credentials": [
-                { "ApiKey": { "Name": "admin", "SecretReference": "file:/etc/mailfathom/secrets/admin-api-key" } }
-              ]
-            }
+          "Authentication": [
+            { "Method": "password" },
+            { "Method": "api-key" }
           ]
         },
         "McpEndpoint": {
@@ -278,14 +281,14 @@ the locks the script takes and what each startup failure means.
 
 ## Recording the mailbox
 
-A started deployment holds no user and reads no mailbox, and no ConfigMap entry changes that: who a deployment serves
+A started deployment serves no user and reads no mailbox, and no ConfigMap entry changes that: who a deployment serves
 and which mailboxes it reads are rows it keeps rather than settings it reads. Each is recorded over the administrative
 endpoint, which is why the values above turn it on — reach it with a port-forward and record them:
 
 ```bash
 kubectl --namespace mailfathom port-forward service/mailfathom 8080:8080 &
 
-mfctl login --endpoint http://127.0.0.1:8080
+mfctl login --endpoint http://127.0.0.1:8080 --mode password
 mfctl user add --display-name Alex
 mfctl account add --from-file mailbox.json
 ```
@@ -381,9 +384,9 @@ an environment block is visible to anything that can read `/proc` and cannot be 
 
 ### Preserving the client address
 
-An administrator's [`AllowedSourceNetworks`](admin-endpoint.md#where-an-administrator-may-act-from) compares the
+A credential's [source networks](admin-endpoint.md#where-a-credential-may-be-presented-from) are compared with the
 address the request came from, and inside a cluster that address is only as good as every hop in front of the pod
-keeps it. Startup refuses a restriction while `ReverseProxy:TrustedProxies` names no proxy, so naming the ingress
+keeps it. Provisioning refuses a restriction while `ReverseProxy:TrustedProxies` names no proxy, so naming the ingress
 controller's pod CIDR, as above, is the first step. It is not the only one:
 
 - **The ingress controller has to see the client's address before it can forward it.** A cloud load balancer in front
@@ -398,13 +401,13 @@ controller's pod CIDR, as above, is the first step. It is not the only one:
   renders a `ClusterIP` `Service` by default; a deployment exposing the pod directly sets `service.type` and
   `service.externalTrafficPolicy: Local` together, and the chart refuses the policy on a `ClusterIP` `Service`. That
   keeps the address and is still not enough for a restriction: with nothing in front of the pod,
-  `ReverseProxy:TrustedProxies` names no proxy and startup refuses every `AllowedSourceNetworks`. A deployment that
+  `ReverseProxy:TrustedProxies` names no proxy and provisioning refuses every source network. A deployment that
   wants one puts an HTTP-terminating proxy that writes `X-Forwarded-For` in front of the pod and names it there —
   `externalTrafficPolicy: Local` then preserves the address that proxy sees, rather than standing in for it.
 
-The deployment's log names the administrator and the address a refused request came from, which is the fastest way to
-see which of these a cluster needs: an office network refused from `10.x` node addresses is the rewritten source,
-not a wrong list.
+A refused request is answered `401` exactly as a wrong credential, and the deployment logs why at `Information` — *the
+credential is not accepted from the network this request arrived from* — so a credential that works from inside the
+cluster and is refused from the office network is the rewritten source, not a wrong list.
 
 ## Serving the client
 

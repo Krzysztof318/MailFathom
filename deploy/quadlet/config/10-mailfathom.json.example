@@ -79,18 +79,18 @@
   // The administrative endpoint, which is how the mailbox above is recorded: `mfctl account add` is a client of this
   // surface, and nothing else creates a mail account for somebody else. It is on for that reason rather than as an
   // extra. Its own default port is 8080, which is the socket the MCP endpoint below is served on, so it states 8090 — the port
-  // mailfathom.container publishes for it, on loopback. The key is a systemd credential like every other one here,
-  // encrypted under the name `admin-api-key` and loaded by its own LoadCredentialEncrypted= line.
+  // mailfathom.container publishes for it, on loopback.
+  //
+  // The first start records the default administrator, `admin`, and gives it the password MAILFATHOM_ADMIN_PASSWORD in
+  // mailfathom.container carries — `admin` as shipped. Sign in with `mfctl login --mode password`, then change the
+  // password with `mfctl credential rotate`; every start warns while it is still the shipped one. The `api-key` entry is
+  // there for the key you provision next, with `mfctl credential create --method api-key --surface admin`.
   "AdminEndpoint": {
     "Enabled": true,
     "Port": 8090,
-    "Administrators": [
-      {
-        "Name": "admin",
-        "Credentials": [
-          { "ApiKey": { "Name": "admin", "SecretReference": "systemd-credential:admin-api-key" } }
-        ]
-      }
+    "Authentication": [
+      { "Method": "password" },
+      { "Method": "api-key" }
     ]
   },
   "McpEndpoint": {

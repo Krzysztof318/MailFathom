@@ -68,10 +68,8 @@ internal sealed class OAuthValidationOptions
     /// <para>
     /// It decides admission and never what an admitted caller may do, so a <see cref="MailFathomPermission" /> name
     /// written here is refused at startup: it would close the door on a caller the deployment meant to serve less
-    /// rather than granting them less. Where the grant lives follows the surface, which is why the refusal takes the
-    /// admission this block was configured for: on the administrative surface it is
-    /// <see cref="AdministratorOptions.Permissions" /> on the administrator this block sits under, and on a mail-serving
-    /// surface it is the user credential record the subject resolves to, written when the credential is provisioned.
+    /// rather than granting them less. What a caller may do is the grant of the user the subject resolves to, narrowed
+    /// by the credential record written when it was provisioned.
     /// </para>
     /// </remarks>
     public IList<string> RequiredScopes { get; } = [];
@@ -110,9 +108,8 @@ internal sealed class OAuthValidationOptions
         || this.AuthorizationServers.Any(authorizationServer => authorizationServer.IsConfigured);
 
     /// <summary>Finds everything an operator must fix before OAuth tokens can be validated.</summary>
-    /// <param name="admission">What a subject decides on the endpoint this block was configured for.</param>
     /// <returns>One message per faulty setting, relative to this section, empty when the settings are usable.</returns>
-    public IReadOnlyList<string> FindConfigurationErrors(OAuthSubjectAdmission admission)
+    public IReadOnlyList<string> FindConfigurationErrors()
     {
         var errors = new List<string>();
 
@@ -126,9 +123,9 @@ internal sealed class OAuthValidationOptions
             errors.Add($"{nameof(this.AuthorizationServers)} — OAuth authentication is selected and no authorization server is configured, so no token could be validated.");
         }
 
-        errors.AddRange(this.FindRequiredScopeErrors(admission));
-        errors.AddRange(this.FindAdvertisedScopeErrors(admission));
-        errors.AddRange(this.FindAuthorizationServerErrors(admission));
+        errors.AddRange(this.FindRequiredScopeErrors());
+        errors.AddRange(this.FindAdvertisedScopeErrors());
+        errors.AddRange(this.FindAuthorizationServerErrors());
 
         return errors;
     }
@@ -142,15 +139,9 @@ internal sealed class OAuthValidationOptions
             : throw new InvalidOperationException(
                 "The canonical resource was read before it was validated, so it is not usable as a resource identifier.");
 
-    /// <summary>Reports the identities a token must name to be served, across every configured authorization server.</summary>
-    /// <returns>The issuer and subject pairs, compared exactly.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the settings have not passed <see cref="FindConfigurationErrors" />.</exception>
-    public HashSet<string> AuthorizedIdentities() =>
-        [.. this.AuthorizationServers.SelectMany(authorizationServer => authorizationServer.AuthorizedIdentities())];
-
-    private IEnumerable<string> FindRequiredScopeErrors(OAuthSubjectAdmission admission)
+    private IEnumerable<string> FindRequiredScopeErrors()
     {
-        var grantIsWritten = GrantRemedy(admission);
+        var grantIsWritten = GrantRemedy;
         var claimedScopes = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var (index, configuredScope) in this.RequiredScopes.Index())
@@ -189,9 +180,9 @@ internal sealed class OAuthValidationOptions
     /// here states nothing and would leave the list reading as the whole advertised set rather than as what is
     /// advertised beyond what is checked.
     /// </remarks>
-    private IEnumerable<string> FindAdvertisedScopeErrors(OAuthSubjectAdmission admission)
+    private IEnumerable<string> FindAdvertisedScopeErrors()
     {
-        var scopesAreRead = ScopeGrantRemedy(admission);
+        var scopesAreRead = ScopeGrantRemedy;
         var requiredScopes = new HashSet<string>(this.RequiredScopes, StringComparer.Ordinal);
         var claimedScopes = new HashSet<string>(StringComparer.Ordinal);
 
@@ -222,7 +213,7 @@ internal sealed class OAuthValidationOptions
         }
     }
 
-    private IEnumerable<string> FindAuthorizationServerErrors(OAuthSubjectAdmission admission)
+    private IEnumerable<string> FindAuthorizationServerErrors()
     {
         var claimedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var claimedIssuers = new HashSet<string>(StringComparer.Ordinal);
@@ -231,7 +222,7 @@ internal sealed class OAuthValidationOptions
         {
             var settingPath = $"{nameof(this.AuthorizationServers)}:{index}";
 
-            var profileErrors = authorizationServer.FindConfigurationErrors(admission);
+            var profileErrors = authorizationServer.FindConfigurationErrors();
             if (profileErrors.Count > 0)
             {
                 foreach (var profileError in profileErrors)
@@ -270,20 +261,11 @@ internal sealed class OAuthValidationOptions
         !string.IsNullOrEmpty(configuredScope)
         && configuredScope.All(character => character is > (char)0x20 and < (char)0x7F and not '"' and not '\\');
 
-    /// <summary>Names where a grant is written on the surface this block was configured for.</summary>
-    /// <remarks>
-    /// A refusal that named the wrong place would be refused a second time when the operator followed it: on a
-    /// mail-serving surface <c>Permissions</c> is a retired key the section rejects by name before it binds, so the
-    /// remedy there is the provisioning command that writes the grant onto the user's credential record.
-    /// </remarks>
-    private static string GrantRemedy(OAuthSubjectAdmission admission) =>
-        admission == OAuthSubjectAdmission.ResolvedUserCredentials
-            ? "Write it as a '--permission' of the 'mfctl credential create' that provisions the user's credential, which is what decides what an admitted caller may do."
-            : $"Write it in '{nameof(AdministratorOptions.Permissions)}' on this administrator, which is what decides what an admitted caller may do.";
+    /// <summary>Names where a grant is written, which a refusal naming the wrong place would send an operator to twice.</summary>
+    private const string GrantRemedy =
+        "Grant it through a role assigned to the user, and keep it on the credential: a '--permission' of the 'mfctl credential create' that provisions the user's credential narrows what the user holds on every endpoint, and a credential naming none keeps all of it.";
 
-    /// <summary>Names where a grant taken from the token's own scopes is turned on, on the surface this block was configured for.</summary>
-    private static string ScopeGrantRemedy(OAuthSubjectAdmission admission) =>
-        admission == OAuthSubjectAdmission.ResolvedUserCredentials
-            ? $"Write it as a '--permission' of the 'mfctl credential create' that provisions the user's credential, or set '{nameof(UserFacingAuthenticationOptions.PermissionsFromTokenScopes)}' on this entry to take the grant from the token instead."
-            : $"Write it in '{nameof(AdministratorOptions.Permissions)}' on this administrator and set '{nameof(AdministratorOptions.PermissionsFromTokenScopes)}'.";
+    /// <summary>Names where a grant taken from the token's own scopes is turned on.</summary>
+    private const string ScopeGrantRemedy =
+        "Grant it through a role assigned to the user and keep it on the '--permission' list of the 'mfctl credential create' that provisions the user's credential, which narrows rather than grants, or set '" + nameof(UserFacingAuthenticationOptions.PermissionsFromTokenScopes) + "' on this entry to take the grant from the token's scopes instead.";
 }

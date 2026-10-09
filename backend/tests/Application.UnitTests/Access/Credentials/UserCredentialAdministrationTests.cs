@@ -43,6 +43,7 @@ public sealed class UserCredentialAdministrationTests
             UserCredentialUsername.Create("user"),
             AcceptablePassword.AsMemory(),
             permissions: null,
+            UserCredentialReach.Default,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -58,6 +59,7 @@ public sealed class UserCredentialAdministrationTests
             Arg.Is<UserCredentialLookup>(lookup => lookup.Value == "user"),
             AdministrationHarness.StoredHash,
             Arg.Any<IReadOnlyList<MailFathomPermission>>(),
+            Arg.Any<UserCredentialReach>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -74,6 +76,7 @@ public sealed class UserCredentialAdministrationTests
             UserCredentialUsername.Create("user"),
             AcceptablePassword.AsMemory(),
             permissions: null,
+            UserCredentialReach.Default,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -84,6 +87,7 @@ public sealed class UserCredentialAdministrationTests
             Arg.Any<UserCredentialLookup>(),
             Arg.Is<string>(stored => stored != null && stored.Contains(AcceptablePassword, StringComparison.Ordinal)),
             Arg.Any<IReadOnlyList<MailFathomPermission>>(),
+            Arg.Any<UserCredentialReach>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -104,6 +108,7 @@ public sealed class UserCredentialAdministrationTests
                 UserCredentialUsername.Create("user"),
                 "short".AsMemory(),
                 permissions: null,
+                UserCredentialReach.Default,
                 TestContext.Current.CancellationToken));
 
         // Assert
@@ -122,6 +127,7 @@ public sealed class UserCredentialAdministrationTests
         var provisioning = await harness.Administration.ProvisionApiKeyAsync(
             User,
             permissions: null,
+            UserCredentialReach.Default,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -135,6 +141,7 @@ public sealed class UserCredentialAdministrationTests
             Arg.Is<UserCredentialLookup>(lookup => lookup.Value == StatedApiKeyMinter.Digest),
             null,
             Arg.Any<IReadOnlyList<MailFathomPermission>>(),
+            Arg.Any<UserCredentialReach>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -150,6 +157,7 @@ public sealed class UserCredentialAdministrationTests
         var provisioning = await harness.Administration.ProvisionApiKeyAsync(
             User,
             permissions: null,
+            UserCredentialReach.Default,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -168,6 +176,7 @@ public sealed class UserCredentialAdministrationTests
             User,
             WrittenPublicKey,
             permissions: null,
+            UserCredentialReach.Default,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -181,6 +190,7 @@ public sealed class UserCredentialAdministrationTests
             Arg.Is<UserCredentialLookup>(lookup => lookup.Value == StatedPublicKeyReader.Fingerprint),
             WrittenPublicKey,
             Arg.Any<IReadOnlyList<MailFathomPermission>>(),
+            Arg.Any<UserCredentialReach>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -197,6 +207,7 @@ public sealed class UserCredentialAdministrationTests
                 User,
                 "not a key",
                 permissions: null,
+                UserCredentialReach.Default,
                 TestContext.Current.CancellationToken));
 
         // Assert
@@ -216,6 +227,7 @@ public sealed class UserCredentialAdministrationTests
             "https://login.example/",
             "subject-1",
             permissions: null,
+            UserCredentialReach.Default,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -230,6 +242,7 @@ public sealed class UserCredentialAdministrationTests
             Arg.Any<UserCredentialLookup>(),
             null,
             Arg.Any<IReadOnlyList<MailFathomPermission>>(),
+            Arg.Any<UserCredentialReach>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -251,6 +264,7 @@ public sealed class UserCredentialAdministrationTests
             issuer,
             subject,
             permissions: null,
+            UserCredentialReach.Default,
             TestContext.Current.CancellationToken));
 
         // Assert
@@ -272,6 +286,7 @@ public sealed class UserCredentialAdministrationTests
         await harness.Administration.ProvisionApiKeyAsync(
             User,
             permissions: null,
+            UserCredentialReach.Default,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -290,6 +305,7 @@ public sealed class UserCredentialAdministrationTests
         await harness.Administration.ProvisionApiKeyAsync(
             User,
             [MailFathomPermission.MailSend, MailFathomPermission.MailRead, MailFathomPermission.MailSend],
+            UserCredentialReach.Default,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -304,30 +320,11 @@ public sealed class UserCredentialAdministrationTests
         var harness = new AdministrationHarness(MailFathomPermission.AdminCredentialsWrite);
 
         // Act
-        await harness.Administration.ProvisionApiKeyAsync(User, [], TestContext.Current.CancellationToken);
+        await harness.Administration.ProvisionApiKeyAsync(User, [], UserCredentialReach.Default, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.NotNull(harness.WrittenGrant);
         Assert.Empty(harness.WrittenGrant);
-    }
-
-    /// <summary>
-    /// A credential reaches one user's mail, so an administrative permission on one would be a way into the deployment
-    /// rather than into a mailbox. The refusal is published so a boundary can answer with it instead of raising.
-    /// </summary>
-    [Fact]
-    public void FindGrantRefusal_APermissionOfTheAdministrativeSurface_IsRefusedNamingWhatMayBeWrittenInstead()
-    {
-        // Arrange
-        IReadOnlyList<MailFathomPermission> requested = [MailFathomPermission.MailRead, MailFathomPermission.AdminErase];
-
-        // Act
-        var refusal = UserCredentialAdministration.FindGrantRefusal(requested);
-
-        // Assert
-        Assert.NotNull(refusal);
-        Assert.Contains(MailFathomPermission.AdminErase.Name, refusal, StringComparison.Ordinal);
-        Assert.Contains(MailFathomPermission.MailRead.Name, refusal, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -343,36 +340,97 @@ public sealed class UserCredentialAdministrationTests
         Assert.NotNull(refusal);
     }
 
+    /// <summary>Each surface reads the half it guards, so a narrowing may name names of both and an administrative name keeps a credential to what it may do on the administrative endpoint.</summary>
     [Fact]
-    public void FindGrantRefusal_AnUnwrittenGrantOrOneOfTheMailSurface_IsAccepted()
+    public void FindGrantRefusal_AnUnwrittenGrantOrOneNamingEitherHalf_IsAccepted()
     {
-        // Arrange
-        var mailSurface = MailFathomPermission.PublishedFor(ProtectedSurface.Mail);
-
         // Act
         var unwritten = UserCredentialAdministration.FindGrantRefusal(permissions: null);
-        var narrowed = UserCredentialAdministration.FindGrantRefusal(mailSurface);
+        var narrowed = UserCredentialAdministration.FindGrantRefusal(MailFathomPermission.All);
 
         // Assert
         Assert.Null(unwritten);
         Assert.Null(narrowed);
     }
 
-    /// <summary>The same rule holds inside the use case, where reaching it means an entrypoint did not check.</summary>
+    /// <summary>Placing a credential is a way in as its user, so a caller kept to the write permission cannot mint itself, or a root, everything that user holds.</summary>
     [Fact]
-    public async Task ProvisionApiKeyAsync_AGrantNamingSomethingAdministrative_ThrowsWithoutTouchingTheStore()
+    public async Task ProvisionApiKeyAsync_ForAUserHoldingAnAdministrativeNameTheCallerLacks_IsRefusedWithoutTouchingTheStore()
     {
         // Arrange
         var harness = new AdministrationHarness(MailFathomPermission.AdminCredentialsWrite);
+        harness.Grants.ReadGrantOfAsync(User, Arg.Any<CancellationToken>())
+            .Returns(ScopedGrant.AtDeployment([MailFathomPermission.AdminCredentialsWrite, MailFathomPermission.AdminErase]));
 
         // Act
-        await Assert.ThrowsAsync<ArgumentException>(() => harness.Administration.ProvisionApiKeyAsync(
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() => harness.Administration.ProvisionApiKeyAsync(
             User,
-            [MailFathomPermission.AdminOperate],
+            permissions: null,
+            new UserCredentialReach([UserCredentialSurface.Administration], []),
             TestContext.Current.CancellationToken));
 
         // Assert
+        Assert.Contains(MailFathomPermission.AdminErase.Name, refusal.Message, StringComparison.Ordinal);
         Assert.Empty(harness.Credentials.ReceivedCalls());
+    }
+
+    [Fact]
+    public async Task ProvisionApiKeyAsync_ByACallerHoldingEveryAdministrativeNameTheUserHolds_IsWritten()
+    {
+        // Arrange
+        var harness = new AdministrationHarness(MailFathomPermission.AdminCredentialsWrite, MailFathomPermission.AdminErase);
+        harness.Grants.ReadGrantOfAsync(User, Arg.Any<CancellationToken>())
+            .Returns(ScopedGrant.AtDeployment([MailFathomPermission.MailRead, MailFathomPermission.AdminErase]));
+
+        // Act
+        var provisioning = await harness.Administration.ProvisionApiKeyAsync(
+            User,
+            permissions: null,
+            new UserCredentialReach([UserCredentialSurface.Administration], []),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(UserCredentialWriteOutcome.Written, provisioning.Outcome);
+    }
+
+    [Fact]
+    public async Task RotateApiKeyAsync_ForAUserHoldingAnAdministrativeNameTheCallerLacks_IsRefusedWithoutTouchingTheStore()
+    {
+        // Arrange
+        var harness = new AdministrationHarness(MailFathomPermission.AdminCredentialsWrite);
+        harness.Grants.ReadGrantOfAsync(User, Arg.Any<CancellationToken>())
+            .Returns(ScopedGrant.AtDeployment([MailFathomPermission.AdminErase]));
+
+        // Act
+        var rotation = () => harness.Administration.RotateApiKeyAsync(User, CredentialId, TestContext.Current.CancellationToken);
+
+        // Assert
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(rotation);
+        Assert.Empty(harness.Credentials.ReceivedCalls());
+    }
+
+    /// <summary>Enabling a credential lets it in again, which is placing it; disabling one widens nobody.</summary>
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task SetEnabledAsync_ForAUserHoldingAnAdministrativeNameTheCallerLacks_IsRefusedOnlyWhenEnabling(
+        bool enabled,
+        bool expectedWritten)
+    {
+        // Arrange
+        var harness = new AdministrationHarness(MailFathomPermission.AdminCredentialsWrite);
+        harness.Grants.ReadGrantOfAsync(User, Arg.Any<CancellationToken>())
+            .Returns(ScopedGrant.AtDeployment([MailFathomPermission.AdminErase]));
+
+        // Act
+        var refusal = await Record.ExceptionAsync(() => harness.Administration.SetEnabledAsync(
+            User,
+            CredentialId,
+            enabled,
+            TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(expectedWritten, refusal is null);
     }
 
     [Fact]
@@ -387,6 +445,7 @@ public sealed class UserCredentialAdministrationTests
             UserCredentialUsername.Create("user"),
             AcceptablePassword.AsMemory(),
             permissions: null,
+            UserCredentialReach.Default,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -420,6 +479,7 @@ public sealed class UserCredentialAdministrationTests
             UserCredentialUsername.Create("user"),
             AcceptablePassword.AsMemory(),
             permissions: null,
+            UserCredentialReach.Default,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -633,18 +693,21 @@ public sealed class UserCredentialAdministrationTests
                 UserCredentialUsername.Create("user"),
                 AcceptablePassword.AsMemory(),
                 permissions: null,
+                UserCredentialReach.Default,
                 cancellationToken)),
-            RefusalOf(() => harness.Administration.ProvisionApiKeyAsync(User, permissions: null, cancellationToken)),
+            RefusalOf(() => harness.Administration.ProvisionApiKeyAsync(User, permissions: null, UserCredentialReach.Default, cancellationToken)),
             RefusalOf(() => harness.Administration.ProvisionPublicKeyAsync(
                 User,
                 WrittenPublicKey,
                 permissions: null,
+                UserCredentialReach.Default,
                 cancellationToken)),
             RefusalOf(() => harness.Administration.ProvisionOAuthSubjectAsync(
                 User,
                 "https://login.example/",
                 "subject-1",
                 permissions: null,
+                UserCredentialReach.Default,
                 cancellationToken)));
 
         // Assert
@@ -710,6 +773,7 @@ public sealed class UserCredentialAdministrationTests
                 Arg.Any<UserCredentialLookup>(),
                 Arg.Any<string>(),
                 Arg.Any<IReadOnlyList<MailFathomPermission>?>(),
+                Arg.Any<UserCredentialReach>(),
                 Arg.Any<CancellationToken>())
             .Returns(UserCredentialWriteOutcome.Written);
         harness.Credentials.ReadForUserAsync(User, Arg.Any<CancellationToken>())
@@ -734,6 +798,7 @@ public sealed class UserCredentialAdministrationTests
             UserCredentialUsername.Create("user"),
             AcceptablePassword.AsMemory(),
             permissions: null,
+            UserCredentialReach.Default,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -808,12 +873,12 @@ public sealed class UserCredentialAdministrationTests
     {
         internal const string StoredHash = "$mf1$stored$";
 
-        internal AdministrationHarness(MailFathomPermission granted)
+        internal AdministrationHarness(params MailFathomPermission[] granted)
         {
             var principals = Substitute.For<IAuthorizedPrincipalSource>();
             // A caller acting for nobody's mail, which is the only shape the administrative surface produces: the user
             // every act here names comes from its own argument rather than from whoever was admitted.
-            principals.Current.Returns(AuthorizedPrincipal.Caller(AdministratorIdentity, [granted]));
+            principals.Current.Returns(AuthorizedPrincipal.Caller(AdministratorIdentity, granted));
 
             this.Credentials = Substitute.For<IUserCredentialStore>();
             this.AnswerCreateWith(UserCredentialWriteOutcome.Written);
@@ -874,6 +939,7 @@ public sealed class UserCredentialAdministrationTests
                     this.WrittenGrant = grant;
                     this.GrantWasWritten = true;
                 }),
+                Arg.Any<UserCredentialReach>(),
                 Arg.Any<CancellationToken>())
             .Returns(outcome);
 

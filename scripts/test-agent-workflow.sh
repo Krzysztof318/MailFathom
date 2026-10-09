@@ -7487,11 +7487,12 @@ quick_start_serves_the_administrative_endpoint_on_a_port_of_its_own() {
   checkout_root="$(stage_quick_start_checkout 'quick-start-admin')"
   compose_directory="$checkout_root/deploy/compose"
 
-  run_quick_start "$checkout_root" --provider yahoo --admin-endpoint api-key > "$output_file" 2>&1
+  run_quick_start "$checkout_root" --provider yahoo --admin-endpoint password > "$output_file" 2>&1
 
   assert_contains '"Port": 8090' "$compose_directory/config/10-mailfathom.json"
-  assert_contains '"SecretReference": "file:/etc/mailfathom/secrets/admin-workstation-key"' \
-    "$compose_directory/config/10-mailfathom.json"
+  assert_contains 'MAILFATHOM_ADMIN_PASSWORD=' "$compose_directory/.env"
+  assert_excludes 'admin-workstation-key' "$compose_directory/config/10-mailfathom.json"
+  assert_contains 'mfctl login --endpoint http://127.0.0.1:8090 --mode password' "$output_file"
   assert_contains '${MAILFATHOM_ADMIN_BIND:-127.0.0.1}:${MAILFATHOM_ADMIN_PORT:-8090}:8090' \
     "$source_repository_root/deploy/compose/compose.yaml"
 
@@ -7595,13 +7596,13 @@ quick_start_serves_the_administrative_endpoint_every_deployment_is_recorded_thro
   assert_contains '"Port": 8090' "$derived_root/deploy/compose/config/10-mailfathom.json"
   assert_contains 'mfctl credential create --method api-key' "$derived_log"
 
-  # `none` is still served, only without a key of its own: what it decides is whether the endpoint takes a
+  # `none` is still served, only without a password of its own: what it decides is whether the endpoint takes a
   # credential, never whether the deployment has one.
   unauthenticated_root="$(stage_quick_start_checkout 'quick-start-admin-unauthenticated')"
   run_quick_start "$unauthenticated_root" --provider yahoo --admin-endpoint none > /dev/null 2>&1
 
   assert_contains '"AdminEndpoint"' "$unauthenticated_root/deploy/compose/config/10-mailfathom.json"
-  assert_excludes 'admin-workstation-key' "$unauthenticated_root/deploy/compose/config/10-mailfathom.json"
+  assert_excludes 'MAILFATHOM_ADMIN_PASSWORD' "$unauthenticated_root/deploy/compose/.env"
 
   # And `off` is not an answer at all: a deployment prepared without the endpoint is one nobody could ever record a
   # user or a mailbox into.
@@ -7612,7 +7613,7 @@ quick_start_serves_the_administrative_endpoint_every_deployment_is_recorded_thro
     return 1
   fi
 
-  assert_contains 'takes api-key or none, not off' "$refused_log"
+  assert_contains 'takes password or none, not off' "$refused_log"
 
   if [[ -e "$refused_root/deploy/compose/config/10-mailfathom.json" ]]; then
     printf 'The refusal left a configuration file behind.\n' >&2

@@ -20,6 +20,7 @@ using MailFathom.Domain.Access;
 using MailFathom.Host.Api;
 using MailFathom.Host.Configuration.Embeddings;
 using MailFathom.Host.Configuration.Endpoints;
+using MailFathom.Host.Security.Basic;
 using MailFathom.Host.Security.Endpoints;
 using MailFathom.Host.Security.Transport;
 using MailFathom.Host.UnitTests.TestDoubles;
@@ -264,6 +265,22 @@ public sealed class AdminApiEndpointsTests
         var mapped = endpoints.Materialize();
         Assert.NotEmpty(mapped);
         Assert.All(mapped, endpoint => Assert.NotNull(endpoint.Metadata.GetMetadata<RoutePermission>()));
+    }
+
+    /// <summary>A browser keeps a password it was prompted for and attaches it to a cross-site form post, and nothing on this surface checks an origin, so no administrative route asks a browser for one.</summary>
+    [Fact]
+    public void MapAdminApi_Always_LeavesNoRouteOfferingThePasswordChallenge()
+    {
+        // Arrange
+        var endpoints = BuildRouteBuilder();
+
+        // Act
+        endpoints.MapAdminApi();
+
+        // Assert
+        var mapped = endpoints.Materialize();
+        Assert.NotEmpty(mapped);
+        Assert.All(mapped, endpoint => Assert.NotNull(endpoint.Metadata.GetMetadata<NoPasswordChallenge>()));
     }
 
     /// <summary>

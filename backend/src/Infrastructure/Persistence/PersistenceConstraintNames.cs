@@ -733,6 +733,9 @@ internal static class PersistenceConstraintNames
     /// <summary>The constraint that keeps every method but a password scoped to no organization.</summary>
     internal const string UserCredentialOrganizationScopesPasswordCheckConstraintName = "ck_user_credentials_organization_scopes_password";
 
+    /// <summary>The constraint that holds the record of the default administrator to one row, which is what makes recording it happen once.</summary>
+    internal const string DefaultAdministratorSingleRowCheckConstraintName = "ck_default_administrator_single_row";
+
     /// <summary>The index every administrative listing of one user's credentials is answered from.</summary>
     /// <remarks>Stated because it covers the user and the provisioning instant together, which is the listing's own order, and a name composed from the two properties would say nothing about that being why.</remarks>
     internal const string UserCredentialUserIndexName = "ix_user_credentials_user_created_at";

@@ -5,6 +5,7 @@
 using System.Net;
 using System.Text.Json;
 using MailFathom.Cli.Administration;
+using MailFathom.Domain.Access;
 using MailFathom.TestSupport;
 using Xunit;
 
@@ -684,6 +685,69 @@ public sealed class UserCredentialCommandTests : IDisposable
             ReadStrings(provisioning.ContentAsUtf8String(), "permissions"));
     }
 
+    /// <summary>Where a credential may be presented and from where are written where it is provisioned, so the invocation carries both and the deployment judges them.</summary>
+    [Fact]
+    public async Task Create_TheEndpointsAndNetworksTheInvocationNamed_SendsExactlyThose()
+    {
+        // Arrange
+        using var deployment = FakeUserCredentialDeployment.Provisioning([User], "mfk_not…", "mfk_a-key");
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "credential",
+            "create",
+            "--method",
+            "api-key",
+            "--surface",
+            "admin",
+            "--source-network",
+            "10.20.0.0/16",
+            "--source-network",
+            "192.0.2.7",
+            "--endpoint",
+            Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+
+        var provisioning = Assert.Single(deployment.RequestsTo(
+            HttpMethod.Post,
+            AdminEndpointRoutes.UserCredentialsPath(User)));
+
+        Assert.Equal(["admin"], ReadStrings(provisioning.ContentAsUtf8String(), "surfaces"));
+        Assert.Equal(["10.20.0.0/16", "192.0.2.7"], ReadStrings(provisioning.ContentAsUtf8String(), "allowedSourceNetworks"));
+    }
+
+    /// <summary>Unwritten endpoints are sent as no list rather than an empty one, because an empty list is a credential presented nowhere and the deployment refuses it.</summary>
+    [Fact]
+    public async Task Create_NoEndpointWritten_SendsNoListSoTheDeploymentAppliesItsDefault()
+    {
+        // Arrange
+        using var deployment = FakeUserCredentialDeployment.Provisioning([User], "mfk_not…", "mfk_a-key");
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "credential",
+            "create",
+            "--method",
+            "api-key",
+            "--endpoint",
+            Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+
+        var provisioning = Assert.Single(deployment.RequestsTo(
+            HttpMethod.Post,
+            AdminEndpointRoutes.UserCredentialsPath(User)));
+
+        Assert.Equal(
+            JsonValueKind.Null,
+            JsonDocument.Parse(provisioning.ContentAsUtf8String()).RootElement.GetProperty("surfaces").ValueKind);
+    }
+
     /// <summary>
     /// An empty grant and an absent one are opposite instructions the deployment reads from the same field — an empty
     /// array grants nothing and no array at all grants the whole mail surface — so the flag that says which is meant is
@@ -814,11 +878,39 @@ public sealed class UserCredentialCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
 
-        var listing = DrawnListing.ReadFrom(this.harness.Console.Lines, "Credential", "Method", "Resolved by", "Narrows to", "Holds", "State");
+        var listing = DrawnListing.ReadFrom(this.harness.Console.Lines, "Credential", "Method", "Resolved by", "Narrows to", "Holds", "Endpoints", "Accepted from", "State");
         var row = Assert.Single(listing.Rows);
 
         Assert.Equal("nothing named", listing.Cell(row, "Narrows to"));
         Assert.Equal("mailfathom.mail.read, mailfathom.mail.ask", listing.Cell(row, "Holds"));
+    }
+
+    /// <summary>A whole half is named as the half it is, so a credential holding every mail name never reads as one that administers.</summary>
+    [Theory]
+    [InlineData("mail", "all mail")]
+    [InlineData("administrative", "all administrative")]
+    [InlineData("both", "everything")]
+    public async Task List_ACredentialHoldingAWholeSet_NamesThatSet(string held, string expected)
+    {
+        // Arrange
+        string[] names = held switch
+        {
+            "mail" => [.. MailFathomPermission.PublishedFor(ProtectedSurface.Mail).Select(permission => permission.Name)],
+            "administrative" => [.. MailFathomPermission.PublishedFor(ProtectedSurface.Administration).Select(permission => permission.Name)],
+            _ => [.. MailFathomPermission.All.Select(permission => permission.Name)],
+        };
+        using var deployment = FakeUserCredentialDeployment.Holding(
+            [User],
+            FakeUserCredentialDeployment.CredentialNamingNothing(CredentialId, names));
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "credential", "list", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+
+        var listing = DrawnListing.ReadFrom(this.harness.Console.Lines, "Credential", "Method", "Resolved by", "Narrows to", "Holds", "Endpoints", "Accepted from", "State");
+        Assert.Equal(expected, listing.Cell(Assert.Single(listing.Rows), "Holds"));
     }
 
     /// <summary>Nothing about an invocation may carry the password, which is what keeps it out of a shell history and a process table.</summary>

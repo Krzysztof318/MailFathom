@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Net;
 using MailFathom.Domain.Access;
 
 namespace MailFathom.Application.Access.Sessions;
@@ -20,4 +21,8 @@ public sealed record HeldClientSession(
     ClientSessionGrant Grant,
     ReadOnlyMemory<byte> SecretDigest,
     DateTimeOffset ExpiresAt,
-    UserEndpointAccess EndpointAccess);
+    UserEndpointAccess EndpointAccess)
+{
+    /// <summary>Gets the networks the credential the session was minted under is accepted from, read beside the session for the reason <see cref="EndpointAccess" /> is, and empty for no restriction.</summary>
+    public IReadOnlyList<IPNetwork> AllowedSourceNetworks { get; init; } = [];
+}

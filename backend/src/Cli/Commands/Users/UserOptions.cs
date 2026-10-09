@@ -4,6 +4,7 @@
 
 using System.CommandLine;
 using MailFathom.Cli.Administration;
+using MailFathom.Cli.Administration.Users;
 
 namespace MailFathom.Cli.Commands.Users;
 
@@ -34,7 +35,7 @@ internal static class UserOptions
     /// <param name="cancellationToken">Cancels the request.</param>
     /// <returns>The user to act for.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="deployment" /> or <paramref name="token" /> is <see langword="null" />.</exception>
-    /// <exception cref="CliFailure">Thrown when the deployment holds no user at all, or holds several and the invocation named none.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment serves no user on a mail endpoint, or serves several and the invocation named none.</exception>
     /// <remarks>
     /// <para>
     /// A named user is used as written and never checked against the roster first: the deployment refuses a user it
@@ -42,6 +43,12 @@ internal static class UserOptions
     /// telling the operator which identifiers exist. The empty identifier is a stated user like any other — an unset
     /// script variable expands to one, and reading it as "no user was named" would act on the single user a
     /// deployment happens to hold instead of refusing an invocation that named nobody.
+    /// </para>
+    /// <para>
+    /// Only a user served on a mail endpoint settles it. The default administrator every deployment records is on the
+    /// roster with both endpoints switched off, so counting it would act on the administrator of a fresh deployment and
+    /// refuse every deployment that has since recorded the one user it serves; a command meant for a user kept off both
+    /// endpoints names them.
     /// </para>
     /// <para>
     /// Settling the user instead reads the roster, which is published under <c>mailfathom.admin.read</c> while the
@@ -65,14 +72,16 @@ internal static class UserOptions
         }
 
         var roster = await deployment.ReadUsersAsync(token, cancellationToken);
+        UserRosterEntry[] served = [.. (roster.Users ?? []).Where(user => user.McpEndpoint || user.ClientEndpoint)];
 
-        return roster.Users switch
+        return served switch
         {
             [var only] => only.Id,
-            null or [] => throw new CliFailure(
-                "The deployment holds no user records, so there is nobody to act for. Record one with 'user add'."),
+            [] => throw new CliFailure(
+                "The deployment serves no user on a mail endpoint, so there is nobody to act for. Record one with "
+                + "'user add', or pass --user to act for a user kept off both endpoints, such as the default administrator."),
             var several => throw new CliFailure(
-                $"The deployment holds {several.Count} users, so which one this acts for has to be said. Pass --user "
+                $"The deployment serves {several.Length} users, so which one this acts for has to be said. Pass --user "
                 + $"with one of: {string.Join(", ", several.Select(user => user.Describe()))}"),
         };
     }

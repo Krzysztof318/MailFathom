@@ -48,7 +48,7 @@ public sealed class ServedUsersStartupGateTests
         Assert.True(startupGates.Completed);
         Assert.Contains(
             startupLog.Messages,
-            message => message.Contains("holds no user", StringComparison.Ordinal)
+            message => message.Contains("serves no user", StringComparison.Ordinal)
                 && message.Contains("mfctl user add", StringComparison.Ordinal));
     }
 

@@ -9,6 +9,7 @@ using MailFathom.Domain.Access;
 using MailFathom.Host.Api;
 using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Configuration.Endpoints;
+using MailFathom.Host.Hosting.Startup;
 using MailFathom.Host.Mcp;
 using MailFathom.Host.Observability.ClientTelemetry;
 using MailFathom.Host.Security.ApiKeys;
@@ -36,11 +37,13 @@ public sealed class TransportAuthorizedPrincipalSourceTests
 {
     private const string ConfiguredKeyName = "mcp-key";
 
+    private static readonly UserId DefaultAdministrator = UserId.Create(Guid.Parse("0197c0de-0000-7000-8000-00000000a001"));
+
     [Fact]
     public async Task Current_AnAuthenticatedRequest_ReportsTheCallerAndTheGrantItsEntryResolvedTo()
     {
         // Arrange
-        var context = RequestBy(AuthenticatedCallerHolding(MailFathomPermission.MailRead));
+        var context = RequestBy(AuthenticatedCallerHolding(MailFathomPermission.MailRead), McpEndpointRoute.Path);
         var source = SourceOver(context);
 
         // Act
@@ -58,7 +61,7 @@ public sealed class TransportAuthorizedPrincipalSourceTests
     public async Task Current_AnAuthenticatedRequestWhoseEntryGrantedNothing_ReportsACallerHoldingNothing()
     {
         // Arrange
-        var context = RequestBy(AuthenticatedCallerHolding());
+        var context = RequestBy(AuthenticatedCallerHolding(), McpEndpointRoute.Path);
         var source = SourceOver(context);
 
         // Act
@@ -145,22 +148,71 @@ public sealed class TransportAuthorizedPrincipalSourceTests
         Assert.Equal([MailFathomPermission.MailRead], principal?.Permissions);
     }
 
-    /// <summary>The administrative surface admits no user's caller, so the one it admits for configuring no administrator holds the whole of that surface, which is what the startup report says.</summary>
+    /// <summary>An administrative surface authenticating nobody serves its callers as the default administrator, holding what that user's roles grant on the administrative half.</summary>
     [Fact]
-    public async Task Current_ARequestOnTheAdministrativeSurfaceConfiguringNoCredential_ReportsACallerHoldingThatWholeSurface()
+    public async Task Current_ARequestOnTheAdministrativeSurfaceConfiguringNoCredential_ActsAsTheDefaultAdministrator()
+    {
+        // Arrange
+        var source = SourceOver(RequestTo(AdminEndpointOptions.RoutePrefix + "/session"), defaultAdministrator: DefaultAdministrator);
+
+        // Act
+        var principal = await ResolvedAsync(
+            source,
+            ScopedGrant.AtDeployment([.. MailFathomPermission.PublishedFor(ProtectedSurface.Administration), MailFathomPermission.MailRead]));
+
+        // Assert
+        Assert.NotNull(principal);
+        Assert.Equal(AuthorizedPrincipalKind.Caller, principal.Kind);
+        Assert.Equal(TransportCallerIdentity.OfAdministrator(DefaultAdministrator, credential: null), principal.Identity);
+        Assert.Null(principal.User);
+        Assert.Equal(MailFathomPermission.PublishedFor(ProtectedSurface.Administration).ToHashSet(), principal.Permissions);
+    }
+
+    /// <summary>Removing the default administrator is final, so a surface authenticating nobody then serves nobody rather than a caller holding the whole surface.</summary>
+    [Fact]
+    public async Task Current_ARequestOnTheAdministrativeSurfaceAfterTheDefaultAdministratorWasRemoved_ReportsNoPrincipal()
     {
         // Arrange
         var source = SourceOver(RequestTo(AdminEndpointOptions.RoutePrefix + "/session"));
 
+        // Act & Assert
+        Assert.Null(await ResolvedAsync(source));
+    }
+
+    /// <summary>
+    /// An administrator is named by the user and the credential that admitted them, which is what an audit record carries
+    /// and what an operator revokes, and holds their roles' administrative grant kept to what the credential names.
+    /// </summary>
+    [Fact]
+    public async Task Current_AnAdministratorsCredential_NamesTheUserAndCredentialAndKeepsTheGrantToWhatItNames()
+    {
+        // Arrange
+        var credential = Guid.Parse("0197c0de-0000-7000-8000-00000000c0de");
+        var caller = new ClaimsPrincipal(new ClaimsIdentity(
+            [
+                new Claim(ApiKeyAuthentication.ApiKeyNameClaimType, ConfiguredKeyName),
+                TransportCallerUser.ClaimFor(SyntheticUser.Another),
+                TransportCallerCredential.ClaimFor(credential),
+                .. TransportGrant.ClaimsFor([MailFathomPermission.AdminRead, MailFathomPermission.MailRead]),
+            ],
+            "test",
+            ApiKeyAuthentication.ApiKeyNameClaimType,
+            ApiKeyAuthentication.RoleClaimType));
+        var source = SourceOver(
+            RequestBy(caller, AdminEndpointOptions.RoutePrefix + "/session"),
+            adminConfiguresACredential: true,
+            defaultAdministrator: DefaultAdministrator);
+
         // Act
-        var principal = await ResolvedAsync(source, ScopedGrant.None);
+        var principal = await ResolvedAsync(
+            source,
+            ScopedGrant.AtDeployment([MailFathomPermission.AdminRead, MailFathomPermission.AdminCredentialsWrite, MailFathomPermission.MailRead]));
 
         // Assert
-        Assert.Equal(AuthorizedPrincipalKind.Caller, principal?.Kind);
-        Assert.Equal(TransportCallerIdentity.AnonymousCaller, principal?.Identity);
-        Assert.Equal(
-            MailFathomPermission.PublishedFor(ProtectedSurface.Administration).ToHashSet(),
-            principal?.Permissions);
+        Assert.NotNull(principal);
+        Assert.Equal(TransportCallerIdentity.OfAdministrator(SyntheticUser.Another, credential), principal.Identity);
+        Assert.Null(principal.User);
+        Assert.Equal([MailFathomPermission.AdminRead], principal.Permissions);
     }
 
     /// <summary>
@@ -342,12 +394,9 @@ public sealed class TransportAuthorizedPrincipalSourceTests
     /// to a deployment rather than to somebody's mailbox, so a caller-scoped read refuses them instead of answering.
     /// </summary>
     [Theory]
-    [InlineData(McpEndpointRoute.Path, true)]
-    [InlineData(ClientEndpointOptions.RoutePrefix + "/session", true)]
-    [InlineData(AdminEndpointOptions.RoutePrefix + "/session", false)]
-    public void Current_AnAuthenticatedRequest_CarriesAUserOnlyOnASurfaceServingOneUsersMail(
-        string path,
-        bool servesOneUsersMail)
+    [InlineData(McpEndpointRoute.Path)]
+    [InlineData(ClientEndpointOptions.RoutePrefix + "/session")]
+    public void Current_AnAuthenticatedRequestOnASurfaceServingOneUsersMail_CarriesThatUser(string path)
     {
         // Arrange
         var source = SourceOver(
@@ -362,7 +411,7 @@ public sealed class TransportAuthorizedPrincipalSourceTests
         // Assert
         Assert.NotNull(principal);
         Assert.Equal(AuthorizedPrincipalKind.Caller, principal.Kind);
-        Assert.Equal(servesOneUsersMail ? SyntheticUser.Deployment : null, principal.User);
+        Assert.Equal(SyntheticUser.Deployment, principal.User);
     }
 
     /// <summary>
@@ -370,12 +419,9 @@ public sealed class TransportAuthorizedPrincipalSourceTests
     /// A caller admitted by the absence of a credential is still admitted to one user's mail and to no other's.
     /// </summary>
     [Theory]
-    [InlineData(McpEndpointRoute.Path, true)]
-    [InlineData(ClientEndpointOptions.RoutePrefix + "/session", true)]
-    [InlineData(AdminEndpointOptions.RoutePrefix + "/session", false)]
-    public void Current_ARequestOnASurfaceConfiguringNoCredential_CarriesAUserOnlyOnASurfaceServingOneUsersMail(
-        string path,
-        bool servesOneUsersMail)
+    [InlineData(McpEndpointRoute.Path)]
+    [InlineData(ClientEndpointOptions.RoutePrefix + "/session")]
+    public void Current_ARequestOnAMailSurfaceConfiguringNoCredential_CarriesTheUserTheDeploymentServes(string path)
     {
         // Arrange
         var source = SourceOver(RequestTo(path));
@@ -386,7 +432,7 @@ public sealed class TransportAuthorizedPrincipalSourceTests
         // Assert
         Assert.NotNull(principal);
         Assert.Equal(AuthorizedPrincipalKind.Caller, principal.Kind);
-        Assert.Equal(servesOneUsersMail ? SyntheticUser.Deployment : null, principal.User);
+        Assert.Equal(SyntheticUser.Deployment, principal.User);
     }
 
     /// <summary>A path neither surface serves is nobody's, so the posture of either endpoint decides nothing about it.</summary>
@@ -451,7 +497,7 @@ public sealed class TransportAuthorizedPrincipalSourceTests
         Assert.Equal(SyntheticUser.Another, principal.User);
     }
 
-    /// <summary>The administrative surface has nowhere to put a user, so a claim carrying one is dropped rather than admitted with it.</summary>
+    /// <summary>The user an administrator's credential names is who acts rather than whose mail is read, so the principal acts for no user's mailbox.</summary>
     [Fact]
     public void Current_AUsersCredentialOnASurfaceServingNoOnesMail_ActsForNoUser()
     {
@@ -479,7 +525,8 @@ public sealed class TransportAuthorizedPrincipalSourceTests
         bool mcpConfiguresACredential = false,
         bool adminConfiguresACredential = false,
         bool clientConfiguresACredential = false,
-        bool deploymentUserResolves = true)
+        bool deploymentUserResolves = true,
+        UserId? defaultAdministrator = null)
     {
         var httpContextAccessor = Substitute.For<IHttpContextAccessor>();
         httpContextAccessor.HttpContext.Returns(context);
@@ -494,13 +541,16 @@ public sealed class TransportAuthorizedPrincipalSourceTests
 
         if (adminConfiguresACredential)
         {
-            adminEndpoint.Administrators.Add(new AdministratorOptions());
+            adminEndpoint.Authentication.Add(new UserFacingAuthenticationOptions());
         }
 
         if (clientConfiguresACredential)
         {
             clientEndpoint.Authentication.Add(new UserFacingAuthenticationOptions());
         }
+
+        RecordedDefaultAdministrator recorded = new();
+        recorded.Record(defaultAdministrator);
 
         var deploymentUser = Substitute.For<IDeploymentUserSource>();
         if (deploymentUserResolves)
@@ -517,7 +567,8 @@ public sealed class TransportAuthorizedPrincipalSourceTests
             deploymentUser,
             Options.Create(mcpEndpoint),
             Options.Create(adminEndpoint),
-            Options.Create(clientEndpoint));
+            Options.Create(clientEndpoint),
+            recorded);
     }
 
     /// <summary>Resolves the grant as the pipeline does ahead of every route, then reads the principal.</summary>

@@ -26,17 +26,23 @@ namespace MailFathom.IntegrationTests.Orchestration;
 /// </remarks>
 internal static class ComposedHostAdministration
 {
-    /// <summary>Opens a client aimed at the administrative surface, already carrying the app model's key.</summary>
+    /// <summary>Opens a client aimed at the administrative surface, already signed in as the default administrator.</summary>
     /// <param name="adminAddress">The base address of the composed host's administrative endpoint.</param>
     /// <returns>The client, which the caller disposes.</returns>
     internal static HttpClient Open(Uri adminAddress)
     {
         var client = new HttpClient { BaseAddress = adminAddress };
-        client.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue("Bearer", OrchestrationContract.AdminApiKey);
+        client.DefaultRequestHeaders.Authorization = AdministratorAuthorization();
 
         return client;
     }
+
+    /// <summary>Composes the password sign-in of the default administrator the app model's host records on its first start.</summary>
+    /// <returns>The <c>Authorization</c> header value.</returns>
+    internal static AuthenticationHeaderValue AdministratorAuthorization() => new(
+        "Basic",
+        Convert.ToBase64String(
+            Encoding.UTF8.GetBytes($"{OrchestrationContract.AdminUsername}:{OrchestrationContract.AdminPassword}")));
 
     /// <summary>Records one user under the label they are told apart by, and reports the identifier minted for them.</summary>
     /// <param name="client">A client aimed at the administrative surface.</param>

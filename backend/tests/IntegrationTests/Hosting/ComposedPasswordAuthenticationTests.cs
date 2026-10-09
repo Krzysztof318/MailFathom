@@ -61,10 +61,6 @@ public sealed class ComposedPasswordAuthenticationTests
 
     private const string AdminSessionRoute = "/api/admin/session";
 
-    private const string AdminKeyName = "operator";
-
-    private const string AdminKey = "not-a-real-admin-key";
-
     private const string Username = "user";
 
     private const string Password = "correcthorsebatterystaple";
@@ -209,25 +205,34 @@ public sealed class ComposedPasswordAuthenticationTests
     }
 
     /// <summary>
-    /// The administrative surface answers for the deployment rather than for a person, so a password admitted there
-    /// would carry a user it has no use for. Refusing the shape at startup is what makes that unreachable rather than
-    /// merely unintended, and what a deployment meets is a start that stopped.
+    /// The administrative surface accepts a password, and judges it with the handler a mail surface uses — but a
+    /// credential provisioned for a person's mail lists the two mail endpoints and not this one, so the password that
+    /// opens their mailbox administers nothing. What refuses it is the credential's own reach, read inside the pipeline.
     /// </summary>
     [Fact]
-    public async Task AdminEndpoint_ADeploymentConfiguringAPasswordOnIt_DoesNotStart()
+    public async Task AdminEndpoint_APasswordProvisionedForTheMailEndpoints_IsRefusedByThatSurfacesPasswordHandler()
     {
         // Arrange
-        IReadOnlyList<KeyValuePair<string, string?>> shape =
+        await using var host = await StartAsync(
         [
             new("AdminEndpoint:Enabled", "true"),
             new("AdminEndpoint:Port", AdminPort.ToString(CultureInfo.InvariantCulture)),
-            new("AdminEndpoint:Administrators:0:Name", "administrator-0"),
-            new("AdminEndpoint:Administrators:0:Credentials:0:Basic:AttemptsPerMinute", "10"),
-            new("ReverseProxy:TrustedProxies:0", "10.0.0.5"),
-        ];
+            new("AdminEndpoint:Authentication:0:Method", "password"),
+            new("AdminEndpoint:Authentication:0:Basic:AttemptsPerMinute", "60"),
+            new("ReverseProxy:TrustedProxies:0", "127.0.0.1"),
+        ]);
 
-        // Act, Assert
-        await Assert.ThrowsAnyAsync<Exception>(() => StartAsync(shape));
+        // Act
+        var response = await host.SendAsync(
+            HttpMethods.Get,
+            AdminSessionRoute,
+            AdminPort,
+            (ForwardedHeadersDefaults.XForwardedProtoHeaderName, "https"),
+            (HeaderNames.Authorization, Credential(Username, Password)));
+
+        // Assert
+        Assert.Equal(StatusCodes.Status401Unauthorized, response.StatusCode);
+        Assert.Contains(TransportSurface.Admin.BasicSchemeName, host.AuthenticatedSchemes.Asked);
     }
 
     /// <summary>A surface that configured no password serves none, so a header naming the scheme is judged by the methods it did configure.</summary>
@@ -299,9 +304,7 @@ public sealed class ComposedPasswordAuthenticationTests
         new("McpEndpoint:Authentication:0:Basic:AttemptsPerMinute", "60"),
         new("AdminEndpoint:Enabled", "true"),
         new("AdminEndpoint:Port", AdminPort.ToString(CultureInfo.InvariantCulture)),
-        new("AdminEndpoint:Administrators:0:Name", "administrator-0"),
-        new("AdminEndpoint:Administrators:0:Credentials:0:ApiKey:Name", AdminKeyName),
-        new("AdminEndpoint:Administrators:0:Credentials:0:ApiKey:SecretReference", $"plaintext:{AdminKey}"),
+        new("AdminEndpoint:Authentication:0:Method", "api-key"),
         new("ClientEndpoint:Enabled", "true"),
         new("ClientEndpoint:Port", ClientPort.ToString(CultureInfo.InvariantCulture)),
         new("ClientEndpoint:Authentication:0:Method", "password"),

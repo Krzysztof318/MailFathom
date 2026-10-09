@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Net;
+using System.Text;
 using MailFathom.Cli.Credentials;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
@@ -59,6 +60,46 @@ public sealed class LoginCommandTests : IDisposable
         Assert.Equal("Bearer", handler.LastAuthorization()?.Scheme);
         Assert.Equal("not-a-real-key", handler.LastAuthorization()?.Parameter);
         Assert.Equal("/api/admin/session", handler.LastPath());
+    }
+
+    /// <summary>The password mode signs in as the default administrator unless told otherwise, which is how a fresh deployment is first reached.</summary>
+    [Fact]
+    public async Task Login_ThePasswordMode_SendsTheDefaultAdministratorsLoginAsABasicCredential()
+    {
+        // Arrange
+        using var handler = FakeAdminEndpoint.Accepting("admin");
+        this.console.SecretToSupply = "not-a-real-password";
+
+        // Act
+        var exitCode = await RunAsync(this.Context(this.CreateStore(), handler), "login", "--endpoint", Endpoint, "--mode", "password");
+
+        // Assert
+        Assert.Equal(0, exitCode);
+        Assert.Equal("Basic", handler.LastAuthorization()?.Scheme);
+        Assert.Equal(
+            "admin:not-a-real-password",
+            Encoding.UTF8.GetString(Convert.FromBase64String(handler.LastAuthorization()!.Parameter!)));
+    }
+
+    /// <summary>A stored password is presented the way it was verified on every later command, rather than as a bearer credential the deployment would not recognize.</summary>
+    [Fact]
+    public async Task Status_AfterAPasswordSignIn_PresentsTheStoredPasswordAsABasicCredential()
+    {
+        // Arrange
+        var store = this.CreateStore();
+        using var handler = FakeAdminEndpoint.Accepting("operator");
+        this.console.SecretToSupply = "not-a-real-password";
+        await RunAsync(this.Context(store, handler), "login", "--endpoint", Endpoint, "--mode", "password", "--username", "operator");
+
+        // Act
+        var exitCode = await RunAsync(this.Context(store, handler), "status");
+
+        // Assert
+        Assert.Equal(0, exitCode);
+        Assert.Equal("Basic", handler.LastAuthorization()?.Scheme);
+        Assert.Equal(
+            "operator:not-a-real-password",
+            Encoding.UTF8.GetString(Convert.FromBase64String(handler.LastAuthorization()!.Parameter!)));
     }
 
     /// <summary>A refused credential must not reach the store, or the next command would present one the deployment already rejected.</summary>

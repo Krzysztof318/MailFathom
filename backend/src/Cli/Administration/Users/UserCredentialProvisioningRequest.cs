@@ -12,6 +12,8 @@ namespace MailFathom.Cli.Administration.Users;
 /// <param name="Issuer">The authorization server's issuer identifier, where the method maps a validated subject.</param>
 /// <param name="Subject">That server's own identifier for the person, where the method maps a validated subject.</param>
 /// <param name="Permissions">The published permission names the credential narrows its user's grant to, or <see langword="null" /> to name none and hold what the user holds.</param>
+/// <param name="Surfaces">The endpoints the credential may be presented on, or <see langword="null" /> for the two mail-serving ones.</param>
+/// <param name="AllowedSourceNetworks">The addresses or CIDR networks the credential is accepted from, or <see langword="null" /> for any.</param>
 /// <remarks><see cref="ToString" /> reports no field at all: the method alone would be safe, and a record that printed one field is a record somebody eventually printed while believing it printed none.</remarks>
 internal sealed record UserCredentialProvisioningRequest(
     string Method,
@@ -20,7 +22,9 @@ internal sealed record UserCredentialProvisioningRequest(
     string? PublicKey,
     string? Issuer,
     string? Subject,
-    IReadOnlyList<string>? Permissions)
+    IReadOnlyList<string>? Permissions,
+    IReadOnlyList<string>? Surfaces = null,
+    IReadOnlyList<string>? AllowedSourceNetworks = null)
 {
     /// <inheritdoc />
     public override string ToString() => nameof(UserCredentialProvisioningRequest);

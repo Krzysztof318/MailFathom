@@ -20,9 +20,9 @@ table on all four, the map to them, and the settings that are read from the envi
 | [Storage, keys, jobs, and logging](configuration-runtime.md) | [`ConfigurationSources`](configuration-runtime.md#configurationsources), [`Secrets`](configuration-runtime.md#secrets), [`Persistence`](configuration-runtime.md#persistence-and-the-connection-string), [`ContentStorage`](configuration-runtime.md#contentstorage), [`DataEncryption`](configuration-runtime.md#dataencryption), [`Deployment`](configuration-runtime.md#deployment), [`MailboxExport`](configuration-runtime.md#mailboxexport), [`Jobs`](configuration-runtime.md#jobs), [`Resilience`](configuration-runtime.md#resilience), [`Logging`](configuration-runtime.md#logging) |
 
 One setting group is not a section of configuration at all. A grant names capabilities this repository publishes rather
-than values a section defines, and it is written in two places: `Permissions` on an `AdminEndpoint:Administrators` entry
-for the deployment's own administrators, and a role assigned to a user — which `mfctl credential create --permission`
-narrows for one of that user's credentials.
+than values a section defines, and it is written in two places: the roles assigned to a user, which are the whole of an
+administrator's grant, and `mfctl credential create --permission`, which narrows what the user holds for one of that
+user's credentials.
 [What a credential may do](permissions.md) states the whole of it: the names, what each one reaches, where each grant is
 written, and what a caller the grant does not admit is told.
 
@@ -90,6 +90,7 @@ belong to the platform rather than to MailFathom:
 | `DOTNET_ENVIRONMENT` / `ASPNETCORE_ENVIRONMENT` | The environment name; `Development` is what admits user secrets and `appsettings.Development.json` |
 | `DOTNET_USE_POLLING_FILE_WATCHER` | Set to `1` where reload must observe a mounted volume's atomic update — Kubernetes ConfigMaps in particular |
 | `OPENSSL_CONF` | The OpenSSL configuration file every TLS connection in the process is handshaked under. Unset is the platform's own policy; setting it is how a mail server the platform refuses is reached at all, and the host warns at startup that it is in force. [The platform TLS policy](platform-tls-policy.md) is the page |
+| `MAILFATHOM_ADMIN_PASSWORD` | The password [the default administrator](admin-endpoint.md#the-default-administrator) `admin` is given on the first start that finds it while `admin` holds no password credential, and on no later one. Unset gives `admin` no password. `admin` is the one value exempt from the password policy's minimum; any other value the policy refuses stops the start |
 
 Each of these has a reader that runs before MailFathom's configuration exists, or that never consults it: the bootstrap
 logging pipeline is composed before the configuration providers are, because a malformed `appsettings.json` is one of

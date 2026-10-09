@@ -186,7 +186,7 @@ internal static class FakeUserCredentialDeployment
 
     /// <summary>States one user the way the roster route publishes them, with the label and whether they are served beside the identifier.</summary>
     private static string Roster(Guid user) =>
-        $$"""{"id":"{{user:D}}","displayName":"user-{{user:D}}","served":true}""";
+        $$"""{"id":"{{user:D}}","displayName":"user-{{user:D}}","served":true,"mcpEndpoint":true,"clientEndpoint":true}""";
 
     private static HttpResponseMessage Written(HttpStatusCode status, string detail, string body) =>
         status == HttpStatusCode.OK

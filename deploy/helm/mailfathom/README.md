@@ -31,6 +31,8 @@ It installs no Secret deliberately: credentials belong to whoever operates the c
 
 **A Secret.** It is mounted read-only at `/etc/mailfathom/secrets`, one file per key, so every credential in your configuration is a `file:` reference. A database the chart deploys needs a *second* Secret for the PostgreSQL superuser password, which the application pod never mounts — and the chart refuses a values document naming one Secret for both.
 
+**The default administrator's password, where you want one.** The first start records a user `admin` holding the `Administrator` role, and `secrets.defaultAdministratorPasswordKey` names the key of that Secret its password is read from, passed as `MAILFATHOM_ADMIN_PASSWORD`. The chart sets none, because `/api/admin` is served on a Service every pod in the cluster reaches and a shipped value would admit any of them: unset, `admin` holds no password and nobody signs in as it. The value has to meet the password policy — twelve characters at least — or the start stops, and it is read on the first start alone, so changing the Secret afterwards changes nothing; `mfctl credential rotate` is how the password changes. [The default administrator](https://krzysztof318.github.io/MailFathom/docs/operations/admin-endpoint.html#the-default-administrator) is the whole rule.
+
 **A database, which is the one with a default.** The chart runs PostgreSQL with the `vector` extension as a single-replica StatefulSet on a retained claim. That gives the data a lifetime longer than the pod's and nothing else — no backup schedule, no failover, no point-in-time recovery, and no upgrade path across a PostgreSQL major — so point the chart at a server you already operate once any of those is somebody's job:
 
 ```yaml

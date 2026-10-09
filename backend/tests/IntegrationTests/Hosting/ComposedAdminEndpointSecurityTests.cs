@@ -15,7 +15,7 @@ namespace MailFathom.IntegrationTests.Hosting;
 /// <summary>Proves that the controls in front of the administrative endpoint run before its routes answer.</summary>
 /// <remarks>
 /// <para>
-/// Which credentials authenticate and how they are compared is unit-tested against <c>ApiKeyAuthenticator</c>, and how
+/// Which credentials authenticate and how they are compared is unit-tested against the authenticators, and how
 /// the isolation predicate matches a path is unit-tested against <c>SurfaceIsolation</c>; neither is repeated
 /// here. What only a composed host can establish is the part those tests structurally cannot see: that the endpoint has
 /// a listener of its own at all, that the authorization requirement is attached to the route group rather than merely
@@ -57,12 +57,12 @@ public sealed class ComposedAdminEndpointSecurityTests
         using var client = await this.orchestration.OpenAdminEndpointClientAsync(TestContext.Current.CancellationToken);
 
         // Act
-        using var request = SessionRequest(apiKey: null);
+        using var request = SessionRequest(authorization: null);
         using var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-        Assert.Equal("Bearer", Assert.Single(response.Headers.WwwAuthenticate).Scheme);
+        Assert.Contains(response.Headers.WwwAuthenticate, challenge => challenge.Scheme == "Bearer");
         Assert.DoesNotContain(
             ServiceNamedByTheHandler,
             await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken),
@@ -81,9 +81,10 @@ public sealed class ComposedAdminEndpointSecurityTests
         using var client = await this.orchestration.OpenAdminEndpointClientAsync(TestContext.Current.CancellationToken);
 
         // Act
-        using var anonymousRequest = SessionRequest(apiKey: null);
+        using var anonymousRequest = SessionRequest(authorization: null);
         using var withoutCredential = await client.SendAsync(anonymousRequest, TestContext.Current.CancellationToken);
-        using var unrecognizedRequest = SessionRequest("a-key-this-deployment-never-configured");
+        using var unrecognizedRequest = SessionRequest(
+            new AuthenticationHeaderValue("Bearer", "a-key-this-deployment-never-configured"));
         using var withUnrecognizedCredential = await client.SendAsync(
             unrecognizedRequest,
             TestContext.Current.CancellationToken);
@@ -101,16 +102,17 @@ public sealed class ComposedAdminEndpointSecurityTests
     /// <summary>
     /// The body is what <c>mfctl login</c> reads to decide that a credential it has just been handed is one this
     /// deployment accepts, so all three of its parts are asserted: the product, so a client can tell it reached
-    /// MailFathom rather than something else answering the port; the running version; and the deployment's own name for
-    /// the credential that authenticated, which is what proves the principal reached the handler rather than the route
-    /// merely admitting the request.
+    /// MailFathom rather than something else answering the port; the running version; and the user and credential the
+    /// caller was admitted as, which is what proves the principal reached the handler rather than the route merely
+    /// admitting the request. The grant is the default administrator's, which its role at the deployment scope gives:
+    /// administrative names and nothing else.
     /// </summary>
     [Fact]
-    public async Task AdminEndpoint_RequestCarryingTheConfiguredKey_ReachesTheSessionHandler()
+    public async Task AdminEndpoint_RequestCarryingTheDefaultAdministratorsPassword_ReachesTheSessionHandler()
     {
         // Arrange
         using var client = await this.orchestration.OpenAdminEndpointClientAsync(TestContext.Current.CancellationToken);
-        using var request = SessionRequest(OrchestrationContract.AdminApiKey);
+        using var request = SessionRequest(ComposedHostAdministration.AdministratorAuthorization());
 
         // Act
         using var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
@@ -122,7 +124,13 @@ public sealed class ComposedAdminEndpointSecurityTests
             await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
 
         Assert.Equal(ServiceNamedByTheHandler, session.RootElement.GetProperty("service").GetString());
-        Assert.Equal(OrchestrationContract.AdminApiKeyName, session.RootElement.GetProperty("credential").GetString());
+        Assert.Matches(
+            "^user [0-9a-f-]{36} credential [0-9a-f-]{36}$",
+            session.RootElement.GetProperty("credential").GetString());
+        Assert.NotEmpty(session.RootElement.GetProperty("permissions").EnumerateArray());
+        Assert.All(
+            session.RootElement.GetProperty("permissions").EnumerateArray(),
+            name => Assert.StartsWith("mailfathom.admin", name.GetString(), StringComparison.Ordinal));
 
         // A version rather than the exact number, because what the composed host establishes is that the handler read
         // the running assembly's stamp: the fallback it reports when a build stamped nothing is the word "unknown", and
@@ -131,13 +139,13 @@ public sealed class ComposedAdminEndpointSecurityTests
     }
 
     /// <summary>
-    /// Neither surface's key authenticates the other's routes, which is the whole reason the administrative endpoint is
+    /// Neither surface's credential authenticates the other's routes, which is the whole reason the administrative endpoint is
     /// a second listener with a section of its own rather than more routes on the MCP one. Both directions are asserted
     /// in one test because they are one claim, and a composition that broke the separation would break it in whichever
     /// direction happened to be checked.
     /// </summary>
     [Fact]
-    public async Task EachEndpoint_PresentedWithTheOthersConfiguredKey_RefusesItLikeAnyUnrecognizedCredential()
+    public async Task EachEndpoint_PresentedWithTheOthersCredential_RefusesItLikeAnyUnrecognizedCredential()
     {
         // Arrange
         using var adminClient = await this.orchestration.OpenAdminEndpointClientAsync(TestContext.Current.CancellationToken);
@@ -145,12 +153,12 @@ public sealed class ComposedAdminEndpointSecurityTests
         var mcpKey = await this.orchestration.ComposedHostMcpApiKeyAsync(TestContext.Current.CancellationToken);
 
         // Act
-        using var mcpKeyOnAdminEndpoint = SessionRequest(mcpKey);
+        using var mcpKeyOnAdminEndpoint = SessionRequest(new AuthenticationHeaderValue("Bearer", mcpKey));
         using var administrativeRefusal = await adminClient.SendAsync(
             mcpKeyOnAdminEndpoint,
             TestContext.Current.CancellationToken);
 
-        using var adminKeyOnMcpEndpoint = ListToolsRequest(OrchestrationContract.AdminApiKey);
+        using var adminKeyOnMcpEndpoint = ListToolsRequest(ComposedHostAdministration.AdministratorAuthorization());
         using var protocolRefusal = await mcpClient.SendAsync(
             adminKeyOnMcpEndpoint,
             TestContext.Current.CancellationToken);
@@ -165,90 +173,14 @@ public sealed class ComposedAdminEndpointSecurityTests
         Assert.Equal("Bearer", Assert.Single(protocolRefusal.Headers.WwwAuthenticate).Scheme);
     }
 
-    /// <summary>
-    /// What no unit test can reach: that the filter reading each route's published permission is attached to the group
-    /// the mapping builds, rather than merely written. An endpoint filter is not endpoint metadata, so nothing about it
-    /// is readable off a built endpoint — deleting the line that attaches it leaves every route serving any admitted
-    /// credential. Both directions are one claim and are asserted together: the same credential reaches the route its
-    /// one permission publishes and is refused the route another does.
-    /// </summary>
-    [Fact]
-    public async Task AdminEndpoint_ACredentialGrantedOneAdministrativePermission_ReachesThatRouteAndIsRefusedAnother()
-    {
-        // Arrange
-        using var client = await this.orchestration.OpenAdminEndpointClientAsync(TestContext.Current.CancellationToken);
-
-        // The refused route reads one user's book and says so in its signature, so the request names a user even though
-        // the grant stops it before anything is read: an unbound required parameter fails while the request delegate is
-        // being invoked, which is ahead of the filter and would answer a fault where a refusal is the claim.
-        var user = await this.orchestration.ComposedHostUserAsync(TestContext.Current.CancellationToken);
-
-        // Act
-        using var permittedRequest = AuthenticatedGet("/api/admin/rules", OrchestrationContract.AdminNarrowedApiKey);
-        using var permitted = await client.SendAsync(permittedRequest, TestContext.Current.CancellationToken);
-
-        using var refusedRequest = AuthenticatedGet(
-            $"/api/admin/contacts?user={user:D}",
-            OrchestrationContract.AdminNarrowedApiKey);
-        using var refused = await client.SendAsync(refusedRequest, TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.Equal(HttpStatusCode.OK, permitted.StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
-
-        using var problem = JsonDocument.Parse(
-            await refused.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
-
-        Assert.Equal("mailfathom.admin.audit.read", problem.RootElement.GetProperty("permission").GetString());
-        Assert.False(problem.RootElement.TryGetProperty("contacts", out _));
-    }
-
-    /// <summary>
-    /// The one route published under no permission, reached by a credential the rest of the surface refuses, reporting
-    /// back exactly what that credential holds. It is what <c>mfctl status</c> prints, and the only way an operator
-    /// learns a grant without reading the deployment's own configuration.
-    /// </summary>
-    [Fact]
-    public async Task AdminEndpoint_TheSessionRoute_ReportsTheGrantTheCredentialWasAdmittedUnder()
-    {
-        // Arrange
-        using var client = await this.orchestration.OpenAdminEndpointClientAsync(TestContext.Current.CancellationToken);
-        using var request = SessionRequest(OrchestrationContract.AdminNarrowedApiKey);
-
-        // Act
-        using var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-
-        using var session = JsonDocument.Parse(
-            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
-
-        Assert.Equal(
-            OrchestrationContract.AdminNarrowedApiKeyName,
-            session.RootElement.GetProperty("credential").GetString());
-        Assert.Equal(
-            [OrchestrationContract.AdminNarrowedPermission],
-            session.RootElement.GetProperty("permissions").EnumerateArray().Select(name => name.GetString()));
-    }
-
-    /// <summary>Builds a bearer-authenticated read of one administrative route.</summary>
-    private static HttpRequestMessage AuthenticatedGet(string route, string apiKey)
-    {
-        var request = new HttpRequestMessage(HttpMethod.Get, new Uri(route, UriKind.Relative));
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
-
-        return request;
-    }
-
-    /// <summary>Builds a request for the session route, optionally presenting a bearer credential.</summary>
-    private static HttpRequestMessage SessionRequest(string? apiKey)
+    /// <summary>Builds a request for the session route, optionally presenting a credential.</summary>
+    private static HttpRequestMessage SessionRequest(AuthenticationHeaderValue? authorization)
     {
         var request = new HttpRequestMessage(HttpMethod.Get, new Uri(SessionRoute, UriKind.Relative));
 
-        if (apiKey is not null)
+        if (authorization is not null)
         {
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+            request.Headers.Authorization = authorization;
         }
 
         return request;
@@ -260,7 +192,7 @@ public sealed class ComposedAdminEndpointSecurityTests
     /// its origin would answer nothing about the credential it presented. Both content types the Streamable HTTP
     /// transport may reply with are accepted, because which one it chooses is not what this test is about.
     /// </remarks>
-    private static HttpRequestMessage ListToolsRequest(string apiKey)
+    private static HttpRequestMessage ListToolsRequest(AuthenticationHeaderValue authorization)
     {
         var request = new HttpRequestMessage(HttpMethod.Post, new Uri("/mcp", UriKind.Relative))
         {
@@ -272,7 +204,7 @@ public sealed class ComposedAdminEndpointSecurityTests
             }),
         };
 
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+        request.Headers.Authorization = authorization;
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
         request.Headers.Add("Origin", OrchestrationContract.McpPermittedOrigin);

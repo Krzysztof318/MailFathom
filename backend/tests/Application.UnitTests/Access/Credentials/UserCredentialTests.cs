@@ -61,6 +61,43 @@ public sealed class UserCredentialTests
         Assert.Empty(held);
     }
 
+    /// <summary>A credential that administers is reported holding what it administers with, and nothing of the mail half it is never presented where.</summary>
+    [Fact]
+    public void HeldUnder_ACredentialPresentedOnlyOnTheAdministrativeEndpoint_HoldsTheAdministrativeHalfOfWhatItsUserHolds()
+    {
+        // Arrange
+        var credential = CredentialNarrowedTo(permissions: null) with
+        {
+            Reach = new UserCredentialReach([UserCredentialSurface.Administration], []),
+        };
+        var userGrant = GrantOf(MailFathomPermission.MailRead, MailFathomPermission.AdminRead, MailFathomPermission.AdminOperate);
+
+        // Act
+        var held = credential.HeldUnder(userGrant);
+
+        // Assert
+        Assert.Equal([MailFathomPermission.AdminRead, MailFathomPermission.AdminOperate], held);
+    }
+
+    [Fact]
+    public void HeldUnder_ACredentialPresentedEverywhereAndNarrowedAcrossBothHalves_HoldsWhatItKeepsOfEach()
+    {
+        // Arrange
+        var credential = CredentialNarrowedTo([MailFathomPermission.MailRead, MailFathomPermission.AdminRead]) with
+        {
+            Reach = new UserCredentialReach(
+                [UserCredentialSurface.Mcp, UserCredentialSurface.Client, UserCredentialSurface.Administration],
+                []),
+        };
+        var userGrant = GrantOf(MailFathomPermission.MailRead, MailFathomPermission.MailAsk, MailFathomPermission.AdminRead, MailFathomPermission.AdminOperate);
+
+        // Act
+        var held = credential.HeldUnder(userGrant);
+
+        // Assert
+        Assert.Equal([MailFathomPermission.MailRead, MailFathomPermission.AdminRead], held);
+    }
+
     private static ScopedGrant GrantOf(params MailFathomPermission[] permissions) =>
         ScopedGrant.Of(permissions.Select(permission => (permission, AssignmentScope.User(User))));
 

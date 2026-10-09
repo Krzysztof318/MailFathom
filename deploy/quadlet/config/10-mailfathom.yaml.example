@@ -32,16 +32,15 @@ MailSynchronization:
   Enabled: true
   Interval: "00:05:00"
 
-# How the mailbox is recorded. Port 8090 is the one mailfathom.container publishes, on loopback.
+# How the mailbox is recorded. Port 8090 is the one mailfathom.container publishes, on loopback. The first start records
+# the default administrator `admin` with the password MAILFATHOM_ADMIN_PASSWORD carries; sign in with
+# `mfctl login --mode password` and change it with `mfctl credential rotate`.
 AdminEndpoint:
   Enabled: true
   Port: 8090
-  Administrators:
-    - Name: admin
-      Credentials:
-        - ApiKey:
-            Name: admin
-            SecretReference: systemd-credential:admin-api-key
+  Authentication:
+    - Method: password
+    - Method: api-key
 
 McpEndpoint:
   Enabled: true

@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Access;
 using MailFathom.Application.Access.Credentials;
+using MailFathom.Application.Access.DefaultAdministrator;
 using MailFathom.Application.Access.Grants;
 using MailFathom.Application.Access.Organizations;
 using MailFathom.Application.Access.Sessions;
@@ -662,6 +663,9 @@ public static class ServiceCollectionExtensions
         // it and a port registered here stay in one place.
         services.AddScoped<UserCredentialAdministration>();
         services.AddScoped<OrganizationAdministration>();
+        // The default administrator, recorded and given its password once per deployment by the start that wins its row.
+        services.AddScoped<IDefaultAdministratorStore, PersistedDefaultAdministrator>();
+        services.AddScoped<DefaultAdministratorBootstrap>();
         // One user's own record, read by key and bounded in the statement rather than in the process. A singleton
         // over the pool for the reason the persisted configuration layer's reader is one — the command holds no state
         // between calls — and separate from the directory above because that answers for the deployment and this for

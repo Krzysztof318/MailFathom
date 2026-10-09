@@ -4,7 +4,6 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Net;
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
@@ -22,6 +21,7 @@ using MailFathom.Cli.Administration.Outbox;
 using MailFathom.Cli.Administration.Rules;
 using MailFathom.Cli.Administration.Spam;
 using MailFathom.Cli.Administration.Users;
+using MailFathom.Cli.Credentials;
 using MailFathom.Cli.Transport;
 using MailFathom.Versioning;
 
@@ -50,7 +50,7 @@ internal sealed class AdminApiClient
     /// would send an operator to rotate a key that is working when what they have to do is widen its grant.
     /// </remarks>
     private const string CredentialRefused =
-        "The deployment refused the credential. Check that it is one the administrative endpoint is configured with, and that it has not expired.";
+        "The deployment refused the credential. Check that it is presented on the administrative endpoint, that what it narrows its user's grant to still holds an administrative permission, that it is enabled and has not expired, and that this machine is on a network the credential accepts.";
 
     /// <summary>What the two decisions about a move say when the deployment has never been asked for one.</summary>
     /// <remarks>
@@ -105,7 +105,7 @@ internal sealed class AdminApiClient
         ArgumentNullException.ThrowIfNull(token);
 
         using var request = new HttpRequestMessage(HttpMethod.Get, AdminEndpointRoutes.SessionPath);
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        request.Headers.Authorization = PasswordCredential.AuthorizationFor(token);
 
         using var response = await this.SendAsync(request, cancellationToken);
 
@@ -163,7 +163,7 @@ internal sealed class AdminApiClient
                 new MailboxRefreshTokenRequest(account, refreshToken),
                 CliJsonContext.Default.MailboxRefreshTokenRequest),
         };
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        request.Headers.Authorization = PasswordCredential.AuthorizationFor(token);
 
         using var response = await this.SendAsync(request, cancellationToken);
 
@@ -2301,7 +2301,7 @@ internal sealed class AdminApiClient
         await this.EnsureSettledAsync(token, cancellationToken);
 
         using var request = new HttpRequestMessage(method, path) { Content = content };
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        request.Headers.Authorization = PasswordCredential.AuthorizationFor(token);
 
         var response = await this.SendAsync(request, cancellationToken, overBoundRemedy, completionOption);
 
@@ -2498,7 +2498,7 @@ internal sealed class AdminApiClient
 
         if (problem?.Permission is { Length: > 0 } permission)
         {
-            return $"The deployment refused the operation: this credential does not hold '{permission}'. Add that permission to the administrator's Permissions under AdminEndpoint:Administrators, or sign in as one that already holds it.";
+            return $"The deployment refused the operation: this credential does not hold '{permission}' at the deployment, either because its user's roles do not grant it or because the credential's own permission list or its token's scopes leave it out. Give the user an administrative role that holds it, provision a credential whose list keeps it, or sign in as an administrator who already holds it.";
         }
 
         return problem?.Detail is { Length: > 0 } stated

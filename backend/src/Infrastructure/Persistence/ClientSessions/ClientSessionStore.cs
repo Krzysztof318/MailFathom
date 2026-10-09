@@ -8,6 +8,7 @@ using MailFathom.Application.Access.Sessions;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Access;
 using MailFathom.Infrastructure.Persistence.Entities;
+using MailFathom.Infrastructure.Persistence.Users;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -102,9 +103,10 @@ internal sealed class ClientSessionStore(NpgsqlDataSource dataSource) : IClientS
     /// <summary>Reports what the deployment holds under one identifier.</summary>
     /// <remarks>The one statement on the request path: an index lookup by the key joined to the user row by its own key, on a request that is about to read mail out of the same database. The user's endpoint switches come back beside the session rather than being stored on it, so a switch turned off reaches a session minted before it on the next request. Nothing in front of it, because a cache would make a revoked session go on working for its own window on every replica that had already read one.</remarks>
     private const string FindSessionStatement = $"""
-        SELECT session."{ClientSessionEntity.UserIdColumnName}", session."{ClientSessionEntity.CredentialIdColumnName}", session."{ClientSessionEntity.PermissionsColumnName}", session."{ClientSessionEntity.SecretDigestColumnName}", session."{ClientSessionEntity.ExpiresAtColumnName}", account."{UserAccountEntity.McpEndpointEnabledColumnName}", account."{UserAccountEntity.ClientEndpointEnabledColumnName}"
+        SELECT session."{ClientSessionEntity.UserIdColumnName}", session."{ClientSessionEntity.CredentialIdColumnName}", session."{ClientSessionEntity.PermissionsColumnName}", session."{ClientSessionEntity.SecretDigestColumnName}", session."{ClientSessionEntity.ExpiresAtColumnName}", account."{UserAccountEntity.McpEndpointEnabledColumnName}", account."{UserAccountEntity.ClientEndpointEnabledColumnName}", credential."{UserCredentialEntity.AllowedSourceNetworksColumnName}"
         FROM "{ClientSessionEntity.TableName}" AS session
         JOIN "{UserAccountEntity.TableName}" AS account ON account."{UserAccountEntity.IdColumnName}" = session."{ClientSessionEntity.UserIdColumnName}"
+        LEFT JOIN "{UserCredentialEntity.TableName}" AS credential ON credential."{UserCredentialEntity.IdColumnName}" = session."{ClientSessionEntity.CredentialIdColumnName}"
         WHERE session."{ClientSessionEntity.IdentifierColumnName}" = @identifier;
         """;
 
@@ -214,7 +216,12 @@ internal sealed class ClientSessionStore(NpgsqlDataSource dataSource) : IClientS
                 ReadGrant(reader, userIdOrdinal: 0, credentialIdOrdinal: 1, permissionsOrdinal: 2),
                 reader.GetFieldValue<byte[]>(3),
                 reader.GetFieldValue<DateTimeOffset>(4),
-                new UserEndpointAccess(reader.GetBoolean(5), reader.GetBoolean(6)));
+                new UserEndpointAccess(reader.GetBoolean(5), reader.GetBoolean(6)))
+            {
+                AllowedSourceNetworks = reader.IsDBNull(7)
+                    ? []
+                    : PersistedUserCredentials.ReachOf([], reader.GetFieldValue<string[]>(7)).AllowedSourceNetworks,
+            };
         }
         catch (NpgsqlException failure)
         {

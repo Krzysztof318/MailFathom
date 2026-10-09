@@ -393,6 +393,11 @@ contentStorage:
 secrets:
   existingSecret: ""
   mountPath: /etc/mailfathom/secrets
+  # The key of that Secret holding the password the default administrator `admin` is given on the first start, passed as
+  # MAILFATHOM_ADMIN_PASSWORD. The chart sets none, and unset, `admin` holds no password and nobody can sign in as it
+  # with one. Write a key here before the first start that should give it one. The value has to meet the password policy — twelve characters at least — and it is read once: changing it afterwards changes
+  # nothing, and `mfctl credential rotate` is how the password changes.
+  defaultAdministratorPasswordKey: ""
 
 ### Configuration
 #
@@ -790,7 +795,7 @@ service:
   port: 8080
   annotations: {}
   # Whether a `NodePort` or `LoadBalancer` Service keeps the client's source address. Empty leaves the cluster default,
-  # `Cluster`, which rewrites the source to a node's address — so an administrator's `AllowedSourceNetworks` would see a
+  # `Cluster`, which rewrites the source to a node's address — so a credential restricted to source networks would see a
   # node rather than the client. `Local` keeps the client's address and serves only from nodes running a pod. It
   # preserves the address a proxy in front of the pod sees rather than replacing that proxy: a restriction still needs an
   # HTTP-terminating proxy that writes `X-Forwarded-For`, named in `ReverseProxy:TrustedProxies`. A `ClusterIP` Service

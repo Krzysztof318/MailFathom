@@ -126,15 +126,17 @@ public sealed class UserCredentialAdministration
     /// <param name="username">The canonical username it will be resolved by.</param>
     /// <param name="password">The plaintext, read within this call and never retained.</param>
     /// <param name="permissions">The names the credential narrows its user's grant to, or <see langword="null" /> to name none and hold what the user holds.</param>
+    /// <param name="reach">On which endpoints, and from which networks, the credential may be presented.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>What the act did, or why it did nothing.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody, <paramref name="username" /> is the unspecified struct default, the password breaks <see cref="UserPasswordPolicy" />, or the grant names something a user-facing credential cannot hold.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.AdminCredentialsWrite" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.AdminCredentialsWrite" />, or an administrative name the user holds.</exception>
     public Task<UserCredentialProvisioning> ProvisionPasswordAsync(
         UserId user,
         UserCredentialUsername username,
         ReadOnlyMemory<char> password,
         IReadOnlyList<MailFathomPermission>? permissions,
+        UserCredentialReach reach,
         CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.AdminCredentialsWrite);
@@ -148,6 +150,7 @@ public sealed class UserCredentialAdministration
             UserCredentialLookup.ForUsername(username),
             passwordHash,
             grant,
+            reach,
             mintedKey: null,
             cancellationToken);
     }
@@ -155,14 +158,16 @@ public sealed class UserCredentialAdministration
     /// <summary>Draws a key one of a user's clients presents, and provisions the credential it resolves.</summary>
     /// <param name="user">The user the credential authenticates.</param>
     /// <param name="permissions">The names the credential narrows its user's grant to, or <see langword="null" /> to name none and hold what the user holds.</param>
+    /// <param name="reach">On which endpoints, and from which networks, the credential may be presented.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>What the act did, and the key to report where it was performed.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody or the grant names something a user-facing credential cannot hold.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.AdminCredentialsWrite" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.AdminCredentialsWrite" />, or an administrative name the user holds.</exception>
     /// <remarks>The key is drawn here rather than accepted from the request, so nothing outside this deployment decides how much entropy a credential carries, and it is reported back because this is the one moment it exists.</remarks>
     public Task<UserCredentialProvisioning> ProvisionApiKeyAsync(
         UserId user,
         IReadOnlyList<MailFathomPermission>? permissions,
+        UserCredentialReach reach,
         CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.AdminCredentialsWrite);
@@ -176,6 +181,7 @@ public sealed class UserCredentialAdministration
             minted.Lookup,
             material: null,
             grant,
+            reach,
             minted.Key,
             cancellationToken);
     }
@@ -184,14 +190,16 @@ public sealed class UserCredentialAdministration
     /// <param name="user">The user the credential authenticates.</param>
     /// <param name="writtenPublicKey">The client's public key as the operator supplied it.</param>
     /// <param name="permissions">The names the credential narrows its user's grant to, or <see langword="null" /> to name none and hold what the user holds.</param>
+    /// <param name="reach">On which endpoints, and from which networks, the credential may be presented.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>What the act did, and the fingerprint the client's assertions must name.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody, the written key is not one this deployment accepts, or the grant names something a user-facing credential cannot hold.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.AdminCredentialsWrite" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.AdminCredentialsWrite" />, or an administrative name the user holds.</exception>
     public Task<UserCredentialProvisioning> ProvisionPublicKeyAsync(
         UserId user,
         string? writtenPublicKey,
         IReadOnlyList<MailFathomPermission>? permissions,
+        UserCredentialReach reach,
         CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.AdminCredentialsWrite);
@@ -205,6 +213,7 @@ public sealed class UserCredentialAdministration
             publicKey.Lookup,
             publicKey.Material,
             grant,
+            reach,
             mintedKey: null,
             cancellationToken);
     }
@@ -214,16 +223,18 @@ public sealed class UserCredentialAdministration
     /// <param name="issuer">The issuer exactly as it is configured and as a token carries it.</param>
     /// <param name="subject">The subject claim the server issues for that person.</param>
     /// <param name="permissions">The names the mapping narrows its user's grant to, or <see langword="null" /> to name none and hold what the user holds.</param>
+    /// <param name="reach">On which endpoints, and from which networks, the credential may be presented.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>What the act did, or why it did nothing.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody, the pair cannot compose a lookup, or the grant names something a user-facing credential cannot hold.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.AdminCredentialsWrite" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.AdminCredentialsWrite" />, or an administrative name the user holds.</exception>
     /// <remarks>Where the endpoint reads a token's own scopes, they narrow what this leaves of the user's grant further. The user comes from here either way, because a token cannot carry one.</remarks>
     public Task<UserCredentialProvisioning> ProvisionOAuthSubjectAsync(
         UserId user,
         string? issuer,
         string? subject,
         IReadOnlyList<MailFathomPermission>? permissions,
+        UserCredentialReach reach,
         CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.AdminCredentialsWrite);
@@ -244,6 +255,7 @@ public sealed class UserCredentialAdministration
             lookup,
             material: null,
             grant,
+            reach,
             mintedKey: null,
             cancellationToken);
     }
@@ -256,7 +268,7 @@ public sealed class UserCredentialAdministration
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>What the act did, or why it did nothing.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody, <paramref name="credentialId" /> is the empty identifier, <paramref name="username" /> is the unspecified struct default, or the password breaks <see cref="UserPasswordPolicy" />.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.AdminCredentialsWrite" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.AdminCredentialsWrite" />, or an administrative name the user holds.</exception>
     /// <remarks>The username is stated rather than read back first, because the write names the lookup a credential carries from now on and a password rotation is the one case where that is the value it already had; a mistyped one answers that no such credential exists rather than renaming somebody's sign-in.</remarks>
     public async Task<UserCredentialRotation> RotatePasswordAsync(
         UserId user,
@@ -266,6 +278,7 @@ public sealed class UserCredentialAdministration
         CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.AdminCredentialsWrite);
+        await this.RequireEveryAdministrativeNameOfAsync(user, cancellationToken);
 
         var lookup = UserCredentialLookup.ForUsername(username);
         var passwordHash = this.HashOrThrow(password.Span);
@@ -301,7 +314,7 @@ public sealed class UserCredentialAdministration
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>What the act did, and the key to report where it was performed.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody or <paramref name="credentialId" /> is the empty identifier.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.AdminCredentialsWrite" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.AdminCredentialsWrite" />, or an administrative name the user holds.</exception>
     /// <remarks>The lookup moves with the key, because it is the key's own digest — which is what makes rotating one a single write rather than a second credential the operator then has to remember to delete.</remarks>
     public async Task<UserCredentialRotation> RotateApiKeyAsync(
         UserId user,
@@ -309,6 +322,7 @@ public sealed class UserCredentialAdministration
         CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.AdminCredentialsWrite);
+        await this.RequireEveryAdministrativeNameOfAsync(user, cancellationToken);
 
         var minted = this.apiKeyMinter.Mint();
 
@@ -341,7 +355,7 @@ public sealed class UserCredentialAdministration
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>What the act did, and the fingerprint the client's assertions must name from now on.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody, <paramref name="credentialId" /> is the empty identifier, or the written key is not one this deployment accepts.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.AdminCredentialsWrite" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.AdminCredentialsWrite" />, or an administrative name the user holds.</exception>
     public async Task<UserCredentialRotation> ReplacePublicKeyAsync(
         UserId user,
         Guid credentialId,
@@ -349,6 +363,7 @@ public sealed class UserCredentialAdministration
         CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.AdminCredentialsWrite);
+        await this.RequireEveryAdministrativeNameOfAsync(user, cancellationToken);
 
         var publicKey = this.ReadPublicKeyOrThrow(writtenPublicKey, nameof(writtenPublicKey));
 
@@ -378,7 +393,7 @@ public sealed class UserCredentialAdministration
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>What the act did, or why it did nothing.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody or <paramref name="credentialId" /> is the empty identifier.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.AdminCredentialsWrite" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.AdminCredentialsWrite" />, or an administrative name the user holds.</exception>
     /// <remarks>Disabling is the reversible half of revoking: the credential stops working immediately and its lookup stays claimed, so nothing else can be provisioned under the name somebody is still using.</remarks>
     public async Task<UserCredentialWriteOutcome> SetEnabledAsync(
         UserId user,
@@ -387,6 +402,11 @@ public sealed class UserCredentialAdministration
         CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.AdminCredentialsWrite);
+
+        if (enabled)
+        {
+            await this.RequireEveryAdministrativeNameOfAsync(user, cancellationToken);
+        }
 
         var outcome = await this.credentials.SetEnabledAsync(user, credentialId, enabled, cancellationToken);
 
@@ -429,8 +449,10 @@ public sealed class UserCredentialAdministration
     /// Published here rather than at each boundary, so an operator provisioning over HTTP and one provisioning from a
     /// terminal are refused in one sentence. An unstated narrowing is not a refusal: it names nothing and holds what the
     /// user's roles grant, and an empty list is the opposite statement — a credential that authenticates and may do
-    /// nothing. A mail name the user does not hold is accepted, because the user's grant moves while the credential's
-    /// list does not.
+    /// nothing. A name the user does not hold is accepted, because the user's grant moves while the credential's list
+    /// does not. Names of both halves are accepted, because each surface reads the half it guards: an administrative
+    /// name narrows what the credential may do on the administrative endpoint and a mail name what it may do on the
+    /// other two.
     /// </remarks>
     public static string? FindGrantRefusal(IReadOnlyList<MailFathomPermission>? permissions)
     {
@@ -444,13 +466,6 @@ public sealed class UserCredentialAdministration
             if (!permission.IsSpecified)
             {
                 return "A grant names published permissions; one of the values names none.";
-            }
-
-            if (permission.Surface != ProtectedSurface.Mail)
-            {
-                return $"'{permission.Name}' belongs to the administrative surface, and a user's credential narrows "
-                    + "what its user holds of their own mail and nothing else. Write one of "
-                    + $"{PublishedMailPermissionNames()}, or name none to hold whatever the user's roles grant.";
             }
         }
 
@@ -471,9 +486,14 @@ public sealed class UserCredentialAdministration
         UserCredentialLookup lookup,
         string? material,
         IReadOnlyList<MailFathomPermission>? permissions,
+        UserCredentialReach reach,
         string? mintedKey,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(reach);
+
+        await this.RequireEveryAdministrativeNameOfAsync(user, cancellationToken);
+
         var provisionedAt = this.timeProvider.GetUtcNow();
         var credentialId = Guid.CreateVersion7(provisionedAt);
 
@@ -484,6 +504,7 @@ public sealed class UserCredentialAdministration
             lookup,
             material,
             permissions,
+            reach,
             cancellationToken);
 
         await this.RecordAsync(outcome, UserCredentialAct.Provisioned, credentialId, user, method, cancellationToken);
@@ -496,6 +517,29 @@ public sealed class UserCredentialAdministration
             method == UserCredentialMethod.Password && outcome == UserCredentialWriteOutcome.Written
                 ? await this.ReadOrganizationScopeAsync(user, credentialId, cancellationToken)
                 : default);
+    }
+
+    /// <summary>Requires the caller to hold every administrative name the credential's user holds, before a way in as that user is placed.</summary>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown naming the first administrative name the user holds and the caller does not.</exception>
+    /// <remarks>
+    /// Placing a credential is the power to sign in as its user, so without this a caller narrowed to
+    /// <see cref="MailFathomPermission.AdminCredentialsWrite" /> — a token whose scopes carry that alone — could provision
+    /// a key on the administrative endpoint for its own user, or for a root, and hold everything that user holds.
+    /// Disabling and deleting widen nobody and are not asked this.
+    /// <para>
+    /// ponytail: names are compared without their scopes and the mail half is not compared, because a caller on the
+    /// administrative surface carries that half alone and no route checks a scope yet; issue 2310 checks the scope of
+    /// credential administration and brings both halves of the rule ADR 0012 states.
+    /// </para>
+    /// </remarks>
+    private async Task RequireEveryAdministrativeNameOfAsync(UserId user, CancellationToken cancellationToken)
+    {
+        var held = await this.grants.ResolveAsync(user, cancellationToken);
+
+        foreach (var permission in MailFathomPermission.PublishedFor(ProtectedSurface.Administration).Where(held.Permissions.Contains))
+        {
+            this.authorization.RequirePermission(permission);
+        }
     }
 
     /// <summary>Reads the organization a password credential was scoped to, so an answer can state the login a person types.</summary>
@@ -558,9 +602,6 @@ public sealed class UserCredentialAdministration
         return [.. MailFathomPermission.All.Where(named.Contains)];
     }
 
-    private static string PublishedMailPermissionNames() => string.Join(
-        ", ",
-        MailFathomPermission.PublishedFor(ProtectedSurface.Mail).Select(permission => $"'{permission.Name}'"));
 
     /// <summary>Writes down an act that actually changed something.</summary>
     /// <remarks>

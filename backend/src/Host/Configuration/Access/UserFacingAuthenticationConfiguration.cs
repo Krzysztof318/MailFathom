@@ -9,8 +9,8 @@ namespace MailFathom.Host.Configuration.Access;
 
 /// <summary>The rules a user-facing endpoint's list of accepted methods follows, wherever that list is configured.</summary>
 /// <remarks>
-/// Both mail-serving surfaces configure the same list under the same key, and a rule about it is a rule about the list
-/// rather than about the endpoint holding one. Keeping them here is what stops the two endpoints from drifting into two
+/// All three surfaces configure the same list under the same key, and a rule about it is a rule about the list rather
+/// than about the endpoint holding one. Keeping them here is what stops the endpoints from drifting into several
 /// readings of one setting, each refusing the same arrangement in its own words or one of them not refusing it at all.
 /// </remarks>
 internal static class UserFacingAuthenticationConfiguration
@@ -97,7 +97,7 @@ internal static class UserFacingAuthenticationConfiguration
     /// <param name="methods">The configured entries, in configuration order.</param>
     /// <returns>The OAuth blocks, in configuration order, empty when the endpoint accepts no token.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="methods" /> is <see langword="null" />.</exception>
-    /// <remarks>Several blocks rather than one, because each states its own required scopes and its own authorization servers. What they may not disagree about is the resource, for the reason <see cref="AdministratorConfiguration" /> gives about the same rule.</remarks>
+    /// <remarks>Several blocks rather than one, because each states its own required scopes and its own authorization servers. What they may not disagree about is the resource: a surface publishes one protected resource metadata document, at an address derived from that resource.</remarks>
     internal static IReadOnlyList<OAuthValidationOptions> OAuthMethodsIn(
         IEnumerable<UserFacingAuthenticationOptions> methods)
     {

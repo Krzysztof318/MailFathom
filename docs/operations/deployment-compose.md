@@ -43,8 +43,9 @@ the answers become `mailbox.json` beside `compose.yaml`, and a mailbox is a mail
 deployment holds. Its address is `--email-address`, which defaults to the login when that is an address. A fresh
 database holds nobody, and the script never records a user for you — who the deployment serves is yours to say first —
 so it leaves the file and prints the `mfctl` commands that record the user and then create the mailbox. Only a run that
-finds exactly one user already recorded creates it itself, through the administrative endpoint once the deployment is
-up. Until then the deployment reads nothing, which is an ordinary
+finds exactly one user served on the MCP or client endpoint creates it itself, through the administrative endpoint once
+the deployment is up — the default administrator is on the roster too, served on neither, and is never who a mailbox is
+for. Until then the deployment reads nothing, which is an ordinary
 first-run state rather than a failure.
 
 **It also relaxes the platform's TLS policy for this deployment**, by copying
@@ -82,9 +83,12 @@ client presents to that endpoint is a record beside the user whose mail it reach
 The administrative endpoint comes with what the deployment needs rather than from an answer, and every run serves it.
 Declaring a mailbox is an administrative operation and there is no other way to reach one, so a deployment without that
 endpoint is one that could never be given a mailbox; minting the MCP key is the second operation with nowhere else to
-go. It is served on port 8090, which `compose.yaml` publishes on loopback, with a generated key of its own — its own
-default port is 8080, which is the socket the MCP endpoint is already served on. `--admin-endpoint none` serves it
-without a key, which anything reaching that port can then administer.
+go. It is served on port 8090, which `compose.yaml` publishes on loopback — its own default port is 8080, which is the
+socket the MCP endpoint is already served on — accepting a password and an API key. The script generates the
+[default administrator](admin-endpoint.md#the-default-administrator)'s password into `.env` as
+`MAILFATHOM_ADMIN_PASSWORD`, which makes `.env` readable by its owner alone, and the closing report names
+`mfctl login --mode password` to sign in with it. `--admin-endpoint none` serves the endpoint without authentication
+instead, which anything reaching that port can then administer as `admin`.
 
 **Every credential here crosses an unencrypted hop.** On a port published to `127.0.0.1` that hop is this machine.
 MailFathom reports it at every startup, naming the surface and the port, and does not refuse it: this process reads the
@@ -164,7 +168,6 @@ into `secrets/mailfathom/`, which is mounted read-only at `/etc/mailfathom/secre
 
 ```bash
 printf '%s' 'the-mailbox-password' > secrets/mailfathom/imap-primary-password
-openssl rand -base64 33 | tr -d '\n'  > secrets/mailfathom/admin-api-key
 openssl rand -base64 32 | tr -d '\n'  > secrets/mailfathom/mailfathom-data-key   # only for an OAuth mailbox
 chmod 444 secrets/mailfathom/*
 ```
@@ -180,8 +183,14 @@ chmod 444 secrets/mailfathom/*
 }
 ```
 
-`admin-api-key` is what the example configuration's administrative endpoint takes — the endpoint every mailbox is
-recorded through, served on port 8090, which `compose.yaml` publishes on loopback. `mfctl login` asks for it.
+The administrative endpoint — the one every mailbox is recorded through, served on port 8090, which `compose.yaml`
+publishes on loopback — takes no file here. The first start records
+[the default administrator](admin-endpoint.md#the-default-administrator), `admin`, with the password
+`MAILFATHOM_ADMIN_PASSWORD` carries: `compose.yaml` passes `admin` unless `.env` sets another value, and
+[`.env.example`](https://github.com/Krzysztof318/MailFathom/blob/main/deploy/compose/.env.example) documents the
+variable. It is read on the first start alone, and any value but `admin` has to meet the password policy — twelve
+characters at least — or the start stops and says so. Every start warns while `admin` still signs in with the shipped
+value, so change it with `mfctl credential rotate` once you have signed in.
 
 That is the same path the Helm chart mounts its Secret at, so a `SecretReference` written for one deployment reads
 correctly in the other. [Secret provisioning](secret-provisioning.md) is the full contract, including what a leaked
@@ -258,12 +267,12 @@ schema](database-schema.md) states the privileges it needs, the locks it takes, 
 
 ### Recording the mailbox
 
-A started deployment holds no user, and reads no mailbox. Who it serves and which mailboxes it reads are rows it keeps
+A started deployment serves no user, and reads no mailbox. Who it serves and which mailboxes it reads are rows it keeps
 rather than settings it reads, so neither is in the file above, and each is recorded over the administrative endpoint
-once the stack is up — `mfctl login` asks for the key in `secrets/mailfathom/admin-api-key`:
+once the stack is up, signed in as the default administrator with the password above:
 
 ```bash
-mfctl login --endpoint http://127.0.0.1:8090
+mfctl login --endpoint http://127.0.0.1:8090 --mode password
 mfctl user add --display-name Alex
 mfctl account add --from-file mailbox.json
 ```

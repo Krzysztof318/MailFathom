@@ -2,9 +2,6 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.Buffers.Text;
-using System.Security.Cryptography;
-using System.Text;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Common;
 using MailFathom.Host.Configuration;
@@ -33,8 +30,6 @@ namespace MailFathom.Host.UnitTests.Hosting.Startup;
 
 public sealed class SecretConfigurationStartupValidatorTests
 {
-    private const string WorkforceIssuer = "https://sso.example.test/realms/mailfathom";
-
     private static readonly DateTimeOffset ValidatedAt = new(2026, 7, 31, 12, 0, 0, TimeSpan.Zero);
 
     private static readonly DatabaseCommandTimeout DefaultCommandTimeout =
@@ -466,164 +461,6 @@ public sealed class SecretConfigurationStartupValidatorTests
         Assert.DoesNotContain(harness.ReportedMessages, message => message.Contains("lifetime ended", StringComparison.Ordinal));
     }
 
-    [Fact]
-    public async Task StartingAsync_AnApiKeyThatCannotBeResolved_FailsStartupNamingItsPosition()
-    {
-        // Arrange
-        var endpoint = EndpointAcceptingApiKeys();
-        AcceptKey(endpoint, new ConfiguredSecret { Name = "workstation", SecretReference = "file:/run/secrets/absent" });
-        var harness = CreateHarness(new PersistenceOptions(), adminEndpointOptions: endpoint);
-
-        // Act
-        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
-            harness.Validator.StartingAsync(CancellationToken.None));
-
-        // Assert
-        var failure = Assert.Single(exception.Failures);
-        Assert.StartsWith("AdminEndpoint:Administrators:0:Credentials:0:ApiKey", failure, StringComparison.Ordinal);
-        Assert.Contains(nameof(SecretResolutionFailure.MaterialNotFound), failure, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task StartingAsync_TwoApiKeysSharingAName_FailsStartupBecauseNeitherCouldBeRotatedByName()
-    {
-        // Arrange
-        var endpoint = EndpointAcceptingApiKeys();
-        AcceptKey(endpoint, new ConfiguredSecret { Name = "workstation", SecretReference = "plaintext:one" });
-        AcceptKey(endpoint, new ConfiguredSecret { Name = "workstation", SecretReference = "plaintext:two" });
-        var harness = CreateHarness(new PersistenceOptions(), adminEndpointOptions: endpoint);
-
-        // Act
-        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
-            harness.Validator.StartingAsync(CancellationToken.None));
-
-        // Assert
-        var failure = Assert.Single(exception.Failures);
-        Assert.StartsWith("AdminEndpoint:Administrators:1:Credentials:0:ApiKey:Name", failure, StringComparison.Ordinal);
-    }
-
-    /// <summary>
-    /// A name means one credential, so its expiry is one fact, and the run that reports it is one that started — two
-    /// identical declarations being one credential written twice. Reporting the expiry once per declaration would tell
-    /// an operator that two credentials lapsed and leave a completed rotation looking half done.
-    /// </summary>
-    [Fact]
-    public async Task StartingAsync_AnExpiredSecretDeclaredTwiceUnderOneName_IsReportedOnce()
-    {
-        // Arrange
-        var endpoint = EndpointAcceptingApiKeys();
-        AcceptKey(endpoint, ExpiredKeyNamed("workstation"));
-        AcceptKey(endpoint, ExpiredKeyNamed("workstation"));
-        var harness = CreateHarness(new PersistenceOptions(), adminEndpointOptions: endpoint);
-
-        // Act
-        await harness.Validator.StartingAsync(CancellationToken.None);
-
-        // Assert
-        Assert.Single(
-            harness.ReportedMessages,
-            message => message.Contains("lifetime ended", StringComparison.Ordinal));
-    }
-
-    /// <summary>
-    /// The endpoint tells the two credentials apart by shape, so a key that is a token naming a configured authorization
-    /// server reaches that server's validator and the key comparison it exists for is never reached. Nothing about the
-    /// deployment would look wrong: the key resolves, the profile is valid, and no client can ever authenticate.
-    /// </summary>
-    [Fact]
-    public async Task StartingAsync_AnApiKeyShapedLikeATokenOfAConfiguredServer_FailsStartupNamingItsPosition()
-    {
-        // Arrange
-        var endpoint = EndpointAcceptingBothCredentials();
-        AcceptKey(endpoint, new ConfiguredSecret
-        {
-            Name = "workstation",
-            SecretReference = $"plaintext:{TokenShapedKeyIssuedBy(WorkforceIssuer)}",
-        });
-        var harness = CreateHarness(new PersistenceOptions(), adminEndpointOptions: endpoint);
-
-        // Act
-        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
-            harness.Validator.StartingAsync(CancellationToken.None));
-
-        // Assert
-        var failure = Assert.Single(exception.Failures);
-        Assert.StartsWith("AdminEndpoint:Administrators:1:Credentials:0:ApiKey", failure, StringComparison.Ordinal);
-        Assert.DoesNotContain(WorkforceIssuer, failure, StringComparison.Ordinal);
-    }
-
-    /// <summary>The shape alone decides nothing: a key naming an issuer this deployment does not configure selects no validator and is compared like any other opaque credential.</summary>
-    [Fact]
-    public async Task StartingAsync_AnApiKeyShapedLikeATokenOfAnUnconfiguredServer_IsAccepted()
-    {
-        // Arrange
-        var endpoint = EndpointAcceptingBothCredentials();
-        AcceptKey(endpoint, new ConfiguredSecret
-        {
-            Name = "workstation",
-            SecretReference = $"plaintext:{TokenShapedKeyIssuedBy("https://sso.other.test/realms/mailfathom")}",
-        });
-        var harness = CreateHarness(new PersistenceOptions(), adminEndpointOptions: endpoint);
-
-        // Act
-        await harness.Validator.StartingAsync(CancellationToken.None);
-
-        // Assert
-        Assert.DoesNotContain(harness.ReportedMessages, message => message.Contains("ApiKey", StringComparison.Ordinal));
-    }
-
-    /// <summary>
-    /// The one configuration mistake nothing about a running deployment would ever report. A private key written where
-    /// the public half belongs imports cleanly and verifies every client's signature correctly, so the host would start,
-    /// serve, and hold exactly the credential key-pair authentication exists to keep off it.
-    /// </summary>
-    [Fact]
-    public async Task StartingAsync_APublicKeySettingHoldingAPrivateKey_FailsStartupSayingSo()
-    {
-        // Arrange
-        using var clientKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
-        var endpoint = EndpointAcceptingPublicKey($"plaintext:{clientKey.ExportPkcs8PrivateKeyPem()}");
-        var harness = CreateHarness(new PersistenceOptions(), adminEndpointOptions: endpoint);
-
-        // Act
-        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
-            harness.Validator.StartingAsync(CancellationToken.None));
-
-        // Assert
-        var failure = Assert.Single(exception.Failures);
-        Assert.StartsWith("AdminEndpoint:Administrators:0:Credentials:0:PublicKey", failure, StringComparison.Ordinal);
-        Assert.Contains("private key", failure, StringComparison.Ordinal);
-    }
-
-    /// <summary>Material that resolves but is not a public key would pass a reference check and then refuse every client the entry exists to serve.</summary>
-    [Fact]
-    public async Task StartingAsync_APublicKeySettingHoldingSomethingElse_FailsStartupNamingItsPosition()
-    {
-        // Arrange
-        var endpoint = EndpointAcceptingPublicKey("plaintext:not-a-public-key");
-        var harness = CreateHarness(new PersistenceOptions(), adminEndpointOptions: endpoint);
-
-        // Act
-        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
-            harness.Validator.StartingAsync(CancellationToken.None));
-
-        // Assert
-        var failure = Assert.Single(exception.Failures);
-        Assert.StartsWith("AdminEndpoint:Administrators:0:Credentials:0:PublicKey", failure, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task StartingAsync_AUsablePublicKey_PassesStartup()
-    {
-        // Arrange
-        using var clientKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
-        var endpoint = EndpointAcceptingPublicKey($"plaintext:{clientKey.ExportSubjectPublicKeyInfoPem()}");
-        var harness = CreateHarness(new PersistenceOptions(), adminEndpointOptions: endpoint);
-
-        // Act, Assert
-        await harness.Validator.StartingAsync(CancellationToken.None);
-    }
-
     /// <summary>
     /// A mail-serving endpoint's section holds neither a key nor a public key, so a private key cannot be written onto
     /// one at all. What the read has to keep doing is the rest of that section's secrets, which is what this covers:
@@ -746,20 +583,6 @@ public sealed class SecretConfigurationStartupValidatorTests
             failure,
             StringComparison.Ordinal);
         Assert.Contains(nameof(CertificateMaterialFailure.EncodingNotRecognized), failure, StringComparison.Ordinal);
-    }
-
-    /// <summary>A disabled endpoint reads no key, so failing a host over one nothing was going to use would be a rule with no purpose.</summary>
-    [Fact]
-    public async Task StartingAsync_AnUnresolvableApiKeyUnderADisabledEndpoint_IsNotValidated()
-    {
-        // Arrange
-        var endpoint = EndpointAcceptingApiKeys();
-        endpoint.Enabled = false;
-        AcceptKey(endpoint, new ConfiguredSecret { Name = "workstation", SecretReference = "file:/run/secrets/absent" });
-        var harness = CreateHarness(new PersistenceOptions(), adminEndpointOptions: endpoint);
-
-        // Act, Assert
-        await harness.Validator.StartingAsync(CancellationToken.None);
     }
 
     [Fact]
@@ -904,62 +727,6 @@ public sealed class SecretConfigurationStartupValidatorTests
 
         // Assert
         Assert.Empty(harness.ReportedMessages);
-    }
-
-    private static AdminEndpointOptions EndpointAcceptingBothCredentials()
-    {
-        var authorizationServer = new AuthorizationServerOptions { Name = "workforce", Issuer = WorkforceIssuer };
-        authorizationServer.AuthorizedSubjects.Add("9f2c");
-
-        var oauth = new OAuthValidationOptions { Resource = "https://mail.example.test/admin" };
-        oauth.AuthorizationServers.Add(authorizationServer);
-
-        var endpoint = EndpointAcceptingApiKeys();
-        AcceptCredential(endpoint, new AdministratorCredentialOptions { OAuth = oauth });
-
-        return endpoint;
-    }
-
-    /// <summary>An enabled endpoint whose keys the caller adds, one entry per key.</summary>
-    private static AdminEndpointOptions EndpointAcceptingApiKeys() => new() { Enabled = true };
-
-    /// <summary>An enabled endpoint accepting one client's assertions, verified against whatever the reference resolves to.</summary>
-    private static AdminEndpointOptions EndpointAcceptingPublicKey(string secretReference)
-    {
-        var endpoint = new AdminEndpointOptions { Enabled = true };
-        AcceptCredential(endpoint, new AdministratorCredentialOptions
-        {
-            PublicKey = new ConfiguredSecret { Name = "nightly-digest", SecretReference = secretReference },
-        });
-
-        return endpoint;
-    }
-
-    /// <summary>A key whose lifetime ended before <see cref="ValidatedAt" />, declared identically however often it is asked for.</summary>
-    private static ConfiguredSecret ExpiredKeyNamed(string name) => new()
-    {
-        Name = name,
-        SecretReference = "plaintext:one",
-        Lifetime = "2026-07-30T00:00:00Z",
-    };
-
-    /// <summary>Adds one key held by an administrator of its own.</summary>
-    private static void AcceptKey(AdminEndpointOptions endpoint, ConfiguredSecret key) =>
-        AcceptCredential(endpoint, new AdministratorCredentialOptions { ApiKey = key });
-
-    /// <summary>Adds one credential as the only one of an administrator of its own, named after its position.</summary>
-    private static void AcceptCredential(AdminEndpointOptions endpoint, AdministratorCredentialOptions credential)
-    {
-        var administrator = new AdministratorOptions { Name = $"administrator-{endpoint.Administrators.Count}" };
-        administrator.Credentials.Add(credential);
-        endpoint.Administrators.Add(administrator);
-    }
-
-    private static string TokenShapedKeyIssuedBy(string issuer)
-    {
-        var payload = Base64Url.EncodeToString(Encoding.UTF8.GetBytes($$"""{"iss":"{{issuer}}","sub":"9f2c"}"""));
-
-        return $"header.{payload}.signature";
     }
 
     private static DataEncryptionOptions RingOf(string keyId, string material)

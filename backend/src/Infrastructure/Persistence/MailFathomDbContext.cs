@@ -99,6 +99,8 @@ internal sealed class MailFathomDbContext : DbContext
 
     internal DbSet<RoleAssignmentEntity> RoleAssignments => this.Set<RoleAssignmentEntity>();
 
+    internal DbSet<DefaultAdministratorEntity> DefaultAdministrator => this.Set<DefaultAdministratorEntity>();
+
     internal DbSet<ClientPreferencesEntity> ClientPreferences => this.Set<ClientPreferencesEntity>();
 
     internal DbSet<StoredFileEntity> StoredFiles => this.Set<StoredFileEntity>();
@@ -287,6 +289,7 @@ internal sealed class MailFathomDbContext : DbContext
         modelBuilder.ApplyConfiguration(new UserGroupConfiguration());
         modelBuilder.ApplyConfiguration(new UserGroupMemberConfiguration());
         modelBuilder.ApplyConfiguration(new RoleAssignmentConfiguration());
+        modelBuilder.ApplyConfiguration(new DefaultAdministratorConfiguration());
         modelBuilder.ApplyConfiguration(new ClientPreferencesConfiguration());
         modelBuilder.ApplyConfiguration(new StoredFileConfiguration());
         modelBuilder.ApplyConfiguration(new SpentClientAssertionConfiguration());

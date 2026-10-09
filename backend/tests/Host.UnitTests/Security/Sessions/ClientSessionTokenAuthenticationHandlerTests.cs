@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Net;
 using System.Text.Encodings.Web;
 using MailFathom.Application.Access.Credentials;
 using MailFathom.Application.Access.Sessions;
@@ -102,6 +103,28 @@ public sealed class ClientSessionTokenAuthenticationHandlerTests
         // Assert
         Assert.False(result.Succeeded);
         Assert.Null(result.Principal);
+    }
+
+    /// <summary>A credential restricted to a network keeps its restriction on every request its session admits, rather than only on the exchange that minted it.</summary>
+    [Theory]
+    [InlineData("10.20.30.40", true)]
+    [InlineData("192.0.2.7", false)]
+    public async Task AuthenticateAsync_ASessionWhoseCredentialIsRestrictedToANetwork_AdmitsOnlyRequestsFromIt(
+        string source,
+        bool admitted)
+    {
+        // Arrange
+        var store = new InMemoryClientSessionStore { AllowedSourceNetworks = [IPNetwork.Parse("10.20.0.0/16")] };
+        var sessions = new ClientSessionTokens(store, new FakeTimeProvider(Instant));
+        var minted = (await sessions.MintAsync(Admitted(), TestContext.Current.CancellationToken)).Token!;
+        var context = new DefaultHttpContext { Connection = { RemoteIpAddress = IPAddress.Parse(source) } };
+        var handler = await InitializeAsync(sessions, $"Bearer {minted.Value}", context);
+
+        // Act
+        var result = await handler.AuthenticateAsync();
+
+        // Assert
+        Assert.Equal(admitted, result.Succeeded);
     }
 
     /// <summary>Everything that is not a live token is refused identically, so a refusal says nothing about which of them it was.</summary>

@@ -88,10 +88,11 @@ prepares has no TLS, no backup, and credentials in files under this checkout.
   --password-file <path>   Where to read the mailbox password from, instead of asking for it.
   --mcp-authentication <api-key|none>
                            Whether the MCP endpoint requires a generated key. Defaults to api-key.
-  --admin-endpoint <api-key|none>
-                           Whether the administrative endpoint requires a generated key. It is always
-                           served: the user this deployment holds, the mailbox it reads, and the key
-                           an MCP client presents are all recorded through it. Defaults to api-key.
+  --admin-endpoint <password|none>
+                           Whether the administrative endpoint requires the default administrator's
+                           password, which is generated into .env. It is always served: the user this
+                           deployment holds, the mailbox it reads, and the key an MCP client presents
+                           are all recorded through it. Defaults to password.
   --no-client              Prepare the MCP endpoint alone, without the client page or the surface it
                            is served on.
   --no-legacy-tls          Leave the platform's own TLS policy in force, instead of the relaxation
@@ -116,7 +117,7 @@ display_name=''
 email_address=''
 password_file=''
 mcp_authentication='api-key'
-admin_endpoint='api-key'
+admin_endpoint='password'
 serve_client='yes'
 relax_tls_policy='yes'
 requested_version=''
@@ -374,8 +375,8 @@ case "$mcp_authentication" in
 esac
 
 case "$admin_endpoint" in
-  api-key | none) ;;
-  *) printf 'The administrative endpoint takes api-key or none, not %s.\n' "$admin_endpoint" >&2; exit 1 ;;
+  password | none) ;;
+  *) printf 'The administrative endpoint takes password or none, not %s.\n' "$admin_endpoint" >&2; exit 1 ;;
 esac
 
 if [[ "$interactive" == 'yes' ]]; then
@@ -425,16 +426,17 @@ The administrative endpoint is what mfctl talks to: synchronization state, what 
 question read, the credentials a user's clients present, and the operations that erase a folder. It
 is served on its own port ($admin_port), also on 127.0.0.1 and also over plain HTTP.
 
-An entry that writes no grant reaches every administrative operation, so a key here is as sensitive
-as the mail it can dispose of.
+The default administrator holds the Administrator role, which reaches every administrative
+operation, so its password is as sensitive as the mail it can dispose of.
 
 It is served either way, because it is the only thing that records a user at all: a deployment
 declares no mail account in its own file, so the person this one serves and the mailbox it reads are
-written through this endpoint once it is running. What is decided here is whether it takes a key.
+written through this endpoint once it is running. What is decided here is whether it takes the
+password of the default administrator, `admin`, which the first start records.
 
 TEXT
 
-  if [[ "$admin_endpoint" == 'api-key' ]] \
+  if [[ "$admin_endpoint" == 'password' ]] \
     && confirm 'Without authentication? Anything that reaches the port can then administer the service'; then
     admin_endpoint='none'
   fi
@@ -498,7 +500,6 @@ for written_value in "$email_address" "$display_name" "$imap_host" "$user_name";
 done
 
 readonly imap_password_name='imap-password'
-readonly admin_key_name='admin-workstation-key'
 readonly schema_asset="mailfathom-schema-$version.sql"
 
 # Written into JSON as a string. Only these two characters can end a string early or start an escape, and a control
@@ -527,7 +528,6 @@ write_secret() {
 refuse_existing "secrets/mailfathom/$imap_password_name"
 refuse_existing 'mailbox.json'
 [[ "$relax_tls_policy" != 'yes' ]] || refuse_existing 'compose.override.yaml'
-[[ "$admin_endpoint" != 'api-key' ]] || refuse_existing "secrets/mailfathom/$admin_key_name"
 [[ "$relax_tls_policy" != 'yes' ]] || refuse_existing 'openssl-legacy.cnf'
 
 printf '\nPreparing deploy/compose for MailFathom %s.\n' "$version" >&2
@@ -584,33 +584,25 @@ JSON
   )
 fi
 
-admin_api_key=''
-admin_administrators_block='[]'
+# The first start records the default administrator, `admin`, and gives it the password .env carries below. Generated
+# rather than left at the shipped `admin`, so the endpoint is never one a guess opens, and long enough for the password
+# policy every value but the shipped one has to meet.
+admin_password=''
+admin_authentication_block='[]'
 
-if [[ "$admin_endpoint" == 'api-key' ]]; then
-  admin_api_key="$(openssl rand -base64 33 | tr -d '\n')"
-  write_secret "secrets/mailfathom/$admin_key_name" "$admin_api_key"
-  admin_administrators_block=$(
-    cat << JSON
+if [[ "$admin_endpoint" == 'password' ]]; then
+  admin_password="$(openssl rand -base64 24 | tr -d '\n')"
+  admin_authentication_block=$(
+    cat << 'JSON'
 [
-      {
-        "Name": "workstation",
-        "Credentials": [
-          {
-            "ApiKey": {
-              "Name": "workstation",
-              "SecretReference": "file:/etc/mailfathom/secrets/$admin_key_name",
-              "Lifetime": "NoLimit"
-            }
-          }
-        ]
-      }
+      { "Method": "password" },
+      { "Method": "api-key" }
     ]
 JSON
   )
 fi
 
-readonly admin_api_key
+readonly admin_password
 
 # The port is stated here and published in compose.override.yaml below. The bind address is left at its default, which
 # is every address inside the container — that is what makes the published mapping reach it, and the mapping is what
@@ -620,7 +612,7 @@ admin_section=$(
   "AdminEndpoint": {
     "Enabled": true,
     "Port": $admin_port,
-    "Administrators": $admin_administrators_block
+    "Authentication": $admin_authentication_block
   },
 JSON
 )
@@ -690,6 +682,16 @@ MAILFATHOM_IMAGE=ghcr.io/krzysztof318/mailfathom:$version
 MAILFATHOM_PULL_POLICY=missing
 ENV
 
+if [[ "$admin_endpoint" == 'password' ]]; then
+  cat >> .env << ENV
+
+# The password the default administrator \`admin\` is given on the first start, and on no later one: changing it here
+# afterwards changes nothing, and \`mfctl credential rotate\` is how the password changes. Sign in with
+# \`mfctl login --mode password\`.
+MAILFATHOM_ADMIN_PASSWORD=$admin_password
+ENV
+fi
+
 if [[ "$serve_client" == 'yes' ]]; then
   cat >> .env << 'ENV'
 
@@ -701,7 +703,7 @@ MAILFATHOM_CLIENT=true
 ENV
 fi
 
-chmod 644 .env
+chmod 600 .env
 
 # Copied rather than written, so the file this deployment runs under is the one the repository reviews and documents.
 if [[ "$relax_tls_policy" == 'yes' ]]; then
@@ -766,22 +768,28 @@ report_connection() {
   fi
 
   printf '\nThe administrative endpoint answers at http://127.0.0.1:%s/api/admin.\n' "$admin_port" >&2
-  printf '  mfctl login --endpoint http://127.0.0.1:%s\n' "$admin_port" >&2
-
-  if [[ "$admin_endpoint" == 'api-key' ]]; then
-    printf '  cat %s/secrets/mailfathom/%s\n' "$compose_directory" "$admin_key_name" >&2
+  if [[ "$admin_endpoint" == 'password' ]]; then
+    printf '  mfctl login --endpoint http://127.0.0.1:%s --mode password\n' "$admin_port" >&2
+    printf 'It signs in as admin, with the password MAILFATHOM_ADMIN_PASSWORD carries in %s/.env.\n' \
+      "$compose_directory" >&2
+  else
+    printf '  mfctl login --endpoint http://127.0.0.1:%s\n' "$admin_port" >&2
   fi
 
   printf 'Getting the command: %s/operations/admin-endpoint.html\n' "$documentation_base" >&2
 }
 
 # Printed wherever this script did not record the mailbox itself, which is every path that leaves the deployment not
-# running and every fresh database, which holds no user to record it for. Nothing is synchronized until this record
+# running and every fresh database, which serves no user to record it for. Nothing is synchronized until this record
 # exists, so it is a step rather than an afterthought.
 report_recording_commands() {
   printf '\nThen record the user it serves, unless it holds one already, and add the mailbox it reads for\n' >&2
   printf 'them:\n\n' >&2
-  printf '  mfctl login --endpoint http://127.0.0.1:%s\n' "$admin_port" >&2
+  if [[ "$admin_endpoint" == 'password' ]]; then
+    printf '  mfctl login --endpoint http://127.0.0.1:%s --mode password\n' "$admin_port" >&2
+  else
+    printf '  mfctl login --endpoint http://127.0.0.1:%s\n' "$admin_port" >&2
+  fi
   printf '  mfctl user add --display-name <name>\n' >&2
   printf '  mfctl account add --from-file %s/mailbox.json\n\n' "$compose_directory" >&2
   printf 'A deployment declares no mail account in its own file, so until one is added it reads\n' >&2
@@ -803,18 +811,22 @@ read_json_text() {
 # restart. A refusal answers with what it refused rather than with a failing status, which is why the outcome is read
 # out of the body.
 record_the_mailbox() {
-  local origin="http://127.0.0.1:$admin_port" roster user outcome declaration
+  local origin="http://127.0.0.1:$admin_port" roster served user outcome declaration
   local -a authorization=()
 
-  if [[ "$admin_endpoint" == 'api-key' ]]; then
-    authorization=(--header "Authorization: Bearer $admin_api_key")
+  if [[ "$admin_endpoint" == 'password' ]]; then
+    authorization=(--header "Authorization: Basic $(printf 'admin:%s' "$admin_password" | base64 -w0)")
   fi
 
   # Who a mailbox belongs to is the operator's answer rather than this script's guess, so anything but exactly one user
-  # — nobody yet, or several — leaves the commands to them.
+  # served on an endpoint — nobody yet, or several — leaves the commands to them. The default administrator is on the
+  # roster too, with both switches off, and is never who a mailbox is for. Each entry is a flat object, so splitting on
+  # braces separates them.
   roster="$(curl -fsS "${authorization[@]}" "$origin/api/admin/users")" || return 1
-  [[ "$roster" != *'"id":'*'"id":'* ]] || return 1
-  user="$(printf '%s' "$roster" | read_json_text 'id')"
+  served="$(printf '%s' "$roster" | grep --only-matching '{[^{}]*}' | grep -E '"(mcpEndpoint|clientEndpoint)":true')" \
+    || return 1
+  [[ "$served" != *$'\n'* ]] || return 1
+  user="$(printf '%s' "$served" | read_json_text 'id')"
   [[ -n "$user" ]] || return 1
 
   # The declaration travels as the JSON object a file states it in, so it is the file's own text on one line rather

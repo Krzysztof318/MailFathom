@@ -19,21 +19,22 @@ namespace MailFathom.Host.Security.Basic;
 /// <remarks>
 /// <para>
 /// The handler is the adapter and nothing more: it lifts the header out of the request, names the source the attempt
-/// came from, hands both to <see cref="UserPasswordAuthenticator" />, asks the surface whether the user the credential
-/// resolved is served on it, and turns the answer into the framework's own vocabulary. Every rule worth asserting — what a readable credential is, what a username folds to, how a password is
+/// came from, hands both to <see cref="UserPasswordAuthenticator" />, asks <see cref="UserCredentialAdmission" /> whether
+/// the credential is admitted on this surface, and turns the answer into the framework's own vocabulary. Every rule worth asserting — what a readable credential is, what a username folds to, how a password is
 /// compared, how often one may be tried, and what a refusal is allowed to distinguish — lives below this boundary,
 /// where a test reaches it without a request pipeline.
 /// </para>
 /// <para>
-/// One handler serves every surface, because what differs between two of them is carried by the scheme's own options:
-/// the attempt bucket, and the surface that judges whether the resolved user is served on it. The grant is not among
-/// them: it arrives on the credential the password resolved, so nothing here decides what an admitted user may do. A
-/// credential is the deployment's rather than a surface's, so a user served on both endpoints signs in to the client
-/// and to the MCP endpoint with one password — and spends a separate bucket of attempts on each, which is what the
-/// surface in the partition key buys.
+/// One handler serves every surface, because what differs between them is carried by the scheme's own options: the
+/// attempt bucket, and the surface that judges whether the credential is admitted on it. The grant is not among them:
+/// the narrowing arrives on the credential the password resolved and each surface keeps the user's grant to the half
+/// it guards, so nothing here decides what an admitted user may do. A credential is the deployment's rather than a
+/// surface's, so one password signs its user in wherever the credential lists — the client, the MCP endpoint, the
+/// administrative one — and spends a separate bucket of attempts on each, which is what the surface in the partition
+/// key buys.
 /// </para>
 /// <para>
-/// Every refusal produces one indistinguishable answer: an empty <c>401</c> carrying the same two challenges, whether
+/// Every refusal produces one indistinguishable answer: an empty <c>401</c> carrying the same challenges, whether
 /// the request presented nothing, presented something that is not a Basic credential, presented a username nobody
 /// holds, presented a wrong password, presented one for a credential somebody disabled, or has spent its attempts. The
 /// reason the framework records reaches the server log only, and even there it names the rejection rather than the
@@ -84,6 +85,20 @@ internal sealed class BasicAuthenticationHandler : AuthenticationHandler<BasicAu
         this.declaredProxyNetworks = reverseProxy.NamesAProxy ? reverseProxy.ToTrustedProxyNetworks() : [];
     }
 
+    /// <summary>Reports whether a browser says a page made this request.</summary>
+    /// <remarks>
+    /// A browser holding a password it was prompted for on any path of this origin — the MCP endpoint's challenge, on
+    /// the port every surface shares by default — attaches it to every later request to the origin, a cross-site form
+    /// post included, and the administrative surface checks no origin of its own. <c>mfctl</c>, its only client, sends
+    /// neither header read here, so a password arriving with one is one nobody chose to present here. The Fetch
+    /// Metadata header reaches only a secure origin, so <c>Origin</c> is read beside it: a browser sends that on a
+    /// cross-origin request whatever the scheme, which is what keeps a deployment serving this port in clear text
+    /// covered. Asked before the store is, so such a request spends no attempt.
+    /// </remarks>
+    private static bool ABrowserPageMade(HttpRequest request) =>
+        request.Headers.Origin.Count > 0
+        || request.Headers["Sec-Fetch-Site"].Any(site => site is "cross-site" or "same-site");
+
     /// <inheritdoc />
     /// <remarks>
     /// <para>
@@ -95,6 +110,11 @@ internal sealed class BasicAuthenticationHandler : AuthenticationHandler<BasicAu
     /// </remarks>
     protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
     {
+        if (this.Options.Surface == TransportSurface.Admin && ABrowserPageMade(this.Request))
+        {
+            return AuthenticateResult.Fail("A password is not accepted on the administrative endpoint from a request a browser page made.");
+        }
+
         var result = await this.authenticator.AuthenticateAsync(
             this.Options.Surface.Name,
             this.Request.Headers.Authorization.ToString(),
@@ -108,9 +128,9 @@ internal sealed class BasicAuthenticationHandler : AuthenticationHandler<BasicAu
             return AuthenticateResult.Fail("The request presented no usable credential.");
         }
 
-        if (!this.Options.Surface.Admits(admitted.EndpointAccess))
+        if (await UserCredentialAdmission.FindRefusalAsync(this.Context, this.Options.Surface, admitted) is { } refusal)
         {
-            return AuthenticateResult.Fail("The credential's user is kept off this endpoint.");
+            return AuthenticateResult.Fail(refusal);
         }
 
         var identity = TransportGrant.IdentityFor(

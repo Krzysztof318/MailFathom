@@ -22,10 +22,10 @@ namespace MailFathom.Host.Security.ApiKeys;
 /// below this boundary, where a test reaches it without a request pipeline.
 /// </para>
 /// <para>
-/// It carries no key list, which is the whole difference between it and the handler beside it. A key a user's client
-/// presents resolves a credential row, so what the scheme has to know is which surface it protects and nothing else,
-/// and the user and the grant both arrive from the row rather than from a configuration entry the host resolved at
-/// startup.
+/// It carries no key list. A key a user's client presents resolves a credential row, so what the scheme has to know is
+/// which surface it protects and nothing else: the user and the narrowing both arrive from the row, and the surface
+/// keeps the user's grant to the half it guards — the mail half on the MCP and client endpoints, the administrative
+/// half on the administrative one.
 /// </para>
 /// <para>
 /// Every refusal produces one indistinguishable answer: an empty <c>401</c> carrying the same challenge, whether the
@@ -70,9 +70,9 @@ internal sealed class UserApiKeyAuthenticationHandler : AuthenticationHandler<Us
             return AuthenticateResult.Fail("The request presented no usable credential.");
         }
 
-        if (!this.Options.Surface.Admits(admitted.EndpointAccess))
+        if (await UserCredentialAdmission.FindRefusalAsync(this.Context, this.Options.Surface, admitted) is { } refusal)
         {
-            return AuthenticateResult.Fail("The credential's user is kept off this endpoint.");
+            return AuthenticateResult.Fail(refusal);
         }
 
         var identity = TransportGrant.IdentityFor(

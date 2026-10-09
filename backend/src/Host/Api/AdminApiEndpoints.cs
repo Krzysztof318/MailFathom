@@ -6,6 +6,7 @@ using System.Security.Claims;
 using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Endpoints;
+using MailFathom.Host.Security.Basic;
 using MailFathom.Host.Security.Endpoints;
 using MailFathom.Host.Security.Transport;
 using MailFathom.Versioning;
@@ -172,6 +173,11 @@ internal static class AdminApiEndpoints
         // route the group holds, whenever it was added, so nothing here depends on this line staying first.
         api.AddEndpointFilter(RouteAuthorization.RefusingUnpermitted(ProtectedSurface.Administration));
 
+        // A password is accepted here and never asked for: a browser answers a Basic challenge with a dialog, and mfctl
+        // chooses its own mode and never reads the challenge. A password a browser was prompted for on another surface of
+        // this origin is refused by the Basic scheme itself when a browser page sends it here.
+        api.WithMetadata(NoPasswordChallenge.Instance);
+
         // TypedResults rather than Results, so the response type reaches the endpoint's metadata and the generated
         // OpenAPI document describes what this answers with rather than an untyped 200.
         api.MapGet(SessionRoute, (ClaimsPrincipal caller, IAuthorizedPrincipalSource principals) =>
@@ -208,12 +214,12 @@ internal static class AdminApiEndpoints
 /// <summary>What the administrative endpoint reports back about an authenticated caller.</summary>
 /// <param name="Service">The product this is, so a client can tell it reached MailFathom rather than something else answering the port.</param>
 /// <param name="Version">The running version, which is what an operator checks before reporting behavior.</param>
-/// <param name="Credential">The name of the credential that authenticated, or <c>anonymous</c> where the endpoint requires none.</param>
+/// <param name="Credential">The administrator and the credential that admitted them, by identifier — the default administrator and none where the endpoint requires no credential — or <c>anonymous</c> where no administrator was admitted.</param>
 /// <param name="Permissions">The published names of what this caller's grant carries, in the order this repository publishes them, and empty for a credential granted nothing.</param>
 /// <remarks>
 /// <para>
-/// The credential's *name* is MailFathom's own configured identity for it — never the material, and never a claim an
-/// authorization server supplied beyond the subject the deployment already authorized. A response that echoed more
+/// The caller is named by identifiers this deployment assigned — the user and the credential record — never by the
+/// material, and never by a claim an authorization server supplied. A response that echoed more
 /// would be a way to read a token's contents back out of the service.
 /// </para>
 /// <para>
@@ -246,7 +252,7 @@ internal sealed record AdminSessionResponse(
         return new AdminSessionResponse(
             "MailFathom",
             StampedAssemblyVersion.ReadFrom(typeof(AdminSessionResponse).Assembly).Version,
-            NameOf(caller),
+            principal?.Identity ?? NameOf(caller),
             GrantOf(principal));
     }
 
@@ -256,8 +262,8 @@ internal sealed record AdminSessionResponse(
         ? []
         : [.. MailFathomPermission.All.Where(principal.Holds).Select(permission => permission.Name)];
 
-    /// <summary>Reports the configured name of whatever authenticated, or that nothing did.</summary>
-    /// <remarks>The naming rule is the transport's own, shared with what the application layer is told the work is running for, so this response and a record of a refusal cannot call one caller two things.</remarks>
+    /// <summary>Reports the name of whatever authenticated where no principal was established, or that nothing did.</summary>
+    /// <remarks>A principal's own identity is preferred above, because it is what every administrative act and audit record carries — the user and the credential — so this response and a record of a refusal cannot call one caller two things.</remarks>
     private static string NameOf(ClaimsPrincipal caller) =>
         TransportCallerIdentity.NameOf(caller) ?? TransportCallerIdentity.AnonymousCaller;
 }

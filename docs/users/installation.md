@@ -130,7 +130,7 @@ and [its Quadlet unit](../operations/deployment-quadlet.md#the-signal-backplane)
   [secret reference](../operations/secret-provisioning.md) rather than written into configuration. The account itself
   is not configuration either: it is a record the deployment holds and assigns to a user, which is the bullet below.
 - **The administrative endpoint, and `mfctl` to reach it.** No configuration source declares a mailbox: a fresh
-  deployment holds no user and reads nothing, in every shape here, until `mfctl user add` records the person it serves
+  deployment serves no user and reads nothing, in every shape here, until `mfctl user add` records the person it serves
   and `mfctl account add` creates a mailbox assigned to them.
   That makes the endpoint part of an installation rather than an extra: [the administrative
   endpoint](../operations/admin-endpoint.md) is what to enable and how the credential it takes is provisioned, and

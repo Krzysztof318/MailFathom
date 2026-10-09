@@ -236,29 +236,19 @@ public static class OrchestrationContract
     /// <remarks>Both loopback families, for the reason <see cref="MutualTlsHostBindAddress" /> is what it is: whether the orchestration reaches this listener over IPv4 or IPv6 is the machine's choice rather than the suite's.</remarks>
     public const string AdminEndpointBindAddress = "::";
 
-    /// <summary>The name the integration-test topology configures its one administrative API key under.</summary>
-    /// <remarks>Present only under <see cref="IntegrationTestingArgument" />, like the key itself. It is also what the endpoint reports back as the credential that authenticated, so the suite asserts against this name rather than against the material.</remarks>
-    public const string AdminApiKeyName = "integration-tests-admin";
+    /// <summary>The username the integration-test topology's default administrator signs in with.</summary>
+    /// <remarks>The deployment's own, recorded on its first start; the suite names it rather than choosing one.</remarks>
+    public const string AdminUsername = "admin";
 
-    /// <summary>The administrative API key the integration-test topology's host accepts.</summary>
+    /// <summary>The password the integration-test topology's host gives its default administrator on the first start.</summary>
     /// <remarks>
     /// A literal under the same restriction as <see cref="MailServerAccountPassword" />, and it authenticates one host
-    /// that exists for the duration of one test run. It is deliberately not a key any user holds: reading a mailbox and administering the service that
-    /// reads it are different authorities, and a suite whose two surfaces shared a key could not observe that neither
-    /// one's credential authenticates the other.
+    /// that exists for the duration of one test run. Long enough for the password policy, because only the shipped value
+    /// is exempt from it, and deliberately not a credential any mail-serving user holds: reading a mailbox and
+    /// administering the service that reads it are different authorities, and a suite whose two surfaces shared a
+    /// credential could not observe that neither one's credential authenticates the other.
     /// </remarks>
-    public const string AdminApiKey = "integration-tests-only-admin-api-key";
-
-    /// <summary>The name of a second administrative key, whose entry grants one permission rather than the surface.</summary>
-    /// <remarks>The key above writes no grant and therefore reaches everything administrative, so a suite holding only that one could never observe a route refusing a caller over what it holds.</remarks>
-    public const string AdminNarrowedApiKeyName = "integration-tests-admin-read-only";
-
-    /// <summary>A second administrative API key, admitted by an entry granting <see cref="AdminNarrowedPermission" /> and nothing else.</summary>
-    /// <remarks>A literal under the same restriction as <see cref="AdminApiKey" />, and deliberately a different value: what it exists to make observable is that two credentials on one surface reach different routes.</remarks>
-    public const string AdminNarrowedApiKey = "integration-tests-only-admin-read-only-api-key";
-
-    /// <summary>The one permission the entry above grants, which is what its key holds and the whole of what it reaches.</summary>
-    public const string AdminNarrowedPermission = "mailfathom.admin.read";
+    public const string AdminPassword = "integration-tests-only-admin-password";
 
     /// <summary>The endpoint the MailFathom host serves its client surface on.</summary>
     /// <remarks>

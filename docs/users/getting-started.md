@@ -259,7 +259,8 @@ first pass; later runs move only what changed, every five minutes by default.
 
 ## 6. Record the mailbox
 
-A fresh deployment holds no user. So the deployment started above serves nobody and reads no mail yet, and said so at
+A fresh deployment serves no user: the one user its first start records is the default administrator, kept off both
+mail endpoints. So the deployment started above serves nobody and reads no mail yet, and said so at
 startup — in a line naming `mfctl user add` and `mfctl account add`. Who a deployment serves and which mailboxes it reads are its own to keep, and the
 [administrative endpoint](administering.md) is where both are written;
 [a deployment that records no user](../operations/configuration-sources.md#a-deployment-that-records-no-user) is the

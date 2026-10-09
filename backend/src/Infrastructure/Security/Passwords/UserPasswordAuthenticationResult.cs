@@ -40,16 +40,19 @@ public sealed record UserPasswordAuthenticationResult
     /// <param name="user">The user the request acts for.</param>
     /// <param name="permissions">What the request may do.</param>
     /// <param name="endpointAccess">Which endpoints the user may be served on, read beside the credential.</param>
+    /// <param name="reach">Where the credential may be presented.</param>
     /// <returns>The successful result.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="permissions" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="permissions" /> or <paramref name="reach" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when the identifier is empty or <paramref name="user" /> names nobody.</exception>
     public static UserPasswordAuthenticationResult Authenticated(
         Guid authenticatedCredentialId,
         UserId user,
         IReadOnlyList<MailFathomPermission> permissions,
-        UserEndpointAccess endpointAccess)
+        UserEndpointAccess endpointAccess,
+        UserCredentialReach reach)
     {
         ArgumentNullException.ThrowIfNull(permissions);
+        ArgumentNullException.ThrowIfNull(reach);
 
         if (authenticatedCredentialId == Guid.Empty)
         {
@@ -66,7 +69,7 @@ public sealed record UserPasswordAuthenticationResult
         }
 
         return new UserPasswordAuthenticationResult(
-            new AdmittedUserCredential(authenticatedCredentialId, user, permissions, endpointAccess),
+            new AdmittedUserCredential(authenticatedCredentialId, user, permissions, endpointAccess) { Reach = reach },
             rejection: null);
     }
 

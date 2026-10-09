@@ -4,7 +4,6 @@
 
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Common.OAuth;
-using MailFathom.Infrastructure.Security.OAuth;
 
 namespace MailFathom.Host.Configuration.Access;
 
@@ -102,35 +101,13 @@ internal sealed class AuthorizationServerOptions
     /// </remarks>
     public string? MetadataAddress { get; set; }
 
-    /// <summary>Gets the subjects this authorization server may authenticate, each its own stable identifier for one person.</summary>
-    /// <remarks>
-    /// <para>
-    /// A tenant holds whoever the operator's identity platform holds, and a token proves which of them is asking rather
-    /// than that they were meant to administer this deployment. The administrative endpoint answers to the deployment
-    /// administrator, who is nobody's user and holds no credential record, so without this list every colleague who can
-    /// obtain a token for that resource administers the deployment.
-    /// </para>
-    /// <para>
-    /// It is read on the administrative endpoint alone. A mail-serving endpoint resolves a subject to one user's
-    /// credential record instead, so the setting is retired there and refused by name — see
-    /// <see cref="OAuthSubjectAdmission" />.
-    /// </para>
-    /// <para>
-    /// Write the <c>sub</c> the server issues, which its administration console shows as the user's identifier — a UUID
-    /// in Keycloak, <c>auth0|…</c> in Auth0, the object identifier in Entra ID. An email address is not it: a subject is
-    /// what the server promises not to reuse, and an address is reassigned to whoever holds the mailbox next.
-    /// </para>
-    /// </remarks>
-    public IList<string> AuthorizedSubjects { get; } = [];
-
     /// <summary>Gets whether anything at all was configured for this profile.</summary>
     public bool IsConfigured =>
         !string.IsNullOrWhiteSpace(this.Name)
         || !string.IsNullOrWhiteSpace(this.Issuer)
         || !string.IsNullOrWhiteSpace(this.MetadataAddress)
         || this.ClientId is not null
-        || this.DisplayName is not null
-        || this.AuthorizedSubjects.Count > 0;
+        || this.DisplayName is not null;
 
     /// <summary>Gets whether this profile is offered to a browser as a way of signing in.</summary>
     /// <remarks>A profile naming no client identifier goes on validating tokens and is published to nobody, which is what keeps a deployment serving agents alone from offering a browser a button it could not follow.</remarks>
@@ -161,15 +138,8 @@ internal sealed class AuthorizationServerOptions
                 "The profile's client identifier was read for a profile that offers a browser no sign-in method.");
 
     /// <summary>Finds everything an operator must fix before this profile can validate a token.</summary>
-    /// <param name="admission">What a subject decides on the endpoint this profile was configured for.</param>
     /// <returns>One message per faulty setting, relative to this profile, empty when the profile is usable.</returns>
-    /// <remarks>
-    /// <see cref="AuthorizedSubjects" /> is read only where the configured list is what admits a person. On an endpoint
-    /// whose subjects resolve user records the setting is retired rather than optional, and it is refused by the walk
-    /// over the raw configuration that names every retired setting with the credential replacing it — so nothing here
-    /// reports it a second time in weaker words.
-    /// </remarks>
-    public IReadOnlyList<string> FindConfigurationErrors(OAuthSubjectAdmission admission)
+    public IReadOnlyList<string> FindConfigurationErrors()
     {
         var errors = new List<string>();
 
@@ -204,20 +174,8 @@ internal sealed class AuthorizationServerOptions
 
         errors.AddRange(this.FindMetadataAddressErrors());
 
-        if (admission == OAuthSubjectAdmission.ConfiguredSubjects)
-        {
-            errors.AddRange(this.FindAuthorizedSubjectErrors());
-        }
-
         return errors;
     }
-
-    /// <summary>Reports the identities a token from this server must match to be served.</summary>
-    /// <returns>The authorized subjects, each paired with this profile's issuer.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the profile has not passed <see cref="FindConfigurationErrors" />.</exception>
-    /// <remarks>A subject is only unique within the server that issued it, so it is paired with the issuer here rather than compared on its own; two servers may both call someone <c>1</c> without either being wrong.</remarks>
-    public IEnumerable<string> AuthorizedIdentities() =>
-        this.AuthorizedSubjects.Select(subject => OAuthIdentity.IdentityOf(this.ValidatedIssuer(), subject.Trim()));
 
     /// <summary>Reports the issuer every comparison against this profile uses.</summary>
     /// <returns>The configured issuer, trimmed and otherwise unchanged.</returns>
@@ -235,35 +193,6 @@ internal sealed class AuthorizationServerOptions
         string.IsNullOrWhiteSpace(this.MetadataAddress)
             ? OAuthMetadataAddresses.ForIssuer(this.ValidatedIssuer())
             : [this.MetadataAddress.Trim()];
-
-    private IEnumerable<string> FindAuthorizedSubjectErrors()
-    {
-        if (this.AuthorizedSubjects.Count == 0)
-        {
-            yield return $"{nameof(this.AuthorizedSubjects)} — an authorization server authenticates whoever its tenant holds, so a profile names the subjects it may authenticate; configure at least one, or every user who can obtain a token for this resource administers the deployment.";
-
-            yield break;
-        }
-
-        var claimedSubjects = new HashSet<string>(StringComparer.Ordinal);
-
-        foreach (var (index, configuredSubject) in this.AuthorizedSubjects.Index())
-        {
-            var settingPath = $"{nameof(this.AuthorizedSubjects)}:{index}";
-
-            // A subject is opaque, so nothing about its shape can be checked beyond its presence. It is quoted back
-            // because it is an identifier the operator copied from their own console rather than a URL that could carry
-            // a credential, and naming it is what lets them see which entry does not match the token being refused.
-            if (string.IsNullOrWhiteSpace(configuredSubject))
-            {
-                yield return $"{settingPath} — a subject is the authorization server's own identifier for one person; write the value it issues as 'sub'.";
-            }
-            else if (!claimedSubjects.Add(configuredSubject.Trim()))
-            {
-                yield return $"{settingPath} — '{configuredSubject}' repeats a subject the list already carries.";
-            }
-        }
-    }
 
     private IEnumerable<string> FindMetadataAddressErrors()
     {

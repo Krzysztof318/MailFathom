@@ -30,6 +30,10 @@ public sealed record AdmittedUserCredential(
     IReadOnlyList<MailFathomPermission> Permissions,
     UserEndpointAccess EndpointAccess)
 {
+    /// <summary>Gets where the credential may be presented, which the surface judging the request asks of it.</summary>
+    /// <remarks>A session exchanged for a credential carries the default surfaces, because it is judged by the surface it was minted on rather than by where its credential may be presented, and the credential's source networks, which hold on every request the session admits.</remarks>
+    public UserCredentialReach Reach { get; init; } = UserCredentialReach.Default;
+
     /// <summary>Describes the credential one resolution admitted, refusing an answer that names nothing.</summary>
     /// <param name="credential">The credential the store resolved.</param>
     /// <returns>What the request was admitted as.</returns>
@@ -45,6 +49,9 @@ public sealed record AdmittedUserCredential(
                 credential.User,
                 credential.Permissions,
                 credential.EndpointAccess)
+            {
+                Reach = credential.Reach,
+            }
             : throw new ArgumentException(
                 "An admitted credential names the user the request acts for.",
                 nameof(credential));

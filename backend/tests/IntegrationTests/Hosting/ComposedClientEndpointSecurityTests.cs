@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Globalization;
+using MailFathom.Application.Access.Credentials;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Api;
 using MailFathom.Host.Security.Transport;
@@ -67,8 +68,6 @@ public sealed class ComposedClientEndpointSecurityTests
 
     private const string McpKey = "not-a-real-mcp-key";
 
-    private const string AdminKeyName = "operator";
-
     private const string AdminKey = "not-a-real-admin-key";
 
     private const string PageOrigin = "https://client.example.test";
@@ -84,6 +83,10 @@ public sealed class ComposedClientEndpointSecurityTests
     /// <summary>The user <see cref="McpKey" /> was provisioned for, served on the MCP endpoint alone.</summary>
     private static readonly UserId McpUser =
         UserId.Create(new Guid("33333333-3333-3333-3333-333333333333"));
+
+    /// <summary>The administrator <see cref="AdminKey" /> was provisioned for, served on neither mail endpoint.</summary>
+    private static readonly UserId AdminUser =
+        UserId.Create(new Guid("44444444-4444-4444-4444-444444444444"));
 
     private const string AuthorizationServerName = "workforce";
 
@@ -341,10 +344,9 @@ public sealed class ComposedClientEndpointSecurityTests
 
     /// <summary>
     /// The claim this class exists for, in the direction a mistake would be worst: a key an operator provisioned for an
-    /// agent or for administering the service must buy nothing on the surface that serves a person's mail. The
-    /// administrative key is a configured one and is refused because that surface keeps its own list; the MCP key is a
-    /// credential row this deployment resolves, and what refuses it here is the switch on the user it was provisioned
-    /// for — which is the separation the user axis replaced the two key lists with.
+    /// agent or for administering the service must buy nothing on the surface that serves a person's mail. Both are
+    /// credential rows this deployment resolves: the administrative key is refused because it lists that endpoint alone,
+    /// and the MCP key because of the switch on the user it was provisioned for.
     /// </summary>
     [Theory]
     [InlineData(McpKey)]
@@ -573,7 +575,12 @@ public sealed class ComposedClientEndpointSecurityTests
                 new ProvisionedUserApiKey(
                     McpKey,
                     McpUser,
-                    EndpointAccess: new UserEndpointAccess(McpEndpoint: true, ClientEndpoint: false))));
+                    EndpointAccess: new UserEndpointAccess(McpEndpoint: true, ClientEndpoint: false)),
+                new ProvisionedUserApiKey(
+                    AdminKey,
+                    AdminUser,
+                    EndpointAccess: new UserEndpointAccess(McpEndpoint: false, ClientEndpoint: false),
+                    Reach: new UserCredentialReach([UserCredentialSurface.Administration], []))));
 
     /// <summary>The two surfaces that existed before this one, each authenticating, and no client endpoint at all.</summary>
     private static IReadOnlyList<KeyValuePair<string, string?>> OtherSurfacesServed() =>
@@ -582,9 +589,7 @@ public sealed class ComposedClientEndpointSecurityTests
         new("McpEndpoint:Authentication:0:Method", "api-key"),
         new("AdminEndpoint:Enabled", "true"),
         new("AdminEndpoint:Port", AdminPort.ToString(CultureInfo.InvariantCulture)),
-        new("AdminEndpoint:Administrators:0:Name", "administrator-0"),
-        new("AdminEndpoint:Administrators:0:Credentials:0:ApiKey:Name", AdminKeyName),
-        new("AdminEndpoint:Administrators:0:Credentials:0:ApiKey:SecretReference", $"plaintext:{AdminKey}"),
+        new("AdminEndpoint:Authentication:0:Method", "api-key"),
     ];
 
     /// <summary>

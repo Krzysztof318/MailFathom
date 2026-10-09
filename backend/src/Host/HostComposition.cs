@@ -271,6 +271,7 @@ internal static class HostComposition
         // transport, because it answers for work reached outside a request as well: a scope with no request behind it
         // is this process's own, and a use case that runs without a caller depends on being told so.
         builder.Services.AddHttpContextAccessor();
+        builder.Services.AddSingleton<RecordedDefaultAdministrator>();
         builder.Services.AddScoped<TransportAuthorizedPrincipalSource>();
         builder.Services.AddScoped<IAuthorizedPrincipalSource>(provider =>
             provider.GetRequiredService<TransportAuthorizedPrincipalSource>());
@@ -816,6 +817,7 @@ internal static class HostComposition
             HostStartupGate.SecretConfiguration,
             HostStartupGate.DatabaseSchema,
             HostStartupGate.ServedUsers,
+            HostStartupGate.DefaultAdministrator,
             .. spamScannerIsConfigured
                 ? (HostStartupGate[])[HostStartupGate.SpamScanner]
                 : [],
@@ -1292,6 +1294,11 @@ internal static class HostComposition
         // Ahead of the workers so no unit of work reads or writes mail before the schema this build expects is proven, and
         // after the infrastructure that registers the inspector it resolves.
         builder.Services.AddHostedService<DatabaseSchemaStartupGate>();
+
+        // Behind the schema gate, because the record of the default administrator lives in a table that migration
+        // creates, and ahead of everything that serves a request, because an administrative endpoint authenticating
+        // nobody serves its callers as that user.
+        builder.Services.AddHostedService<DefaultAdministratorStartupGate>();
 
         // Behind the schema gate, because the user records live in a table that migration creates, and ahead of
         // everything that serves a request, because a caller naming no user acts for the sole one and how many users the

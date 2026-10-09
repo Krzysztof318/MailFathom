@@ -2,18 +2,12 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.Security.Claims;
 using MailFathom.Host.Configuration.Access;
-using MailFathom.Host.Security.ApiKeys;
-using MailFathom.Host.Security.ClientAssertions;
 using MailFathom.Host.Security.Mcp;
-using MailFathom.Infrastructure.Security.ApiKeys;
 using MailFathom.Infrastructure.Security.OAuth;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.HttpOverrides;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.IdentityModel.Protocols;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 
@@ -38,140 +32,6 @@ internal static partial class TransportSecurityExtensions
     /// <summary>Names the registered transport an authorization server's metadata is retrieved over.</summary>
     /// <remarks>One transport for every scheme on every surface, because what it carries is the same fetch of the same kind of document under the same bounds. Each scheme still holds a client of its own over it, so no key refresh can observe another scheme's.</remarks>
     internal const string MetadataBackchannelTransportName = "mailfathom.oauth-metadata";
-
-    /// <summary>Adds one surface's authentication schemes and its authorization requirement.</summary>
-    /// <param name="services">The container to add to.</param>
-    /// <param name="surface">The surface being protected, which names every scheme and the policy.</param>
-    /// <param name="administrators">The surface's configured administrators, in configuration order.</param>
-    /// <param name="challengeSchemeName">The scheme answering a request that presented no credential this surface can place, which is both what authenticates it and what challenges it.</param>
-    /// <returns>The authentication builder, so a surface can add schemes only it needs.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when any reference argument is <see langword="null" />.</exception>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="surface" /> is the struct default.</exception>
-    /// <remarks>
-    /// <para>
-    /// The whole administrators rather than the credentials pulled out of them, because an administrator is what carries
-    /// a name, a grant, and its networks as well as its credentials, and they have to be registered together: a key is
-    /// compared by the scheme its credential selected, and who the caller is afterwards is the administrator it sits
-    /// under.
-    /// </para>
-    /// <para>
-    /// Nothing here decides what the application authenticates with by default. There is one such default and one
-    /// authentication middleware running it over every request, so a surface claiming it would be claiming the other
-    /// surface's requests as well, and which surface held it would come down to registration order.
-    /// <see cref="DefaultTransportAuthentication" /> is that decision, taken once by the composition root; what a
-    /// surface registers is the schemes its own routes are judged by and the policy that names them.
-    /// </para>
-    /// </remarks>
-    internal static AuthenticationBuilder AddTransportAuthentication(
-        this IServiceCollection services,
-        TransportSurface surface,
-        IReadOnlyList<AdministratorOptions> administrators,
-        string challengeSchemeName)
-    {
-        ArgumentNullException.ThrowIfNull(services);
-        ArgumentNullException.ThrowIfNull(administrators);
-        ArgumentNullException.ThrowIfNull(challengeSchemeName);
-
-        if (!surface.IsSpecified)
-        {
-            throw new ArgumentException("A transport surface is required to name the schemes and the policy.", nameof(surface));
-        }
-
-        var apiKeys = AdministratorConfiguration.ApiKeysIn(administrators);
-        var publicKeys = AdministratorConfiguration.PublicKeysIn(administrators);
-        var oauthMethods = AdministratorConfiguration.OAuthMethodsIn(administrators);
-        var authorizationServers = AdministratorConfiguration.DistinctAuthorizationServersIn(administrators);
-        var admissions = AdministratorAdmission.ForEach(administrators);
-
-        var authentication = services.AddAuthentication();
-
-        AddRoutingScheme(
-            authentication,
-            surface,
-            OAuthSchemesByIssuer(surface, authorizationServers),
-            apiKeys.Count > 0 ? surface.ApiKeySchemeName : null,
-            publicKeys.Count > 0 ? surface.ClientAssertionSchemeName : null,
-
-            // No Basic scheme, whatever an entry states. A password names a user, and the administrative endpoint —
-            // the one surface still registered this way — answers for the deployment rather than for a person, so the
-            // entry that would have selected the method is refused by that section's own validation instead of
-            // reaching a registration here.
-            basicSchemeName: null,
-
-            // And no session token either, which follows: a session is what a password is exchanged for, so a surface
-            // that reads no password has nothing to exchange and mints nothing to judge.
-            sessionTokenSchemeName: null,
-            challengeSchemeName);
-
-        if (publicKeys.Count > 0)
-        {
-            // Added once however many surfaces accept an assertion, for the reason the API key authenticator is: the
-            // verifier holds no surface state, and the replay store is one for the deployment — an identifier spent on
-            // either surface, and on any replica, is spent, which is the safe direction and costs a client nothing,
-            // since an identifier is minted fresh per request. The store is a singleton because what it holds of its
-            // own is the sweep interval; what it records lives in the database the port beneath it writes.
-            services.TryAddSingleton<ClientAssertionReplayStore>();
-            services.TryAddSingleton<ClientAssertionAuthenticator>();
-            authentication.AddScheme<ClientAssertionAuthenticationSchemeOptions, ClientAssertionAuthenticationHandler>(
-                surface.ClientAssertionSchemeName,
-                schemeOptions =>
-                {
-                    schemeOptions.Surface = surface;
-                    schemeOptions.PublicKeys = publicKeys;
-                    schemeOptions.AdministratorsByKeyName = AdmissionsByCredentialName(
-                        AdministratorConfiguration.AdministratorsByPublicKeyName(administrators),
-                        admissions);
-                });
-        }
-
-        if (apiKeys.Count > 0)
-        {
-            // Added once however many surfaces accept a key, because the authenticator holds no surface state: which
-            // keys it compares against arrive as an argument on every call. A second registration would resolve the
-            // same thing twice over and leave which instance answers decided by registration order.
-            services.TryAddSingleton<ApiKeyAuthenticator>();
-            authentication.AddScheme<ApiKeyAuthenticationSchemeOptions, ApiKeyAuthenticationHandler>(
-                surface.ApiKeySchemeName,
-                schemeOptions =>
-                {
-                    schemeOptions.Surface = surface;
-                    schemeOptions.ApiKeys = apiKeys;
-                    schemeOptions.AdministratorsByKeyName = AdmissionsByCredentialName(
-                        AdministratorConfiguration.AdministratorsByApiKeyName(administrators),
-                        admissions);
-                });
-        }
-
-        if (oauthMethods.Count > 0)
-        {
-            AddMetadataBackchannel(services);
-        }
-
-        // One validator per authorization server however many administrators sign in through it. What a validated
-        // token then becomes is decided by the issuer and subject it carries, which bind it to exactly one administrator.
-        var tokenAdmissions = TokenAdmissionsByIdentity(
-            AdministratorConfiguration.TokenBindingsByIdentity(administrators),
-            admissions);
-
-        foreach (var authorizationServer in authorizationServers)
-        {
-            var schemeName = surface.OAuthSchemeNameFor(authorizationServer.Name!);
-
-            authentication.AddJwtBearer(schemeName);
-            services.AddOptions<JwtBearerOptions>(schemeName)
-                .Configure<IHttpClientFactory>((jwtOptions, transportFactory) =>
-                    ConfigureAuthorizationServer(
-                        jwtOptions,
-                        authorizationServer,
-                        oauthMethods[0],
-                        transportFactory,
-                        context => ReplacePrincipalWithAdministratorIdentity(context, tokenAdmissions)));
-        }
-
-        AddAuthorizationPolicy(services, surface, administrators);
-
-        return authentication;
-    }
 
     /// <summary>Refuses a bearer token presented over a connection that was not encrypted.</summary>
     /// <remarks>
@@ -263,30 +123,10 @@ internal static partial class TransportSecurityExtensions
             authorizationServer => surface.OAuthSchemeNameFor(authorizationServer.Name!),
             StringComparer.Ordinal);
 
-    /// <summary>Replaces each credential's administrator with the admission composed for it.</summary>
-    private static Dictionary<string, AdministratorAdmission> AdmissionsByCredentialName(
-        IReadOnlyDictionary<string, AdministratorOptions> administratorsByCredentialName,
-        IReadOnlyDictionary<AdministratorOptions, AdministratorAdmission> admissions) =>
-        administratorsByCredentialName.ToDictionary(
-            entry => entry.Key,
-            entry => admissions[entry.Value],
-            StringComparer.Ordinal);
-
-    /// <summary>Replaces each token identity's administrator with the admission composed for it.</summary>
-    private static Dictionary<string, AdministratorAdmission> TokenAdmissionsByIdentity(
-        IReadOnlyDictionary<string, AdministratorTokenBinding> bindingsByIdentity,
-        IReadOnlyDictionary<AdministratorOptions, AdministratorAdmission> admissions) =>
-        bindingsByIdentity.ToDictionary(
-            entry => entry.Key,
-            entry => admissions[entry.Value.Administrator],
-            StringComparer.Ordinal);
-
     /// <summary>Registers the scheme that reads the presented credential and forwards it to the handler that judges it.</summary>
     /// <remarks>
-    /// It is handed scheme names rather than the credentials behind them, which is what lets the configured axis and the
-    /// user axis share one routing rule. Which handler judges a presented credential is decided by the shape of the
-    /// credential and never by where the material that answers it is kept, so a surface whose keys are rows routes
-    /// exactly as one whose keys are configuration entries does.
+    /// It is handed scheme names rather than the credentials behind them. Which handler judges a presented credential is
+    /// decided by the shape of the credential and never by where the material that answers it is kept.
     /// </remarks>
     private static void AddRoutingScheme(
         AuthenticationBuilder authentication,
@@ -331,11 +171,9 @@ internal static partial class TransportSecurityExtensions
     /// identify the same way never validates a token claiming the other's issuer.
     /// </para>
     /// <para>
-    /// What a validated token then becomes is the caller's, because it is the one part the two axes genuinely differ
-    /// on: a configured entry writes the grant it stated onto the identity, and a user-facing entry resolves the
-    /// subject to a credential record and takes both the user and the grant from it. Everything above that — the
-    /// issuer, the audience, the metadata retrieval, the clear-text refusal — is the same question asked of the same
-    /// server, so it is asked once here.
+    /// What a validated token then becomes is the caller's: the subject resolves a credential record, which names the
+    /// user. Everything above that — the issuer, the audience, the metadata retrieval, the clear-text refusal — is the
+    /// same question asked of the same server on every surface, so it is asked once here.
     /// </para>
     /// <para>
     /// Nothing about the server's own endpoints is assembled here. The key set address comes out of the discovery
@@ -388,59 +226,6 @@ internal static partial class TransportSecurityExtensions
         };
     }
 
-    /// <summary>Reduces a validated token to the identity MailFathom keeps of it, binds it to its administrator, and writes the grant it holds.</summary>
-    /// <remarks>
-    /// <para>
-    /// The validated principal carries every claim the authorization server chose to include, which routinely means a
-    /// name, an address, and a set of groups. Replacing it here means nothing downstream can read one, so a later change
-    /// cannot start depending on a claim the operator never mapped.
-    /// </para>
-    /// <para>
-    /// A token whose issuer and subject name no administrator is refused here, as an authentication failure, rather than
-    /// admitted and forbidden later: a validly signed token for somebody this deployment never named is no more a
-    /// credential here than a key nobody configured. The same holds for an administrator's token arriving from outside
-    /// the networks that administrator may act from.
-    /// </para>
-    /// </remarks>
-    private static Task ReplacePrincipalWithAdministratorIdentity(
-        TokenValidatedContext context,
-        Dictionary<string, AdministratorAdmission> admissionsByIdentity)
-    {
-        var tokenIdentity = context.Principal is { } validatedPrincipal
-            ? OAuthIdentity.FromValidatedToken(validatedPrincipal.Claims, context.Scheme.Name)
-            : null;
-
-        if (tokenIdentity is null)
-        {
-            context.Fail("The validated token names no subject.");
-
-            return Task.CompletedTask;
-        }
-
-        if (OAuthIdentity.IdentityCarriedBy(new ClaimsPrincipal(tokenIdentity)) is not { } identity
-            || !admissionsByIdentity.TryGetValue(identity, out var administrator))
-        {
-            context.Fail("The validated token names no configured administrator.");
-
-            return Task.CompletedTask;
-        }
-
-        var logger = context.HttpContext.RequestServices
-            .GetRequiredService<ILoggerFactory>()
-            .CreateLogger(typeof(TransportSecurityExtensions));
-
-        if (!administrator.AdmitsSourceOf(context.HttpContext, context.Scheme.Name, logger))
-        {
-            context.Fail("The administrator may not act from the network this request arrived from.");
-
-            return Task.CompletedTask;
-        }
-
-        context.Principal = new ClaimsPrincipal(administrator.IdentityForToken(tokenIdentity, OAuthIdentity.RoleClaimType));
-
-        return Task.CompletedTask;
-    }
-
     /// <summary>Registers the transport the discovery document and key set are retrieved through.</summary>
     /// <remarks>
     /// <para>
@@ -475,30 +260,4 @@ internal static partial class TransportSecurityExtensions
                 })
             .ConfigureHttpClient(static backchannel =>
                 backchannel.Timeout = OAuthValidationOptions.MetadataRetrievalTimeout);
-
-    /// <summary>Registers the requirement this surface's routes carry.</summary>
-    /// <remarks>
-    /// The policy names only this surface's routing scheme, which is what keeps a credential the other surface accepts
-    /// from ever being consulted here. How a refusal is *worded* is not registered with it: an
-    /// <see cref="IAuthorizationMiddlewareResultHandler" /> is one object for the whole application, so a surface that
-    /// shapes its own refusal registers it itself rather than through a method two surfaces call.
-    /// </remarks>
-    private static void AddAuthorizationPolicy(
-        IServiceCollection services,
-        TransportSurface surface,
-        IReadOnlyList<AdministratorOptions> administrators)
-    {
-        var requiredScopesByIdentity = AdministratorConfiguration.TokenBindingsByIdentity(administrators)
-            .ToDictionary(
-                entry => entry.Key,
-                entry => entry.Value.RequiredScopes,
-                StringComparer.Ordinal);
-
-        services.AddAuthorization(authorizationOptions => authorizationOptions.AddPolicy(
-            surface.AccessPolicyName,
-            policy => policy
-                .AddAuthenticationSchemes(surface.RoutingSchemeName)
-                .RequireAssertion(context =>
-                    TransportAccessPolicy.IsAuthorized(context.User, requiredScopesByIdentity))));
-    }
 }

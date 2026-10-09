@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access.Credentials;
 using MailFathom.Common.ClientAssertions;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Endpoints;
@@ -51,12 +52,14 @@ internal readonly record struct TransportSurface
         string name,
         string routePrefix,
         string clientAssertionAudience,
-        ProtectedSurface grantedSurface)
+        ProtectedSurface grantedSurface,
+        UserCredentialSurface credentialSurface)
     {
         this.name = name;
         this.routePrefix = routePrefix;
         this.clientAssertionAudience = clientAssertionAudience;
         this.GrantedSurface = grantedSurface;
+        this.CredentialSurface = credentialSurface;
     }
 
     /// <summary>Gets the surface serving the MCP protocol.</summary>
@@ -71,7 +74,8 @@ internal readonly record struct TransportSurface
         "Mcp",
         McpEndpointRoute.Path,
         ClientAssertion.McpAudience,
-        McpEndpointOptions.GrantedSurface);
+        McpEndpointOptions.GrantedSurface,
+        UserCredentialSurface.Mcp);
 
     /// <summary>Gets the surface serving the administrative API the <c>mfctl</c> command reaches.</summary>
     /// <remarks>Separate from <see cref="Mcp" /> because reading a mailbox and administering the service that reads it are different authorities, and a credential provisioned for one authenticates nothing on the other.</remarks>
@@ -79,7 +83,8 @@ internal readonly record struct TransportSurface
         "Admin",
         AdminEndpointOptions.RoutePrefix,
         ClientAssertion.AdminAudience,
-        AdminEndpointOptions.GrantedSurface);
+        AdminEndpointOptions.GrantedSurface,
+        UserCredentialSurface.Administration);
 
     /// <summary>Gets the surface serving the API the MailFathom client reaches.</summary>
     /// <remarks>
@@ -88,34 +93,34 @@ internal readonly record struct TransportSurface
     /// What is separate is its listener, its bounds, and its assertion audience — the last of which is what still keeps
     /// a client assertion signed for one of the two mail surfaces from being replayed against the other.
     /// <para>
-    /// Its credentials are not separate, and that is a deliberate consequence of resolving every user-facing credential
-    /// to a user row: a row names a user and a method and carries no surface. What decides whether a person is served
-    /// here rather than on <see cref="Mcp" /> is the user's own switch, which <see cref="Admits" /> reads, so a person
-    /// kept off one surface is refused there whichever credential they present — and a credential never carries a
-    /// surface of its own that could be provisioned around it.
-    /// </para>
-    /// <para>
-    /// The administrative surface is unaffected either way, because its credentials stay configured under
-    /// <see cref="Admin" />'s own section and are never resolved from a row.
+    /// A credential row names a user and the surfaces it may be presented on, and by default it lists both mail-serving
+    /// ones. What decides whether a person is served here rather than on <see cref="Mcp" /> is then the user's own
+    /// switch, which <see cref="Admits" /> reads beside the credential's surfaces, so a person kept off one surface is
+    /// refused there whichever credential they present.
     /// </para>
     /// </remarks>
     internal static TransportSurface Client { get; } = new(
         "Client",
         ClientEndpointOptions.RoutePrefix,
         ClientAssertion.ClientAudience,
-        ClientEndpointOptions.GrantedSurface);
+        ClientEndpointOptions.GrantedSurface,
+        UserCredentialSurface.Client);
 
-    /// <summary>Reports whether a user with the given endpoint switches may be served on this surface.</summary>
-    /// <param name="access">The switches read beside the credential or the session the request presented.</param>
-    /// <returns><see langword="true" /> when this is a mail-serving surface whose switch the user has on; otherwise <see langword="false" />.</returns>
+    /// <summary>Reports whether a resolved credential may be presented on this surface, and its user served here.</summary>
+    /// <param name="admitted">The credential or the session the request presented, with the switches read beside it.</param>
+    /// <returns><see langword="true" /> when the credential lists this surface and, on a mail-serving one, the user has its switch on; otherwise <see langword="false" />.</returns>
     /// <remarks>
-    /// Asked by every scheme that resolves a user, at authentication rather than in the surface's policy, so a user
+    /// Asked by every scheme that resolves a user, at authentication rather than in the surface's policy, so a credential
     /// kept off a surface receives there exactly the answer a credential nobody holds receives: a policy refusing an
     /// authenticated principal is a <c>403</c>, which would tell a caller that what they presented is good somewhere.
-    /// The administrative surface resolves no user and admits none through this.
+    /// The administrative surface reads no switch, because an administrator's acts are the deployment's rather than one
+    /// person's mail; what admits a user there is an administrative assignment, which
+    /// <see cref="UserCredentialAdmission" /> asks.
     /// </remarks>
-    internal bool Admits(UserEndpointAccess access) =>
-        this == Mcp ? access.McpEndpoint : this == Client && access.ClientEndpoint;
+    internal bool Admits(AdmittedUserCredential admitted) =>
+        admitted.Reach.Lists(this.CredentialSurface)
+        && (this == Admin
+            || (this == Mcp ? admitted.EndpointAccess.McpEndpoint : this == Client && admitted.EndpointAccess.ClientEndpoint));
 
     /// <summary>Gets whether this value names a surface rather than the unusable struct default.</summary>
     internal bool IsSpecified => this.name is not null;
@@ -128,6 +133,9 @@ internal readonly record struct TransportSurface
     /// ask <see cref="IsSpecified" /> before reading it.
     /// </remarks>
     internal ProtectedSurface GrantedSurface { get; }
+
+    /// <summary>Gets the name a credential lists to be presented on this surface.</summary>
+    internal UserCredentialSurface CredentialSurface { get; }
 
     /// <summary>Gets the surface's name, which every scheme and policy name below is composed from.</summary>
     /// <exception cref="InvalidOperationException">Thrown when the value is the struct default rather than a surface.</exception>
@@ -180,9 +188,9 @@ internal readonly record struct TransportSurface
     /// <exception cref="InvalidOperationException">Thrown when the value is the struct default rather than a surface.</exception>
     internal string RoutingSchemeName => $"MailFathom:{this.Name}:Transport";
 
-    /// <summary>Gets the scheme judging a presented key, against this surface's configured keys on the administrative surface and against the credentials this deployment stores on the two mail-serving ones.</summary>
+    /// <summary>Gets the scheme judging a presented key against the credentials this deployment stores.</summary>
     /// <exception cref="InvalidOperationException">Thrown when the value is the struct default rather than a surface.</exception>
-    /// <remarks>One name registering two handlers, because what a surface publishes to a client is a scheme rather than where the deployment keeps what it compares against. Which handler the name carries is decided where the scheme is registered.</remarks>
+    /// <remarks>Composed from the surface's name, because what a surface publishes to a client is a scheme of its own: every surface judges the same rows, and which of them may be presented here is the credential's surfaces, which admission reads.</remarks>
     internal string ApiKeySchemeName => $"MailFathom:{this.Name}:ApiKey";
 
     /// <summary>Gets the scheme judging a user's username and password against the credentials this deployment stores.</summary>
@@ -195,9 +203,9 @@ internal readonly record struct TransportSurface
     /// <remarks>Composed from the surface's name like the others, and what it keeps apart is the registration rather than the sessions: one process-wide store holds those, keyed by the token alone, so a token authenticates wherever this scheme is registered. One surface asks for the exchange today, which is what makes that the same thing.</remarks>
     internal string SessionTokenSchemeName => $"MailFathom:{this.Name}:SessionToken";
 
-    /// <summary>Gets the scheme verifying a signed assertion, against this surface's configured client public keys on the administrative surface and against the credentials this deployment stores on the two mail-serving ones.</summary>
+    /// <summary>Gets the scheme verifying a signed assertion against the client public keys this deployment stores.</summary>
     /// <exception cref="InvalidOperationException">Thrown when the value is the struct default rather than a surface.</exception>
-    /// <remarks>One name registering two handlers, for the reason <see cref="ApiKeySchemeName" /> gives. What the name keeps apart either way is the audience, which is what stops an assertion minted for one surface verifying on another.</remarks>
+    /// <remarks>Composed from the surface's name for the reason <see cref="ApiKeySchemeName" /> gives. What the name keeps apart beside that is the audience, which is what stops an assertion minted for one surface verifying on another.</remarks>
     internal string ClientAssertionSchemeName => $"MailFathom:{this.Name}:ClientAssertion";
 
     /// <summary>Gets the audience an assertion presented here must name.</summary>
