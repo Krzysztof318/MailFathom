@@ -94,7 +94,7 @@ internal static class MailAccountCustodyEndpoints
         ArgumentNullException.ThrowIfNull(drain);
         ArgumentNullException.ThrowIfNull(restore);
 
-        if (AdminAccountRequest.Resolve(account, accounts) is not { } servedAccount)
+        if (await AdminAccountRequest.ResolveAsync(account, accounts, cancellationToken) is not { } servedAccount)
         {
             return AdminAccountRequest.Refuse(account);
         }
@@ -176,7 +176,7 @@ internal static class MailAccountCustodyEndpoints
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(custody);
 
-        if (AdminAccountRequest.Resolve(request?.Account, accounts) is not { } servedAccount)
+        if (await AdminAccountRequest.ResolveAsync(request?.Account, accounts, cancellationToken) is not { } servedAccount)
         {
             return AdminAccountRequest.Refuse(request?.Account);
         }
@@ -234,7 +234,7 @@ internal static class MailAccountCustodyEndpoints
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(settlement);
 
-        if (AdminAccountRequest.Resolve(request?.Account, accounts) is not { } servedAccount)
+        if (await AdminAccountRequest.ResolveAsync(request?.Account, accounts, cancellationToken) is not { } servedAccount)
         {
             return AdminAccountRequest.Refuse(request?.Account);
         }

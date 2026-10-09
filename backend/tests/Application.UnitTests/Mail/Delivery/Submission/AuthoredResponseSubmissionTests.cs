@@ -827,7 +827,7 @@ public sealed class AuthoredResponseSubmissionTests
     private static ICallerMailAccountCatalog CatalogServing(MailAccountId accountId)
     {
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
-        catalog.AssignedAccounts.Returns([SyntheticServedAccount.Of(accountId)]);
+        catalog.ReadAssignedAccountsAsync(Arg.Any<CancellationToken>()).Returns([SyntheticServedAccount.Of(accountId)]);
 
         return catalog;
     }

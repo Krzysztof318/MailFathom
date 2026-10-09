@@ -397,7 +397,7 @@ public sealed class MailboxEmailSelectionTests
     private static MailboxScopeResolver ResolverWithJunkFolder(StubJunkMailFolderCatalog? junkFolders = null)
     {
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
-        catalog.AssignedAccounts.Returns(
+        catalog.ReadAssignedAccountsAsync(Arg.Any<CancellationToken>()).Returns(
         [
             new ServedMailAccount(
                 Account,

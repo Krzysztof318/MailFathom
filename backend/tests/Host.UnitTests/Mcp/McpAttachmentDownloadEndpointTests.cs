@@ -442,7 +442,7 @@ public sealed class McpAttachmentDownloadEndpointTests
                 : OpenedEmailAttachmentResult.Opened(attachment)));
 
         var accountCatalog = Substitute.For<ICallerMailAccountCatalog>();
-        accountCatalog.AssignedAccounts.Returns([SyntheticServedAccount.Of(summary.Account)]);
+        accountCatalog.ReadAssignedAccountsAsync(Arg.Any<CancellationToken>()).Returns([SyntheticServedAccount.Of(summary.Account)]);
 
         // The folder the summary was stored in is mapped, because a folder no mapping names does not exist as far as
         // MailFathom is concerned and every download of it would be refused before the endpoint is reached — which is

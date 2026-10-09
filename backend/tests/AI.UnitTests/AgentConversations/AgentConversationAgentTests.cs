@@ -250,7 +250,7 @@ public sealed class AgentConversationAgentTests : IAsyncDisposable
                 .Returns(call => call.Arg<Func<CancellationToken, Task<Microsoft.Extensions.AI.ChatResponse>>>()!(call.Arg<CancellationToken>()));
 
             var catalog = Substitute.For<ICallerMailAccountCatalog>();
-            catalog.AssignedAccounts.Returns([SyntheticServedAccount.Of(Primary)]);
+            catalog.ReadAssignedAccountsAsync(Arg.Any<CancellationToken>()).Returns([SyntheticServedAccount.Of(Primary)]);
             catalog.User.Returns(SyntheticUser.Deployment);
 
             var participation = StubMailFolderParticipation.Mapping(new MailFolderIdentity(Primary, MailFolderAlias.Create("inbox")));

@@ -99,10 +99,14 @@ internal static class JobDeadLetterEndpoints
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(deadLetters);
 
-        if (!AdminAccountRequest.TryResolveFilter(account, accounts, out var servedAccount, out var refusal))
+        var filter = await AdminAccountRequest.ResolveFilterAsync(account, accounts, cancellationToken);
+
+        if (filter.Refusal is { } refusal)
         {
             return refusal;
         }
+
+        var servedAccount = filter.Account;
 
         JobType? jobType = null;
 

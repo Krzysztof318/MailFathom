@@ -76,7 +76,7 @@ public sealed class MailFolderEditor
     {
         this.authorization.RequirePermission(MailFathomPermission.MailRead);
 
-        if (!this.IsAssigned(account))
+        if (!await this.IsAssignedAsync(account, cancellationToken))
         {
             return null;
         }
@@ -187,7 +187,7 @@ public sealed class MailFolderEditor
     {
         this.authorization.RequirePermission(MailFathomPermission.MailFoldersWrite);
 
-        if (!this.IsAssigned(account))
+        if (!await this.IsAssignedAsync(account, cancellationToken))
         {
             return MailFolderActOutcome.Refused(MailFolderActRefusal.AccountMissing);
         }
@@ -247,8 +247,8 @@ public sealed class MailFolderEditor
     /// A principal acting for no user is refused by the catalog rather than answered, because an empty set of
     /// assignments would let that mistake read as a person who is assigned nothing.
     /// </remarks>
-    private bool IsAssigned(MailAccountId account) =>
-        this.accounts.AssignedAccounts.Any(assigned => assigned.Id == account);
+    private async Task<bool> IsAssignedAsync(MailAccountId account, CancellationToken cancellationToken) =>
+        (await this.accounts.ReadAssignedAccountsAsync(cancellationToken)).Any(assigned => assigned.Id == account);
 
     private static MailFolderManagement DescribeHeld(LocalMailFolderHolding holding)
     {

@@ -21,7 +21,7 @@ public sealed class AssignedMailAccountCatalogsTests
     private static readonly MailAccountId Work = MailAccountId.Create("work");
 
     [Fact]
-    public void AssignedAccounts_ForTheUserEveryConfiguredAccountBelongsTo_AreTheAccountsServed()
+    public async Task ReadAssignedAccountsAsync_ForTheUserEveryConfiguredAccountBelongsTo_AreTheAccountsServed()
     {
         // Arrange
         var catalog = AssignedMailAccountCatalogs.For(
@@ -29,14 +29,14 @@ public sealed class AssignedMailAccountCatalogsTests
             SyntheticServedAccount.Of(Work));
 
         // Act
-        var owned = catalog.AssignedAccounts;
+        var owned = await catalog.ReadAssignedAccountsAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(Work, Assert.Single(owned).Id);
     }
 
     [Fact]
-    public void AssignedAccounts_ForAnotherUser_AreNone()
+    public async Task ReadAssignedAccountsAsync_ForAnotherUser_AreNone()
     {
         // Arrange
         var catalog = AssignedMailAccountCatalogs.For(
@@ -44,7 +44,7 @@ public sealed class AssignedMailAccountCatalogsTests
             SyntheticServedAccount.Of(Work));
 
         // Act
-        var owned = catalog.AssignedAccounts;
+        var owned = await catalog.ReadAssignedAccountsAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Empty(owned);
@@ -52,7 +52,7 @@ public sealed class AssignedMailAccountCatalogsTests
 
     /// <summary>A principal acting for nobody is refused rather than answered, so the two never look alike in a test.</summary>
     [Fact]
-    public void AssignedAccounts_ForAPrincipalActingForNoUser_AreRefused()
+    public async Task ReadAssignedAccountsAsync_ForAPrincipalActingForNoUser_AreRefused()
     {
         // Arrange
         var catalog = AssignedMailAccountCatalogs.For(
@@ -60,7 +60,7 @@ public sealed class AssignedMailAccountCatalogsTests
             SyntheticServedAccount.Of(Work));
 
         // Act & Assert
-        Assert.Throws<PrincipalNotAuthorizedException>(() => catalog.AssignedAccounts);
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() => catalog.ReadAssignedAccountsAsync(TestContext.Current.CancellationToken));
     }
 
     /// <summary>The switch is the deployment's and says nothing about who owns what, so it reaches every caller.</summary>
@@ -78,7 +78,7 @@ public sealed class AssignedMailAccountCatalogsTests
 
     /// <summary>The order is the deployment's own, so a scope a test resolves from this set is the canonical one.</summary>
     [Fact]
-    public void AssignedAccounts_HoweverATestNamedThem_AreOrderedByIdentifier()
+    public async Task ReadAssignedAccountsAsync_HoweverATestNamedThem_AreOrderedByIdentifier()
     {
         // Arrange
         var catalog = AssignedMailAccountCatalogs.For(
@@ -87,7 +87,7 @@ public sealed class AssignedMailAccountCatalogsTests
             SyntheticServedAccount.Of("archive"));
 
         // Act
-        var owned = catalog.AssignedAccounts;
+        var owned = await catalog.ReadAssignedAccountsAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(["archive", "private"], owned.Select(account => account.Id.Value));

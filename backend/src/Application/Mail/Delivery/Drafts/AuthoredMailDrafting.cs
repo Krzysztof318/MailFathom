@@ -63,7 +63,7 @@ public sealed class AuthoredMailDrafting(
         // Resolved against the accounts the caller's user is assigned for the reason the send is, and a draft lands in a
         // folder rather than in the world: one written into another user's account is a message that person may read
         // in their own mailbox as their own.
-        var account = accountCatalog.AssignedAccounts.FirstOrDefault(assigned => assigned.IsNamedBy(request.Account))
+        var account = (await accountCatalog.ReadAssignedAccountsAsync(cancellationToken)).FirstOrDefault(assigned => assigned.IsNamedBy(request.Account))
             ?? throw new MailAccountNotAccessibleException(request.Account);
 
         // Ahead of the resolution rather than left to it, because the reads it performs carry what the caller supplied

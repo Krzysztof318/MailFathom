@@ -47,6 +47,8 @@ using MailFathom.Application.Spam;
 using MailFathom.Application.Spam.Actions;
 using MailFathom.Application.Spam.Runs;
 using MailFathom.Application.StoredFiles;
+using MailFathom.Application.Synchronization;
+using MailFathom.Application.Synchronization.Administration;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Host.Api;
@@ -88,7 +90,9 @@ using MailFathom.Infrastructure.DataEncryption;
 using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Mail.OAuth;
 using MailFathom.Infrastructure.ObjectStorage;
+using MailFathom.Infrastructure.Observability;
 using MailFathom.Infrastructure.Persistence.Connections;
+using MailFathom.Infrastructure.Persistence.Users;
 using MailFathom.Infrastructure.Persistence.Users.AccountSettings;
 using MailFathom.Infrastructure.Rules;
 using MailFathom.Infrastructure.Secrets.Resolution;
@@ -307,6 +311,9 @@ internal static class HostComposition
         // than anything the caller brought, and the holds it takes outlive the request scope's services by design: a
         // renewal runs in a scope of its own for the whole of the erasure it guards.
         builder.Services.AddSingleton<IMailAccountWorkQuiescing, MailAccountWorkQuiesce>();
+        // What an erasure stops this replica supervising before it takes the accounts' leases, and what the
+        // coordinator and every run consult before they supervise one.
+        builder.Services.AddSingleton<WithheldMailAccounts>();
         // Scoped for the reason PersistedSettingsAdministration is: each asks AccessAuthorization for the permission
         // its operations are published under, and that service is scoped to whatever admitted the caller.
         builder.Services.AddScoped<UserRosterAdministration>();
@@ -553,18 +560,22 @@ internal static class HostComposition
         builder.Services.AddScoped<IMailRuleActionPermissionReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.RuleActionPermissions);
         builder.Services.AddScoped<IMailboxMutationAuditSettingsReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.MutationAuditSettings);
         builder.Services.AddScoped<IMailAnsweringAuditSettingsReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.AnsweringAuditSettings);
-        // Composed here rather than taken off the snapshot's reader set, because which users an account is assigned to
-        // is established by a startup gate rather than bound from a file. The snapshot still decides which accounts are
-        // served; this adds the half configuration cannot state. Both ports are the same instance, so the set of
-        // accounts and the assignments into it are one reading of one roster.
-        builder.Services.AddScoped(provider => new ConfiguredMailAccountCatalog(
+        // Composed here rather than taken off the snapshot's reader set, because which accounts are served is read from
+        // the account records rather than bound from a file; the snapshot contributes only the synchronization switch.
+        builder.Services.AddScoped<IDeploymentMailAccountCatalog>(provider => new ConfiguredMailAccountCatalog(
             provider.GetRequiredService<MailSynchronizationOptions>(),
-            provider.GetRequiredService<ServedUsers>(),
             provider.GetRequiredService<IServedMailAccountReader>()));
-        builder.Services.AddScoped<IDeploymentMailAccountCatalog>(provider =>
-            provider.GetRequiredService<ConfiguredMailAccountCatalog>());
-        builder.Services.AddScoped<IMailAccountAssignments>(provider =>
-            provider.GetRequiredService<ConfiguredMailAccountCatalog>());
+        // The accounts the coordinator supervises and what each run reads, both from the records. It composes over the
+        // bound settings rather than the published snapshot, because a run carries only the users its account is
+        // assigned to rather than the roster the published snapshot pairs every section with.
+        builder.Services.AddSingleton<IMailSynchronizationAccountSource>(provider => new PersistedMailSynchronizationAccounts(
+            provider.GetRequiredService<ValidatedSettingsSnapshot<MailSynchronizationOptions>>(),
+            provider.GetRequiredService<IServedMailAccountReader>(),
+            provider.GetRequiredService<IMailAccountAssignments>(),
+            provider.GetRequiredService<IUserSettingsDocumentReader>(),
+            provider.GetRequiredService<ServedUserRecordComposition>(),
+            provider.GetRequiredService<ConfigurationChangeAnnouncements>(),
+            provider.GetRequiredService<WithheldMailAccounts>()));
         builder.Services.AddScoped<ITrustedAuthenticationAuthorityReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.TrustedAuthenticationAuthorities);
         builder.Services.AddScoped<ISenderTrustPolicyReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.SenderTrustPolicies);
         // Resolved from the same snapshot as the verdicts above, so one work unit reads mail under one reload. Which of
@@ -1321,7 +1332,19 @@ internal static class HostComposition
         // says nothing where no user's mail is scanned.
         builder.Services.AddHostedService<StaleDerivedDataStartupReport>();
 
-        builder.Services.AddHostedService<MailSynchronizationCoordinator>();
+        // The bound settings rather than the published snapshot, because the published one is replaced on every user
+        // record a replica republishes and the coordinator replaces every supervisor when its settings are replaced:
+        // the accounts it supervises, and each account's own settings, are read from the records instead.
+        builder.Services.AddHostedService(provider => new MailSynchronizationCoordinator(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            provider.GetRequiredService<ValidatedSettingsSnapshot<MailSynchronizationOptions>>(),
+            provider.GetRequiredService<IMailSynchronizationAccountSource>(),
+            provider.GetRequiredService<MailSynchronizationTelemetry>(),
+            provider.GetRequiredService<MailSynchronizationRunLedger>(),
+            provider.GetRequiredService<MailAccountRunSignal>(),
+            provider.GetRequiredService<ClientSignals>(),
+            provider.GetRequiredService<ILoggerFactory>(),
+            provider.GetRequiredService<TimeProvider>()));
         // Registered beside the coordinator rather than instead of anything it does: the account run already drains
         // whatever is outstanding, and this is what makes a message written down leave in seconds instead of waiting for
         // that run. An account that configures no submission endpoint is answered by an empty pass, so nothing here is

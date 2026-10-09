@@ -407,18 +407,14 @@ internal static class SynchronizationTestHost
         services.AddScoped<IMailSynchronizationWindowReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.SynchronizationWindows);
         services.AddScoped<IRemotelyDeletedEmailDispositionReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.RemotelyDeletedEmailDispositions);
         // Composed off the scoped snapshot rather than the container's own options, exactly as the composition root
-        // composes it, so the account list a supervision pass reads is the one the latest reload published. The roster
-        // is the one those options were published over, because a mailbox belongs to the user whose record holds it.
+        // composes it. The roster and the assignments are the ones those options were published over, because a
+        // mailbox belongs to the user whose record holds it.
         services.AddSingleton(ResolvedServedUsers.Serving([.. options.ServedUsers ?? []]));
         services.AddSingleton<IDeploymentUserSource>(provider => provider.GetRequiredService<ServedUsers>());
-        services.AddScoped(provider => new ConfiguredMailAccountCatalog(
+        services.AddScoped<IDeploymentMailAccountCatalog>(provider => new ConfiguredMailAccountCatalog(
             provider.GetRequiredService<MailSynchronizationOptions>(),
-            provider.GetRequiredService<ServedUsers>(),
             ServedMailAccountReaders.HoldingNothing()));
-        services.AddScoped<IDeploymentMailAccountCatalog>(provider =>
-            provider.GetRequiredService<ConfiguredMailAccountCatalog>());
-        services.AddScoped<IMailAccountAssignments>(provider =>
-            provider.GetRequiredService<ConfiguredMailAccountCatalog>());
+        services.AddSingleton<IMailAccountAssignments>(AssignmentsOf(options));
 
         // The coordinator supervises an account only once it holds the account's lease, so the table stands here as one
         // that grants every account to this replica unless a test plays the other one.
@@ -498,6 +494,17 @@ internal static class SynchronizationTestHost
 
         return runStore;
     }
+
+    /// <summary>Assigns each mailbox to the users whose records hold it, which is what the assignment table records.</summary>
+    private static StubMailAccountAssignments AssignmentsOf(MailSynchronizationOptions options) =>
+        (options.ServedUsers ?? []).Aggregate(
+            new StubMailAccountAssignments(),
+            static (assignments, served) => assignments.Assigning(
+                served.User,
+                [.. served.MailAccounts
+                    .Select(static account => MailSynchronizationOptions.TryReadAccountId(account.AccountId))
+                    .OfType<string>()
+                    .Select(MailAccountId.Create)]));
 
     /// <summary>The language of a deployment that has not been told a mailbox is read in anything else.</summary>
     private sealed class EnglishForEveryAccount : IMailAccountLanguages

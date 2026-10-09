@@ -372,7 +372,7 @@ public sealed class MailReplyDraftingTests
     {
         var accounts = servedAccounts ?? [Account];
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
-        catalog.AssignedAccounts.Returns([.. accounts.Select(static accountId => SyntheticServedAccount.Of(accountId))]);
+        catalog.ReadAssignedAccountsAsync(Arg.Any<CancellationToken>()).Returns([.. accounts.Select(static accountId => SyntheticServedAccount.Of(accountId))]);
         catalog.User.Returns(SyntheticUser.Deployment);
 
         var participation = StubMailFolderParticipation.Mapping(

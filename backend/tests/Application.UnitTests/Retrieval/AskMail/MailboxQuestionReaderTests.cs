@@ -846,7 +846,7 @@ public sealed class MailboxQuestionReaderTests
     private static ICallerMailAccountCatalog CatalogServing(params MailAccountId[] servedAccountIds)
     {
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
-        catalog.AssignedAccounts.Returns([.. servedAccountIds.Select(accountId => SyntheticServedAccount.Of(accountId))]);
+        catalog.ReadAssignedAccountsAsync(Arg.Any<CancellationToken>()).Returns([.. servedAccountIds.Select(accountId => SyntheticServedAccount.Of(accountId))]);
 
         return catalog;
     }

@@ -228,7 +228,7 @@ internal sealed class SyntheticMailAccount(
     /// <summary>The window this account keeps an answering entry for, which a retention test writes an older entry than.</summary>
     internal static readonly TimeSpan AnsweringAuditRetention = TimeSpan.FromDays(30);
 
-    /// <inheritdoc />
+    /// <summary>Gets the accounts this harness serves.</summary>
     /// <remarks>
     /// The one account this suite stores anything under. Every read model resolves its scope through this port before it
     /// reads a row, so a harness that answered nothing here would make a mailbox query return an empty window over mail
@@ -247,6 +247,13 @@ internal sealed class SyntheticMailAccount(
         Task.FromResult(this.ServedAccounts);
 
     /// <inheritdoc />
+    public Task<IReadOnlyList<ServedMailAccount>> ReadServedAccountsAsync(
+        IReadOnlyCollection<MailAccountId> among,
+        CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<ServedMailAccount>>(
+            [.. this.ServedAccounts.Where(account => among.Contains(account.Id))]);
+
+    /// <inheritdoc />
     /// <remarks>
     /// On, because every orchestrated test arranges a deployment that synchronizes: the flag reports the operator's
     /// switch and nothing in the suite exercises a deployment that turned it off.
@@ -259,12 +266,16 @@ internal sealed class SyntheticMailAccount(
     /// table state as well. Anybody else is assigned nothing, so a test acting for a user this deployment never
     /// established reads nothing rather than reading the suite's mail.
     /// </remarks>
-    public IReadOnlyList<MailAccountId> AccountsAssignedTo(UserId user) =>
-        user == User ? [AccountId] : [];
+    public Task<IReadOnlyList<MailAccountId>> ReadAccountsAssignedToAsync(
+        UserId user,
+        CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<MailAccountId>>(user == User ? [AccountId] : []);
 
     /// <inheritdoc />
-    public IReadOnlyList<UserId> UsersAssignedTo(MailAccountId account) =>
-        account == AccountId ? [User] : [];
+    public Task<IReadOnlyList<UserId>> ReadUsersAssignedToAsync(
+        MailAccountId account,
+        CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<UserId>>(account == AccountId ? [User] : []);
 
     /// <inheritdoc />
     /// <remarks>

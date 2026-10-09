@@ -105,7 +105,8 @@ public sealed class MailCalendarProposals
         }
 
         var recordedAt = this.timeProvider.GetUtcNow();
-        var rows = this.assignments.UsersAssignedTo(account)
+        var owners = await this.assignments.ReadUsersAssignedToAsync(account, cancellationToken);
+        var rows = owners
             .SelectMany(owner => proposals.Select(proposal => (Owner: owner, Proposal: proposal)))
             .ToArray();
 

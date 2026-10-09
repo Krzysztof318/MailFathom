@@ -6,6 +6,7 @@ using MailFathom.Application.Access;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Mutations;
 
 namespace MailFathom.Application.Mail.Mutations.Authoring;
@@ -140,10 +141,11 @@ public sealed class MailboxChangeWithdrawer
 
         ArgumentOutOfRangeException.ThrowIfGreaterThan(recordIds.Count, MaximumRecordsPerCall);
 
-        var held = await this.records.ReadAsync(this.scopeResolver.AssignedAccounts, recordIds, cancellationToken);
+        var assignedAccounts = await this.scopeResolver.ReadAssignedAccountsAsync(cancellationToken);
+        var held = await this.records.ReadAsync(assignedAccounts, recordIds, cancellationToken);
 
         var withdrawable = held
-            .Where(record => covered.Contains(record.Request.Mutation) && this.IsReadable(record))
+            .Where(record => covered.Contains(record.Request.Mutation) && this.IsReadable(assignedAccounts, record))
             .Select(record => record.Id)
             .ToArray();
 
@@ -161,7 +163,7 @@ public sealed class MailboxChangeWithdrawer
                 // otherwise report the losing attempt's answers beside the winning one's.
                 var records = await this.records.WithdrawAsync(
                     session,
-                    this.scopeResolver.AssignedAccounts,
+                    assignedAccounts,
                     withdrawable,
                     attemptCancellationToken);
 
@@ -173,7 +175,9 @@ public sealed class MailboxChangeWithdrawer
     }
 
     /// <summary>Reports whether the caller may still reach the mailbox the change was recorded in.</summary>
-    private bool IsReadable(MailboxMutationRecord record) => this.scopeResolver.IsReadableByTools(
-        record.Request.Occurrence.AccountId,
-        record.Request.Occurrence.FolderResolutionId.Alias);
+    private bool IsReadable(IReadOnlyList<MailAccountId> assignedAccounts, MailboxMutationRecord record) =>
+        this.scopeResolver.IsReadableByTools(
+            assignedAccounts,
+            record.Request.Occurrence.AccountId,
+            record.Request.Occurrence.FolderResolutionId.Alias);
 }

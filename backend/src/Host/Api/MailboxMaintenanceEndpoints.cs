@@ -112,9 +112,9 @@ internal static class MailboxMaintenanceEndpoints
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(rewind);
 
-        if (ResolveScope(account, folder, accounts) is not { } resolution)
+        if (await ResolveScopeAsync(account, folder, accounts, cancellationToken) is not { } resolution)
         {
-            return Refusal(account, accounts);
+            return await RefusalAsync(account, accounts, cancellationToken);
         }
 
         var storedEmailCount = await rewind.AssessAsync(resolution, cancellationToken);
@@ -146,9 +146,9 @@ internal static class MailboxMaintenanceEndpoints
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(rewind);
 
-        if (ResolveScope(request?.Account, request?.Folder, accounts) is not { } resolution)
+        if (await ResolveScopeAsync(request?.Account, request?.Folder, accounts, cancellationToken) is not { } resolution)
         {
-            return Refusal(request?.Account, accounts);
+            return await RefusalAsync(request?.Account, accounts, cancellationToken);
         }
 
         var rewound = await rewind.RewindAsync(resolution, cancellationToken);
@@ -183,9 +183,9 @@ internal static class MailboxMaintenanceEndpoints
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(requests);
 
-        if (ResolveScope(request?.Account, request?.Folder, accounts) is not { } resolution)
+        if (await ResolveScopeAsync(request?.Account, request?.Folder, accounts, cancellationToken) is not { } resolution)
         {
-            return Refusal(request?.Account, accounts);
+            return await RefusalAsync(request?.Account, accounts, cancellationToken);
         }
 
         var submitted = await requests.SubmitAsync(resolution, cancellationToken);
@@ -215,9 +215,9 @@ internal static class MailboxMaintenanceEndpoints
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(runs);
 
-        if (ResolveScope(account, folder, accounts) is not { } resolution)
+        if (await ResolveScopeAsync(account, folder, accounts, cancellationToken) is not { } resolution)
         {
-            return Refusal(account, accounts);
+            return await RefusalAsync(account, accounts, cancellationToken);
         }
 
         var run = await runs.FindAsync(resolution, cancellationToken);
@@ -234,9 +234,13 @@ internal static class MailboxMaintenanceEndpoints
     /// an operator names none. Blank text is treated as absent for the same reason a query string omitting the
     /// parameter is: the two are indistinguishable to a caller writing a URL by hand.
     /// </remarks>
-    private static StoredMailScope? ResolveScope(string? account, string? folder, IDeploymentMailAccountCatalog accounts)
+    private static async Task<StoredMailScope?> ResolveScopeAsync(
+        string? account,
+        string? folder,
+        IDeploymentMailAccountCatalog accounts,
+        CancellationToken cancellationToken)
     {
-        if (AdminAccountRequest.Resolve(account, accounts) is not { } servedAccount)
+        if (await AdminAccountRequest.ResolveAsync(account, accounts, cancellationToken) is not { } servedAccount)
         {
             return null;
         }
@@ -256,9 +260,12 @@ internal static class MailboxMaintenanceEndpoints
     /// The folder is not a parameter because it is not read: a scope that failed to resolve with an account this
     /// deployment serves failed on its folder, and naming the text back would echo whatever a caller sent.
     /// </remarks>
-    private static ProblemHttpResult Refusal(string? account, IDeploymentMailAccountCatalog accounts)
+    private static async Task<ProblemHttpResult> RefusalAsync(
+        string? account,
+        IDeploymentMailAccountCatalog accounts,
+        CancellationToken cancellationToken)
     {
-        if (AdminAccountRequest.Resolve(account, accounts) is not null)
+        if (await AdminAccountRequest.ResolveAsync(account, accounts, cancellationToken) is not null)
         {
             return TypedResults.Problem(
                 "The request named a folder that is not an alias. Name the alias of one folder, or name none at all to cover every folder the account holds mail in.",

@@ -64,7 +64,7 @@ internal sealed partial class SignalRClientSignalChannel : IClientSignalChannel
         {
             var payload = ClientSignalPayload.For(signal);
 
-            foreach (var recipient in this.RecipientsOf(signal))
+            foreach (var recipient in await this.ReadRecipientsAsync(signal, cancellationToken))
             {
                 await this.hub.Clients
                     .Group(ClientSignalHub.GroupOf(recipient))
@@ -84,7 +84,7 @@ internal sealed partial class SignalRClientSignalChannel : IClientSignalChannel
     /// two would otherwise deliver to the set as it stood when a run started. A mailbox assigned to nobody reaches
     /// nobody, which is what an empty answer has to mean everywhere the assignment relation is read.
     /// </remarks>
-    private IReadOnlyList<UserId> RecipientsOf(ClientSignal signal)
+    private async Task<IReadOnlyList<UserId>> ReadRecipientsAsync(ClientSignal signal, CancellationToken cancellationToken)
     {
         if (signal.User is { } named)
         {
@@ -96,9 +96,11 @@ internal sealed partial class SignalRClientSignalChannel : IClientSignalChannel
             return [];
         }
 
-        using var scope = this.scopes.CreateScope();
+        await using var scope = this.scopes.CreateAsyncScope();
 
-        return scope.ServiceProvider.GetRequiredService<IMailAccountAssignments>().UsersAssignedTo(account);
+        return await scope.ServiceProvider
+            .GetRequiredService<IMailAccountAssignments>()
+            .ReadUsersAssignedToAsync(account, cancellationToken);
     }
 
     [LoggerMessage(

@@ -52,6 +52,44 @@ public sealed class ConfigurationChangeAnnouncementsTests
     }
 
     /// <summary>
+    /// A change this replica commits reaches what it supervises here even where no backplane carries it anywhere, which
+    /// is what lets the synchronization coordinator act on its own replica's commit at once.
+    /// </summary>
+    [Fact]
+    public async Task GetChangeToken_AChangeAnnouncedWithNoBackplane_Changes()
+    {
+        // Arrange
+        var announcements = new ConfigurationChangeAnnouncements(
+            connect: null,
+            new RecordingLogger<ConfigurationChangeAnnouncements>());
+        var token = announcements.GetChangeToken();
+
+        // Act
+        await announcements.AnnounceAsync();
+
+        // Assert
+        Assert.True(token.HasChanged);
+        Assert.False(announcements.GetChangeToken().HasChanged);
+    }
+
+    /// <summary>A change another replica announces changes the token on the replica that heard it.</summary>
+    [Fact]
+    public async Task GetChangeToken_AChangeHeardFromAnotherReplica_Changes()
+    {
+        // Arrange
+        var backplane = new InMemoryBackplane();
+        var listener = Over(backplane);
+        await listener.ListenAsync(() => { });
+        var token = listener.GetChangeToken();
+
+        // Act
+        await Over(backplane).AnnounceAsync();
+
+        // Assert
+        Assert.True(token.HasChanged);
+    }
+
+    /// <summary>
     /// A connection attempt that failed is made again rather than remembered, so a replica that started before its
     /// backplane answered still ends up listening.
     /// </summary>

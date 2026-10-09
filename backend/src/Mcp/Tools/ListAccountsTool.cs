@@ -83,6 +83,6 @@ internal sealed class ListAccountsTool(
     {
         var directory = await mailAccountDirectoryReader.ReadAsync(cancellationToken);
 
-        return ListAccountsToolResult.From(directory, PublishedAccountNames.From(accountCatalog));
+        return ListAccountsToolResult.From(directory, await PublishedAccountNames.FromAsync(accountCatalog, cancellationToken));
     }
 }

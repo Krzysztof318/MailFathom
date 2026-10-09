@@ -37,8 +37,9 @@ public sealed class ContactBookScopes
 
     /// <summary>Composes the books one user reads: their own, and the collected book of each account assigned to them.</summary>
     /// <param name="user">The user.</param>
+    /// <param name="cancellationToken">Cancels the read of the user's assignments.</param>
     /// <returns>The scope.</returns>
     /// <remarks>A user the deployment holds no record for is assigned nothing, so the scope is their own book — empty until somebody writes in it — rather than a refusal.</remarks>
-    public ContactBookScope Of(UserId user) =>
-        ContactBookScope.Of(user, this.assignments.AccountsAssignedTo(user));
+    public async Task<ContactBookScope> ReadScopeAsync(UserId user, CancellationToken cancellationToken) =>
+        ContactBookScope.Of(user, await this.assignments.ReadAccountsAssignedToAsync(user, cancellationToken));
 }

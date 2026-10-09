@@ -32,7 +32,6 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
-using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Infrastructure.Observability;
 
@@ -54,7 +53,7 @@ internal sealed partial class AccountSynchronizationSupervisor
 {
     private readonly MailAccountId account;
     private readonly IServiceScopeFactory scopeFactory;
-    private readonly ISettingsSnapshot<MailSynchronizationOptions> settings;
+    private readonly IMailSynchronizationAccountSource accounts;
     private readonly SemaphoreSlim accountRunSlots;
     private readonly AccountPushNotificationWatch pushNotifications;
     private readonly MailSynchronizationTelemetry telemetry;
@@ -66,7 +65,7 @@ internal sealed partial class AccountSynchronizationSupervisor
     /// <summary>Initializes a supervisor for one configured account.</summary>
     /// <param name="account">The account this supervisor synchronizes, by its generated identifier together; the identifier is what it logs.</param>
     /// <param name="scopeFactory">Creates the scope each folder work unit runs in.</param>
-    /// <param name="settings">Supplies the snapshot every run is scheduled from.</param>
+    /// <param name="accounts">Reads the settings every run is scheduled from, when that run begins.</param>
     /// <param name="accountRunSlots">Bounds how many accounts run at once; owned by the coordinator and never released beyond what this supervisor took.</param>
     /// <param name="pushNotifications">Ends the wait between runs early when a watched folder changes; owned by this supervisor and disposed with it.</param>
     /// <param name="telemetry">Publishes the run as a span with its folders beneath it, and the counts and waits an operator reads without opening a log; it also measures how long a run took.</param>
@@ -77,7 +76,7 @@ internal sealed partial class AccountSynchronizationSupervisor
     public AccountSynchronizationSupervisor(
         MailAccountId account,
         IServiceScopeFactory scopeFactory,
-        ISettingsSnapshot<MailSynchronizationOptions> settings,
+        IMailSynchronizationAccountSource accounts,
         SemaphoreSlim accountRunSlots,
         AccountPushNotificationWatch pushNotifications,
         MailSynchronizationTelemetry telemetry,
@@ -88,7 +87,7 @@ internal sealed partial class AccountSynchronizationSupervisor
     {
         this.account = account;
         this.scopeFactory = scopeFactory;
-        this.settings = settings;
+        this.accounts = accounts;
         this.accountRunSlots = accountRunSlots;
         this.pushNotifications = pushNotifications;
         this.telemetry = telemetry;
@@ -98,8 +97,8 @@ internal sealed partial class AccountSynchronizationSupervisor
         this.logger = logger;
     }
 
-    /// <summary>Supervises the account until scheduling stops or the account leaves configuration.</summary>
-    /// <param name="schedulingToken">Stops the supervisor from starting another run; cancelled when the host begins shutting down, when a reload replaces this supervisor, or when this replica stops holding the account.</param>
+    /// <summary>Supervises the account until scheduling stops or the account is no longer served.</summary>
+    /// <param name="schedulingToken">Stops the supervisor from starting another run; cancelled when the host begins shutting down, when a change to its account or to the synchronization settings replaces this supervisor, or when this replica stops holding the account.</param>
     /// <param name="workUnitToken">Tears down a run already under way; cancelled once the coordinator's bounded shutdown drain expires, or at once when this replica stops holding the account.</param>
     /// <returns>A task that completes when the account is no longer supervised, and that never faults.</returns>
     /// <remarks>
@@ -144,20 +143,22 @@ internal sealed partial class AccountSynchronizationSupervisor
 
     /// <summary>Runs the account, waits, and runs it again until scheduling stops.</summary>
     /// <remarks>
-    /// Everything a run reads is taken from the published snapshot when that run begins, so a reload or a rotated
-    /// credential reaches the next run and never the one already under way. The account is looked up in that same
-    /// snapshot, which is how a supervisor learns that the operator removed the account it was serving.
+    /// Everything a run reads is read from the account records when that run begins — this account and the other
+    /// accounts of the users it is assigned to, under the deployment's bound settings — so a commit or a rotated
+    /// credential reaches the next run and never the one already under way. Not finding the account in what was read is
+    /// how a supervisor learns that the account was removed, unassigned from everybody, or withheld by an erasure.
     /// </remarks>
     private async Task SuperviseAsync(CancellationToken schedulingToken, CancellationToken workUnitToken)
     {
         var consecutiveFailureCount = 0;
+        MailSynchronizationOptions? runSettings = null;
 
         while (!schedulingToken.IsCancellationRequested)
         {
-            var runSettings = this.settings.Current;
-            var account = runSettings.FindConfiguredAccount(this.account);
+            runSettings = await this.accounts.ReadRunSettingsAsync(this.account, runSettings, schedulingToken);
+            var account = runSettings?.FindConfiguredAccount(this.account);
 
-            if (account is null)
+            if (runSettings is null || account is null)
             {
                 this.LogAccountNoLongerConfigured(this.account.Value);
 
@@ -714,9 +715,11 @@ internal sealed partial class AccountSynchronizationSupervisor
             var retention = scope.ServiceProvider.GetRequiredService<NotificationRetention>();
             var erasedNotificationCount = 0;
 
-            foreach (var reader in scope.ServiceProvider
+            var readers = await scope.ServiceProvider
                 .GetRequiredService<IMailAccountAssignments>()
-                .UsersAssignedTo(this.account))
+                .ReadUsersAssignedToAsync(this.account, cancellationToken);
+
+            foreach (var reader in readers)
             {
                 erasedNotificationCount += await retention.EraseExpiredAsync(reader, cancellationToken);
             }
@@ -1580,12 +1583,12 @@ internal sealed partial class AccountSynchronizationSupervisor
 
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "Account {AccountId} is no longer configured, so its supervision ended; the mail already stored for it stays readable.")]
+        Message = "Account {AccountId} is no longer served, so its supervision ended; the mail already stored for it stays where it is.")]
     private partial void LogAccountNoLongerConfigured(string accountId);
 
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "Supervision of account {AccountId} stopped because it was asked to: the host is shutting down, a reload replaced it, or this replica no longer holds the account.")]
+        Message = "Supervision of account {AccountId} stopped because it was asked to: the host is shutting down, a change to its account or to the synchronization settings replaced it, or this replica no longer holds the account.")]
     private partial void LogSupervisionStopped(string accountId);
 
     /// <summary>Separates a supervisor that ended unexpectedly from one that was asked to stop, because only the first is a defect.</summary>

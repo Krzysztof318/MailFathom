@@ -262,7 +262,10 @@ public sealed class EmailContentReader
         // An account this deployment no longer serves leaves its stored rows in place, and a folder an operator withheld
         // from tools keeps its own, so the row existing is not enough. All three cases produce one answer: telling them
         // apart would let a caller learn which identifiers exist by asking about them.
-        if (summary is null || !this.scopeResolver.IsReadableByTools(summary.Account, summary.FolderAlias))
+        if (summary is null || !await this.scopeResolver.IsReadableByToolsAsync(
+                summary.Account,
+                summary.FolderAlias,
+                cancellationToken))
         {
             return EmailContentReadOutcome.NotFound(storedEmailId);
         }

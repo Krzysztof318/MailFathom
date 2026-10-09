@@ -541,7 +541,7 @@ public sealed class MailEnrichmentPassTests
         ICalendarEventStore events)
     {
         var assignments = Substitute.For<IMailAccountAssignments>();
-        assignments.UsersAssignedTo(Account).Returns([Owner]);
+        assignments.ReadUsersAssignedToAsync(Account, Arg.Any<CancellationToken>()).Returns([Owner]);
 
         return new MailCalendarProposals(extractor, events, assignments, new FakeTimeProvider(DerivedAt));
     }

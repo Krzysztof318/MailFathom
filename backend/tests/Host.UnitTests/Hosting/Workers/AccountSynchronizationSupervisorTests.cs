@@ -985,7 +985,7 @@ public sealed class AccountSynchronizationSupervisorTests
         // Assert
         Assert.Contains(
             harness.Logger.Messages,
-            message => message.Contains("Account primary is no longer configured", StringComparison.Ordinal));
+            message => message.Contains("Account primary is no longer served", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -1602,7 +1602,7 @@ public sealed class AccountSynchronizationSupervisorTests
             this.supervisor = new AccountSynchronizationSupervisor(
                 account,
                 services.GetRequiredService<IServiceScopeFactory>(),
-                settings,
+                new SnapshotMailSynchronizationAccounts(settings),
                 this.accountRunSlots,
                 new AccountPushNotificationWatch(
                     account,

@@ -3,11 +3,13 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Domain.Accounts;
-using MailFathom.Domain.Synchronization;
 using MailFathom.Host.Configuration.Mail;
+using MailFathom.Host.Configuration.Mail.Readers;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Mail;
+using MailFathom.Infrastructure.Persistence.Users.AccountSettings;
 using MailFathom.Infrastructure.Secrets.Discovery;
+using NSubstitute;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Configuration.Mail;
@@ -132,41 +134,6 @@ public sealed class MailAccountDisplayNameValidationTests
             message => message!.Contains("could not say which mailbox it meant", StringComparison.Ordinal));
     }
 
-    /// <summary>A configured account reaches every reader under the name it was given, together with the mode it was configured for.</summary>
-    [Fact]
-    public void ServedAccounts_ConfiguredAccounts_CarryTheirDisplayNameAndMode()
-    {
-        // Arrange
-        var pushed = CreateAccount("acct-2", "Private mail");
-        pushed.Mode = MailSynchronizationMode.Push;
-        var options = OptionsFor(CreateAccount("acct-1", "  Work mail  "), pushed);
-
-        // Act
-        var servedAccounts = ConfiguredMailAccounts.CatalogOver(options).ServedAccounts;
-
-        // Assert
-        Assert.Equal(
-            [
-                ("acct-1", "Work mail", MailSynchronizationMode.Polling),
-                ("acct-2", "Private mail", MailSynchronizationMode.Push),
-            ],
-            servedAccounts.Select(account => (account.Id.Value, account.DisplayName.Value, account.SynchronizationMode)));
-    }
-
-    /// <summary>Reading the set never fails on configuration startup refuses; an unnamed account is left out rather than named by MailFathom.</summary>
-    [Fact]
-    public void ServedAccounts_AccountWithNoUsableDisplayName_IsSkippedRatherThanNamedByDefault()
-    {
-        // Arrange
-        var options = OptionsFor(CreateAccount("acct-1", "Work mail"), CreateAccount("acct-2", displayName: string.Empty));
-
-        // Act
-        var servedAccounts = ConfiguredMailAccounts.CatalogOver(options).ServedAccounts;
-
-        // Assert
-        Assert.Equal("acct-1", Assert.Single(servedAccounts).Id.Value);
-    }
-
     /// <summary>The switch is a fact about the deployment rather than about any account, and every reader takes it from the same place.</summary>
     [Theory]
     [InlineData(true)]
@@ -178,7 +145,7 @@ public sealed class MailAccountDisplayNameValidationTests
         options.Enabled = enabled;
 
         // Act, Assert
-        Assert.Equal(enabled, ConfiguredMailAccounts.CatalogOver(options).SynchronizationEnabled);
+        Assert.Equal(enabled, new ConfiguredMailAccountCatalog(options, Substitute.For<IServedMailAccountReader>()).SynchronizationEnabled);
     }
 
     private static MailSynchronizationOptions OptionsFor(params MailSynchronizationAccountOptions[] accounts) =>

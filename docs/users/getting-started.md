@@ -288,9 +288,9 @@ correspondence. `mfctl user edit` changes it, and [the language this person
 reads](../operations/configuration-sources.md#the-language-this-person-reads--language) is the whole of that one. A
 person whose mailbox is read in Polish may read English themselves, and the two are set apart.
 
-**The mailbox is served from that moment, without a restart.** The write that commits the record publishes it to the
-running roster, so the next synchronization run is this account's first one — and the same holds for every user
-recorded later.
+**The mailbox is served from that moment, without a restart.** The write that commits the record announces it, so the
+next synchronization pass reads the account from the records and starts its first run — and the same holds for every
+user recorded later.
 
 A declaration the deployment will not accept is refused whole rather than committed in part, naming what it refused: an
 account identifier the record already carries, a missing `Host` or `UserName`, a transport weakening that was not

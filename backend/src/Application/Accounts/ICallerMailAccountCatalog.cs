@@ -51,12 +51,14 @@ public interface ICallerMailAccountCatalog
     /// </remarks>
     UserId User { get; }
 
-    /// <summary>Gets the accounts the user in hand is assigned, deduplicated and ordered, or empty when they are assigned none.</summary>
+    /// <summary>Reads the accounts the user in hand is assigned, deduplicated and ordered, or empty when they are assigned none.</summary>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The served accounts assigned to the user, in the ordinal order of their identifiers.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the work in hand is acting for no user.</exception>
     /// <remarks>
-    /// Ordered the way <see cref="IDeploymentMailAccountCatalog.ServedAccounts" /> is, and for the same reason: a scope
-    /// resolved from it is canonical, so a continuation cursor issued for it stays valid while neither the configuration
-    /// nor this user's assignments change.
+    /// Ordered the way <see cref="IDeploymentMailAccountCatalog.ReadServedAccountsAsync(CancellationToken)" /> is, and
+    /// for the same reason: a scope resolved from it is canonical, so a continuation cursor issued for it stays valid
+    /// while neither the account records nor this user's assignments change.
     /// </remarks>
-    IReadOnlyList<ServedMailAccount> AssignedAccounts { get; }
+    Task<IReadOnlyList<ServedMailAccount>> ReadAssignedAccountsAsync(CancellationToken cancellationToken);
 }

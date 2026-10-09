@@ -50,7 +50,10 @@ public sealed class ContactBookOwnership
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the work was reached under a principal acting for no user.</exception>
     public UserId User => this.authorization.RequireUser();
 
-    /// <summary>Gets the books this caller reads: their own first, then the collected book of each account they are assigned.</summary>
+    /// <summary>Reads the books this caller reads: their own first, then the collected book of each account they are assigned.</summary>
+    /// <param name="cancellationToken">Cancels the read of the user's assignments.</param>
+    /// <returns>The books this caller reads.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the work was reached under a principal acting for no user.</exception>
-    public ContactBookScope Scope => this.scopes.Of(this.User);
+    public Task<ContactBookScope> ReadScopeAsync(CancellationToken cancellationToken) =>
+        this.scopes.ReadScopeAsync(this.User, cancellationToken);
 }

@@ -77,7 +77,9 @@ public sealed class MailboxRefreshTokenRecorder
 
         this.authorization.RequirePermission(MailFathomPermission.AdminCredentialsWrite);
 
-        if (this.accountCatalog.ServedAccounts.FirstOrDefault(served => served.Id == accountId) is not { } account)
+        var served = await this.accountCatalog.ReadServedAccountsAsync([accountId], cancellationToken);
+
+        if (served is not [var account])
         {
             throw new MailAccountNotAccessibleException(accountId);
         }

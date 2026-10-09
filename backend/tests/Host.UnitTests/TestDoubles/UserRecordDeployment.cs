@@ -13,6 +13,7 @@ using MailFathom.Host.Configuration.Records;
 using MailFathom.Host.Configuration.SensitiveContent;
 using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.Configuration.UserSettings.Administration;
+using MailFathom.Host.Hosting.Workers;
 using MailFathom.Host.Signals;
 using MailFathom.Infrastructure.Persistence.Users;
 using MailFathom.Infrastructure.Secrets;
@@ -114,6 +115,7 @@ internal sealed class UserRecordDeployment
             this.Erasure,
             this.MailAccountRecords,
             this.Quiescing,
+            new WithheldMailAccounts(),
             this.Store,
             this.ServedUsers,
             admission,

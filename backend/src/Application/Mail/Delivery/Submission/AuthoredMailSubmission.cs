@@ -86,7 +86,7 @@ public sealed class AuthoredMailSubmission(
         // names the mailbox mail leaves as: an account belonging to somebody else would put this caller's message into
         // the world under that person's address. It is refused with the failure an unserved account gets, so a refusal
         // cannot tell a caller that the account exists.
-        var account = accountCatalog.AssignedAccounts.FirstOrDefault(assigned => assigned.IsNamedBy(request.Account))
+        var account = (await accountCatalog.ReadAssignedAccountsAsync(cancellationToken)).FirstOrDefault(assigned => assigned.IsNamedBy(request.Account))
             ?? throw new MailAccountNotAccessibleException(request.Account);
 
         // Before the contact book is read and before anything is composed, because a time that has gone is the

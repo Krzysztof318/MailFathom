@@ -68,13 +68,15 @@ public sealed class ContactBookReader
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold the reading grant.</exception>
     /// <exception cref="ContactQueryInvalidException">Thrown when the page size, the origin, or the search text is not one the book serves.</exception>
     /// <exception cref="ContactCursorMalformedException">Thrown when the cursor is not one this system issued.</exception>
-    public Task<ContactPage> ReadPageAsync(ContactPageRequest request, CancellationToken cancellationToken)
+    public async Task<ContactPage> ReadPageAsync(ContactPageRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
         this.authorization.RequirePermission(MailFathomPermission.MailContactsRead);
 
-        return this.directory.ReadPageAsync(this.ownership.Scope, QueryFrom(request), cancellationToken);
+        var scope = await this.ownership.ReadScopeAsync(cancellationToken);
+
+        return await this.directory.ReadPageAsync(scope, QueryFrom(request), cancellationToken);
     }
 
     /// <summary>Reads one contact by the identity the book gave it.</summary>
@@ -82,11 +84,13 @@ public sealed class ContactBookReader
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The contact, or <see langword="null" /> when the book holds none.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold the reading grant.</exception>
-    public Task<Contact?> FindAsync(ContactId contactId, CancellationToken cancellationToken)
+    public async Task<Contact?> FindAsync(ContactId contactId, CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.MailContactsRead);
 
-        return this.directory.FindAsync(this.ownership.Scope, contactId, cancellationToken);
+        var scope = await this.ownership.ReadScopeAsync(cancellationToken);
+
+        return await this.directory.FindAsync(scope, contactId, cancellationToken);
     }
 
     /// <summary>Reads the person who uses one address.</summary>
@@ -101,11 +105,13 @@ public sealed class ContactBookReader
     /// keeps. It is taken over the address here rather than over the record, so an address only a record a listing
     /// hides holds still resolves.
     /// </remarks>
-    public Task<Contact?> FindByAddressAsync(EmailAddress address, CancellationToken cancellationToken)
+    public async Task<Contact?> FindByAddressAsync(EmailAddress address, CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.MailContactsRead);
 
-        return this.directory.FindByAddressAsync(this.ownership.Scope, address, cancellationToken);
+        var scope = await this.ownership.ReadScopeAsync(cancellationToken);
+
+        return await this.directory.FindByAddressAsync(scope, address, cancellationToken);
     }
 
     /// <summary>Reads the query a request states, refusing every part of it the book does not serve.</summary>

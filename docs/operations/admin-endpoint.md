@@ -1477,9 +1477,10 @@ operator reads the one to pass.
 of what a user's erasure removes is reached from the rows it deletes, but a synchronization run and a job handler write
 rows keyed to a *mail account* rather than to the person — so a deletion racing one of them would answer that this
 deployment holds nothing while it was still being written to. What the request does first is therefore take the user off
-the roster this replica serves and hold the supervision of every mailbox they were the last one assigned, which is the
-same lease a replica takes before it synchronizes that mailbox: holding it means no replica is running that account, and
-none starts one until the erasure has committed. A mailbox somebody else is also assigned is left running and is not
+the roster this replica serves, withhold every mailbox they were the last one assigned from this replica's
+synchronization, and hold the supervision of each of those mailboxes, which is the same lease a replica takes before it
+synchronizes that mailbox: holding it means no replica is running that account, and none starts one until the erasure
+has committed. A mailbox somebody else is also assigned is left running and is not
 held: the mailbox, its mail, and the work going on in it are untouched, because that mail is the other person's. What
 does go from it is what the erased user themselves authored there — their drafts and their standing recurring sends —
 since those are the departing person's rather than the mailbox's, and an erasure that left them would leave that person
@@ -1517,9 +1518,9 @@ The confirmation is asked before any request is sent, so an answer of anything b
 all. `--yes` states the agreement in the command for a scripted erasure, exactly as it does for the rewind above.
 
 On a deployment of several replicas the mailbox may be held by a replica other than the one the request reached, and
-that replica goes on supervising it — it reads the same roster from the database, which still holds the user. Such an
-erasure is refused for as long as that lasts, and the way through it is to send the request again after that replica has
-moved on, or to reach the replica holding the account. A refusal is the deliberate answer here: an erasure answered as
+that replica goes on supervising it — it reads the same account records from the database, which still hold the
+mailbox. Such an erasure is refused for as long as that lasts, and the way through it is to send the request again after
+that replica has moved on, or to reach the replica holding the account. A refusal is the deliberate answer here: an erasure answered as
 done while a run was still writing is the failure this exists to prevent.
 
 **A user is minted with an identifier that says nothing about who they are.** It is a version 7 UUID, like every

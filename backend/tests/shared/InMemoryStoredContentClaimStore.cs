@@ -119,29 +119,42 @@ internal sealed class InMemoryStoredContentClaimStore : IStoredContentClaimStore
             return Task.FromResult(StoredContentClaimRecord.Unbounded);
         }
 
+        return this.ClaimWithinCeilingsAsync(account, bytes, ceilings, cancellationToken);
+    }
+
+    private async Task<StoredContentClaimRecord> ClaimWithinCeilingsAsync(
+        MailAccountId account,
+        long bytes,
+        StoredContentCeilings ceilings,
+        CancellationToken cancellationToken)
+    {
         var binding = this.claims.Values.Where(room => !room.HasExpired).ToArray();
         var deploymentHeld = this.OccupiedBytes + binding.Sum(room => room.Bytes);
-        var userHeld = this.assignments.UsersAssignedTo(account)
-            .Select(reader => this.assignments.AccountsAssignedTo(reader).Sum(assigned =>
+        var userHeld = 0L;
+
+        foreach (var reader in await this.assignments.ReadUsersAssignedToAsync(account, cancellationToken))
+        {
+            var readerHeld = (await this.assignments.ReadAccountsAssignedToAsync(reader, cancellationToken)).Sum(assigned =>
                 this.occupiedBytesByAccount.GetValueOrDefault(assigned)
-                + binding.Where(room => room.Account == assigned).Sum(room => room.Bytes)))
-            .DefaultIfEmpty(0L)
-            .Max();
+                + binding.Where(room => room.Account == assigned).Sum(room => room.Bytes));
+
+            userHeld = Math.Max(userHeld, readerHeld);
+        }
 
         if (deploymentHeld > (ceilings.DeploymentBytes ?? long.MaxValue) - bytes)
         {
-            return Task.FromResult(new StoredContentClaimRecord(ClaimId: null, StoredContentBound.Deployment));
+            return new StoredContentClaimRecord(ClaimId: null, StoredContentBound.Deployment);
         }
 
         if (userHeld > (ceilings.UserBytes ?? long.MaxValue) - bytes)
         {
-            return Task.FromResult(new StoredContentClaimRecord(ClaimId: null, StoredContentBound.User));
+            return new StoredContentClaimRecord(ClaimId: null, StoredContentBound.User);
         }
 
         var claimId = Guid.CreateVersion7();
         this.claims[claimId] = new ReservedRoom(account, bytes, HasExpired: false);
 
-        return Task.FromResult(new StoredContentClaimRecord(claimId, StoredContentBound.None));
+        return new StoredContentClaimRecord(claimId, StoredContentBound.None);
     }
 
     /// <inheritdoc />

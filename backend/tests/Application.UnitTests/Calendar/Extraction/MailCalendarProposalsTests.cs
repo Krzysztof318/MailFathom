@@ -170,7 +170,7 @@ public sealed class MailCalendarProposalsTests
 
         // Assert
         Assert.Equal(0, staged);
-        assignments.DidNotReceive().UsersAssignedTo(Arg.Any<MailAccountId>());
+        await assignments.DidNotReceive().ReadUsersAssignedToAsync(Arg.Any<MailAccountId>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -209,7 +209,7 @@ public sealed class MailCalendarProposalsTests
         ICalendarEventExtractor? extractor = null)
     {
         var assignments = Substitute.For<IMailAccountAssignments>();
-        assignments.UsersAssignedTo(Account).Returns(owners);
+        assignments.ReadUsersAssignedToAsync(Account, Arg.Any<CancellationToken>()).Returns(owners);
 
         return new MailCalendarProposals(
             extractor ?? Substitute.For<ICalendarEventExtractor>(),

@@ -110,7 +110,7 @@ internal static class SpamClassificationEndpoints
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(requests);
 
-        if (AdminAccountRequest.Resolve(request?.Account, accounts) is not { } servedAccount)
+        if (await AdminAccountRequest.ResolveAsync(request?.Account, accounts, cancellationToken) is not { } servedAccount)
         {
             return AdminAccountRequest.Refuse(request?.Account);
         }
@@ -155,7 +155,7 @@ internal static class SpamClassificationEndpoints
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(runs);
 
-        if (AdminAccountRequest.Resolve(account, accounts) is not { } servedAccount)
+        if (await AdminAccountRequest.ResolveAsync(account, accounts, cancellationToken) is not { } servedAccount)
         {
             return AdminAccountRequest.Refuse(account);
         }
@@ -200,7 +200,7 @@ internal static class SpamClassificationEndpoints
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(classifications);
 
-        if (AdminAccountRequest.Resolve(account, accounts) is not { } servedAccount)
+        if (await AdminAccountRequest.ResolveAsync(account, accounts, cancellationToken) is not { } servedAccount)
         {
             return AdminAccountRequest.Refuse(account);
         }

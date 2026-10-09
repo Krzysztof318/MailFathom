@@ -26,6 +26,28 @@ public interface IServedMailAccountReader
     /// <returns>The served accounts, in the ordinal order of their identifiers.</returns>
     Task<IReadOnlyList<ServedMailAccountRow>> ReadServedAsync(CancellationToken cancellationToken);
 
+    /// <summary>Reads which of the named accounts this deployment serves, by the columns that name them.</summary>
+    /// <param name="among">The accounts asked about; one this deployment does not serve is left out of the answer.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The served accounts among those named, in the ordinal order of their identifiers.</returns>
+    Task<IReadOnlyList<ServedMailAccountRow>> ReadServedAsync(
+        IReadOnlyCollection<Guid> among,
+        CancellationToken cancellationToken);
+
+    /// <summary>Reads one page of the accounts this deployment serves, each with the version its record stands at.</summary>
+    /// <param name="after">The last identifier of the previous page, or <see langword="null" /> for the first page.</param>
+    /// <param name="limit">The most accounts the page holds.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The page, in the order of the identifiers; a page shorter than <paramref name="limit" /> is the last.</returns>
+    /// <remarks>
+    /// Keyed on the identifier rather than on a position, so an account recorded or erased between two pages moves no
+    /// other account across the boundary: a walk of every page reads every account that was served throughout it once.
+    /// </remarks>
+    Task<IReadOnlyList<ServedMailAccountVersion>> ReadServedVersionsAsync(
+        Guid? after,
+        int limit,
+        CancellationToken cancellationToken);
+
     /// <summary>Reads every account this deployment serves whole, document included.</summary>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The served accounts, in the ordinal order of their identifiers.</returns>

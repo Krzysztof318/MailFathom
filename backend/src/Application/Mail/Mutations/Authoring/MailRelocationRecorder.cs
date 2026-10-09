@@ -141,12 +141,18 @@ public sealed class MailRelocationRecorder
         // The two withheld folders are reported as the two absences they are. A source this caller may not read is a
         // message it may not learn about at all, and a destination it may not read is a folder it may not learn about,
         // so neither answer says anything about the other.
-        if (target is null || !this.scopeResolver.IsReadableByTools(target.Occurrence.AccountId, target.Folder.Alias))
+        if (target is null || !await this.scopeResolver.IsReadableByToolsAsync(
+                target.Occurrence.AccountId,
+                target.Folder.Alias,
+                cancellationToken))
         {
             return AuthoredMailRelocationResult.NotRecorded(MailRelocationOutcome.MessageNotFound);
         }
 
-        if (!this.scopeResolver.IsReadableByTools(target.Occurrence.AccountId, destination))
+        if (!await this.scopeResolver.IsReadableByToolsAsync(
+                target.Occurrence.AccountId,
+                destination,
+                cancellationToken))
         {
             return AuthoredMailRelocationResult.NotRecorded(MailRelocationOutcome.DestinationNotFound);
         }

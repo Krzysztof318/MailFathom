@@ -297,15 +297,16 @@ internal sealed class ServedUsers : IDeploymentUserSource
     /// <exception cref="ArgumentException">Thrown when the user is unspecified.</exception>
     /// <remarks>
     /// <para>
-    /// An erasure has to stop this process serving the user <em>before</em> it deletes anything: the accounts only they
-    /// are assigned leave the set this replica serves, which is what has the synchronization coordinator give their
-    /// supervision back so nothing is mid-write when the deletion runs. But an erasure can still be refused, and a
-    /// person nothing erased must go on being served rather than disappear until the next convergence reading.
+    /// An erasure has to stop this process serving the user <em>before</em> it deletes anything, so no request composed
+    /// against the roster acts for them while the deletion runs; the synchronization of the accounts only they are
+    /// assigned is stopped beside this, by withholding those accounts from the coordinator. But an erasure can still be
+    /// refused, and a person nothing erased must go on being served rather than disappear until the next convergence
+    /// reading.
     /// </para>
     /// <para>
     /// Restoring is exact rather than re-read: the entry and the record version it was published at are the ones taken
     /// off, so putting them back changes nothing about what this replica had bound. It is the same publication as any
-    /// other, so it signals a reload and the coordinator picks the accounts up again.
+    /// other, so it signals a reload.
     /// </para>
     /// <para>
     /// What the shrunk roster must not change is <see cref="User" />, which is why the withholding is recorded rather

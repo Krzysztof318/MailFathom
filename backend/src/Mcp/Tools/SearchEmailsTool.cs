@@ -165,6 +165,6 @@ internal sealed class SearchEmailsTool(
 
         var result = await mailboxSearchReader.SearchEmailsAsync(request, cancellationToken);
 
-        return SearchEmailsToolResult.From(result, snippetBounds, PublishedAccountNames.From(accountCatalog));
+        return SearchEmailsToolResult.From(result, snippetBounds, await PublishedAccountNames.FromAsync(accountCatalog, cancellationToken));
     }
 }

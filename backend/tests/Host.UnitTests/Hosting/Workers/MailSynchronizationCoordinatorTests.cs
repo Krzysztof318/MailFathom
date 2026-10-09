@@ -234,6 +234,92 @@ public sealed class MailSynchronizationCoordinatorTests
         await harness.StopAndDrainAsync();
     }
 
+    /// <summary>
+    /// A change to one account's record moves that record's version and no other's, so only that account's supervision
+    /// is replaced; the account beside it keeps the schedule it already had.
+    /// </summary>
+    [Fact]
+    public async Task ExecuteAsync_OneOfTwoAccountsChangedBetweenPasses_ReplacesOnlyThatAccountsSupervision()
+    {
+        // Arrange
+        var unchangedAttempted = new TaskCompletionSource();
+        var changedAttempted = new TaskCompletionSource();
+        var changedAttempts = 0;
+        var changedAttemptedAgain = new TaskCompletionSource();
+        var sessionFactory = Substitute.For<IMailboxSessionFactory>();
+        sessionFactory
+            .OpenReadOnlyAsync(
+                Arg.Any<MailAccountId>(),
+                Arg.Any<MailFolderResolution>(),
+                Arg.Any<MailTransportSecurityPolicy>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<MailAccountId>().Value == "changed"
+                ? FailImmediately(Interlocked.Increment(ref changedAttempts) == 1 ? changedAttempted : changedAttemptedAgain)
+                : FailImmediately(unchangedAttempted));
+        var unchanged = SynchronizationTestHost.CreateAccount("unchanged", "INBOX");
+        using var harness = CreateHarness(
+            SynchronizationTestHost.CreateOptions(enabled: true, unchanged, SynchronizationTestHost.CreateAccount("changed", "INBOX")),
+            sessionFactory);
+
+        // Act
+        await harness.Coordinator.StartAsync(CancellationToken.None);
+        await Task.WhenAll(unchangedAttempted.Task, changedAttempted.Task)
+            .WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+        harness.Settings.Current = SynchronizationTestHost.CreateOptions(
+            enabled: true,
+            unchanged,
+            SynchronizationTestHost.CreateAccount("changed", "INBOX"));
+        await changedAttemptedAgain.Task.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+        await harness.StopAndDrainAsync();
+
+        // Assert
+        Assert.Single(harness.LoggedMessages, message => message.Contains("Account unchanged is now supervised", StringComparison.Ordinal));
+        Assert.Equal(2, harness.LoggedMessages.Count(message => message.Contains("Account changed is now supervised", StringComparison.Ordinal)));
+    }
+
+    /// <summary>
+    /// An account that is no longer served — its record gone, or withheld for an erasure — drops out of the next pass's
+    /// read, so its supervision ends and its lease is given back while the account beside it goes on being supervised.
+    /// </summary>
+    [Fact]
+    public async Task ExecuteAsync_AccountNoLongerServedBetweenPasses_EndsItsSupervisionAndKeepsTheOther()
+    {
+        // Arrange
+        var keptAttempted = new TaskCompletionSource();
+        var removedAttempted = new TaskCompletionSource();
+        var sessionFactory = Substitute.For<IMailboxSessionFactory>();
+        sessionFactory
+            .OpenReadOnlyAsync(
+                Arg.Any<MailAccountId>(),
+                Arg.Any<MailFolderResolution>(),
+                Arg.Any<MailTransportSecurityPolicy>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call => FailImmediately(call.Arg<MailAccountId>().Value == "kept" ? keptAttempted : removedAttempted));
+        var kept = SynchronizationTestHost.CreateAccount("kept", "INBOX");
+        var leases = new ScriptedWorkLeaseStore();
+        using var harness = CreateHarness(
+            SynchronizationTestHost.CreateOptions(enabled: true, kept, SynchronizationTestHost.CreateAccount("removed", "INBOX")),
+            sessionFactory,
+            workLeaseStore: leases);
+
+        // Act
+        await harness.Coordinator.StartAsync(CancellationToken.None);
+        await Task.WhenAll(keptAttempted.Task, removedAttempted.Task)
+            .WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+        var heldWhileBothServed = leases.HeldScopes;
+        harness.Settings.Current = SynchronizationTestHost.CreateOptions(enabled: true, kept);
+        var released = await leases.WaitForReleaseAsync(TestContext.Current.CancellationToken)
+            .WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+        var heldAfterwards = leases.HeldScopes;
+        await harness.StopAndDrainAsync();
+
+        // Assert
+        Assert.Equal(2, heldWhileBothServed.Count);
+        var stillHeld = Assert.Single(heldAfterwards);
+        Assert.NotEqual(released, stillHeld);
+        Assert.Contains(heldWhileBothServed, scope => scope == released);
+    }
+
     /// <summary>A work unit is not torn down where it happens to be; shutdown stops scheduling and lets it finish.</summary>
     [Fact]
     public async Task ExecuteAsync_HostStopsWhileAWorkUnitRuns_LetsItFinishWithinTheDrain()
@@ -484,9 +570,11 @@ public sealed class MailSynchronizationCoordinatorTests
             this.ServedUsers = services.GetRequiredService<ServedUsers>();
             this.Settings = settings;
             this.Clock = clock;
+            this.BoundSettings = new StubSettingsSnapshot<MailSynchronizationOptions>(settings.Current);
             this.Coordinator = new MailSynchronizationCoordinator(
                 services.GetRequiredService<IServiceScopeFactory>(),
-                settings,
+                this.BoundSettings,
+                new SnapshotMailSynchronizationAccounts(settings),
                 services.GetRequiredService<MailSynchronizationTelemetry>(),
                 new MailSynchronizationRunLedger(clock),
                 new MailAccountRunSignal(),
@@ -495,7 +583,11 @@ public sealed class MailSynchronizationCoordinatorTests
                 clock);
         }
 
+        /// <summary>Gets the snapshot the accounts and every run are read from, which is what a record commit changes.</summary>
         internal StubSettingsSnapshot<MailSynchronizationOptions> Settings { get; }
+
+        /// <summary>Gets the settings bound from the operator's sections, which no record commit changes.</summary>
+        internal StubSettingsSnapshot<MailSynchronizationOptions> BoundSettings { get; }
 
         /// <summary>Gets the roster a record commit publishes into, which is where the accounts a run supervises come from.</summary>
         internal ServedUsers ServedUsers { get; }
@@ -510,8 +602,8 @@ public sealed class MailSynchronizationCoordinatorTests
         /// <summary>Commits one user's record, which is the only way a mailbox arrives while the process runs.</summary>
         /// <param name="mailAccounts">The mailboxes that user's document now holds.</param>
         /// <remarks>
-        /// Both halves, because the composition root publishes both: the roster is what decides which accounts are
-        /// served, and the settings snapshot is what a supervision pass wakes on.
+        /// Both halves, because a commit changes both: the roster is what the scoped readers of a run answer from,
+        /// and the snapshot is what the accounts a pass supervises are read from and what it wakes on.
         /// </remarks>
         internal void RecordMailboxes(params MailSynchronizationAccountOptions[] mailAccounts)
         {

@@ -99,7 +99,7 @@ public sealed class MailFolderEditorTests
     {
         // Arrange
         await using var deployment = new EditorDeployment(phase);
-        deployment.Accounts.AssignedAccounts.Returns([SyntheticServedAccount.Of(MailAccountId.Create("theirs"))]);
+        deployment.Accounts.ReadAssignedAccountsAsync(Arg.Any<CancellationToken>()).Returns([SyntheticServedAccount.Of(MailAccountId.Create("theirs"))]);
 
         // Act
         var outcome = await deployment.Editor.CreateAsync(
@@ -300,7 +300,7 @@ public sealed class MailFolderEditorTests
             sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ => new CommittingSession());
 
             this.Accounts = Substitute.For<ICallerMailAccountCatalog>();
-            this.Accounts.AssignedAccounts.Returns([SyntheticServedAccount.Of(Account)]);
+            this.Accounts.ReadAssignedAccountsAsync(Arg.Any<CancellationToken>()).Returns([SyntheticServedAccount.Of(Account)]);
 
             var authorization = AccessAuthorizations.ForUserGranted(
                 SyntheticUser.Deployment,

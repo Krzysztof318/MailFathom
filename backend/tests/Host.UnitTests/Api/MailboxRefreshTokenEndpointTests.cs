@@ -183,7 +183,10 @@ public sealed class MailboxRefreshTokenEndpointTests
     private MailboxRefreshTokenRecorder RecorderServing(params MailAccountId[] servedAccountIds)
     {
         var catalog = Substitute.For<IDeploymentMailAccountCatalog>();
-        catalog.ServedAccounts.Returns([.. servedAccountIds.Select(accountId => SyntheticServedAccount.Of(accountId))]);
+        IReadOnlyList<ServedMailAccount> served = [.. servedAccountIds.Select(accountId => SyntheticServedAccount.Of(accountId))];
+        catalog.ReadServedAccountsAsync(Arg.Any<IReadOnlyCollection<MailAccountId>>(), Arg.Any<CancellationToken>())
+            .Returns(call => (IReadOnlyList<ServedMailAccount>)
+                [.. served.Where(account => call.ArgAt<IReadOnlyCollection<MailAccountId>>(0).Contains(account.Id))]);
 
         return new MailboxRefreshTokenRecorder(catalog, this.store, AdministrativeGrant.WholeSurface);
     }

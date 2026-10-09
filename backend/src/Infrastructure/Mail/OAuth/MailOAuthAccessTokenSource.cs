@@ -114,7 +114,7 @@ internal sealed class MailOAuthAccessTokenSource : IMailAccessTokenSource
         {
             using var storedRefreshToken = settings.Grant.RequiresRefreshToken
                 ? await this.refreshTokenStore.FindTokenAsync(
-                    this.AccountIdentityOf(settings),
+                    await this.AccountIdentityOfAsync(settings, cancellationToken),
                     cancellationToken)
                 : null;
 
@@ -147,16 +147,21 @@ internal sealed class MailOAuthAccessTokenSource : IMailAccessTokenSource
     /// and which user declared it is exactly what the catalog resolved when it published the account.
     /// </remarks>
     /// <exception cref="InvalidOperationException">Thrown when no served account carries the identifier, which is an account withdrawn between the run being scheduled and its token being requested.</exception>
-    private MailAccountId AccountIdentityOf(MailOAuthAccountSettings settings)
+    private async Task<MailAccountId> AccountIdentityOfAsync(
+        MailOAuthAccountSettings settings,
+        CancellationToken cancellationToken)
     {
         var accountId = MailAccountId.Create(settings.AccountId);
 
-        var served = this.accountCatalog.ServedAccounts
-            .FirstOrDefault(account => account.Id == accountId)
-            ?? throw new InvalidOperationException(
-                $"Account '{accountId.Value}' is no longer served, so its stored credential cannot be recorded against it.");
+        var served = await this.accountCatalog.ReadServedAccountsAsync([accountId], cancellationToken);
 
-        return served.Id;
+        if (served.Count is 0)
+        {
+            throw new InvalidOperationException(
+                $"Account '{accountId.Value}' is no longer served, so its stored credential cannot be recorded against it.");
+        }
+
+        return served[0].Id;
     }
 
     private static Dictionary<string, string> BuildTokenRequestForm(
@@ -280,7 +285,7 @@ internal sealed class MailOAuthAccessTokenSource : IMailAccessTokenSource
         try
         {
             await this.refreshTokenStore.SaveTokenAsync(
-                this.AccountIdentityOf(settings),
+                await this.AccountIdentityOfAsync(settings, cancellationToken),
                 refreshToken,
                 cancellationToken);
         }

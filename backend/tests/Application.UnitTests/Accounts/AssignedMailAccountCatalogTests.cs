@@ -33,13 +33,13 @@ public sealed class AssignedMailAccountCatalogTests
         MailSynchronizationMode.Polling);
 
     [Fact]
-    public void AssignedAccounts_AUserAssignedEveryAccountTheDeploymentServes_ReadsThemAll()
+    public async Task ReadAssignedAccountsAsync_AUserAssignedEveryAccountTheDeploymentServes_ReadsThemAll()
     {
         // Arrange
         var catalog = CatalogFor(AccessAuthorizations.ForUserGranted(SyntheticUser.Deployment));
 
         // Act
-        var assigned = catalog.AssignedAccounts;
+        var assigned = await catalog.ReadAssignedAccountsAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal([ServedAccount], assigned);
@@ -51,13 +51,13 @@ public sealed class AssignedMailAccountCatalogTests
     /// that the account exists and somebody else reaches it.
     /// </summary>
     [Fact]
-    public void AssignedAccounts_AUserAssignedNoMailbox_ReadsNothingThisDeploymentServes()
+    public async Task ReadAssignedAccountsAsync_AUserAssignedNoMailbox_ReadsNothingThisDeploymentServes()
     {
         // Arrange
         var catalog = CatalogFor(AccessAuthorizations.ForUserGranted(SyntheticUser.Another));
 
         // Act
-        var assigned = catalog.AssignedAccounts;
+        var assigned = await catalog.ReadAssignedAccountsAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Empty(assigned);
@@ -69,13 +69,13 @@ public sealed class AssignedMailAccountCatalogTests
     /// </summary>
     [Theory]
     [MemberData(nameof(PrincipalsActingForNoUser))]
-    public void AssignedAccounts_APrincipalActingForNoUser_IsRefused(AuthorizedPrincipal principal)
+    public async Task ReadAssignedAccountsAsync_APrincipalActingForNoUser_IsRefused(AuthorizedPrincipal principal)
     {
         // Arrange
         var catalog = CatalogFor(AccessAuthorizations.ForPrincipal(principal));
 
         // Act
-        var refusal = Record.Exception(() => catalog.AssignedAccounts);
+        var refusal = await Record.ExceptionAsync(() => catalog.ReadAssignedAccountsAsync(TestContext.Current.CancellationToken));
 
         // Assert
         Assert.IsType<PrincipalNotAuthorizedException>(refusal);
@@ -83,13 +83,13 @@ public sealed class AssignedMailAccountCatalogTests
 
     /// <summary>An entrypoint that stated no principal at all is refused by the same requirement rather than answered.</summary>
     [Fact]
-    public void AssignedAccounts_ReachedUnderNoPrincipal_IsRefused()
+    public async Task ReadAssignedAccountsAsync_ReachedUnderNoPrincipal_IsRefused()
     {
         // Arrange
         var catalog = CatalogFor(AccessAuthorizations.ForPrincipal(principal: null));
 
         // Act
-        var refusal = Record.Exception(() => catalog.AssignedAccounts);
+        var refusal = await Record.ExceptionAsync(() => catalog.ReadAssignedAccountsAsync(TestContext.Current.CancellationToken));
 
         // Assert
         Assert.IsType<PrincipalNotAuthorizedException>(refusal);
@@ -101,7 +101,7 @@ public sealed class AssignedMailAccountCatalogTests
     /// could be named, which is what asking the deployment for one would have produced.
     /// </summary>
     [Fact]
-    public void AssignedAccounts_TwoUsersAssignedOneMailboxEach_AnswersEachWithTheirOwn()
+    public async Task ReadAssignedAccountsAsync_TwoUsersAssignedOneMailboxEach_AnswersEachWithTheirOwn()
     {
         // Arrange
         var assignments = new StubMailAccountAssignments()
@@ -119,8 +119,8 @@ public sealed class AssignedMailAccountCatalogTests
             assignments: assignments);
 
         // Act
-        var deploymentUsersAccounts = deploymentUser.AssignedAccounts;
-        var anotherUsersAccounts = anotherUser.AssignedAccounts;
+        var deploymentUsersAccounts = await deploymentUser.ReadAssignedAccountsAsync(TestContext.Current.CancellationToken);
+        var anotherUsersAccounts = await anotherUser.ReadAssignedAccountsAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal([ServedAccount], deploymentUsersAccounts);
@@ -133,7 +133,7 @@ public sealed class AssignedMailAccountCatalogTests
     /// the answer every narrowing site downstream composes its scope from.
     /// </summary>
     [Fact]
-    public void AssignedAccounts_OneMailboxAssignedToTwoUsers_IsReadByBothUnderTheSameIdentifier()
+    public async Task ReadAssignedAccountsAsync_OneMailboxAssignedToTwoUsers_IsReadByBothUnderTheSameIdentifier()
     {
         // Arrange
         var assignments = new StubMailAccountAssignments()
@@ -149,8 +149,8 @@ public sealed class AssignedMailAccountCatalogTests
             assignments: assignments);
 
         // Act
-        var read = firstReader.AssignedAccounts;
-        var alsoRead = secondReader.AssignedAccounts;
+        var read = await firstReader.ReadAssignedAccountsAsync(TestContext.Current.CancellationToken);
+        var alsoRead = await secondReader.ReadAssignedAccountsAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal([ServedAccount], read);
@@ -186,7 +186,10 @@ public sealed class AssignedMailAccountCatalogTests
         IMailAccountAssignments? assignments = null)
     {
         var deploymentAccounts = Substitute.For<IDeploymentMailAccountCatalog>();
-        deploymentAccounts.ServedAccounts.Returns(servedAccounts ?? [ServedAccount]);
+        IReadOnlyList<ServedMailAccount> served = servedAccounts ?? [ServedAccount];
+        deploymentAccounts
+            .ReadServedAccountsAsync(Arg.Any<IReadOnlyCollection<MailAccountId>>(), Arg.Any<CancellationToken>())
+            .Returns(call => (IReadOnlyList<ServedMailAccount>)[.. served.Where(account => call.ArgAt<IReadOnlyCollection<MailAccountId>>(0).Contains(account.Id))]);
         deploymentAccounts.SynchronizationEnabled.Returns(synchronizationEnabled);
 
         return new AssignedMailAccountCatalog(

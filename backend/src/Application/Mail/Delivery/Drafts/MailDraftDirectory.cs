@@ -70,7 +70,7 @@ public sealed class MailDraftDirectory(
         authorization.RequirePermission(MailFathomPermission.MailDraftsWrite);
 
         var narrowed = account is { } named
-            ? (accountCatalog.AssignedAccounts.FirstOrDefault(assigned => assigned.IsNamedBy(named))
+            ? ((await accountCatalog.ReadAssignedAccountsAsync(cancellationToken)).FirstOrDefault(assigned => assigned.IsNamedBy(named))
                 ?? throw new MailAccountNotAccessibleException(named)).Id
             : (MailAccountId?)null;
 

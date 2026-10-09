@@ -273,66 +273,6 @@ public sealed class MailSynchronizationOptionsTests
         Assert.True(budget > shutdownDrainTimeout);
     }
 
-    /// <summary>Configuration defines the served accounts, normalized and ordered the way a resolved query scope needs them.</summary>
-    [Fact]
-    public void ServedAccounts_ConfiguredAccounts_AreNormalizedDeduplicatedAndOrdered()
-    {
-        // Arrange
-        var options = new MailSynchronizationOptions().Serving(CreateAccount("  secondary  "), CreateAccount("primary"), CreateAccount("secondary"));
-
-        // Act
-        var servedAccountIds = ConfiguredMailAccounts.CatalogOver(options).ServedAccounts.Select(account => account.Id);
-
-        // Assert
-        Assert.Equal([MailAccountId.Create("primary"), MailAccountId.Create("secondary")], servedAccountIds);
-    }
-
-    /// <summary>Casing is part of an account identifier, so two spellings of one name are two accounts here.</summary>
-    [Fact]
-    public void ServedAccounts_AccountNamedInAnotherCase_IsNotTheConfiguredAccount()
-    {
-        // Arrange
-        var options = new MailSynchronizationOptions().Serving(CreateAccount("primary"));
-
-        // Act
-        var servedAccountIds = ConfiguredMailAccounts.CatalogOver(options).ServedAccounts.Select(account => account.Id);
-
-        // Assert
-        Assert.DoesNotContain(MailAccountId.Create("PRIMARY"), servedAccountIds);
-    }
-
-    /// <summary>Switching synchronization off stops runs from fetching mail; it does not hide the copy already stored.</summary>
-    [Fact]
-    public void ServedAccounts_SynchronizationDisabled_StillNamesTheConfiguredAccount()
-    {
-        // Arrange
-        var options = new MailSynchronizationOptions { Enabled = false }.Serving(CreateAccount("primary"));
-
-        // Act, Assert
-        Assert.Equal(MailAccountId.Create("primary"), Assert.Single(ConfiguredMailAccounts.CatalogOver(options).ServedAccounts).Id);
-    }
-
-    [Fact]
-    public void ServedAccounts_NoAccountsConfigured_ServesNothing()
-    {
-        // Arrange
-        var options = new MailSynchronizationOptions();
-
-        // Act, Assert
-        Assert.Empty(ConfiguredMailAccounts.CatalogOver(options).ServedAccounts);
-    }
-
-    /// <summary>An account whose identifier never bound is not a served account, and reading the set does not fail on it.</summary>
-    [Fact]
-    public void ServedAccounts_AccountWithNoIdentifier_IsSkipped()
-    {
-        // Arrange
-        var options = new MailSynchronizationOptions().Serving(CreateAccount("primary"), CreateAccount("   "));
-
-        // Act, Assert
-        Assert.Equal(MailAccountId.Create("primary"), Assert.Single(ConfiguredMailAccounts.CatalogOver(options).ServedAccounts).Id);
-    }
-
     /// <summary>Two spellings of one identifier are one account's name written twice, and the user may hold it once.</summary>
     /// <remarks>
     /// Case joins the whitespace the identifier is already normalized of, because the shared naming space it belongs
@@ -832,8 +772,10 @@ public sealed class MailSynchronizationOptionsTests
         var options = new MailSynchronizationOptions().Serving(CreateAccount("following-server"), archive);
 
         // Act
-        var dispositions = ConfiguredMailAccounts.CatalogOver(options).ServedAccounts
-            .Select(account => options.Readers.RemotelyDeletedEmailDispositions.GetDisposition(account.Id))
+        string[] accountNames = ["archive", "following-server"];
+        var dispositions = accountNames
+            .Select(MailAccountId.Create)
+            .Select(accountId => options.Readers.RemotelyDeletedEmailDispositions.GetDisposition(accountId))
             .ToArray();
 
         // Assert
@@ -968,8 +910,10 @@ public sealed class MailSynchronizationOptionsTests
         var options = new MailSynchronizationOptions().Serving(CreateAccount("forgetful"), archive);
 
         // Act
-        var dispositions = ConfiguredMailAccounts.CatalogOver(options).ServedAccounts
-            .Select(account => options.Readers.AuthoredDeleteEmailDispositions.GetAuthoredDeleteDisposition(account.Id))
+        string[] accountNames = ["archive", "forgetful"];
+        var dispositions = accountNames
+            .Select(MailAccountId.Create)
+            .Select(accountId => options.Readers.AuthoredDeleteEmailDispositions.GetAuthoredDeleteDisposition(accountId))
             .ToArray();
 
         // Assert
@@ -1060,8 +1004,10 @@ public sealed class MailSynchronizationOptionsTests
         var options = new MailSynchronizationOptions().Serving(CreateAccount("primary"), shared);
 
         // Act
-        var dispositions = ConfiguredMailAccounts.CatalogOver(options).ServedAccounts
-            .Select(account => options.Readers.AuthoredDeleteEmailDispositions.GetAuthoredDeleteServerDisposition(account.Id))
+        string[] accountNames = ["primary", "shared"];
+        var dispositions = accountNames
+            .Select(MailAccountId.Create)
+            .Select(accountId => options.Readers.AuthoredDeleteEmailDispositions.GetAuthoredDeleteServerDisposition(accountId))
             .ToArray();
 
         // Assert
@@ -1163,8 +1109,10 @@ public sealed class MailSynchronizationOptionsTests
         var options = new MailSynchronizationOptions().Serving(careful, CreateAccount("primary"));
 
         // Act
-        var dispositions = ConfiguredMailAccounts.CatalogOver(options).ServedAccounts
-            .Select(account => options.Readers.AuthoredFolderDeleteDispositions.GetAuthoredFolderDeleteDisposition(account.Id))
+        string[] accountNames = ["careful", "primary"];
+        var dispositions = accountNames
+            .Select(MailAccountId.Create)
+            .Select(accountId => options.Readers.AuthoredFolderDeleteDispositions.GetAuthoredFolderDeleteDisposition(accountId))
             .ToArray();
 
         // Assert

@@ -200,7 +200,7 @@ public sealed class AuthoredResponseDraftingTests
             MailFathomPermission.MailRead);
 
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
-        catalog.AssignedAccounts.Returns([SyntheticServedAccount.Of(Account)]);
+        catalog.ReadAssignedAccountsAsync(Arg.Any<CancellationToken>()).Returns([SyntheticServedAccount.Of(Account)]);
 
         var authoring = new StoredEmailResponseAuthoring(
             summaries,
@@ -288,7 +288,7 @@ public sealed class AuthoredResponseDraftingTests
             .Returns(_ => Task.FromResult(OpenedEmailAttachmentResult.Opened(new StubOpenedEmailAttachment())));
 
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
-        catalog.AssignedAccounts.Returns([SyntheticServedAccount.Of(Account)]);
+        catalog.ReadAssignedAccountsAsync(Arg.Any<CancellationToken>()).Returns([SyntheticServedAccount.Of(Account)]);
 
         var participation = StubMailFolderParticipation.Mapping(new MailFolderIdentity(answered.Account, answered.FolderAlias));
 

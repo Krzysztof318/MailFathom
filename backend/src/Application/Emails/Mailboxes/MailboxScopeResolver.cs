@@ -140,7 +140,7 @@ public sealed class MailboxScopeResolver
                 "A read either reaches into the junk folder or leaves it out, and no other value names an answer.");
         }
 
-        var assignedAccounts = this.accountCatalog.AssignedAccounts;
+        var assignedAccounts = await this.accountCatalog.ReadAssignedAccountsAsync(cancellationToken);
 
         // Counted before anything is resolved, because the count is the caller's and each resolution walks the
         // assigned accounts or that account's folders. The scope's own limits are reused rather than second ones
@@ -207,7 +207,9 @@ public sealed class MailboxScopeResolver
     /// </remarks>
     public UserId User => this.accountCatalog.User;
 
-    /// <summary>Gets the accounts this unit of work may reach, which is what a read that builds no scope narrows by.</summary>
+    /// <summary>Reads the accounts this unit of work may reach, which is what a read that builds no scope narrows by.</summary>
+    /// <param name="cancellationToken">Cancels the read of the user's assignments.</param>
+    /// <returns>The accounts the user in hand is assigned and this deployment serves.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the work in hand is acting for no user.</exception>
     /// <remarks>
     /// The same answer <see cref="ReadableScopeAsync" /> narrows a query with, published for the reads that reach a row by
@@ -215,12 +217,13 @@ public sealed class MailboxScopeResolver
     /// assigned nothing gets an empty list, and a containment test against an empty list reads nothing, which is the
     /// same fail-closed answer <see cref="MailboxScope.NothingReadable" /> is.
     /// </remarks>
-    public IReadOnlyList<MailAccountId> AssignedAccounts =>
-        [.. this.accountCatalog.AssignedAccounts.Select(static account => account.Id)];
+    public async Task<IReadOnlyList<MailAccountId>> ReadAssignedAccountsAsync(CancellationToken cancellationToken) =>
+        [.. (await this.accountCatalog.ReadAssignedAccountsAsync(cancellationToken)).Select(static account => account.Id)];
 
     /// <summary>Reports whether a tool may read one email, given the mailbox it was stored from.</summary>
     /// <param name="accountId">The account the email was read from.</param>
     /// <param name="folderAlias">The folder the email was read from.</param>
+    /// <param name="cancellationToken">Cancels the read of the user's assignments.</param>
     /// <returns><see langword="true" /> when the user in hand is assigned that account and a mapping admits that folder to tools.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the work in hand is acting for no user, which is a refusal rather than the <see langword="false" /> a caller with nothing readable is answered with.</exception>
     /// <remarks>
@@ -236,8 +239,22 @@ public sealed class MailboxScopeResolver
     /// not found rather than refused, for the reason an account this deployment no longer serves is: a refusal would
     /// confirm the identifier exists.
     /// </remarks>
-    public bool IsReadableByTools(MailAccountId accountId, MailFolderAlias folderAlias) =>
-        this.accountCatalog.AssignedAccounts.Any(account => account.Id == accountId)
+    public async Task<bool> IsReadableByToolsAsync(
+        MailAccountId accountId,
+        MailFolderAlias folderAlias,
+        CancellationToken cancellationToken) =>
+        this.IsReadableByTools(await this.ReadAssignedAccountsAsync(cancellationToken), accountId, folderAlias);
+
+    /// <summary>Reports whether a tool may read one email, given the accounts the user in hand was already read to be assigned.</summary>
+    /// <param name="assignedAccounts">The accounts <see cref="ReadAssignedAccountsAsync" /> answered, read once for every email asked about.</param>
+    /// <param name="accountId">The account the email was read from.</param>
+    /// <param name="folderAlias">The folder the email was read from.</param>
+    /// <returns>The same answer <see cref="IsReadableByToolsAsync" /> gives, without reading the assignments again.</returns>
+    public bool IsReadableByTools(
+        IReadOnlyList<MailAccountId> assignedAccounts,
+        MailAccountId accountId,
+        MailFolderAlias folderAlias) =>
+        assignedAccounts.Contains(accountId)
         && this.folderParticipation.GetParticipation(accountId, folderAlias).IsVisibleToTools;
 
     /// <summary>Turns what a request named folders with into the account-and-folder pairs a query is expressed in.</summary>

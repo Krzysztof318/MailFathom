@@ -329,7 +329,7 @@ public sealed class EmailThreadContextsTests
         IDeploymentMailFolders? deploymentFolders = null)
     {
         var accountCatalog = Substitute.For<ICallerMailAccountCatalog>();
-        accountCatalog.AssignedAccounts.Returns([SyntheticServedAccount.Of(Account)]);
+        accountCatalog.ReadAssignedAccountsAsync(Arg.Any<CancellationToken>()).Returns([SyntheticServedAccount.Of(Account)]);
 
         var participation = StubMailFolderParticipation
             .Mapping(new MailFolderIdentity(Account, Inbox))

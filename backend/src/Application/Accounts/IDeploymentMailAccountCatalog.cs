@@ -2,6 +2,8 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Accounts;
+
 namespace MailFathom.Application.Accounts;
 
 /// <summary>Describes every mail account this deployment serves, whoever owns it.</summary>
@@ -37,21 +39,13 @@ public interface IDeploymentMailAccountCatalog
     /// </remarks>
     bool SynchronizationEnabled { get; }
 
-    /// <summary>Gets the accounts this deployment is configured to serve, deduplicated and ordered.</summary>
-    /// <remarks>
-    /// The order is the ordinal order of the identifiers, so a scope resolved from this set is canonical and a
-    /// continuation cursor issued for it stays valid while the configuration does not change. An empty set means no
-    /// account is served and therefore that no stored mail is readable, which is a state configuration allows: an
-    /// operator may switch synchronization off and remove every account while a local copy still exists.
-    /// </remarks>
-    IReadOnlyList<ServedMailAccount> ServedAccounts { get; }
-
     /// <summary>Reads every account this deployment serves from the account records, deduplicated and ordered.</summary>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>
-    /// The accounts in identifier order. It is the set <see cref="ServedAccounts" /> describes only once the roster has
-    /// republished every account's last write, because that one is what this process composed and this is what the
-    /// records hold now.
+    /// The accounts in the ordinal order of their identifiers, so a scope resolved from this set is canonical and a
+    /// continuation cursor issued for it stays valid while the records do not change. An empty set means no account is
+    /// served and therefore that no stored mail is readable, which is a state configuration allows: an operator may switch
+    /// synchronization off and remove every account while a local copy still exists.
     /// </returns>
     /// <remarks>
     /// The shape a reader of the whole set takes — the status an operator reads, the schedule that evaluates rules
@@ -60,4 +54,18 @@ public interface IDeploymentMailAccountCatalog
     /// replica must hold.
     /// </remarks>
     Task<IReadOnlyList<ServedMailAccount>> ReadServedAccountsAsync(CancellationToken cancellationToken);
+
+    /// <summary>Reads which of the named accounts this deployment serves.</summary>
+    /// <param name="among">The accounts asked about.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The served accounts among those named, in the ordinal order of their identifiers; one the deployment does not serve is left out.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="among" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// The shape a reader that has an account in hand takes — an operator naming one, a credential recorded against one,
+    /// a caller's own assigned accounts — because it reads those accounts rather than the whole set, so what it costs is
+    /// the size of the question rather than the size of the deployment.
+    /// </remarks>
+    Task<IReadOnlyList<ServedMailAccount>> ReadServedAccountsAsync(
+        IReadOnlyCollection<MailAccountId> among,
+        CancellationToken cancellationToken);
 }

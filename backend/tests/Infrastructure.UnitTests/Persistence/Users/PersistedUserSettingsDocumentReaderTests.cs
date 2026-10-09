@@ -26,7 +26,7 @@ public sealed class PersistedUserSettingsDocumentReaderTests
         // Arrange
         await using var dataSource = NpgsqlDataSource.Create(UnreachedDatabase);
         var reader = new PersistedUserSettingsDocumentReader(
-            dataSource,
+            () => dataSource,
             new DatabaseCommandTimeout(TimeSpan.FromSeconds(30)));
 
         // Act
@@ -51,7 +51,7 @@ public sealed class PersistedUserSettingsDocumentReaderTests
         // Arrange
         await using var dataSource = NpgsqlDataSource.Create(UnreachedDatabase);
         var reader = new PersistedUserSettingsDocumentReader(
-            dataSource,
+            () => dataSource,
             new DatabaseCommandTimeout(TimeSpan.FromSeconds(30)));
 
         // Act

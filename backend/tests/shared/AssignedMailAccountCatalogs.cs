@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
+using MailFathom.Domain.Accounts;
 
 namespace MailFathom.TestSupport;
 
@@ -70,9 +71,13 @@ internal static class AssignedMailAccountCatalogs
     {
         public bool SynchronizationEnabled => true;
 
-        public IReadOnlyList<ServedMailAccount> ServedAccounts { get; } = servedAccounts;
-
         public Task<IReadOnlyList<ServedMailAccount>> ReadServedAccountsAsync(CancellationToken cancellationToken) =>
-            Task.FromResult(this.ServedAccounts);
+            Task.FromResult(servedAccounts);
+
+        public Task<IReadOnlyList<ServedMailAccount>> ReadServedAccountsAsync(
+            IReadOnlyCollection<MailAccountId> among,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<ServedMailAccount>>(
+                [.. servedAccounts.Where(account => among.Contains(account.Id))]);
     }
 }

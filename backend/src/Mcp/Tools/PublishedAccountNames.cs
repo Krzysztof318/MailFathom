@@ -30,14 +30,19 @@ internal sealed class PublishedAccountNames
 
     /// <summary>Reads the published names of the accounts the caller's user owns.</summary>
     /// <param name="accountCatalog">Describes the accounts the caller's user owns.</param>
+    /// <param name="cancellationToken">Cancels the read of the user's assignments.</param>
     /// <returns>The lookup a result mapping reads names from.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="accountCatalog" /> is <see langword="null" />.</exception>
-    public static PublishedAccountNames From(ICallerMailAccountCatalog accountCatalog)
+    public static async Task<PublishedAccountNames> FromAsync(
+        ICallerMailAccountCatalog accountCatalog,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(accountCatalog);
 
+        var assignedAccounts = await accountCatalog.ReadAssignedAccountsAsync(cancellationToken);
+
         return new PublishedAccountNames(
-            accountCatalog.AssignedAccounts.ToDictionary(
+            assignedAccounts.ToDictionary(
                 static account => account.Id.Value,
                 static account => account.DisplayName.Value,
                 StringComparer.Ordinal));

@@ -210,9 +210,15 @@ public sealed class OrchestratedSignalBackplaneTests(MailFathomOrchestrationFixt
     private sealed class OneMailboxOnePerson(UserId served) : IMailAccountAssignments
     {
         /// <inheritdoc />
-        public IReadOnlyList<MailAccountId> AccountsAssignedTo(UserId user) => user == served ? [Account] : [];
+        public Task<IReadOnlyList<MailAccountId>> ReadAccountsAssignedToAsync(
+            UserId user,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<MailAccountId>>(user == served ? [Account] : []);
 
         /// <inheritdoc />
-        public IReadOnlyList<UserId> UsersAssignedTo(MailAccountId account) => account == Account ? [served] : [];
+        public Task<IReadOnlyList<UserId>> ReadUsersAssignedToAsync(
+            MailAccountId account,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<UserId>>(account == Account ? [served] : []);
     }
 }

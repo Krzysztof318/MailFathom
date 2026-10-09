@@ -164,7 +164,7 @@ public sealed class NamedRecipientResolver(IContactDirectory contacts, ContactBo
 
         // Resolved once for the same reason the vouching does: every group of one act reads one set of books by
         // construction.
-        var scope = ownership.Scope;
+        var scope = await ownership.ReadScopeAsync(cancellationToken);
         var held = new Dictionary<ContactId, Contact>();
 
         foreach (var group in identities.Chunk(ContactQuery.MaximumPageSize))
@@ -190,7 +190,7 @@ public sealed class NamedRecipientResolver(IContactDirectory contacts, ContactBo
             .Distinct()
             .ToArray();
 
-        var scope = ownership.Scope;
+        var scope = await ownership.ReadScopeAsync(cancellationToken);
         var matches = new Dictionary<ContactDisplayName, ContactMatch>();
 
         foreach (var group in contactNames.Chunk(ContactQuery.MaximumPageSize))

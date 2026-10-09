@@ -289,21 +289,21 @@ public sealed class MailboxScopeResolverTests
 
     /// <summary>The identity question a tool asks about one folder answers on the same user scope as the listing does.</summary>
     [Fact]
-    public void IsReadableByTools_AnAccountAnotherUserIsAssigned_IsNotReadable()
+    public async Task IsReadableByToolsAsync_AnAccountAnotherUserIsAssigned_IsNotReadable()
     {
         // Arrange
         var inbox = new MailFolderIdentity(Work.Id, MailFolderAlias.Create("INBOX"));
 
         // Act, Assert
         Assert.False(
-            ResolverFor(SyntheticUser.Another, StubMailFolderParticipation.Mapping(inbox), Work)
-                .IsReadableByTools(Work.Id, MailFolderAlias.Create("INBOX")));
+            await ResolverFor(SyntheticUser.Another, StubMailFolderParticipation.Mapping(inbox), Work)
+                .IsReadableByToolsAsync(Work.Id, MailFolderAlias.Create("INBOX"), TestContext.Current.CancellationToken));
 
         // The control: the same folder under the same mapping is readable for the user who owns the account, so the
         // refusal above is the user axis rather than a mapping that admitted nothing.
         Assert.True(
-            ResolverFor(SyntheticUser.Deployment, StubMailFolderParticipation.Mapping(inbox), Work)
-                .IsReadableByTools(Work.Id, MailFolderAlias.Create("INBOX")));
+            await ResolverFor(SyntheticUser.Deployment, StubMailFolderParticipation.Mapping(inbox), Work)
+                .IsReadableByToolsAsync(Work.Id, MailFolderAlias.Create("INBOX"), TestContext.Current.CancellationToken));
     }
 
     /// <summary>The count is refused before anything is resolved, so a request enumerating names never walks the served set once per name.</summary>
@@ -408,7 +408,7 @@ public sealed class MailboxScopeResolverTests
 
     /// <summary>The reads that reach an email by its identifier ask the same question, so a withheld folder is unreadable through them too.</summary>
     [Fact]
-    public void IsReadableByTools_AFolderWithheldFromTools_IsNotReadable()
+    public async Task IsReadableByToolsAsync_AFolderWithheldFromTools_IsNotReadable()
     {
         // Arrange
         var inbox = new MailFolderIdentity(Work.Id, MailFolderAlias.Create("INBOX"));
@@ -418,13 +418,13 @@ public sealed class MailboxScopeResolverTests
             Work);
 
         // Act, Assert
-        Assert.False(resolver.IsReadableByTools(Work.Id, MailFolderAlias.Create("PRIVATE")));
-        Assert.True(resolver.IsReadableByTools(Work.Id, MailFolderAlias.Create("INBOX")));
+        Assert.False(await resolver.IsReadableByToolsAsync(Work.Id, MailFolderAlias.Create("PRIVATE"), TestContext.Current.CancellationToken));
+        Assert.True(await resolver.IsReadableByToolsAsync(Work.Id, MailFolderAlias.Create("INBOX"), TestContext.Current.CancellationToken));
     }
 
     /// <summary>Stored mail under an alias no mapping names is unreachable through the two reads that name an email by its identifier.</summary>
     [Fact]
-    public void IsReadableByTools_AnAliasNoMappingNames_IsNotReadable()
+    public async Task IsReadableByToolsAsync_AnAliasNoMappingNames_IsNotReadable()
     {
         // Arrange
         var resolver = ResolverServing(
@@ -432,19 +432,19 @@ public sealed class MailboxScopeResolverTests
             Work);
 
         // Act, Assert
-        Assert.False(resolver.IsReadableByTools(Work.Id, MailFolderAlias.Create("ARCHIVE")));
-        Assert.True(resolver.IsReadableByTools(Work.Id, MailFolderAlias.Create("INBOX")));
+        Assert.False(await resolver.IsReadableByToolsAsync(Work.Id, MailFolderAlias.Create("ARCHIVE"), TestContext.Current.CancellationToken));
+        Assert.True(await resolver.IsReadableByToolsAsync(Work.Id, MailFolderAlias.Create("INBOX"), TestContext.Current.CancellationToken));
     }
 
     /// <summary>An account the deployment stopped serving keeps its stored rows, and neither question may admit them.</summary>
     [Fact]
-    public void IsReadableByTools_AnAccountTheDeploymentDoesNotServe_IsNotReadable()
+    public async Task IsReadableByToolsAsync_AnAccountTheDeploymentDoesNotServe_IsNotReadable()
     {
         // Arrange
         var resolver = ResolverServing(Work);
 
         // Act, Assert
-        Assert.False(resolver.IsReadableByTools(Private.Id, MailFolderAlias.Create("INBOX")));
+        Assert.False(await resolver.IsReadableByToolsAsync(Private.Id, MailFolderAlias.Create("INBOX"), TestContext.Current.CancellationToken));
     }
 
     /// <summary>Junk is what a reader means by mail they never asked to see, so a read that says nothing about it gets none.</summary>
@@ -673,7 +673,7 @@ public sealed class MailboxScopeResolverTests
     {
         // Arrange
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
-        catalog.AssignedAccounts.Returns([Work, Private]);
+        catalog.ReadAssignedAccountsAsync(Arg.Any<CancellationToken>()).Returns([Work, Private]);
         var deploymentFolders = Substitute.For<IDeploymentMailFolders>();
         deploymentFolders
             .ReadAsync(Arg.Any<MailFolderSelection>(), Arg.Any<IReadOnlyCollection<MailAccountId>>(), Arg.Any<CancellationToken>())
@@ -812,7 +812,7 @@ public sealed class MailboxScopeResolverTests
     {
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
         catalog.User.Returns(user);
-        catalog.AssignedAccounts.Returns([.. ownedAccounts.OrderBy(account => account.Id.Value, StringComparer.Ordinal)]);
+        catalog.ReadAssignedAccountsAsync(Arg.Any<CancellationToken>()).Returns([.. ownedAccounts.OrderBy(account => account.Id.Value, StringComparer.Ordinal)]);
 
         return new MailboxScopeResolver(
             catalog,
@@ -828,7 +828,7 @@ public sealed class MailboxScopeResolverTests
         params ServedMailAccount[] servedAccounts)
     {
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
-        catalog.AssignedAccounts.Returns(
+        catalog.ReadAssignedAccountsAsync(Arg.Any<CancellationToken>()).Returns(
         [
             .. servedAccounts.OrderBy(account => account.Id.Value, StringComparer.Ordinal),
         ]);

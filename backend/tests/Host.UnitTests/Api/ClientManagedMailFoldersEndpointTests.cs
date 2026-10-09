@@ -252,7 +252,7 @@ public sealed class ClientManagedMailFoldersEndpointTests
                 [MailFathomPermission.MailRead, MailFathomPermission.MailFoldersWrite]);
 
             var accounts = Substitute.For<ICallerMailAccountCatalog>();
-            accounts.AssignedAccounts.Returns([SyntheticServedAccount.Of(Account)]);
+            accounts.ReadAssignedAccountsAsync(Arg.Any<CancellationToken>()).Returns([SyntheticServedAccount.Of(Account)]);
 
             this.Editor = new MailFolderEditor(
                 new LocalMailFolderEditor(

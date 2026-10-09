@@ -2,7 +2,6 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Accounts;
 using MailFathom.Domain.Accounts;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -28,24 +27,25 @@ internal static class AdminAccountRequest
     /// <summary>Reads the account a request named, or nothing when this deployment does not serve it.</summary>
     /// <param name="account">The account identifier the request carried, which may be absent or blank.</param>
     /// <param name="accounts">Reports the accounts this deployment serves.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The served account, or <see langword="null" /> when the request named none or named one this deployment does not serve.</returns>
     /// <remarks>
-    /// The answer is the account and its user together, because an identifier names one account within its user and
-    /// every write an administrative request leads to records whose mail it was about. The catalog is what supplies the
-    /// user, so the pair comes from the same lookup that decided the account is served rather than from a second read.
+    /// Only the named account is read, so asking whether an operator named a served account costs one account rather
+    /// than the deployment's whole set.
     /// </remarks>
-    internal static MailAccountId? Resolve(string? account, IDeploymentMailAccountCatalog accounts)
+    internal static async Task<MailAccountId?> ResolveAsync(
+        string? account,
+        IDeploymentMailAccountCatalog accounts,
+        CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(account))
         {
             return null;
         }
 
-        var accountId = MailAccountId.Create(account);
+        var served = await accounts.ReadServedAccountsAsync([MailAccountId.Create(account)], cancellationToken);
 
-        return accounts.ServedAccounts
-            .FirstOrDefault(served => served.Id == accountId)
-            ?.Id;
+        return served is [var named] ? named.Id : null;
     }
 
     /// <summary>States why the account a request named did not resolve, without echoing an empty one.</summary>
@@ -77,38 +77,34 @@ internal static class AdminAccountRequest
     /// <summary>Reads an optional account filter, which narrows a reading to one account or leaves it across every account.</summary>
     /// <param name="account">The account filter the request carried, absent for every account.</param>
     /// <param name="accounts">Reports the accounts this deployment serves.</param>
-    /// <param name="accountId">The account to narrow to, or <see langword="null" /> for every account.</param>
-    /// <param name="refusal">What the caller is told when the filter is present and names no served account.</param>
-    /// <returns><see langword="true" /> when the reading may go ahead.</returns>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The account to narrow to — none for every account — or what the caller is told when the filter is present and names no served account.</returns>
     /// <remarks>
     /// An absent filter is every account rather than a refusal, which is why this is a form of its own: a present filter
     /// is held to the same two questions as a required account, and only the absent case differs.
     /// </remarks>
-    internal static bool TryResolveFilter(
+    internal static async Task<AccountFilter> ResolveFilterAsync(
         string? account,
         IDeploymentMailAccountCatalog accounts,
-        out MailAccountId? accountId,
-        [NotNullWhen(false)] out ProblemHttpResult? refusal)
+        CancellationToken cancellationToken)
     {
-        accountId = null;
-        refusal = null;
-
         if (account is null)
         {
-            return true;
+            return new AccountFilter(Account: null, Refusal: null);
         }
 
-        if (Resolve(account, accounts) is not { } servedAccount)
+        if (await ResolveAsync(account, accounts, cancellationToken) is not { } servedAccount)
         {
-            refusal = string.IsNullOrWhiteSpace(account)
-                ? MissingFilter()
-                : Unknown(MailAccountId.Create(account).Value);
-
-            return false;
+            return new AccountFilter(
+                Account: null,
+                string.IsNullOrWhiteSpace(account) ? MissingFilter() : Unknown(MailAccountId.Create(account).Value));
         }
 
-        accountId = servedAccount;
-
-        return true;
+        return new AccountFilter(servedAccount, Refusal: null);
     }
+
+    /// <summary>What an optional account filter resolved to.</summary>
+    /// <param name="Account">The account to narrow to, or <see langword="null" /> for every account.</param>
+    /// <param name="Refusal">What the caller is told when the filter named no served account, or <see langword="null" /> when the reading may go ahead.</param>
+    internal sealed record AccountFilter(MailAccountId? Account, ProblemHttpResult? Refusal);
 }

@@ -66,7 +66,7 @@ public sealed class UserOutbox(
     {
         authorization.RequirePermission(MailFathomPermission.MailSend);
 
-        var owned = accountCatalog.AssignedAccounts.FirstOrDefault(candidate => candidate.IsNamedBy(account))
+        var owned = (await accountCatalog.ReadAssignedAccountsAsync(cancellationToken)).FirstOrDefault(candidate => candidate.IsNamedBy(account))
             ?? throw new MailAccountNotAccessibleException(account);
 
         var queryResult = OutboxQuery.Create(owned.Id, stage, pageSize, cursor);
@@ -100,7 +100,8 @@ public sealed class UserOutbox(
 
         var record = await outgoingEmails.FindAsync(outgoingEmailId, cancellationToken);
 
-        return record is not null && accountCatalog.AssignedAccounts.Any(assigned => assigned.Id == record.AccountId)
+        return record is not null
+            && (await accountCatalog.ReadAssignedAccountsAsync(cancellationToken)).Any(assigned => assigned.Id == record.AccountId)
             ? record
             : null;
     }

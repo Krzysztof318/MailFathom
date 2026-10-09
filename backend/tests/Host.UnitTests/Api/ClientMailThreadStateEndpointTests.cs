@@ -248,7 +248,7 @@ public sealed class ClientMailThreadStateEndpointTests
     {
         var accountId = MailAccountId.Create("work");
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
-        catalog.AssignedAccounts.Returns([SyntheticServedAccount.Of(accountId)]);
+        catalog.ReadAssignedAccountsAsync(Arg.Any<CancellationToken>()).Returns([SyntheticServedAccount.Of(accountId)]);
         catalog.User.Returns(SyntheticUser.Deployment);
 
         var participation = StubMailFolderParticipation.Mapping(

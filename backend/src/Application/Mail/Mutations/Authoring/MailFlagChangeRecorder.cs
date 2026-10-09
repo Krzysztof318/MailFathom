@@ -114,7 +114,10 @@ public sealed class MailFlagChangeRecorder
         var target = await this.targets.FindAsync(change.StoredEmailId, cancellationToken);
 
         if (target is null
-            || !this.scopeResolver.IsReadableByTools(target.Occurrence.AccountId, target.Folder.Alias))
+            || !await this.scopeResolver.IsReadableByToolsAsync(
+                target.Occurrence.AccountId,
+                target.Folder.Alias,
+                cancellationToken))
         {
             throw new AuthoredMailChangeTargetNotFoundException();
         }
