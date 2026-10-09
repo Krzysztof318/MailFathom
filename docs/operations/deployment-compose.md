@@ -273,7 +273,9 @@ settings, with the same `file:` reference into `/etc/mailfathom/secrets`. The ma
 write commits, without a restart, and the next synchronization run is its first one. `mfctl user add` records the person
 under the label you tell them apart by, and `mfctl account add` names no user, because the deployment then holds
 exactly one; once `mfctl user add` records a second person, `--user` says whom the account is created for. [Getting started § write down the mailbox](../users/getting-started.md#2-write-down-the-mailbox) is what goes
-in the file, and [administering your deployment](../users/administering.md) the command group around it.
+in the file, and [administering your deployment](../users/administering.md) the command group around it. Recording the person assigns them no role, so they reach no tool until they hold `Mail user` —
+[getting started § record the mailbox](../users/getting-started.md#6-record-the-mailbox) gives the statement that
+assigns it.
 
 ### What the first `up` of PostgreSQL does
 

@@ -278,6 +278,22 @@ assigns it to them, and prints the identifier it was generated under. It names n
 several says which of them — `mfctl user add` records each further person — and an invocation that omits it where there
 are several is refused rather than guessed at.
 
+**What the person may do is a role, and recording them assigns none.** A user no role is assigned to reaches no tool,
+whichever credential they later present, so give the person the seeded `Mail user` role at their own scope.
+This build has no `mfctl` command that assigns a role — [#2314](https://github.com/Krzysztof318/MailFathom/issues/2314)
+owns that — so the assignment is one statement against the deployment's database, here for every user it holds:
+
+```sql
+INSERT INTO role_assignments ("Id", "RoleId", "PrincipalUserId", "ScopeUserId", "AssignedAt")
+SELECT uuidv7(), r."Id", u."Id", u."Id", now()
+FROM settings_accounts u
+CROSS JOIN roles r
+WHERE r."Name" = 'Mail user';
+```
+
+[How a caller's grant is computed](../operations/permissions.md#how-a-callers-grant-is-computed) is what that role
+does, and every replica reads the assignment within thirty seconds.
+
 The mailbox file written in [step 2](#2-write-down-the-mailbox) names the language MailFathom writes about that
 mailbox's mail in — the reading on a message row, the statement about a conversation. `mfctl account edit` is where it
 becomes something else, and [the language this mailbox is read in](../operations/configuration-mail.md#the-language-this-mailbox-is-read-in--language) is the whole of it.
@@ -373,7 +389,8 @@ only the setup steps;
 [connecting the chat client you already use](mcp-clients.md) has the steps, the address kind, and the authentication
 shapes for each one by name.
 
-A connected client's tool listing should show at least fourteen tools — `list_accounts`, `list_emails`,
+A connected client whose user holds `Mail user`, as [step 6](#6-record-the-mailbox) assigned, should be listed at
+least fourteen tools — `list_accounts`, `list_emails`,
 `get_email_content`, `search_emails`, each advertising itself as read-only, non-destructive, and idempotent;
 `set_mail_flags`, which marks, stars, and labels a message and announces itself as neither read-only nor confined to
 this process, and as destructive because a keyword replacement states the whole set; and `send_email`,

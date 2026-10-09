@@ -288,7 +288,9 @@ The mailbox is served from the moment the write commits, without restarting the 
 no user, because the deployment then holds exactly one; once `mfctl user add` records a second person, `--user` says
 whom the account is created for.
 [Getting started § write down the mailbox](../users/getting-started.md#2-write-down-the-mailbox) is what goes in the
-file.
+file. Recording the person assigns them no role, so they reach no tool until they hold `Mail user` —
+[getting started § record the mailbox](../users/getting-started.md#6-record-the-mailbox) gives the statement that
+assigns it.
 
 ## Checking it
 
