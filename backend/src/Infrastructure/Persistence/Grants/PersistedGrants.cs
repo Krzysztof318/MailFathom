@@ -357,7 +357,7 @@ internal sealed class PersistedGrants(MailFathomDbContext dbContext) : IGrantSto
             return GrantWriteResult.Of(GrantWriteOutcome.UnknownUser);
         }
 
-        if (group.OrganizationId != member.OrganizationId)
+        if (!AdmitsMember(group.OrganizationId, member.OrganizationId))
         {
             return GrantWriteResult.Of(GrantWriteOutcome.OutsideGroupOrganization);
         }
@@ -460,7 +460,11 @@ internal sealed class PersistedGrants(MailFathomDbContext dbContext) : IGrantSto
         }
         catch (PostgresException violation) when (violation.SqlState == PostgresErrorCodes.ForeignKeyViolation)
         {
-            return GrantWriteResult.Of(MissingReferenceOf(violation.ConstraintName));
+            return GrantWriteResult.Of(
+                MissingReferenceOf(violation.ConstraintName)
+                ?? throw new InvalidOperationException(
+                    "An assignment was refused by a foreign key it does not declare.",
+                    violation));
         }
     }
 
@@ -476,17 +480,23 @@ internal sealed class PersistedGrants(MailFathomDbContext dbContext) : IGrantSto
 
     /// <summary>Names what an assignment named that does not exist, from the foreign key that refused it.</summary>
     /// <param name="constraintName">The constraint PostgreSQL reported.</param>
-    /// <returns>The outcome naming the missing role, group, user, or organization.</returns>
-    /// <exception cref="InvalidOperationException">Thrown for a constraint no assignment declares, which is a defect rather than an answer.</exception>
-    internal static GrantWriteOutcome MissingReferenceOf(string? constraintName) => constraintName switch
+    /// <returns>The outcome naming the missing role, group, user, or organization; <see langword="null" /> for a constraint no assignment declares, which is a defect the caller raises with the violation attached rather than an answer.</returns>
+    internal static GrantWriteOutcome? MissingReferenceOf(string? constraintName) => constraintName switch
     {
         PersistenceConstraintNames.RoleAssignmentRoleForeignKeyName => GrantWriteOutcome.UnknownRole,
         PersistenceConstraintNames.RoleAssignmentPrincipalGroupForeignKeyName => GrantWriteOutcome.UnknownGroup,
         PersistenceConstraintNames.RoleAssignmentPrincipalUserForeignKeyName
             or PersistenceConstraintNames.RoleAssignmentScopeUserForeignKeyName => GrantWriteOutcome.UnknownUser,
         PersistenceConstraintNames.RoleAssignmentScopeOrganizationForeignKeyName => GrantWriteOutcome.UnknownOrganization,
-        _ => throw new InvalidOperationException("An assignment was refused by a foreign key it does not declare."),
+        _ => null,
     };
+
+    /// <summary>Decides whether a group may take a user as a member, by the organization each belongs to.</summary>
+    /// <param name="groupOrganization">The group's organization, or <see langword="null" /> for a group in none.</param>
+    /// <param name="memberOrganization">The user's organization, or <see langword="null" /> for somebody in none.</param>
+    /// <returns><see langword="true" /> when the group is in no organization, which is the deployment's and holds anybody, or when both name the same one.</returns>
+    internal static bool AdmitsMember(Guid? groupOrganization, Guid? memberOrganization) =>
+        groupOrganization is not { } organization || organization == memberOrganization;
 
     /// <summary>Reads one stored assignment as the principal and the scope its columns name.</summary>
     /// <param name="assignment">The stored row.</param>

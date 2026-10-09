@@ -8,14 +8,14 @@ namespace MailFathom.Application.Access.Grants;
 /// <param name="Id">The identifier every membership and assignment names the group by.</param>
 /// <param name="Name">The name an operator reads the group by, unique across the deployment.</param>
 /// <param name="OrganizationId">The organization the group belongs to, or <see langword="null" /> for a group in none.</param>
-/// <param name="Members">How many users belong to it.</param>
+/// <param name="MemberCount">How many users belong to it.</param>
 /// <param name="CreatedAt">When the group was recorded.</param>
 /// <remarks>
 /// A group holds users and nothing else, so no group is a member of another and why somebody holds a permission is
 /// always one row away. A group in an organization holds only that organization's members, which is what lets the
-/// organization's administrator manage it.
+/// organization's administrator manage it; a group in no organization is the deployment's and holds anybody.
 /// </remarks>
-public sealed record UserGroup(Guid Id, string Name, Guid? OrganizationId, int Members, DateTimeOffset CreatedAt)
+public sealed record UserGroup(Guid Id, string Name, Guid? OrganizationId, int MemberCount, DateTimeOffset CreatedAt)
 {
     /// <summary>The longest name a group is recorded under.</summary>
     public const int MaximumNameLength = 128;

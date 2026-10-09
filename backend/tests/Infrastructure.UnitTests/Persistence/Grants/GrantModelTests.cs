@@ -175,9 +175,13 @@ public sealed class GrantModelTests
 
     /// <summary>Exactly one principal and at most one scope, neither scope column meaning the deployment.</summary>
     [Theory]
-    [InlineData(PersistenceConstraintNames.RoleAssignmentPrincipalCheckConstraintName, "= 1")]
-    [InlineData(PersistenceConstraintNames.RoleAssignmentScopeCheckConstraintName, "<= 1")]
-    public void Model_AnAssignmentsPrincipalAndScope_AreBoundedByACheckConstraint(string constraintName, string bound)
+    [InlineData(
+        PersistenceConstraintNames.RoleAssignmentPrincipalCheckConstraintName,
+        "num_nonnulls(\"PrincipalUserId\", \"PrincipalGroupId\") = 1")]
+    [InlineData(
+        PersistenceConstraintNames.RoleAssignmentScopeCheckConstraintName,
+        "num_nonnulls(\"ScopeOrganizationId\", \"ScopeUserId\") <= 1")]
+    public void Model_AnAssignmentsPrincipalAndScope_AreBoundedByACheckConstraint(string constraintName, string expectedSql)
     {
         // Arrange
         using var context = CreateContext();
@@ -188,8 +192,7 @@ public sealed class GrantModelTests
             .Single(candidate => candidate.ModelName == constraintName);
 
         // Assert
-        Assert.StartsWith("num_nonnulls(", constraint.Sql, StringComparison.Ordinal);
-        Assert.EndsWith(bound, constraint.Sql, StringComparison.Ordinal);
+        Assert.Equal(expectedSql, constraint.Sql);
     }
 
     private static IIndex UniqueIndexOver<TEntity>(MailFathomDbContext context, params string[] columns) =>

@@ -234,8 +234,13 @@ public sealed class OrchestratedGrantStoreTests(MailFathomOrchestrationFixture o
                 (await services.InScopeAsync(
                     (scope, token) => Store(scope).AddGroupMemberAsync(group, UserId.Create(user), RecordedAt, token),
                     cancellationToken)).Outcome);
-            await AssignAsync(services, role, AssignmentPrincipal.User(UserId.Create(user)), AssignmentScope.Deployment, cancellationToken);
-            await AssignAsync(services, role, AssignmentPrincipal.Group(group), AssignmentScope.User(UserId.Create(user)), cancellationToken);
+            Assert.Equal(
+                GrantWriteOutcome.Written,
+                (await AssignAsync(services, role, AssignmentPrincipal.User(UserId.Create(user)), AssignmentScope.Deployment, cancellationToken)).Outcome);
+            Assert.Equal(
+                GrantWriteOutcome.Written,
+                (await AssignAsync(services, role, AssignmentPrincipal.Group(group), AssignmentScope.User(UserId.Create(user)), cancellationToken)).Outcome);
+            Assert.Equal(2, (await AssignmentsOfRoleAsync(services, role, cancellationToken)).Count);
 
             // Act
             await OrchestratedForeignUser.EraseAsync(services, user);
@@ -254,18 +259,63 @@ public sealed class OrchestratedGrantStoreTests(MailFathomOrchestrationFixture o
         }
     }
 
+    /// <summary>
+    /// Removing a group still assigned would revoke its grant from every member as a side effect, and the foreign key
+    /// cascades, so the count under the group's lock is the only thing refusing it.
+    /// </summary>
+    [Fact]
+    public async Task DeleteGroupAsync_AGroupStillAssigned_IsRefusedAndKeepsTheAssignment()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var role = Guid.CreateVersion7();
+        var group = Guid.CreateVersion7();
+
+        try
+        {
+            await CreateRoleAsync(services, role, $"role-{role:N}", cancellationToken);
+            Assert.Equal(
+                GrantWriteOutcome.Written,
+                (await services.InScopeAsync(
+                    (scope, token) => Store(scope).CreateGroupAsync(group, $"group-{group:N}", null, RecordedAt, token),
+                    cancellationToken)).Outcome);
+            Assert.Equal(
+                GrantWriteOutcome.Written,
+                (await AssignAsync(services, role, AssignmentPrincipal.Group(group), AssignmentScope.Deployment, cancellationToken)).Outcome);
+
+            // Act
+            var refused = await services.InScopeAsync(
+                (scope, token) => Store(scope).DeleteGroupAsync(group, token),
+                cancellationToken);
+
+            // Assert
+            Assert.Equal(GrantWriteOutcome.StillAssigned, refused.Outcome);
+            Assert.Equal(1, refused.StandingAssignments);
+            Assert.Single(await AssignmentsOfRoleAsync(services, role, cancellationToken));
+        }
+        finally
+        {
+            await RevokeEveryAssignmentOfRoleAsync(services, role);
+            await services.InScopeAsync((scope, token) => Store(scope).DeleteGroupAsync(group, token), CancellationToken.None);
+            await DeleteRoleAsync(services, role);
+        }
+    }
+
     /// <summary>A group in an organization holds only its members, and removing the organization takes the group and every assignment at its scope with it.</summary>
     [Fact]
-    public async Task OrganizationGroups_AMemberOfNoOrganizationAndTheOrganizationsRemoval_AreRefusedAndCascaded()
+    public async Task OrganizationGroups_AMemberAndAnOutsiderAndTheOrganizationsRemoval_AreAdmittedRefusedAndCascaded()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var user = Guid.CreateVersion7();
+        var colleague = Guid.CreateVersion7();
         var role = Guid.CreateVersion7();
         var group = Guid.CreateVersion7();
         var organization = Guid.CreateVersion7();
         await ProvisionUserAsync(services, user, cancellationToken);
+        await ProvisionUserAsync(services, colleague, cancellationToken);
 
         try
         {
@@ -280,20 +330,35 @@ public sealed class OrchestratedGrantStoreTests(MailFathomOrchestrationFixture o
                         RecordedAt,
                         token),
                     cancellationToken)).Outcome);
-            await services.InScopeAsync(
-                (scope, token) => Store(scope).CreateGroupAsync(group, $"group-{group:N}", organization, RecordedAt, token),
-                cancellationToken);
-            await AssignAsync(services, role, AssignmentPrincipal.Group(group), AssignmentScope.Organization(organization), cancellationToken);
+            Assert.Equal(
+                OrganizationWriteOutcome.Written,
+                (await services.InScopeAsync(
+                    (scope, token) => scope.GetRequiredService<IOrganizationStore>().SetUserOrganizationAsync(UserId.Create(colleague), organization, token),
+                    cancellationToken)).Outcome);
+            Assert.Equal(
+                GrantWriteOutcome.Written,
+                (await services.InScopeAsync(
+                    (scope, token) => Store(scope).CreateGroupAsync(group, $"group-{group:N}", organization, RecordedAt, token),
+                    cancellationToken)).Outcome);
+            Assert.Equal(
+                GrantWriteOutcome.Written,
+                (await AssignAsync(services, role, AssignmentPrincipal.Group(group), AssignmentScope.Organization(organization), cancellationToken)).Outcome);
+            Assert.Single(await AssignmentsOfRoleAsync(services, role, cancellationToken));
 
             // Act
+            var member = await services.InScopeAsync(
+                (scope, token) => Store(scope).AddGroupMemberAsync(group, UserId.Create(colleague), RecordedAt, token),
+                cancellationToken);
             var outsider = await services.InScopeAsync(
                 (scope, token) => Store(scope).AddGroupMemberAsync(group, UserId.Create(user), RecordedAt, token),
                 cancellationToken);
+            await OrchestratedForeignUser.EraseAsync(services, colleague);
             var removed = await services.InScopeAsync(
                 (scope, token) => scope.GetRequiredService<IOrganizationStore>().DeleteAsync(organization, token),
                 cancellationToken);
 
             // Assert
+            Assert.Equal(GrantWriteOutcome.Written, member.Outcome);
             Assert.Equal(GrantWriteOutcome.OutsideGroupOrganization, outsider.Outcome);
             Assert.Equal(OrganizationWriteOutcome.Written, removed.Outcome);
             Assert.Empty(await AssignmentsOfRoleAsync(services, role, cancellationToken));
@@ -304,6 +369,7 @@ public sealed class OrchestratedGrantStoreTests(MailFathomOrchestrationFixture o
         finally
         {
             await OrchestratedForeignUser.EraseAsync(services, user);
+            await OrchestratedForeignUser.EraseAsync(services, colleague);
             await services.InScopeAsync(
                 (scope, token) => scope.GetRequiredService<IOrganizationStore>().DeleteAsync(organization, token),
                 CancellationToken.None);
@@ -388,6 +454,15 @@ public sealed class OrchestratedGrantStoreTests(MailFathomOrchestrationFixture o
         CancellationToken cancellationToken) => services.InScopeAsync(
             (serviceScope, token) => Store(serviceScope).AssignAsync(Guid.CreateVersion7(), role, principal, scope, RecordedAt, token),
             cancellationToken);
+
+    /// <summary>Uncancellable because it runs in a <c>finally</c>, for the reason <see cref="OrchestratedForeignUser.EraseAsync" /> is.</summary>
+    private static async Task RevokeEveryAssignmentOfRoleAsync(OrchestratedMailFathomServices services, Guid role)
+    {
+        foreach (var assignment in await AssignmentsOfRoleAsync(services, role, CancellationToken.None))
+        {
+            await services.InScopeAsync((scope, token) => Store(scope).RevokeAsync(assignment.Id, token), CancellationToken.None);
+        }
+    }
 
     /// <summary>Uncancellable because it runs in a <c>finally</c>, for the reason <see cref="OrchestratedForeignUser.EraseAsync" /> is.</summary>
     private static Task<GrantWriteResult> DeleteRoleAsync(OrchestratedMailFathomServices services, Guid role) =>

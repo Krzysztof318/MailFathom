@@ -40,11 +40,36 @@ public sealed class PersistedGrantsTests
         Assert.Equal(expected, outcome);
     }
 
+    /// <summary>No outcome is answered for a foreign key the assignment does not declare, so the caller raises it with the violation attached instead of naming the wrong thing as missing.</summary>
     [Fact]
-    public void MissingReferenceOf_AConstraintNoAssignmentDeclares_IsADefectRatherThanAnAnswer()
+    public void MissingReferenceOf_AConstraintNoAssignmentDeclares_AnswersNoOutcome()
     {
-        // Act & Assert
-        Assert.Throws<InvalidOperationException>(() => PersistedGrants.MissingReferenceOf("fk_somewhere_else"));
+        // Act
+        var outcome = PersistedGrants.MissingReferenceOf("fk_somewhere_else");
+
+        // Assert
+        Assert.Null(outcome);
+    }
+
+    /// <summary>A group in an organization holds only that organization's members, and a group in none is the deployment's and holds anybody.</summary>
+    [Theory]
+    [InlineData("0198f0aa-0000-7000-8000-0000000000c4", "0198f0aa-0000-7000-8000-0000000000c4", true)]
+    [InlineData("0198f0aa-0000-7000-8000-0000000000c4", "0198f0aa-0000-7000-8000-0000000000c6", false)]
+    [InlineData("0198f0aa-0000-7000-8000-0000000000c4", null, false)]
+    [InlineData(null, "0198f0aa-0000-7000-8000-0000000000c4", true)]
+    [InlineData(null, null, true)]
+    public void AdmitsMember_TheGroupsAndTheUsersOrganization_AdmitOnlyAnOrganizationsOwnMembersIntoItsGroups(
+        string? groupOrganization,
+        string? memberOrganization,
+        bool admitted)
+    {
+        // Act
+        var admits = PersistedGrants.AdmitsMember(
+            groupOrganization is null ? null : Guid.Parse(groupOrganization),
+            memberOrganization is null ? null : Guid.Parse(memberOrganization));
+
+        // Assert
+        Assert.Equal(admitted, admits);
     }
 
     [Fact]
