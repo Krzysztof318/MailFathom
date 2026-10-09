@@ -5,6 +5,7 @@
 using MailFathom.Host.Api;
 using MailFathom.Host.Api.Documentation;
 using MailFathom.Host.Configuration.Endpoints;
+using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Hosting;
 using MailFathom.Host.Hosting.Startup;
 using MailFathom.Host.Mcp;
@@ -175,6 +176,10 @@ internal static class HostPipeline
             // share a bucket.
             app.UseAuthorization();
         }
+
+        // Behind authorization, which is what establishes whom a caller acts for, and ahead of every endpoint, whose
+        // parameters are resolved from the scope this prepares with that user's accounts.
+        app.Use(ActingUserMailSettings.PrepareAsync);
 
         if (composition.Admin.Enabled)
         {

@@ -102,10 +102,11 @@ public sealed class MailboxScopeResolver
     /// folders configuration no longer names and no list of withheld names reaches those: a folder nobody mapped is a
     /// folder MailFathom does not have, and it stays out by not being admitted. A tool that read the mailbox some other
     /// way would bypass this, which is why the two reads that reach an email by its identifier ask the folder mapping
-    /// directly rather than building a scope. Until #2330 moves them, those two read the mapping the roster publishes
-    /// while a scope reads the account's settings columns, so the two agree once the roster has republished the
-    /// account's last write — within one convergence interval of its commit on every replica but the one that wrote it.
-    /// For that long a folder the write withheld stays readable by identifier while it is already out of every scope.
+    /// directly rather than building a scope. Until #2330 moves them, those two read the mapping in the settings the
+    /// work's own scope was prepared with while a scope reads the account's settings columns, and that mapping was read
+    /// from the account records when the work's scope was prepared, so the two agree for any work prepared after the
+    /// account's last write committed. Only work prepared before it can find a folder the write withheld readable by
+    /// identifier while it is already out of every scope.
     /// </para>
     /// <para>
     /// The junk folder is withheld here too, and it is a different kind of decision from the one above: an operator did
@@ -230,10 +231,10 @@ public sealed class MailboxScopeResolver
     /// This is <see cref="ReadableScopeAsync" /> asked about one email instead of about a query, and it exists because
     /// several reads reach an email by its identifier and build no scope at all. Both questions are answered from the
     /// same catalog here, so an account this caller is not assigned cannot be reachable by identifier while it is
-    /// unreachable by name. The folder is a different matter until #2330 moves this read: it asks the mapping the roster
-    /// publishes, while a scope reads the account's settings columns, so a folder a write withheld stays readable here
-    /// until the roster republishes that write — within one convergence interval of its commit on every replica but the
-    /// one that wrote it — while it is already out of every scope. It is a mapping being asked to admit the folder
+    /// unreachable by name. The folder is a different matter until #2330 moves this read: it asks the mapping in the
+    /// settings the work's own scope was prepared with, while a scope reads the account's settings columns, so a folder a
+    /// write withheld stays readable here only to work prepared before that write committed, while it is already out of
+    /// every scope. It is a mapping being asked to admit the folder
     /// rather than a list being asked whether it names it, so an email stored under an alias no mapping names is
     /// unreadable by the same answer that withholds a mapped folder. A caller that may not read the email is told it was
     /// not found rather than refused, for the reason an account this deployment no longer serves is: a refusal would

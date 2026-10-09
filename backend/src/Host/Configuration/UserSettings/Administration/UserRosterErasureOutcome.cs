@@ -7,8 +7,8 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// <summary>What erasing a user did, whether this process was serving them, or why nothing was erased at all.</summary>
 /// <remarks>
 /// <para>
-/// The second says whether removing the user also changed the running process. A served user leaves the runtime roster
-/// before the erasure commits, so callers and synchronization stop reaching them without a restart.
+/// The second says whether removing the user also changed the running process. A served user is withheld from the served-user
+/// cache before the erasure commits, so callers and synchronization stop reaching them without a restart.
 /// </para>
 /// <para>
 /// The third is a refusal rather than an exception for the reason provisioning's is: work the deployment could not
@@ -23,7 +23,7 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// </para>
 /// </remarks>
 /// <param name="UserErased">Whether a user record was there to remove, so a repeat is reported as the no-op it is.</param>
-/// <param name="WasServed">Whether the runtime roster held the user that was erased.</param>
+/// <param name="WasServed">Whether the user that was erased was served, which is whether their record composed.</param>
 /// <param name="RefusalMessage">The sentence naming the work that is still running, or <see langword="null" /> where nothing refused the erasure.</param>
 internal readonly record struct UserRosterErasureOutcome(bool UserErased, bool WasServed, string? RefusalMessage = null)
 {

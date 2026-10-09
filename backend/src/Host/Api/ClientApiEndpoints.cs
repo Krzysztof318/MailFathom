@@ -172,7 +172,7 @@ internal static class ClientApiEndpoints
 
         // TypedResults rather than Results, so the response type reaches the endpoint's metadata and the generated
         // OpenAPI document describes what this answers with rather than an untyped 200.
-        // The roster is named as a service rather than left to inference: it is a concrete type, so a deployment or a
+        // The served users are named as a service rather than left to inference: it is a concrete type, so a deployment or a
         // test that maps this route without registering it would have the binder read it as a request body instead of
         // refusing, which is a GET route acquiring one.
         api.MapGet(SessionRoute, (
@@ -229,12 +229,12 @@ internal static class ClientApiEndpoints
     }
 
     /// <summary>Reads the level the acting person's own record asks their client for, where they have one and it states one.</summary>
-    /// <param name="servedUsers">The roster this deployment's user records were published into.</param>
+    /// <param name="servedUsers">The served-user cache this request's acting person was read into when its scope was prepared.</param>
     /// <param name="principal">What admitted this request, or nothing where the transport established none.</param>
-    /// <returns>The level that person's record states, or <see langword="null" /> where it states none, where the request names no user, or where the roster has not been established.</returns>
+    /// <returns>The level that person's record states, or <see langword="null" /> where it states none, where the request names no user, or where this replica holds no composition of them.</returns>
     /// <remarks>
-    /// Out of the roster rather than out of a document read, for the reason every other reader of a record's own value
-    /// takes it from there: it is republished by the commit that changed it, so a level an operator just raised is
+    /// Out of the cache rather than out of a document read, for the reason every other reader of a record's own value
+    /// takes it from there: a held user is current until their record moves, so a level an operator just raised is
     /// answered on the next session read without a restart, and a second source would be a second answer. A request
     /// that names no user is an ordinary case here rather than a refusal — this route requires no permission and is
     /// what a client reads before it holds a credential for anything else — and it is served the deployment's own
@@ -243,7 +243,7 @@ internal static class ClientApiEndpoints
     internal static ClientTelemetryLevel? StatedTelemetryLevelOf(
         ServedUsers servedUsers,
         AuthorizedPrincipal? principal) => principal?.User is { } user
-        ? servedUsers.TryGetUsers()?.FirstOrDefault(served => served.User == user)?.ClientTelemetryLevel
+        ? servedUsers.Peek(user)?.ClientTelemetryLevel
         : null;
 }
 

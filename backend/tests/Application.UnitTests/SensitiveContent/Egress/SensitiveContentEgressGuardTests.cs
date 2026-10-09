@@ -180,7 +180,7 @@ public sealed class SensitiveContentEgressGuardTests
         string fromUnscannedMailbox;
         string acrossBoth;
 
-        using (guard.ActingFor(scanned))
+        using (guard.ActingFor(await guard.ReadPostureOfAsync(scanned, TestContext.Current.CancellationToken)))
         {
             fromScannedMailbox = await guard.GuardAsync(
                 SensitiveContentEgressPoint.ChatPrompt,
@@ -188,7 +188,7 @@ public sealed class SensitiveContentEgressGuardTests
                 TestContext.Current.CancellationToken);
         }
 
-        using (guard.ActingFor(unscanned))
+        using (guard.ActingFor(await guard.ReadPostureOfAsync(unscanned, TestContext.Current.CancellationToken)))
         {
             fromUnscannedMailbox = await guard.GuardAsync(
                 SensitiveContentEgressPoint.ChatPrompt,

@@ -151,7 +151,7 @@ public sealed class EmailAttachmentTextDeriver
         // Read before the scan rather than at the write, exactly as the body's own redaction takes it: a posture
         // republished while this message is being read then leaves its rows stamped with the older configuration,
         // which reads as stale and is re-derived — the safe direction.
-        var redactedUnder = this.guard.StampFor(email.Account);
+        var redactedUnder = await this.guard.StampForAsync(email.Account, cancellationToken);
 
         var content = await this.contentStore.FindStoredContentAsync(email.Id, cancellationToken);
 

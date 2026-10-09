@@ -32,7 +32,10 @@ internal sealed class StoredEmailExtractionBackfillStore(
     /// <summary>The admission terms read for the batch committing in one session, so a batch reads them once rather than per message.</summary>
     private (IPersistenceSession Session, DerivedWorkAdmissionTerms Terms)? batchTerms;
 
-    /// <summary>Gets what every account's mail is re-derived towards while a rebuild is switched on, and nothing otherwise.</summary>
+    /// <summary>What this run re-derives mail towards, read on first use and held for the life of this store.</summary>
+    private RebuildTarget? rebuildTarget;
+
+    /// <summary>Reads what every account's mail is re-derived towards while a rebuild is switched on, and nothing otherwise.</summary>
     /// <remarks>
     /// Both halves are required: an operator who asked for a rebuild on a deployment that scans nobody has asked for
     /// every derived row to be re-derived back to the text it already holds, which is a full re-extraction of the
@@ -46,22 +49,28 @@ internal sealed class StoredEmailExtractionBackfillStore(
     /// process; only an account's record moves under a run.
     /// </para>
     /// </remarks>
-    private IReadOnlyList<MailAccountSensitiveContentPosture> RebuiltTowards =>
-        field ??= options.RebuildsStaleDerivedData && derivationGuard.Current.Any(account => account.Posture.IsActive)
-            ? derivationGuard.Current
-            : [];
+    private async Task<RebuildTarget> ReadRebuildTargetAsync(CancellationToken cancellationToken)
+    {
+        if (this.rebuildTarget is { } read)
+        {
+            return read;
+        }
 
-    /// <summary>Gets what mail whose account the roster no longer names is re-derived towards, and nothing where no rebuild runs.</summary>
-    /// <remarks>
-    /// Gated on the same switch as the served postures, so a walk that is not rebuilding carries no fallback either
-    /// and goes on clearing the cursor's stamp rather than recording one it never walked under.
-    /// </remarks>
-    private SensitiveContentDerivationStamp? UnservedRebuiltTowards =>
-        this.RebuiltTowards.Count == 0 ? null : derivationGuard.StampForUnservedAccount;
+        var target = RebuildTarget.None;
 
-    /// <summary>Gets the one stamp this run's cursor records, over every posture the walk is judging mail against.</summary>
-    private SensitiveContentDerivationStamp? RebuildComposite =>
-        SensitiveContentDerivationStamp.Across(this.RebuiltTowards, this.UnservedRebuiltTowards);
+        if (options.RebuildsStaleDerivedData)
+        {
+            var candidate = new RebuildTarget(
+                await derivationGuard.ReadAccountsBeyondDeploymentAsync(cancellationToken),
+                derivationGuard.StampForEveryOtherAccount);
+
+            target = candidate.Composite is null ? RebuildTarget.None : candidate;
+        }
+
+        this.rebuildTarget = target;
+
+        return target;
+    }
 
     /// <inheritdoc />
     /// <remarks>
@@ -86,7 +95,7 @@ internal sealed class StoredEmailExtractionBackfillStore(
             return null;
         }
 
-        if (this.RebuildComposite is { } current
+        if ((await this.ReadRebuildTargetAsync(cancellationToken)).Composite is { } current
             && !string.Equals(recorded.Stamp, current.Value, StringComparison.Ordinal))
         {
             return null;
@@ -112,7 +121,7 @@ internal sealed class StoredEmailExtractionBackfillStore(
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(batchSize);
 
         var resumeAfterId = resumeAfter?.Value;
-        var candidates = await this.Outstanding()
+        var candidates = await this.Outstanding(await this.ReadRebuildTargetAsync(cancellationToken))
             .Where(email => resumeAfterId == null || email.Id > resumeAfterId)
             .OrderBy(email => email.Id)
             .Take(batchSize)
@@ -134,8 +143,8 @@ internal sealed class StoredEmailExtractionBackfillStore(
     /// outstanding, and a rebuild discards the position outright. Counting the predicate answers the question an
     /// operator asks — how much is left — for either shape of the walk.
     /// </remarks>
-    public Task<int> CountEmailsAwaitingExtractionAsync(CancellationToken cancellationToken) =>
-        this.Outstanding().CountAsync(cancellationToken);
+    public async Task<int> CountEmailsAwaitingExtractionAsync(CancellationToken cancellationToken) =>
+        await this.Outstanding(await this.ReadRebuildTargetAsync(cancellationToken)).CountAsync(cancellationToken);
 
     /// <inheritdoc />
     /// <exception cref="InvalidOperationException">Thrown when the email disappeared between the batch query and this write.</exception>
@@ -212,18 +221,20 @@ internal sealed class StoredEmailExtractionBackfillStore(
         StoredEmailEntity storedEmail,
         CancellationToken cancellationToken)
     {
-        if (this.RebuiltTowards.Count == 0)
+        var target = await this.ReadRebuildTargetAsync(cancellationToken);
+
+        if (target.Composite is null)
         {
             return;
         }
 
-        var posture = this.RebuiltTowards.FirstOrDefault(candidate =>
+        var posture = target.Accounts.FirstOrDefault(candidate =>
             candidate.Account.Value == storedEmail.MailboxAccountId);
 
-        // An account off the roster is judged by the deployment's own posture, exactly as the selection judges it. An
-        // account on it whose mail nothing scans has no stamp to be stale against, and falling through to the
-        // deployment's would re-read its attachments against a posture that was never applied to them.
-        if ((posture is null ? this.UnservedRebuiltTowards : posture.Posture.Stamp) is not { } current)
+        // An account the target does not name is judged by the deployment's own posture, exactly as the selection judges
+        // it, and where that scans nothing there is no stamp to be stale against: falling through to anything else would
+        // re-read its attachments against a posture that was never applied to them.
+        if ((posture is null ? target.EveryOtherAccount : posture.Posture.Stamp) is not { } current)
         {
             return;
         }
@@ -274,7 +285,7 @@ internal sealed class StoredEmailExtractionBackfillStore(
                 Name = BackfillPositionEntity.StoredEmailExtractionName,
                 LastProcessedStoredEmailId = position.Value,
                 UpdatedAt = recordedAt,
-                SensitiveContentStamp = this.RebuildComposite?.Value,
+                SensitiveContentStamp = (await this.ReadRebuildTargetAsync(cancellationToken)).Composite?.Value,
             });
 
             return;
@@ -286,7 +297,7 @@ internal sealed class StoredEmailExtractionBackfillStore(
         // The cursor and the configuration it was reached under move together. A walk that is not rebuilding still
         // advances the position past rows a rebuild has to revisit, so it clears the stamp rather than leaving one a
         // later rebuild would read as everything behind here being done under that configuration.
-        storedPosition.SensitiveContentStamp = this.RebuildComposite?.Value;
+        storedPosition.SensitiveContentStamp = (await this.ReadRebuildTargetAsync(cancellationToken)).Composite?.Value;
     }
 
     /// <inheritdoc />
@@ -297,8 +308,8 @@ internal sealed class StoredEmailExtractionBackfillStore(
         // at all is left out here and is not: it has never been derived, so it holds no under-redacted text, and it is
         // already outstanding for the reason the backfill has always existed.
         var derived = Derived(this.Stored());
-        var postures = derivationGuard.Current;
-        var unserved = derivationGuard.StampForUnservedAccount;
+        var postures = await derivationGuard.ReadAccountsBeyondDeploymentAsync(cancellationToken);
+        var unserved = derivationGuard.StampForEveryOtherAccount;
 
         // Two queries rather than one, because the two figures count different rows: a message is counted once whatever
         // it carries, and a reading is counted per attachment. Joining them would report one of the two as the other.
@@ -308,11 +319,11 @@ internal sealed class StoredEmailExtractionBackfillStore(
     }
 
     /// <summary>Unions one branch per stamp in force, so every row is judged against the stamp of the account holding it.</summary>
-    /// <param name="postures">What each account this deployment serves has its mail derived under.</param>
-    /// <param name="unserved">What mail whose account the roster no longer names is judged against, or nothing.</param>
+    /// <param name="postures">What each account whose own record asks for more than the deployment has its mail derived under.</param>
+    /// <param name="unserved">What the mail of every account <paramref name="postures" /> does not name is judged against, or nothing.</param>
     /// <param name="nothing">The empty set to answer with where no posture carries a stamp at all.</param>
     /// <param name="ofAccounts">Builds the branch of the accounts deriving under one stamp, from their identifiers and that stamp.</param>
-    /// <param name="ofEverythingElse">Builds the branch for the accounts the roster does not name, from the roster and the deployment's stamp.</param>
+    /// <param name="ofEverythingElse">Builds the branch for every account <paramref name="postures" /> does not name, from the accounts it names and the deployment's stamp.</param>
     /// <returns>The branches concatenated, which stay disjoint because each names a different set of accounts.</returns>
     /// <remarks>
     /// <para>
@@ -331,11 +342,12 @@ internal sealed class StoredEmailExtractionBackfillStore(
     /// stamp is stale, and a concatenation over a null column is null rather than unmatched.
     /// </para>
     /// <para>
-    /// One further branch covers the rows whose account the roster does not name — mail still stored for a mailbox a
-    /// deployment has stopped serving. They are judged against the deployment's own posture, which is what
-    /// <see cref="ISensitiveContentPostures.ForAccount" /> already answers for such an account and is the stricter of
-    /// the two candidates. Without it those rows would match nothing, and a walk that silently steps over stored mail
-    /// is exactly what the deployment-wide predicate this replaced did not do.
+    /// One further branch covers the rows of every account the postures do not name — an account asking for nothing
+    /// beyond the deployment, and mail still stored for a mailbox a deployment has stopped serving. They are judged
+    /// against the deployment's own posture, which is what <see cref="ISensitiveContentPostures.ForAccountAsync" />
+    /// answers for either. Without it those rows would match nothing, and a walk that silently steps over stored mail
+    /// is exactly what the deployment-wide predicate this replaced did not do. Naming only the accounts that differ is
+    /// what keeps the membership test following the accounts that opted into something rather than every account.
     /// </para>
     /// <para>
     /// An account whose mail nothing scans has no stamp to be stale against, so it contributes to no branch at all:
@@ -454,19 +466,18 @@ internal sealed class StoredEmailExtractionBackfillStore(
     /// what its attachments yielded, or both — including the absent stamp, which is text derived before any scanner was
     /// switched on and is exactly the case an operator or a user enabling one late is asking about.
     /// </remarks>
-    private IQueryable<StoredEmailEntity> Outstanding()
+    private IQueryable<StoredEmailEntity> Outstanding(RebuildTarget target)
     {
         var stored = this.Stored();
         var neverDerived = stored.Where(email => email.SearchDocument == null);
-        var rebuiltTowards = this.RebuiltTowards;
 
-        if (rebuiltTowards.Count == 0)
+        if (target.Composite is null)
         {
             return neverDerived;
         }
 
         return neverDerived.Concat(
-            StaleOrReadUnderAnOlderPostureFor(Derived(stored), rebuiltTowards, this.UnservedRebuiltTowards));
+            StaleOrReadUnderAnOlderPostureFor(Derived(stored), target.Accounts, target.EveryOtherAccount));
     }
 
     /// <summary>Asks both stages that stand in front of the cut about one email, through the predicates they own.</summary>
@@ -543,4 +554,18 @@ internal sealed class StoredEmailExtractionBackfillStore(
 
     /// <summary>Where a previous walk stopped, and the configuration it stopped under.</summary>
     private sealed record RecordedPosition(Guid LastProcessedStoredEmailId, string? Stamp);
+
+    /// <summary>What one run re-derives mail towards: the accounts asking for more than the deployment, and the deployment's own stamp for every other.</summary>
+    /// <param name="Accounts">Every account whose own record asks for more than the deployment, with its posture.</param>
+    /// <param name="EveryOtherAccount">The deployment's own stamp, which every other account's mail is judged against, or nothing where it scans nothing.</param>
+    private sealed record RebuildTarget(
+        IReadOnlyList<MailAccountSensitiveContentPosture> Accounts,
+        SensitiveContentDerivationStamp? EveryOtherAccount)
+    {
+        /// <summary>Gets the target of a run that is not rebuilding.</summary>
+        internal static RebuildTarget None { get; } = new([], null);
+
+        /// <summary>Gets the one stamp this run's cursor records, or nothing where no mail this walk covers is scanned.</summary>
+        internal SensitiveContentDerivationStamp? Composite { get; } = SensitiveContentDerivationStamp.Across(Accounts, EveryOtherAccount);
+    }
 }

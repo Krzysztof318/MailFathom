@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using Microsoft.Extensions.Primitives;
 
@@ -10,7 +11,7 @@ namespace MailFathom.Host.Configuration.Mail;
 /// <summary>Reads which mail accounts synchronization supervises, and what one account's run reads, from the account records.</summary>
 /// <remarks>
 /// <para>
-/// The coordinator and every supervisor it starts read here rather than off a roster every replica composes, so what a
+/// The coordinator and every supervisor it starts read here rather than off a set of users every replica composes, so what a
 /// pass costs follows the accounts the database holds and what a run costs follows the handful of accounts it touches.
 /// </para>
 /// <para>
@@ -44,6 +45,16 @@ internal interface IMailSynchronizationAccountSource
         MailAccountId account,
         MailSynchronizationOptions? previous,
         CancellationToken cancellationToken);
+
+    /// <summary>Reads the settings a work unit acting for one user runs against.</summary>
+    /// <param name="user">The user the work unit acts for.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The deployment's bound settings carrying every account of that user, or none where the user is not served.</returns>
+    /// <remarks>
+    /// Read through the served-user cache rather than per call, because a request reaches here on every one a person
+    /// makes: what a request costs is a lookup while their record has not moved.
+    /// </remarks>
+    Task<MailSynchronizationOptions> ReadUserSettingsAsync(UserId user, CancellationToken cancellationToken);
 
     /// <summary>Gets a token that changes once the accounts <see cref="ReadSupervisedAsync" /> reads may have changed.</summary>
     /// <returns>The token for the next change, which a reader asks for again after every one.</returns>

@@ -4,12 +4,12 @@
 
 namespace MailFathom.Host.Configuration.Records;
 
-/// <summary>Which kind of stored record a roster reading refused, which decides what the refusal costs.</summary>
+/// <summary>Which kind of stored record composing a user refused, which decides what the refusal costs.</summary>
 /// <remarks>
 /// The two are not degrees of the same thing: a user this deployment cannot read is a person it serves nothing for,
 /// and one of their mail accounts is a mailbox it does not synchronize while the rest of their mail keeps working. An
 /// operator reads the kind first because it says which of their people noticed. An organization is not among them —
-/// no roster binds one, so an unreadable organization row is answered from the rows themselves as an
+/// composing a user binds none, so an unreadable organization row is answered from the rows themselves as an
 /// <c>UnreadableOrganization</c> rather than held here.
 /// </remarks>
 internal enum HeldBackRecordKind

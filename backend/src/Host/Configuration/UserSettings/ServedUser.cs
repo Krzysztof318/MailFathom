@@ -32,15 +32,15 @@ internal sealed record ServedUser(
     /// say about a zone says nothing rather than repeating an answer. It stays nothing rather than falling to
     /// <see cref="UserTimeZone.Coordinated" /> here, because a person who chose UTC and a person nobody has asked
     /// yet are answered differently — the first is left alone and the second is offered the zone their client reports —
-    /// and the roster is the last place holding both facts.
+    /// and the served user is the last place holding both facts.
     /// </remarks>
     public UserTimeZone? TimeZone { get; init; }
 
     /// <summary>Gets the level this person's own record asks their client to record at, or <see langword="null" /> where it states none.</summary>
     /// <remarks>
-    /// Nothing rather than the deployment's level, for the reason <see cref="TimeZone" /> stays nothing: the roster
+    /// Nothing rather than the deployment's level, for the reason <see cref="TimeZone" /> stays nothing: the served user
     /// carries what the record stated, and the session route is the one place the two are resolved into the single
-    /// answer a client is served. Reading it here as the deployment's would put that resolution in the roster, where
+    /// answer a client is served. Reading it here as the deployment's would put that resolution in the served user, where
     /// nothing could tell a person who asked for the deployment's level from a person nobody has raised.
     /// </remarks>
     public ClientTelemetryLevel? ClientTelemetryLevel { get; init; }

@@ -12,8 +12,8 @@ namespace MailFathom.Host.Configuration.UserSettings;
 /// <remarks>
 /// The relation is read from PostgreSQL, where a user being erased stays assigned until the deletion commits. Every
 /// reader of it — the caller's catalog every resolution over stored mail narrows through, the contact book, the spend
-/// gates, the signals — is answered through here, so withholding the user on the roster is what takes their mailboxes
-/// away from every request and every signal at once, as it did when the roster itself answered.
+/// gates, the signals — is answered through here, so withholding the user in <see cref="ServedUsers" /> is what takes
+/// their mailboxes away from every request and every signal at once.
 /// </remarks>
 internal sealed class WithholdingMailAccountAssignments(IMailAccountAssignments assignments, ServedUsers servedUsers)
     : IMailAccountAssignments

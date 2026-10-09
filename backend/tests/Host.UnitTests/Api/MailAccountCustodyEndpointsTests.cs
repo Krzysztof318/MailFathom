@@ -20,9 +20,11 @@ using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Synchronization;
 using MailFathom.Host.Api;
+using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -208,7 +210,7 @@ public sealed class MailAccountCustodyEndpointsTests
     public async Task SwitchAsync_AnAccountServedButNotBoundYet_SaysSoRatherThanCallingItUnknown()
     {
         // Act
-        var answer = await MailAccountCustodyEndpoints.SwitchAsync(
+        var answer = await SwitchAsync(
             new MailAccountCustodySwitchRequest(Account.Value, "HoldMailbox"),
             CatalogServing(Account),
             SwitchOver(CustodyStoreHoldingNothing()),
@@ -224,7 +226,7 @@ public sealed class MailAccountCustodyEndpointsTests
     public async Task SwitchAsync_ARequestNamingNoCustody_IsRefusedNamingTheValuesItCouldHaveNamed()
     {
         // Act
-        var answer = await MailAccountCustodyEndpoints.SwitchAsync(
+        var answer = await SwitchAsync(
             new MailAccountCustodySwitchRequest(Account.Value, "EmptyEverything"),
             CatalogServing(Account),
             SwitchOver(CustodyStoreHolding(MailAccountCustodyState.Mirrored)),
@@ -240,7 +242,7 @@ public sealed class MailAccountCustodyEndpointsTests
     public async Task SwitchAsync_ARequestWithNoBodyAtAll_IsRefusedRatherThanReadAsAnAccount()
     {
         // Act
-        var answer = await MailAccountCustodyEndpoints.SwitchAsync(
+        var answer = await SwitchAsync(
             request: null,
             CatalogServing(Account),
             SwitchOver(CustodyStoreHolding(MailAccountCustodyState.Mirrored)),
@@ -259,7 +261,7 @@ public sealed class MailAccountCustodyEndpointsTests
         var store = CustodyStoreHolding(MailAccountCustodyState.Mirrored);
 
         // Act
-        var answer = await MailAccountCustodyEndpoints.SwitchAsync(
+        var answer = await SwitchAsync(
             new MailAccountCustodySwitchRequest(Account.Value, "holdmailbox"),
             CatalogServing(Account),
             SwitchOver(store),
@@ -291,7 +293,7 @@ public sealed class MailAccountCustodyEndpointsTests
             ]));
 
         // Act
-        var answer = await MailAccountCustodyEndpoints.SwitchAsync(
+        var answer = await SwitchAsync(
             new MailAccountCustodySwitchRequest(Account.Value, "HoldMailbox"),
             CatalogServing(Account),
             SwitchOver(CustodyStoreHolding(MailAccountCustodyState.Mirrored), leases),
@@ -306,6 +308,22 @@ public sealed class MailAccountCustodyEndpointsTests
 
     /// <summary>Answers every read of the one account as the state a test stated, and accepts whatever is written.</summary>
     /// <summary>A store with no row for the account, which is every account before its first folder binds.</summary>
+    private static async Task<Results<Ok<MailAccountCustodySwitchResponse>, ProblemHttpResult>> SwitchAsync(
+        MailAccountCustodySwitchRequest? request,
+        IDeploymentMailAccountCatalog accounts,
+        MailAccountCustodySwitch custody,
+        CancellationToken cancellationToken)
+    {
+        using var scoped = AccountScopedRequest.Serving(services => services.AddSingleton(custody), Account);
+
+        return await MailAccountCustodyEndpoints.SwitchAsync(
+            request,
+            accounts,
+            scoped.MailSettings,
+            scoped.Context,
+            cancellationToken);
+    }
+
     private static IMailAccountCustodyStore CustodyStoreHoldingNothing()
     {
         var store = Substitute.For<IMailAccountCustodyStore>();

@@ -49,8 +49,8 @@ and the derivation of what a message is about — and in what order. A run also 
 the account's outbox there, which is what makes sending correct without anything watching for it;
 [mail delivery](mail-delivery.md#how-a-written-down-send-reaches-a-server) states why that step can never fail the run.
 
-The account set is read from the account records on every supervision pass, page by page, rather than from a roster
-every replica composes. An account is served when it holds an address, its settings bind, and somebody is assigned it,
+The account set is read from the account records on every supervision pass, page by page, rather than from a list
+every replica holds. An account is served when it holds an address, its settings bind, and somebody is assigned it,
 and each one comes back with the version its record stands at. A pass starts a supervisor for a served account that
 has none, replaces the supervisor of an account whose record moved to another version, and stops the supervisor of an
 account the pass no longer read — and touches nothing else, so a change to one person's mailbox interrupts that

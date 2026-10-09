@@ -12,7 +12,7 @@ namespace MailFathom.Application.Access;
 /// A deployment serves the users it has recorded, so where it holds exactly one there is a sole user to name and this
 /// is that user. A deployment holding several has no sole one: reading this refuses rather than answering, because
 /// attributing an act to whichever user a read happened to find is how one person is handed another person's mail. What
-/// keeps that refusal off a running deployment is the startup gate, which will not serve a roster of several users
+/// keeps that refusal off a running deployment is the startup gate, which will not start beside several users
 /// while any surface that reads this is enabled.
 /// </para>
 /// <para>
@@ -30,6 +30,7 @@ namespace MailFathom.Application.Access;
 public interface IDeploymentUserSource
 {
     /// <summary>Gets the user this deployment's configured mail accounts belong to.</summary>
-    /// <exception cref="InvalidOperationException">Thrown when this deployment serves several users, which leaves no sole user for an act carrying none to be attributed to, and when the roster has not been established yet.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when how many users this deployment holds has not been read yet.</exception>
+    /// <exception cref="DeploymentUserUnresolvedException">Thrown when this deployment holds nobody, or several users, which leaves no sole user for an act carrying none to be attributed to.</exception>
     UserId User { get; }
 }

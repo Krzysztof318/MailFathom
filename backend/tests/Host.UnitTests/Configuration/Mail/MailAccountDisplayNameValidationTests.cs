@@ -145,7 +145,7 @@ public sealed class MailAccountDisplayNameValidationTests
         options.Enabled = enabled;
 
         // Act, Assert
-        Assert.Equal(enabled, new ConfiguredMailAccountCatalog(options, Substitute.For<IServedMailAccountReader>()).SynchronizationEnabled);
+        Assert.Equal(enabled, new ConfiguredMailAccountCatalog(new StubSettingsSnapshot<MailSynchronizationOptions>(options), Substitute.For<IServedMailAccountReader>()).SynchronizationEnabled);
     }
 
     private static MailSynchronizationOptions OptionsFor(params MailSynchronizationAccountOptions[] accounts) =>

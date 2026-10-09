@@ -136,16 +136,17 @@ exactly as an unknown credential is. The same read carries the two endpoint swit
 administrator kept off the surface the request arrived on is refused at authentication with that same answer, whatever
 the method and however long ago a session or token was minted, and never reaches a policy to be told `403` instead.
 
-The gate settles the whole roster while the host starts — every user the deployment holds, each with the mail accounts
-their own record declares. No configuration source names a user or declares a mailbox. A caller that names no user needs
+The gate reads, while the host starts, whether the deployment holds nobody, one user, or several — never anybody's
+record, which a replica reads the first time something acts for that user, together with the mail accounts assigned to
+them, and keeps while somebody keeps asking. No configuration source names a user or declares a mailbox. A caller that names no user needs
 at most one user to act for, so the gate refuses to come up on more **while `McpEndpoint` or `ClientEndpoint` admits such
 a caller** — which is a surface requiring no authentication and nothing else. Every credential these two surfaces admit is
 a record naming the user it belongs to, whichever of the four methods presents it, so what an entry states is a method
-rather than a person and reading the entry would answer nothing; what frees the roster is requiring a credential on both
-surfaces — or the surfaces being off.
+rather than a person and reading the entry would answer nothing; what admits several users is requiring a credential on
+both surfaces — or the surfaces being off.
 
 **The administrative surface is deliberately outside that reading.** An administrator acts for the deployment rather
-than for a person, and every route there that is about one user names the user it is about, so a roster of several
+than for a person, and every route there that is about one user names the user it is about, so a deployment of several
 leaves nothing unanswered. That is also what makes recording a second user reachable at all: the surface an operator
 would use to correct the other two cannot be the surface the refusal closes. No administrative route resolves the sole user any more — the contact
 book was the last of them, and each of its routes now names the user, or the mail account, whose book it reaches. Which
@@ -176,9 +177,10 @@ differently — and a use case that raised either shape directly would have deci
 A use case that acts on one user's mail and is reached by a principal acting for no user is refused the same way and
 with the same code, because from the use case's side it is the same fact: what reached it cannot say whose mail it is
 about. A deployment that cannot resolve its own user never reaches a use case at all, and answers
-`14002 DeploymentUserUnresolved` in the two places that reading is taken. A roster the start cannot settle at all
-is a refusal to start, so nothing serves. A roster of several is a start that succeeds, and the code is then answered
-per request, as `409` on the handful of acts above that resolve the sole user and name none themselves.
+`14002 DeploymentUserUnresolved` in the two places that reading is taken. Several users behind a surface that admits
+a caller naming none is a refusal to start, so nothing serves. Several users otherwise is a start that succeeds, and the
+code is then answered per request, as `409` on the handful of acts above that resolve the sole user and name none
+themselves.
 
 A use case reached under no principal at all is refused the same way. That is the case an entrypoint produces by
 omission — it never said what admitted the work — and refusing it is what "fails rather than defaulting to permitted"

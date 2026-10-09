@@ -121,4 +121,47 @@ public sealed class FixedSensitiveContentPosturesTests
         // Assert
         Assert.Contains("this double cannot build", refusal.Message, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// The real composition lists only an account whose own record asks for more than the deployment, so a double that
+    /// listed an account answered with the fallback would hand a walk judging stale rows a mailbox no deployment reports.
+    /// </summary>
+    [Fact]
+    public async Task ReadAccountsBeyondDeploymentAsync_AnAccountAnsweredWithTheFallback_IsLeftOut()
+    {
+        // Arrange
+        using var secrets = ScanningSensitiveContentEgress.Finding("AKIAEXAMPLEKEY", this.timeProvider);
+        var scanning = secrets.Postures.ForAccount(FixedSensitiveContentPostures.SoleAccount);
+
+        var postures = FixedSensitiveContentPostures.Of(
+            SensitiveContentPosture.ScanningNothing,
+            (FixedSensitiveContentPostures.SoleAccount, scanning),
+            (Archive, SensitiveContentPosture.ScanningNothing));
+
+        // Act
+        var beyondDeployment = await postures.ReadAccountsBeyondDeploymentAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        var listed = Assert.Single(beyondDeployment);
+        Assert.Equal(FixedSensitiveContentPostures.SoleAccount, listed.Account);
+        Assert.Same(scanning, listed.Posture);
+    }
+
+    [Fact]
+    public async Task ForAccountAsync_AnAccountTheDoubleNamesNoPostureFor_AnswersTheDeploymentsOwn()
+    {
+        // Arrange
+        using var secrets = ScanningSensitiveContentEgress.Finding("AKIAEXAMPLEKEY", this.timeProvider);
+
+        var postures = FixedSensitiveContentPostures.Of(
+            SensitiveContentPosture.ScanningNothing,
+            (FixedSensitiveContentPostures.SoleAccount, secrets.Postures.ForAccount(FixedSensitiveContentPostures.SoleAccount)));
+
+        // Act
+        var posture = await postures.ForAccountAsync(SomebodyElses, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Same(postures.Deployment, posture);
+        Assert.Same(SensitiveContentPosture.ScanningNothing, posture);
+    }
 }

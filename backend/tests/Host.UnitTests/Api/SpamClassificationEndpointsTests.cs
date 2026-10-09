@@ -451,20 +451,24 @@ public sealed class SpamClassificationEndpointsTests
             .ReadPageAsync(Arg.Any<SpamClassificationHistoryQuery>(), Arg.Any<CancellationToken>())
             .Returns(new SpamClassificationHistoryPage(entries, NextCursor: null));
 
-    private Task<Results<Ok<SpamClassificationRunStartResponse>, ProblemHttpResult>> StartRunAsync(
+    private async Task<Results<Ok<SpamClassificationRunStartResponse>, ProblemHttpResult>> StartRunAsync(
         SpamClassificationRunRequestBody? request,
         SpamClassificationSettings? settings = null)
     {
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ => new CommittingSession());
 
-        return SpamClassificationEndpoints.StartRunAsync(
-            request,
-            CatalogServing(Account),
-            SettingsReading(settings ?? SpamClassificationSettings.Create(
+        using var scoped = AccountScopedRequest.Serving(
+            services => services.AddSingleton(SettingsReading(settings ?? SpamClassificationSettings.Create(
                 isEnabled: true,
                 usesScanner: false,
-                [Inbox])),
+                [Inbox]))),
+            Account);
+
+        return await SpamClassificationEndpoints.StartRunAsync(
+            request,
+            CatalogServing(Account),
+            scoped.MailSettings,
             new SpamClassificationRunRequests(
                 this.runs,
                 new OptimisticConcurrencyRetryPolicy(
@@ -473,6 +477,7 @@ public sealed class SpamClassificationEndpointsTests
                     this.timeProvider),
                 this.timeProvider,
                 AdministrativeGrant.WholeSurface),
+            scoped.Context,
             TestContext.Current.CancellationToken);
     }
 

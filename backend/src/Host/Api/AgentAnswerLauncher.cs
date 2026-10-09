@@ -8,6 +8,7 @@ using MailFathom.Application.Agent.Answering;
 using MailFathom.Application.Agent.Conversations;
 using MailFathom.Application.Agent.Search;
 using MailFathom.Application.Signals;
+using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Security.Transport;
 
 namespace MailFathom.Host.Api;
@@ -102,6 +103,10 @@ internal sealed partial class AgentAnswerLauncher
             await using var scope = this.scopeFactory.CreateAsyncScope();
 
             scope.ServiceProvider.GetRequiredService<TransportAuthorizedPrincipalSource>().Assume(caller);
+
+            await scope.ServiceProvider
+                .GetRequiredService<ScopedMailSynchronizationSettings>()
+                .UseUserSettingsAsync(question.User, this.lifetime.ApplicationStopping);
 
             var answering = scope.ServiceProvider.GetRequiredService<AgentAnswering>();
 

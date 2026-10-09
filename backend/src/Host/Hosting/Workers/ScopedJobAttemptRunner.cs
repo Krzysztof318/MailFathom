@@ -5,6 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.Execution;
+using MailFathom.Host.Configuration.Mail;
 using MailFathom.Infrastructure.Observability;
 
 namespace MailFathom.Host.Hosting.Workers;
@@ -24,6 +25,12 @@ namespace MailFathom.Host.Hosting.Workers;
 /// happened to be running. A pass dispatching several jobs at once therefore produces one span each, since each attempt
 /// opens its own on the task that runs it.
 /// </para>
+/// <para>
+/// A job enqueued for a mail account is run against that account's settings and those of the other accounts its users
+/// hold, read when the scope is created and before the executor is: every handler is composed with the scope, and what
+/// they are composed from reads the account's settings. An account no longer served leaves the scope holding none, so
+/// the handler meets the account as removed, exactly as it would have once its record went.
+/// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this port implementation.")]
 internal sealed class ScopedJobAttemptRunner(IServiceScopeFactory scopeFactory, JobQueueTelemetry telemetry)
@@ -37,6 +44,13 @@ internal sealed class ScopedJobAttemptRunner(IServiceScopeFactory scopeFactory, 
         using var attempt = telemetry.BeginAttempt(job.JobType, job.EnqueuedTrace);
 
         await using var scope = scopeFactory.CreateAsyncScope();
+
+        if (job.AccountId is { } account)
+        {
+            await scope.ServiceProvider
+                .GetRequiredService<ScopedMailSynchronizationSettings>()
+                .UseAccountSettingsAsync(account, stoppingToken);
+        }
 
         var executor = scope.ServiceProvider.GetRequiredService<JobExecutor>();
         var result = await executor.ExecuteAsync(job, stoppingToken);

@@ -40,8 +40,8 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// commits.
 /// </para>
 /// <para>
-/// A committed write is served by converging this replica's roster on the rows, which republishes every user whose record
-/// version the write moved, and then announced so every other replica converges too.
+/// A committed write is served by comparing the users this replica holds against the rows, which recomposes every user
+/// whose record version the write moved, and then announced so every other replica compares too.
 /// </para>
 /// </remarks>
 [SuppressMessage(
@@ -54,7 +54,7 @@ internal sealed class MailAccountAdministration(
     IMailAccountRecordStore accounts,
     UserAccountDocumentBinder binder,
     SecretConfigurationValidator secrets,
-    ServedUsersConvergence convergence,
+    ServedUsers servedUsers,
     ConfigurationChangeAnnouncements announcements)
 {
     /// <summary>What a save refused over a redaction marker it cannot place is sent to.</summary>
@@ -949,7 +949,7 @@ internal sealed class MailAccountAdministration(
     {
         try
         {
-            await convergence.ConvergeAsync(cancellationToken);
+            await servedUsers.ConvergeAsync(cancellationToken);
         }
         catch (UserSettingsUnreadableException)
         {

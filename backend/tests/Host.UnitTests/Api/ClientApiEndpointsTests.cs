@@ -1026,11 +1026,11 @@ public sealed class ClientApiEndpointsTests
             ResolvedServedUsers.Serving(RaisedTo(ClientTelemetryLevel.Debug)),
             principal: null));
 
-    /// <summary>A session read reaching the route before the gate settled the roster answers rather than throwing, the deployment's level being a complete answer.</summary>
+    /// <summary>A session read for a user this replica does not hold answers rather than throwing, the deployment's level being a complete answer.</summary>
     [Fact]
-    public void StatedTelemetryLevelOf_ADeploymentWhoseGateHasNotRun_AnswersNothing() =>
+    public void StatedTelemetryLevelOf_AUserThisReplicaDoesNotHold_AnswersNothing() =>
         Assert.Null(ClientApiEndpoints.StatedTelemetryLevelOf(
-            new ServedUsers(),
+            ResolvedServedUsers.Serving(),
             ActingFor(SyntheticUser.Deployment)));
 
     /// <summary>Builds the roster entry of a person an operator raised, which is the one shape the reading above is about.</summary>

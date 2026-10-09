@@ -559,7 +559,8 @@ public sealed class MailSynchronizationCoordinatorTests
     {
         private readonly ServiceProvider services;
         private readonly RecordingLoggerFactory loggerFactory = new();
-        private long recordedDocumentVersion;
+        /// <summary>The version the user's record was last committed at, which starts where the users the host is composed with are held.</summary>
+        private long recordedDocumentVersion = 1;
 
         internal CoordinatorHarness(
             ServiceProvider services,
@@ -612,7 +613,9 @@ public sealed class MailSynchronizationCoordinatorTests
                 "user",
                 new UserAccountOptions { MailAccounts = [.. mailAccounts] },
                 ++this.recordedDocumentVersion);
-            this.Settings.Current = this.Settings.Current.WithServedUsers(this.ServedUsers.Users);
+            var recorded = this.ServedUsers.Peek(SyntheticUser.Deployment)!;
+            this.Settings.Current = this.Settings.Current.WithServedUsers(
+                [.. (this.Settings.Current.ServedUsers ?? []).Where(served => served.User != recorded.User), recorded]);
         }
 
         /// <summary>Stops the coordinator and advances the clock, so work that ignores the drain is cancelled by it.</summary>

@@ -10,9 +10,8 @@ namespace MailFathom.Application.SensitiveContent;
 /// <param name="Account">The account.</param>
 /// <param name="Posture">What its mail is scanned for, what a finding in it stops, and what a derived row records.</param>
 /// <remarks>
-/// The pair exists for the one consumer that asks about every account at once rather than about the account in front
-/// of it: the walk that re-derives mail written under a posture nobody runs any more has to judge each row against its
-/// own account's stamp, and a query cannot ask a port row by row. Everything else resolves the account the mail
-/// belongs to and calls <see cref="ISensitiveContentPostures.ForAccount" />.
+/// Read as a pair by the walk that re-derives mail written under a posture nobody runs any more, which has to judge each
+/// row against its own account's stamp, and by a use case acting on one account, which reads it once and then enters it
+/// with <see cref="Egress.SensitiveContentEgressGuard.ActingFor(MailAccountSensitiveContentPosture)" />.
 /// </remarks>
 public sealed record MailAccountSensitiveContentPosture(MailAccountId Account, SensitiveContentPosture Posture);

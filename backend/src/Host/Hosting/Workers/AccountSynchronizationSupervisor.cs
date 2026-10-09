@@ -401,7 +401,7 @@ internal sealed partial class AccountSynchronizationSupervisor
                 [
                     token => this.DrainHeldSourceAsync(runSettings, token),
                     token => this.RestoreHeldMailboxAsync(runSettings, token),
-                    this.DeliverOutstandingMailAsync,
+                    token => this.DeliverOutstandingMailAsync(runSettings, token),
                     token => this.EraseExpiredDerivedRecordsAsync(runSettings, token),
                     token => this.ClassifyRequestedMailAsync(runSettings, token),
                     token => this.EvaluateMailRulesAsync(runSettings, token),
@@ -645,11 +645,15 @@ internal sealed partial class AccountSynchronizationSupervisor
     /// </para>
     /// </remarks>
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A delivery pass that ended unexpectedly must not stop the account's synchronization: each send's own record already carries how far it got, and the next run claims again.")]
-    private async Task DeliverOutstandingMailAsync(CancellationToken cancellationToken)
+    private async Task DeliverOutstandingMailAsync(
+        MailSynchronizationOptions runSettings,
+        CancellationToken cancellationToken)
     {
         try
         {
             using var scope = this.scopeFactory.CreateScope();
+
+            scope.ServiceProvider.GetRequiredService<ScopedMailSynchronizationSettings>().UseRunSnapshot(runSettings);
 
             var pass = scope.ServiceProvider.GetRequiredService<MailOutboxPass>();
             var report = await pass.RunAsync(this.account, cancellationToken);

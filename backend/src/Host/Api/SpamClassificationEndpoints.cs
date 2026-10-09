@@ -11,6 +11,7 @@ using MailFathom.Domain.Access;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Spam;
+using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Security.Endpoints;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
@@ -84,8 +85,9 @@ internal static class SpamClassificationEndpoints
     /// <summary>Asks for every message stored for one account to be classified on the terms the caller named.</summary>
     /// <param name="request">The account, the scope, and the two switches.</param>
     /// <param name="accounts">Reports whether this deployment serves the named account.</param>
-    /// <param name="settings">Answers what scope the account itself classifies over, which is the default and the bound.</param>
+    /// <param name="mailSettings">Holds the account settings the scope is read from, which this route prepares for the named account.</param>
     /// <param name="requests">Records the request, or reports the run already in front of the account.</param>
+    /// <param name="context">The request being answered, whose services the account's classification settings are resolved through once they are prepared.</param>
     /// <param name="cancellationToken">Cancels the write when the client disconnects.</param>
     /// <returns><c>200</c> with the run, or <c>400</c> naming what was wrong with the request.</returns>
     /// <remarks>
@@ -98,24 +100,38 @@ internal static class SpamClassificationEndpoints
     /// one that acts halfway through. The answer says which of the two happened and reports the terms the outstanding run
     /// is actually walking under.
     /// </para>
+    /// <para>
+    /// An administrative caller acts for no user, so the scope the account classifies over — the default and the bound —
+    /// is read only after the named account's settings are prepared.
+    /// </para>
     /// </remarks>
     internal static async Task<Results<Ok<SpamClassificationRunStartResponse>, ProblemHttpResult>> StartRunAsync(
         [FromBody] SpamClassificationRunRequestBody? request,
         [FromServices] IDeploymentMailAccountCatalog accounts,
-        [FromServices] ISpamClassificationSettingsReader settings,
+        [FromServices] ScopedMailSynchronizationSettings mailSettings,
         [FromServices] SpamClassificationRunRequests requests,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(accounts);
-        ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(mailSettings);
         ArgumentNullException.ThrowIfNull(requests);
+        ArgumentNullException.ThrowIfNull(context);
 
         if (await AdminAccountRequest.ResolveAsync(request?.Account, accounts, cancellationToken) is not { } servedAccount)
         {
             return AdminAccountRequest.Refuse(request?.Account);
         }
 
-        var configuredScope = settings.SettingsFor(servedAccount).ScannedFolderAliases;
+        if (!await mailSettings.UseAccountSettingsAsync(servedAccount, cancellationToken))
+        {
+            return AdminAccountRequest.Unknown(servedAccount.Value);
+        }
+
+        var configuredScope = context.RequestServices
+            .GetRequiredService<ISpamClassificationSettingsReader>()
+            .SettingsFor(servedAccount)
+            .ScannedFolderAliases;
         var scope = ResolveScope(request?.Folders, configuredScope);
 
         if (scope.Refusal is { } refusal)

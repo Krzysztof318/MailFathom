@@ -18,8 +18,8 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// does first, and the identifier says nothing about who the person is.
 /// </para>
 /// <para>
-/// Every user this deployment holds is served, so <c>Served</c> answers whether this process has settled its roster
-/// rather than whether anybody was left out of it.
+/// Every user this deployment holds is served, so <c>Served</c> answers whether their record composes on this process
+/// rather than whether anybody was left out of the deployment.
 /// </para>
 /// </remarks>
 internal sealed record UserRosterEntry(

@@ -177,7 +177,7 @@ internal static class HostComposition
     /// describes a roster or a mailbox this host would not serve. It runs ahead of the options framework as well, so
     /// that a section the strict binder no longer has a property for is answered by the sentence naming the commands
     /// rather than by the binder's own report of an unknown key. Nothing here reaches the database: who is served is
-    /// settled by the startup gate that can read the rows.
+    /// read from the rows once something asks for them.
     /// </remarks>
     /// <exception cref="OptionsValidationException">Thrown when a configuration source still carries the withdrawn user collection or the withdrawn deployment mail section.</exception>
     private static void RefuseTheWithdrawnUserAndMailboxSections(WebApplicationBuilder builder) =>
@@ -273,18 +273,16 @@ internal static class HostComposition
         builder.Services.AddScoped<TransportAuthorizedPrincipalSource>();
         builder.Services.AddScoped<IAuthorizedPrincipalSource>(provider =>
             provider.GetRequiredService<TransportAuthorizedPrincipalSource>());
-        // Whose mail an admitted caller is acting on. A singleton because it is a property of the deployment rather than
-        // of a request: a startup gate settles it once, and the two registrations are the same object so nothing can
-        // read a user the gate has not established.
+        // Whose mail an admitted caller is acting on, resolved one user at a time from a cache keyed by the version of
+        // their record. A singleton because the cache is this replica's, and the two registrations are the same object so
+        // the sole user a caller naming none acts for is read from the count the startup gate took.
+        builder.Services.AddSingleton<ServedUserResolution>();
         builder.Services.AddSingleton<ServedUsers>();
         builder.Services.AddSingleton<IDeploymentUserSource>(provider =>
             provider.GetRequiredService<ServedUsers>());
-        // A singleton over that same roster, for the same reason: which language somebody reads is a fact about them
-        // rather than about the request being served, and a use case composing text for them must reach it without a
-        // query.
+        // Singletons over that same cache: which language somebody reads, and which zone their own days are read in, are
+        // facts about them rather than about the request being served.
         builder.Services.AddSingleton<IUserLanguages, ServedUserLanguages>();
-        // And which zone their own days are read in, over the same roster and for the same reason: an agent about to
-        // state its anchor must not put a query in front of the call it is about to make.
         builder.Services.AddSingleton<IUserTimeZones, ServedUserTimeZones>();
         // ReferenceOnly is the default, so a deployment that configures nothing gets the mode under which a plain-text value
         // where a reference belongs fails startup instead of authenticating.
@@ -297,9 +295,10 @@ internal static class HostComposition
         builder.Services.AddSingleton<UserAccountDocumentBinder>();
         // How much of a user's row this build can read, which is where a refusal is attributed to the one declaration
         // that introduced it rather than costing the user every mailbox they have. A singleton over the binder above,
-        // because it holds nothing of its own and both the startup gate and the convergence ask it the same question.
+        // because it holds nothing of its own and the served-user resolution and every account's run ask it the same
+        // question.
         builder.Services.AddSingleton<ServedUserRecordComposition>();
-        // What those two readings refused, which is a report rather than a decision: nothing resolves anything on it,
+        // What that reading refused, which is a report rather than a decision: nothing resolves anything on it,
         // and the administrative surface is what an operator meets a broken row on instead of a log line.
         builder.Services.AddSingleton<HeldBackRecords>();
         // Whether this deployment's endpoints could tell one user's caller from another's, which decides whether it
@@ -330,7 +329,7 @@ internal static class HostComposition
     /// <remarks>
     /// <para>
     /// Registration follows what the deployment <em>provides</em> rather than what it switched on, because a mail
-    /// account's own record may switch a scanner on for the mail in it and no roster exists while services are being
+    /// account's own record may switch a scanner on for the mail in it, and no record is read while services are being
     /// registered. Providing is not the same as costing anything: a detector registered here is constructed on first
     /// resolution, and nothing resolves one until a posture runs it, so a deployment nobody asked for scanning on still
     /// compiles no expression and opens no analyzer client.
@@ -375,7 +374,7 @@ internal static class HostComposition
             // the liveness probe — restarting this process cannot start the container beside it. A singleton because the
             // check holds the last observation it made, which is what keeps one outage to one pair of log records
             // instead of one per scrape. Whether anybody's mail is actually scanned for personal data is the check's own
-            // first question, because that answer follows the roster rather than this section.
+            // first question, because that answer follows the account records rather than this section.
             builder.Services.AddSingleton<PersonalDataAnalyzerHealthCheck>();
             builder.Services.AddHealthChecks()
                 .Add(PersonalDataAnalyzerHealthCheck.Registration());
@@ -403,7 +402,6 @@ internal static class HostComposition
             provider.GetServices<ISensitiveContentScanner>,
             provider.GetRequiredService<TimeProvider>(),
             provider.GetRequiredService<SensitiveContentScanConcurrency>(),
-            provider.GetRequiredService<ServedUsers>(),
             provider.GetRequiredService<IServedMailAccountReader>()));
     }
 
@@ -460,8 +458,7 @@ internal static class HostComposition
         //
         // What a rule claims about a mailbox is left unjudged here, because every mailbox is a user's own record and no
         // reading of the files could tell a scope naming one that exists from a scope naming one that does not.
-        // ServedUsersStartupGate reports such a claim once it holds the roster; a reload and a configuration write
-        // refuse it.
+        // A reload and a configuration write refuse such a claim, reading the accounts the records hold.
         var mailRuleConditionCompiler = new NCalcMailRuleConditionCompiler();
 
         ComposedSettings.RefuseFirstOf(
@@ -535,20 +532,19 @@ internal static class HostComposition
                 .FindDataEncryptionConfigurationErrorsAsync(candidate, cancellationToken),
             "DataEncryption",
             provider.GetRequiredService<ILogger<ValidatedSettingsSnapshot<DataEncryptionOptions>>>()));
-        builder.Services.AddSingleton(provider => new MailSynchronizationSettingsSnapshot(
-            provider.GetRequiredService<ValidatedSettingsSnapshot<MailSynchronizationOptions>>(),
-            provider.GetRequiredService<ServedUsers>()));
-        builder.Services.AddSingleton<ISettingsSnapshot<MailSynchronizationOptions>>(provider => provider.GetRequiredService<MailSynchronizationSettingsSnapshot>());
+        builder.Services.AddSingleton<ISettingsSnapshot<MailSynchronizationOptions>>(provider => provider.GetRequiredService<ValidatedSettingsSnapshot<MailSynchronizationOptions>>());
         builder.Services.AddSingleton<ISettingsSnapshot<PersistenceOptions>>(provider => provider.GetRequiredService<ValidatedSettingsSnapshot<PersistenceOptions>>());
         builder.Services.AddSingleton<ISettingsSnapshot<DataEncryptionOptions>>(provider => provider.GetRequiredService<ValidatedSettingsSnapshot<DataEncryptionOptions>>());
         // The key ring reads the published snapshot on every operation, so a key an operator adds reaches the next seal or
         // open without a restart — which is the half of a rotation that must not need one.
         builder.Services.AddDataEncryption(provider => DataEncryptionKeyRingMapper.Map(
             provider.GetRequiredService<ISettingsSnapshot<DataEncryptionOptions>>().Current));
-        // One work unit runs against one snapshot: the enclosing run hands its own down, and a scope with no enclosing run
-        // falls back to the published one. That is what keeps the transport security policy a work unit validates against,
-        // the material it connects with, and the account list it was scheduled from all from the same reload.
+        // One work unit runs against one snapshot: the enclosing run hands its own down, a request or a job is prepared with
+        // the accounts it acts on, and a scope nothing prepared falls back to the published one, which holds no account.
+        // That is what keeps the transport security policy a work unit validates against, the material it connects with,
+        // and the account list it was scheduled from all from the same reload.
         builder.Services.AddScoped<ScopedMailSynchronizationSettings>();
+        builder.Services.AddScoped<IMailAccountSettingsScope>(provider => provider.GetRequiredService<ScopedMailSynchronizationSettings>());
         builder.Services.AddScoped(provider => provider.GetRequiredService<ScopedMailSynchronizationSettings>().Current);
         // Each port is a scoped forwarder to the reader the scope's own snapshot owns, rather than a reader constructed
         // per scope: three of them memoize a per-account map, and each of those maps walks every account and every
@@ -563,11 +559,10 @@ internal static class HostComposition
         // Composed here rather than taken off the snapshot's reader set, because which accounts are served is read from
         // the account records rather than bound from a file; the snapshot contributes only the synchronization switch.
         builder.Services.AddScoped<IDeploymentMailAccountCatalog>(provider => new ConfiguredMailAccountCatalog(
-            provider.GetRequiredService<MailSynchronizationOptions>(),
+            provider.GetRequiredService<ISettingsSnapshot<MailSynchronizationOptions>>(),
             provider.GetRequiredService<IServedMailAccountReader>()));
-        // The accounts the coordinator supervises and what each run reads, both from the records. It composes over the
-        // bound settings rather than the published snapshot, because a run carries only the users its account is
-        // assigned to rather than the roster the published snapshot pairs every section with.
+        // The accounts the coordinator supervises, what each run reads, and what a request acting for one user reads, all
+        // from the records and composed over the bound settings, which carry no account of their own.
         builder.Services.AddSingleton<IMailSynchronizationAccountSource>(provider => new PersistedMailSynchronizationAccounts(
             provider.GetRequiredService<ValidatedSettingsSnapshot<MailSynchronizationOptions>>(),
             provider.GetRequiredService<IServedMailAccountReader>(),
@@ -575,7 +570,8 @@ internal static class HostComposition
             provider.GetRequiredService<IUserSettingsDocumentReader>(),
             provider.GetRequiredService<ServedUserRecordComposition>(),
             provider.GetRequiredService<ConfigurationChangeAnnouncements>(),
-            provider.GetRequiredService<WithheldMailAccounts>()));
+            provider.GetRequiredService<WithheldMailAccounts>(),
+            provider.GetRequiredService<ServedUsers>()));
         builder.Services.AddScoped<ITrustedAuthenticationAuthorityReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.TrustedAuthenticationAuthorities);
         builder.Services.AddScoped<ISenderTrustPolicyReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.SenderTrustPolicies);
         // Resolved from the same snapshot as the verdicts above, so one work unit reads mail under one reload. Which of
@@ -1297,21 +1293,21 @@ internal static class HostComposition
         builder.Services.AddHostedService<DatabaseSchemaStartupGate>();
 
         // Behind the schema gate, because the user records live in a table that migration creates, and ahead of
-        // everything that serves a request, because a caller is admitted to act for a user and there is nothing to
-        // admit one for until this has run.
+        // everything that serves a request, because a caller naming no user acts for the sole one and how many users the
+        // deployment holds is what this reads.
         builder.Services.AddHostedService<ServedUsersStartupGate>();
 
-        // Behind the gate above, because what it keeps current is the roster that gate settled, and what it reads is
-        // settings and records rather than mail, so nothing behind it waits on it. The persisted layer's reloader is
-        // asked for rather than required: a host composed without that layer has only a roster to keep current. It is
+        // Behind the gate above, because what it keeps current is the count that gate read and the users this replica has
+        // composed since, and what it reads is settings and records rather than mail, so nothing behind it waits on it.
+        // The persisted layer's reloader is asked for rather than required: a host composed without that layer has only
+        // the users and the accounts to keep current. It is
         // handed as the resolution rather than as the service, because that reloader reads through the connection pool
         // and every hosted service is constructed before any is started — asking for it here would build the pool
         // before startup composed the connection string it needs.
-        builder.Services.AddSingleton<ServedUsersConvergence>();
         builder.Services.AddSingleton<MailAccountSettingsReconciliation>();
         builder.Services.AddHostedService(provider => new ConfigurationConvergenceWorker(
             provider.GetRequiredService<ConfigurationChangeAnnouncements>(),
-            provider.GetRequiredService<ServedUsersConvergence>(),
+            provider.GetRequiredService<ServedUsers>(),
             provider.GetRequiredService<MailAccountSettingsReconciliation>(),
             provider.GetService<RootSettingsReloader>,
             provider.GetRequiredService<TimeProvider>(),
@@ -1328,14 +1324,13 @@ internal static class HostComposition
 
         // Behind the schema gate, because it reads a table, and ahead of the walk that would reduce the figure it
         // reports, so what an operator sees at start is the state the instance came up in. Registered whatever this
-        // deployment's own section says, because whether anything can be stale follows the postures the roster composes
-        // and the roster is settled by the gate above rather than known here; the report asks that question itself and
-        // says nothing where no user's mail is scanned.
+        // deployment's own section says, because whether anything can be stale follows the postures the account records
+        // compose rather than anything known here; the report asks that question itself and says nothing where no user's
+        // mail is scanned.
         builder.Services.AddHostedService<StaleDerivedDataStartupReport>();
 
-        // The bound settings rather than the published snapshot, because the published one is replaced on every user
-        // record a replica republishes and the coordinator replaces every supervisor when its settings are replaced:
-        // the accounts it supervises, and each account's own settings, are read from the records instead.
+        // The bound settings, because the coordinator replaces every supervisor when its settings are replaced and the
+        // accounts it supervises, and each account's own settings, are read from the records instead.
         builder.Services.AddHostedService(provider => new MailSynchronizationCoordinator(
             provider.GetRequiredService<IServiceScopeFactory>(),
             provider.GetRequiredService<ValidatedSettingsSnapshot<MailSynchronizationOptions>>(),

@@ -9,7 +9,6 @@ using MailFathom.Application.StoredFiles;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Endpoints;
-using MailFathom.Host.Configuration.Records;
 using MailFathom.Host.Configuration.SensitiveContent;
 using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.Configuration.UserSettings.Administration;
@@ -65,7 +64,15 @@ internal sealed class UserRecordDeployment
 
         this.Documents = Substitute.For<IUserSettingsDocumentReader>();
         this.Documents.ReadVersionsAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
-            .Returns(_ => this.MailAccountRecords.Versions());
+            .Returns(call => Task.FromResult<IReadOnlyList<UserSettingsDocumentVersion>>(
+                [.. this.MailAccountRecords.Versions().Take(call.ArgAt<int>(0))]));
+        this.Documents.ReadVersionsAsync(Arg.Any<IReadOnlyCollection<UserId>>(), Arg.Any<CancellationToken>())
+            .Returns(call => Task.FromResult<IReadOnlyList<UserSettingsDocumentVersion>>(
+            [
+                .. this.MailAccountRecords.Versions()
+                    .Where(row => call.ArgAt<IReadOnlyCollection<UserId>>(0).Contains(row.User)),
+            ]));
+        this.ServedUsers = ResolvedServedUsers.Over(this.Documents);
 
         this.Store = Substitute.For<IUserSettingsDocumentWriter>();
         this.Store
@@ -91,16 +98,6 @@ internal sealed class UserRecordDeployment
         this.Erasure = Substitute.For<IUserErasure>();
         this.Erasure.EraseAsync(Arg.Any<UserId>(), Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>())
             .Returns(new UserErasureOutcome(false, null));
-
-        // A roster naming somebody no test acts on, so every user a test writes for reads as one nothing declares —
-        // which is the ordinary case — until the test says otherwise.
-        this.ServedUsers.Resolved(
-        [
-            new(
-                UserId.Create(new Guid("99999999-9999-9999-9999-999999999999")),
-                "nobody-these-tests-name",
-                []),
-        ]);
 
         var authorization = new AccessAuthorization(principals);
         var settings = new ConfigurationBuilder().Build();
@@ -143,11 +140,7 @@ internal sealed class UserRecordDeployment
             this.MailAccountRecords,
             binder,
             SecretValidation.OverRegisteredSchemes(),
-            new ServedUsersConvergence(
-                UserRecordScopes.Resolving(this.Documents, binder),
-                this.ServedUsers,
-                new HeldBackRecords(),
-                new RecordingLogger<ServedUsersConvergence>()),
+            this.ServedUsers,
             new ConfigurationChangeAnnouncements(
                 () => Task.FromResult(this.Backplane.Connect()),
                 new RecordingLogger<ConfigurationChangeAnnouncements>()));
@@ -191,8 +184,8 @@ internal sealed class UserRecordDeployment
     /// <summary>Gets the quiescing an erasure runs under, which lets the work through unless a test refuses it.</summary>
     internal RecordedMailAccountWorkQuiescing Quiescing { get; } = new();
 
-    /// <summary>Gets the roster this process serves, which an account write converges before announcing.</summary>
-    internal ServedUsers ServedUsers { get; } = new();
+    /// <summary>Gets the users this process holds, read from the rows <see cref="Documents" /> answers, which an account write converges before announcing.</summary>
+    internal ServedUsers ServedUsers { get; }
 
     /// <summary>Gets the backplane an account write is announced over, which nobody hears until a test listens.</summary>
     internal InMemoryBackplane Backplane { get; } = new();
@@ -237,9 +230,20 @@ internal sealed class UserRecordDeployment
         this.Directory.ReadUsersAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(held);
         this.Directory.ReadUserPageAsync(Arg.Any<AdministrativeListingQuery>(), Arg.Any<CancellationToken>())
             .Returns(new AdministrativeListingPage<UserRecord>(held, ContinuesAfter: null));
+
+        foreach (var record in held)
+        {
+            this.Directory.ReadUserAsync(record.User, Arg.Any<CancellationToken>()).Returns(record);
+        }
     }
 
-    /// <summary>States the roster this process settled at start.</summary>
-    /// <param name="served">The users served, and where each one's mail accounts are read from.</param>
-    internal void Serving(params ServedUser[] served) => this.ServedUsers.Resolved(served);
+    /// <summary>States the users this process already holds, each as composed at version one.</summary>
+    /// <param name="served">The users held, and the mail accounts each one is served.</param>
+    internal void Serving(params ServedUser[] served)
+    {
+        foreach (var user in served)
+        {
+            this.ServedUsers.Published(user, 1);
+        }
+    }
 }

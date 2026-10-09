@@ -163,7 +163,7 @@ The mailbox travels as a file rather than as a list of flags: a JSON object stat
 `DisplayName` beside the keys [one account](configuration-mail.md#one-account--a-mailbox-in-a-users-record) lists.
 `--user` may be left out on a deployment holding one person.
 
-At most **256** users may be recorded. A roster that long was generated rather than provisioned, which is worth stopping for on its own.
+No count bounds how many users may be recorded. A replica reads a user's record the first time something acts for them rather than reading everybody at start, so how many a deployment holds is a question of sizing its database rather than a ceiling this page states.
 
 ### What a user's own record carries
 
@@ -335,7 +335,7 @@ A label is applied only where nobody else holds it, because a label names one us
 
 **A fresh database holds no user.** A user is somebody an administrator records, so a first run serves nobody and reads no mail until `mfctl user add` records the first person and `mfctl account add` gives them a mailbox — without naming them, while they are the only one. The migration that creates the table of users writes a row of its own only where it upgrades a database already holding mail from a release before users were recorded, so that the stored mail has somebody to belong to: one user, labelled `user`, with a record stating nothing. `mfctl user rename` changes that label.
 
-**A deployment holding no user starts, completes every startup gate, reports itself started, and serves nobody.** That is where every new deployment stands on its first start, and where one whose every user was erased returns to, and nothing about it is a failure: there is no roster to compose, no mailbox to read, and no surface answering for anybody. It says so once, at `Information`:
+**A deployment holding no user starts, completes every startup gate, reports itself started, and serves nobody.** That is where every new deployment stands on its first start, and where one whose every user was erased returns to, and nothing about it is a failure: there is nobody to compose, no mailbox to read, and no surface answering for anybody. It says so once, at `Information`:
 
 ```
 This deployment holds no user and therefore serves nobody. Record one with 'mfctl user add', then give them a mailbox with 'mfctl account add'.
@@ -347,7 +347,7 @@ Synchronization being switched on changes nothing about that. A deployment whose
 Mail synchronization is switched on and no user this deployment serves is assigned a mail account, so there is nothing to synchronize. Record one with 'mfctl account add'.
 ```
 
-**A user recorded at runtime is served without a restart**, mailboxes and all: a committed record or account write is published to the running roster by the write that committed it, so every surface that replica serves answers for that user from that moment, and it is announced, so that replica's next synchronization pass reads the account from the records and supervises it. Every other replica serves them within thirty seconds, or as soon as a [signal backplane](#what-reaches-every-replica) carries the announcement; its synchronization picks the account up on that announcement, or within `MailSynchronization:Interval` where none arrives.
+**A user recorded at runtime is served without a restart**, mailboxes and all, because no replica holds a list of the users it serves. A user is read from their own record the first time a request or a piece of work acts for them, and is kept while somebody keeps asking — a user nobody has asked for over fifteen minutes is let go and read again on the next ask. A committed record or account write is taken by the replica that committed it at once, and it is announced, so that replica's next synchronization pass reads the account from the records and supervises it. Every other replica compares the users it holds against their stored versions within thirty seconds, or as soon as a [signal backplane](#what-reaches-every-replica) carries the announcement; its synchronization picks the account up on that announcement, or within `MailSynchronization:Interval` where none arrives. What an account's own record asks to have its mail scanned for reaches every replica within the same thirty seconds.
 
 **A deployment whose file still carries `MailSynchronization:Accounts` does not start.** Nothing imports what the section declared, so a start that quietly ignored it would leave an operator believing mail was being read that nothing was reading. The refusal names the section and the two commands that replace it:
 
@@ -360,27 +360,17 @@ from your configuration.
 
 One bound holds while several users are served. Only one user may be served whenever an **user-facing** surface — the MCP endpoint or the client endpoint — admits a caller that names no user, because such a caller is composed against whichever user the deployment happens to hold, and a second user would leave that surface serving one person another person's mail. Every credential these two surfaces admit is a record naming the user it belongs to, whichever method presents it, so the one way a caller arrives naming nobody is a surface requiring no authentication at all. A deployment serving several with either of those surfaces in that state is refused, and the message names the correction: require a credential, or switch the surface off. **The administrative endpoint is deliberately outside that bound** — an administrator acts for the deployment rather than for a person, so a caller there is admitted for no user and every user-scoped route names the user it is for, which is what makes recording a second user something an operator can do at all.
 
-**One mailbox is one account, whoever it serves.** An account's identifier is generated rather than typed and its address is unique across the deployment, so one mailbox is one account and one copy of its mail however many users are assigned to it. [Mail accounts and who they are assigned to](admin-endpoint.md#mail-accounts-and-who-they-are-assigned-to) holds the rules. An account holding no address is not served, and a start reports it at `Warning`:
+**One mailbox is one account, whoever it serves.** An account's identifier is generated rather than typed and its address is unique across the deployment, so one mailbox is one account and one copy of its mail however many users are assigned to it. [Mail accounts and who they are assigned to](admin-endpoint.md#mail-accounts-and-who-they-are-assigned-to) holds the rules. An account holding no address is not served, and the replica that first reads a user assigned one reports it at `Warning`:
 
 ```
 The user labelled alex is assigned 1 mail accounts that hold no email address, so those mailboxes are not served. State each address with 'mfctl account edit'; 'mfctl account list' names the accounts.
 ```
 
-**A mail rule naming a mailbox nobody records does not stop a start either.** A configuration write and a reload refuse one, but a mailbox can stop being served after the rule naming it was accepted — its last assignment ends, or it is erased — and a start that refused then could be undone only through the host it refused. A start reports each such claim at `Warning` instead, and the rule does nothing there until the account is assigned again or the rule is changed; [Mail rules](../features/mail-rules.md#which-accounts-a-rule-applies-to) has the rule itself:
-
-```
-A declared mail rule names something no record of a user this deployment serves provides, so the rule does nothing there until a record provides it or the rule is changed: MailRules:Rules:0:Accounts — no user this deployment serves records a mail account named '5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10', so this rule would reach no mail.
-```
+**A mail rule naming a mailbox nobody records does not stop a start either.** A configuration write and a reload refuse one, but a mailbox can stop being served after the rule naming it was accepted — its last assignment ends, or it is erased — and a start that refused then could be undone only through the host it refused. A start reads no account to judge it against, so the rule simply does nothing there until the account is assigned again or the rule is changed; [Mail rules](../features/mail-rules.md#which-accounts-a-rule-applies-to) has the rule itself.
 
 ### What a start reports
 
-Every start records the roster, at `Information`:
-
-```
-This deployment serves 3 users, each read from their own record; no configuration source reaches anybody's mail accounts. Change them with mfctl.
-```
-
-Every user the deployment holds is served, in the order the rows were recorded in. A deployment holding none says so instead, in the line [a deployment that records no user](#a-deployment-that-records-no-user) above carries.
+A start reads no user's record. What it reads is whether the deployment holds nobody, one user, or several — which is what a caller naming no user is attributed by, and what decides whether a user-facing surface may be served beside several — so the time a start takes does not grow with the users a deployment holds. A deployment holding none says so, in the line [a deployment that records no user](#a-deployment-that-records-no-user) above carries; one holding somebody and no mailbox at all, with synchronization switched on, says it has nothing to synchronize. [`mfctl user list`](admin-endpoint.md#users-and-their-records) is what names who a deployment holds and whether the running process serves each of them.
 
 ### A record this deployment will not read
 
@@ -388,19 +378,19 @@ Every record is judged before it is committed, so a stored one that no longer re
 
 | The record | What a document this build will not read costs |
 | --- | --- |
-| A user | That user is not served: no mailbox of theirs is synchronized and no surface answers for them. A start completes without them and serves every other user unchanged; a running replica keeps serving them from the last version that bound, and adopts the next version that does. |
+| A user | That user is not served: no mailbox of theirs is synchronized and no surface answers for them. Every other user is served unchanged; a replica already serving them keeps serving them from the last version that bound, and adopts the next version that does. |
 | One of a user's mail accounts | That mailbox alone. The user's other mailboxes keep synchronizing, their record is published at the version the row holds, and everybody else is unaffected. |
 | An organization | The prefix its members type in front of their username. Every other organization is listed, renamed, and removed exactly as before, and the members of the affected one keep every credential that is not a password scoped to it. |
 
 **A conflict rejects the declaration that introduced it rather than both.** Two of one user's mail accounts cannot share a display name, so where a row holds two that do, the one recorded first is served and the second is what an operator is told to correct.
 
-A refused user record and a refused mail account declaration are each recorded at `Error` by the replica that read them, naming the kind of record, its identifier, the label it carries, the version refused, and the settings to correct. A start and a convergence write the same sentence, so one search finds both:
+A refused user record and a refused mail account declaration are each recorded at `Error` by the replica that read them, naming the kind of record, its identifier, the label it carries, the version refused, and the settings to correct. The first read of a user and every later comparison write the same sentence, so one search finds both:
 
 ```
 A MailAccount record is held back by a document this build will not bind: 0197a3c0-0000-7000-8000-000000000001 labelled work, at version 2. It is served from the last version that bound, where there is one, and every other record is unaffected. Correct it: The user record names 'Nonsense', which is not a setting a user's record carries. Remove it, or correct the spelling of the setting it was meant to be.
 ```
 
-**An unreadable organization row is logged by nothing, and is met on the administrative surface alone.** No roster binds an organization — a replica reads one when somebody asks for the listing rather than while it settles who it serves — so there is no reading of it to report, and an operator watching logs for one would wait forever. [`GET /api/admin/records/held-back`](admin-endpoint.md#records-this-deployment-will-not-read) answers all three kinds grouped by kind, and [`mfctl organization list`](admin-endpoint.md#organizations) names the organization half beneath the listing. For the two kinds above it is the second way to meet them rather than the only one.
+**An unreadable organization row is logged by nothing, and is met on the administrative surface alone.** Nothing a replica serves binds an organization — a replica reads one when somebody asks for the listing — so there is no reading of it to report, and an operator watching logs for one would wait forever. [`GET /api/admin/records/held-back`](admin-endpoint.md#records-this-deployment-will-not-read) answers all three kinds grouped by kind, and [`mfctl organization list`](admin-endpoint.md#organizations) names the organization half beneath the listing. For the two kinds above it is the second way to meet them rather than the only one.
 
 ### Which source reaches a user
 
@@ -416,7 +406,7 @@ they are served with 'mfctl account'.
 
 A change naming `MailSynchronization:Accounts` is refused too, and by the binding rather than by the catalog: nothing in this release binds that section, so a candidate carrying it composes no configuration this deployment would accept.
 
-This is the one place the page's standing claim needs reading carefully. **No file MailFathom reads is ever written back** — that still holds, and nothing here writes into anybody's file. What a file can no longer show is who this deployment serves or which mailboxes they own; the startup line above is what says so.
+This is the one place the page's standing claim needs reading carefully. **No file MailFathom reads is ever written back** — that still holds, and nothing here writes into anybody's file. What a file can no longer show is who this deployment serves or which mailboxes they own; `mfctl user list` is what says so.
 
 ### Which endpoints one user is served on
 
@@ -553,13 +543,13 @@ Two further properties belong to Kubernetes rather than to the watcher: an updat
 
 ### What reaches every replica
 
-**A change committed through MailFathom reaches every replica within thirty seconds, without a restart.** That holds for both stores a program writes: the deployment's persisted document in `settings_root`, and each user's record in `settings_accounts` — recording a user, changing their record, and erasing them. The replica that committed the change republishes it before the write answers. Every other replica compares the version it bound with the version each row holds every thirty seconds, and republishes a newer one through the same path a write takes, so it is bound, validated, and refused by version exactly as it was on the replica that committed it. The interval is fixed rather than a setting, because it is the bound this page promises. The same interval reads again the [settings every account is asked about at once](../architecture/stored-email-schema.md#what-every-account-is-asked-about-at-once) for up to a hundred accounts whose document a build older than those settings wrote alone, which is what bounds how long such a write goes unseen by those answers during a rolling upgrade: one interval while no more than a hundred trail, and a hundred per interval beyond that.
+**A change committed through MailFathom reaches every replica within thirty seconds, without a restart.** That holds for both stores a program writes: the deployment's persisted document in `settings_root`, and each user's record in `settings_accounts` — recording a user, changing their record, and erasing them. The replica that committed the change takes it before the write answers. Every other replica compares the version it bound with the version the row holds every thirty seconds — for a user's record, only the users that replica is holding, because it reads a user when something first acts for them — and takes a newer one through the same path a write takes, so it is bound, validated, and refused by version exactly as it was on the replica that committed it. The interval is fixed rather than a setting, because it is the bound this page promises. The same interval reads again the [settings every account is asked about at once](../architecture/stored-email-schema.md#what-every-account-is-asked-about-at-once) for up to a hundred accounts whose document a build older than those settings wrote alone, which is what bounds how long such a write goes unseen by those answers during a rolling upgrade: one interval while no more than a hundred trail, and a hundred per interval beyond that.
 
 **Where a [signal backplane](configuration-endpoints.md#signalbackplane) is declared, a change arrives sooner.** The committing replica announces it over the backplane, and every replica listening compares the versions straight away rather than on its next interval. The announcement carries nothing — no setting, no user, no version — and losing it costs only the wait: a replica that missed one, and every replica of a deployment that declares no backplane, still converges on the interval. [ADR 0032](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0032-reaching-a-client-from-any-replica-over-websockets-and-a-resp-backplane.md#amendment-2-a-configuration-change-is-announced-over-the-backplane) records that exception to what the backplane carries.
 
 **Mail synchronization reads the accounts it supervises from the records themselves, on a schedule of its own.** Its coordinator wakes on every announcement — the ones this replica makes, whether or not a backplane is declared, and every one heard over one — and otherwise every `MailSynchronization:Interval`. So an account recorded, changed, or removed on another replica reaches that replica's supervision on the announcement, or within that interval where none arrives, which can be longer than the thirty seconds above. [Per-account supervision](../features/imap-synchronization.md#per-account-supervision) states what a pass reads and what it replaces.
 
-**A replica that cannot take a change reports it exactly as the replica that committed it would, and keeps what it bound.** A persisted document that does not bind or validate there is [rejected by version](#startup-and-a-reload-that-fails) with the same record, and the version it last bound goes on serving. A user's record that does not bind is logged at `Error` and reported on the administrative surface, naming the user's identifier, their label, the version, and the settings to correct, and that user goes on being served from the record bound before it; one mail account of theirs that does not bind is held back the same way and costs that mailbox alone, the rest of the record being republished at the version the row holds. Neither is reported again on every interval while the row stays at that version, and both stop being reported once the row is repaired. [A record this deployment will not read](#a-record-this-deployment-will-not-read) states what each kind costs. A deployment holding more users than one deployment may serve is logged at `Error` on every interval, and while it does, the replica takes no user's change at all — no newer record and no erasure — until the count is back within that bound, because a roster read short would drop whoever the reading left out. A reading that fails outright — a database out of reach — is logged at `Warning` and made again on the next interval:
+**A replica that cannot take a change reports it exactly as the replica that committed it would, and keeps what it bound.** A persisted document that does not bind or validate there is [rejected by version](#startup-and-a-reload-that-fails) with the same record, and the version it last bound goes on serving. A user's record that does not bind is logged at `Error` and reported on the administrative surface, naming the user's identifier, their label, the version, and the settings to correct, and that user goes on being served from the record bound before it; one mail account of theirs that does not bind is held back the same way and costs that mailbox alone, the rest of the record being composed at the version the row holds. Neither is reported again on every interval while the row stays at that version, and both stop being reported once the row is repaired. [A record this deployment will not read](#a-record-this-deployment-will-not-read) states what each kind costs. A reading that fails outright — a database out of reach — is logged at `Warning` and made again on the next interval:
 
 ```
 This replica could not compare what it serves against the persisted configuration and the users' records, and reads them again in 00:00:30; what it bound stays in force.
@@ -570,7 +560,7 @@ This replica could not compare what it serves against the persisted configuratio
 - **A row edited in the database without raising its version.** The comparison reads `Version`, so an edit made behind MailFathom that leaves it where it was is never seen by a running replica.
 - **A setting classified restart-required**, and every setting [the persisted layer may not carry](#what-it-may-not-carry). A committed change republishes the layer, and what binds only at startup still binds only at startup.
 - **Which keys a ConfigMap holds**, as the section above states.
-- **A new label, on any replica.** Relabelling a user moves no record version and republishes nothing, so every replica — the one that relabelled them included — serves the label it last bound that user's record under until the record next changes or the replica restarts. The label is what an administrator selects a user by, and nothing a user is served changes with it.
+- **A new label, on any replica.** Relabelling a user moves no record version, so every replica — the one that relabelled them included — serves the label it last bound that user's record under until the record next changes, or until that replica lets the user go and reads them again. The label is what an administrator selects a user by, and nothing a user is served changes with it.
 
 ## Kubernetes
 

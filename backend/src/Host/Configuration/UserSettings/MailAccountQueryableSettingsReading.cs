@@ -23,7 +23,7 @@ namespace MailFathom.Host.Configuration.UserSettings;
 /// it asked, and the reader that asks about every account composes it with what the deployment provides.
 /// </para>
 /// <para>
-/// A document that does not bind, or binds to a declaration the roster's judge would refuse, is read as settings that
+/// A document that does not bind, or binds to a declaration a user's composition would refuse, is read as settings that
 /// take part in nothing rather than refused. The write path judges a declaration before it ever reaches this, so the
 /// case is a row something other than the administration wrote, and the honest answer about such an account is that
 /// nothing can be said for it.

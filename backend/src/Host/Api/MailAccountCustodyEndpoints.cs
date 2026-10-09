@@ -9,6 +9,7 @@ using MailFathom.Application.Synchronization.Restore;
 using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
+using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Security.Endpoints;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
@@ -151,7 +152,8 @@ internal static class MailAccountCustodyEndpoints
     /// <summary>Asks for one account's custody to become what the request names.</summary>
     /// <param name="request">The account and the custody asked for.</param>
     /// <param name="accounts">Reports whether this deployment serves the named account.</param>
-    /// <param name="custody">Performs the switch.</param>
+    /// <param name="mailSettings">Holds the account settings the switch reads, which this route prepares for the named account.</param>
+    /// <param name="context">The request being answered, whose services the switch is resolved through once the account's settings are prepared.</param>
     /// <param name="cancellationToken">Cancels the request when the client disconnects.</param>
     /// <returns><c>200</c> with what the request did, <c>400</c> naming what was wrong with it, <c>409</c> where the account is served but has bound no folder yet, or <c>503</c> where the source could not be read.</returns>
     /// <remarks>
@@ -166,15 +168,21 @@ internal static class MailAccountCustodyEndpoints
     /// the ordinary condition rather than a fault: it answers <c>503</c> saying nothing was started, because a
     /// generic failure there would read as the deployment being broken rather than as the mail server being away.
     /// </para>
+    /// <para>
+    /// An administrative caller acts for no user, so the switch is resolved only after the named account's settings are
+    /// prepared: what it is composed from reads the account's folder mappings and its connection to the source.
+    /// </para>
     /// </remarks>
     internal static async Task<Results<Ok<MailAccountCustodySwitchResponse>, ProblemHttpResult>> SwitchAsync(
         [FromBody] MailAccountCustodySwitchRequest? request,
         [FromServices] IDeploymentMailAccountCatalog accounts,
-        [FromServices] MailAccountCustodySwitch custody,
+        [FromServices] ScopedMailSynchronizationSettings mailSettings,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(accounts);
-        ArgumentNullException.ThrowIfNull(custody);
+        ArgumentNullException.ThrowIfNull(mailSettings);
+        ArgumentNullException.ThrowIfNull(context);
 
         if (await AdminAccountRequest.ResolveAsync(request?.Account, accounts, cancellationToken) is not { } servedAccount)
         {
@@ -188,6 +196,12 @@ internal static class MailAccountCustodyEndpoints
                 statusCode: StatusCodes.Status400BadRequest);
         }
 
+        if (!await mailSettings.UseAccountSettingsAsync(servedAccount, cancellationToken))
+        {
+            return AdminAccountRequest.Unknown(servedAccount.Value);
+        }
+
+        var custody = context.RequestServices.GetRequiredService<MailAccountCustodySwitch>();
         MailAccountCustodySwitchOutcome? outcome;
 
         try

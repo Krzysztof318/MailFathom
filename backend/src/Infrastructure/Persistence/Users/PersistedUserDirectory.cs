@@ -20,7 +20,7 @@ namespace MailFathom.Infrastructure.Persistence.Users;
 /// <para>
 /// The order is by the instant a user was recorded, so "the first user" is a stable answer rather than whichever
 /// row the database returned first. What a caller does about the roster is theirs to decide: this reports what is
-/// there, and the startup gate is what reconciles it against what configuration declares.
+/// there.
 /// </para>
 /// </remarks>
 [RequiresIntegrationCoverage]

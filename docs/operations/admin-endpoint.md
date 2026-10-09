@@ -331,7 +331,7 @@ request from a permitted network still needs a valid credential, and a request w
 | `GET /api/admin/configuration/adoption` | `mailfathom.admin.read` | Reports what adopting a path would copy out of the deployment's files, naming the file behind each setting, and writes nothing. |
 | `POST /api/admin/configuration/adoption` | `mailfathom.admin.configuration.write` | Copies those values into the persisted document. **This is the one route that moves a decision out of a deployment's files and into its database.** |
 | `GET /api/admin/users` | `mailfathom.admin.read` | Reads [one page](#reading-the-users-mail-accounts-and-organizations-a-page-at-a-time) of [the users this deployment holds records for](#users-and-their-records), each with the label it tells them apart by, whether the running process serves them, and whether they are served on the MCP endpoint and on the client endpoint. It is what a user or credential command reads before it acts, so that a deployment serving one person needs no `--user`. |
-| `POST /api/admin/users` | `mailfathom.admin.configuration.write` | Records a user this deployment did not hold, from the display name the body carries, and answers with the identifier they were minted under. It refuses, naming what to change, a second user while a user-facing endpoint admits a caller who names nobody, a label another user already carries, and a roster already at its bound. |
+| `POST /api/admin/users` | `mailfathom.admin.configuration.write` | Records a user this deployment did not hold, from the display name the body carries, and answers with the identifier they were minted under. It refuses, naming what to change, a second user while a user-facing endpoint admits a caller who names nobody, and a label another user already carries. |
 | `PUT /api/admin/users/{userId}/display-name` | `mailfathom.admin.configuration.write` | Replaces the label the user is told apart by. It answers with no body — the label the request carried is the whole of what changed — refuses a label another user carries, naming what to change, and answers `404` for a user this deployment holds no record for, as every other user-scoped route does. |
 | `PUT /api/admin/users/{userId}/endpoint-access` | `mailfathom.admin.configuration.write` | Keeps the user off [the MCP endpoint, the client endpoint, or both](#users-and-their-records), or lets them back on, from `mcpEndpoint` and `clientEndpoint` in the body; a switch the body leaves out stays where it is and a body naming neither is refused. It writes them into the user's record, answers both switches as the record now states them, and answers `404` for a user this deployment holds no record for and `409` where another write moved the record first. |
 | `DELETE /api/admin/users/{userId}` | `mailfathom.admin.erase` | Erases the user and every message, folder, attachment, and derived index this deployment holds for them, once [the work bound to their own mailboxes has stopped](#users-and-their-records). **This is the one route here that destroys mail, and it cannot be undone.** A user this deployment does not hold is reported as nothing erased rather than as a refusal, and work that will not stop within its bound is answered `409` naming it, with nothing erased. |
@@ -377,9 +377,8 @@ nothing about the request was wrong.
 
 `GET /api/admin/users`, `GET /api/admin/mail-accounts`, and `GET /api/admin/organizations` each answer one page.
 Paging is what lets a listing hold more rows than one answer carries, not a limit on how many there are: no total
-count bounds the mail accounts or the organizations a deployment holds, so every one of them is listed a page at a
-time, while users are still bounded by the roster limit `POST /api/admin/users` refuses past, and the per-user bounds
-on assigning and listing mail accounts stay. Each listing takes the same two parameters:
+count bounds the users, the mail accounts, or the organizations a deployment holds, so every one of them is listed a
+page at a time, while the per-user bounds on assigning and listing mail accounts stay. Each listing takes the same two parameters:
 
 | Parameter | Meaning |
 | --- | --- |
@@ -1476,8 +1475,8 @@ operator reads the one to pass.
 **An erasure stops that user's own mail work before it deletes anything, and refuses rather than erasing half.** Most
 of what a user's erasure removes is reached from the rows it deletes, but a synchronization run and a job handler write
 rows keyed to a *mail account* rather than to the person — so a deletion racing one of them would answer that this
-deployment holds nothing while it was still being written to. What the request does first is therefore take the user off
-the roster this replica serves, withhold every mailbox they were the last one assigned from this replica's
+deployment holds nothing while it was still being written to. What the request does first is therefore withhold the user
+from everything this replica serves, withhold every mailbox they were the last one assigned from this replica's
 synchronization, and hold the supervision of each of those mailboxes, which is the same lease a replica takes before it
 synchronizes that mailbox: holding it means no replica is running that account, and none starts one until the erasure
 has committed. A mailbox somebody else is also assigned is left running and is not
@@ -1638,9 +1637,10 @@ somebody's password. Material supplied through these routes is sealed under the 
 [data-encryption key](secret-provisioning.md) like every other MailFathom secret, and what the record keeps is the
 reference to it.
 
-**A committed user record is published to the running process.** Recording, changing, or erasing a user
-replaces the runtime account snapshot after the database commit. The coordinator stops scheduling the superseded
-account set and starts the new one without a restart. A synchronization run already in flight keeps the snapshot it
+**A committed user record reaches the running process.** Recording, changing, or erasing a user is taken by the
+replica that committed it once the database commit is durable, and announced to every other. The coordinator reads the
+accounts it supervises from the records on that announcement, stops scheduling the superseded account set, and starts
+the new one without a restart. A synchronization run already in flight keeps the snapshot it
 began with and drains before its supervisor ends, so one run never reads two document versions.
 
 ### Organizations

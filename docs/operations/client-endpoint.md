@@ -2151,7 +2151,7 @@ refused, naming the declaration as where those mailboxes are changed, because co
 which mailboxes this deployment reads and the files would win at the next restart. Nothing on this surface changes
 that: which decisions a deployment's own files make is the operator's, not the user's.
 
-**An accepted record change is published to the running process.** A mailbox declared here is stored and scheduled
+**An accepted record change reaches the running process.** A mailbox declared here is stored and scheduled
 without a restart. The coordinator drains work already in flight against the immutable document version it began with,
 then starts the replacement supervisor, so one run never reads two answers.
 
@@ -2235,8 +2235,8 @@ said so. The body is bounded like every other on this surface, and one past the 
 
 **Neither route names a user**, exactly as no record route does: the zone read and written is that of the credential
 that authenticated. A deployment holding no record for that person answers the write `404`. A write naming the zone the
-record already states is answered as a write that landed and commits nothing: the record's version is what a roster
-republish across every replica is keyed on, which is a cost to pay for a change rather than for a re-submitted choice.
+record already states is answered as a write that landed and commits nothing: the record's version is what every replica
+recomposes that person on, which is a cost to pay for a change rather than for a re-submitted choice.
 
 **Both routes are `mailfathom.mail.read`.** The write is under the reading grant for the reason
 [the portrait routes](#the-portrait-routes) are: which zone somebody's own days are read in is not a decision about

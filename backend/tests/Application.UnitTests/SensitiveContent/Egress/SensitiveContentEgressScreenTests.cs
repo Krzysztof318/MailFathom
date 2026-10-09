@@ -39,7 +39,7 @@ public sealed class SensitiveContentEgressScreenTests
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.False(screen.IsActiveFor(ScanningSensitiveContentEgress.Account));
+        Assert.False(await screen.IsActiveForAsync(ScanningSensitiveContentEgress.Account, TestContext.Current.CancellationToken));
         Assert.Null(refusal);
         Assert.Empty(telemetry.Operations);
         Assert.Empty(telemetry.Guarded);
@@ -81,8 +81,8 @@ public sealed class SensitiveContentEgressScreenTests
         Assert.NotNull(screened);
         Assert.Equal(MarkerSensitiveContentScanner.Category, screened.Category);
         Assert.Null(unscreened);
-        Assert.True(screen.IsActiveFor(screening));
-        Assert.False(screen.IsActiveFor(quiet));
+        Assert.True(await screen.IsActiveForAsync(screening, TestContext.Current.CancellationToken));
+        Assert.False(await screen.IsActiveForAsync(quiet, TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -99,7 +99,7 @@ public sealed class SensitiveContentEgressScreenTests
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.True(egress.Screen.IsActiveFor(ScanningSensitiveContentEgress.Account));
+        Assert.True(await egress.Screen.IsActiveForAsync(ScanningSensitiveContentEgress.Account, TestContext.Current.CancellationToken));
         Assert.NotNull(refusal);
         Assert.Equal(SensitiveContentEgressRefusalReason.ContentFound, refusal.Reason);
         Assert.Equal(SensitiveContentScannerKind.Secrets, refusal.Scanner);
@@ -204,7 +204,7 @@ public sealed class SensitiveContentEgressScreenTests
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.True(screen.IsActiveFor(ScanningSensitiveContentEgress.Account));
+        Assert.True(await screen.IsActiveForAsync(ScanningSensitiveContentEgress.Account, TestContext.Current.CancellationToken));
         Assert.Null(refusal);
         Assert.Equal([$"the key is {Marker}"], scanner.ScannedTexts);
         Assert.Single(telemetry.Guarded);

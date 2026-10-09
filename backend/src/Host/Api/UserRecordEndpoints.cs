@@ -145,7 +145,7 @@ internal static class UserRecordEndpoints
     /// <param name="request">The label the user is told apart by.</param>
     /// <param name="cancellationToken">Cancels the write when the client disconnects.</param>
     /// <returns><c>200</c> with the identifier the user was minted under, or <c>400</c> naming what has to change first.</returns>
-    /// <remarks>A refusal is a request the administrator corrects — an endpoint to narrow, a label already taken, a roster at its bound — so it names what to change rather than reporting that something failed.</remarks>
+    /// <remarks>A refusal is a request the administrator corrects — an endpoint to narrow, a label already taken — so it names what to change rather than reporting that something failed.</remarks>
     internal static async Task<Results<Ok<UserProvisionedResponse>, ProblemHttpResult>> ProvisionAsync(
         [FromServices] UserRosterAdministration roster,
         [FromBody] UserProvisioningRequest request,

@@ -70,7 +70,8 @@ internal sealed class SyntheticMailAccount(
     ISenderTrustPolicyReader,
     IOutgoingSenderIdentityReader,
     IOutgoingMailFilingPolicyReader,
-    IOutgoingSendPermissionReader
+    IOutgoingSendPermissionReader,
+    IMailAccountSettingsScope
 {
     /// <summary>Every folder alias this suite's configuration maps, which is every alias its tests bind one to.</summary>
     /// <remarks>
@@ -252,6 +253,14 @@ internal sealed class SyntheticMailAccount(
         CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<ServedMailAccount>>(
             [.. this.ServedAccounts.Where(account => among.Contains(account.Id))]);
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Every scope already reads this one account's settings, so preparing one has nothing to load and answers whether
+    /// the account asked about is the one this suite serves.
+    /// </remarks>
+    public Task<bool> UseAccountSettingsAsync(MailAccountId account, CancellationToken cancellationToken) =>
+        Task.FromResult(account == AccountId);
 
     /// <inheritdoc />
     /// <remarks>

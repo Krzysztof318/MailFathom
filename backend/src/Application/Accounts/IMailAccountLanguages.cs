@@ -11,8 +11,8 @@ namespace MailFathom.Application.Accounts;
 /// <para>
 /// It is a port because the answer comes out of that account's record, which is the host's, while every pass that
 /// derives text about a mailbox lives above it. Resolution is synchronous and reaches no database: the answer follows
-/// the declarations the startup gate published and each account commit republishes, so a derivation never puts a read
-/// in front of the call it is about to make.
+/// the settings the work's scope was prepared with, which were read from the account records when it was prepared, so
+/// a derivation never puts a read in front of the call it is about to make.
 /// </para>
 /// <para>
 /// The answer is the account's rather than a user's because the mail is one copy however many users are assigned the

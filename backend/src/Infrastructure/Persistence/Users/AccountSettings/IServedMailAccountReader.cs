@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 
 namespace MailFathom.Infrastructure.Persistence.Users.AccountSettings;
 
@@ -10,7 +11,7 @@ namespace MailFathom.Infrastructure.Persistence.Users.AccountSettings;
 /// <remarks>
 /// <para>
 /// An account is served when it holds an address, its document binds, and somebody is assigned it. Each of the three
-/// is what the composed roster required of an account before it published one: an account the upgrade derived no
+/// is what composing a user requires of an account before serving it: an account the upgrade derived no
 /// address for waits for one to be stated, a document nothing can bind declares nothing, and an account nobody is
 /// assigned is read by nobody.
 /// </para>
@@ -70,5 +71,23 @@ public interface IServedMailAccountReader
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
     Task<IReadOnlyList<MailAccountScanningRequest>> ReadScanningRequestsAsync(
         UserId? user,
+        CancellationToken cancellationToken);
+
+    /// <summary>Reads what one served account asked for about scanning its mail.</summary>
+    /// <param name="account">The account asked about.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The account's answer, or <see langword="null" /> where this deployment does not serve it.</returns>
+    Task<MailAccountScanningRequest?> ReadScanningRequestAsync(
+        MailAccountId account,
+        CancellationToken cancellationToken);
+
+    /// <summary>Reads every served account that asked for a scanner or a screening of its own.</summary>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>Those accounts with what each asked for, in identifier order; an account that asked for nothing is left out.</returns>
+    /// <remarks>
+    /// An account that asked for nothing is scanned under the deployment's own section, so what a caller judging every
+    /// account at once needs named is only the accounts whose own record could differ from it.
+    /// </remarks>
+    Task<IReadOnlyList<MailAccountScanningDeclaration>> ReadAccountsRequestingScanningAsync(
         CancellationToken cancellationToken);
 }

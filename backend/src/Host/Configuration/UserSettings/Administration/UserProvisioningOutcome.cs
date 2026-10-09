@@ -9,7 +9,7 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// <summary>What provisioning a user produced: the identifier they were minted under, or why none was.</summary>
 /// <remarks>
 /// A refusal is a result rather than an exception because every one of them is a decision the administrator asking for
-/// the user acts on: a label somebody already carries, a roster at the bound, and a deployment whose endpoints could
+/// the user acts on: a label that is unusable or that somebody already carries, and a deployment whose endpoints could
 /// not tell one user's caller from another's. None of them is a failure of the machinery underneath.
 /// </remarks>
 internal sealed record UserProvisioningOutcome

@@ -8,15 +8,15 @@ using MailFathom.Domain.Access;
 
 namespace MailFathom.Host.Configuration.UserSettings;
 
-/// <summary>Answers each person's zone out of the roster their own records were published into.</summary>
+/// <summary>Answers each person's zone out of the served-user cache their own record is held in.</summary>
 /// <remarks>
 /// <para>
-/// The roster is followed rather than read per call, exactly as <see cref="ServedUserLanguages" /> follows it: it is
-/// published by the startup gate and republished by each user-record commit, so a zone somebody corrected reaches the
-/// next anchor without a restart and without any use case holding a copy of its own.
+/// The cache is read rather than the record, exactly as <see cref="ServedUserLanguages" /> reads it: whatever resolves a
+/// period for somebody has already prepared its scope with their accounts, which holds them here, so a zone somebody
+/// corrected reaches the next anchor without a restart and without any use case holding a copy of its own.
 /// </para>
 /// <para>
-/// A deployment before its gate has run, and a user it does not serve, are one answer rather than two —
+/// A user this replica does not hold, and a user it does not serve, are one answer rather than two —
 /// <see cref="UserTimeZone.Coordinated" />, which is what <see cref="IUserTimeZones" /> states and why.
 /// </para>
 /// </remarks>
@@ -28,5 +28,5 @@ internal sealed class ServedUserTimeZones(ServedUsers servedUsers) : IUserTimeZo
 
     /// <inheritdoc />
     public UserTimeZone? StatedZoneOf(UserId user) =>
-        servedUsers.TryGetUsers()?.FirstOrDefault(served => served.User == user)?.TimeZone;
+        servedUsers.Peek(user)?.TimeZone;
 }

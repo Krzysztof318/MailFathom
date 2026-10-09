@@ -21,10 +21,11 @@ namespace MailFathom.Host.Api;
 /// it happened.
 /// </para>
 /// <para>
-/// The users and their mail accounts are this replica's own reading, taken as the roster was bound and replaced on every
-/// convergence; the organizations are read from the rows when the route is asked, because no roster binds one. So the
-/// first two answer for the process being asked and the third for the deployment — and since every replica binds the
-/// same rows, an operator reading one replica learns what all of them refused.
+/// The users and their mail accounts are this replica's own reading, recorded as each user's record is read and composed
+/// here and replaced on every recomposition; the organizations are read from the rows when the route is asked, because
+/// nothing composes one. So the first two answer for the users the process being asked has composed and the third for
+/// the deployment — and since every replica binds the same rows, what one replica refused for a user is what any
+/// replica composing that user refuses.
 /// </para>
 /// </remarks>
 internal static class HeldBackRecordEndpoints
@@ -44,7 +45,7 @@ internal static class HeldBackRecordEndpoints
     }
 
     /// <summary>Reports every record this deployment is holding back, and how many of each kind there are.</summary>
-    /// <param name="heldBack">What this replica refused while binding the roster.</param>
+    /// <param name="heldBack">What this replica refused while composing the users it was asked for.</param>
     /// <param name="organizations">The organization administration, which reads the rows for the third kind.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
     /// <returns><c>200</c> with the records, each naming what must change, and empty lists where nothing is held back.</returns>

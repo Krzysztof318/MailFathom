@@ -155,9 +155,12 @@ internal sealed partial class MailExtractionBackfillWorker : BackgroundService
 
         try
         {
-            using var scope = this.scopeFactory.CreateScope();
+            await using var scope = this.scopeFactory.CreateAsyncScope();
+            await using var mimeReader = new AccountScopedEmailMimeReader(this.scopeFactory);
 
-            var backfill = scope.ServiceProvider.GetRequiredService<StoredEmailExtractionBackfill>();
+            // The walk meets several accounts' mail in one run, so each message is read under its own account's settings
+            // rather than under a scope prepared for none of them.
+            var backfill = ActivatorUtilities.CreateInstance<StoredEmailExtractionBackfill>(scope.ServiceProvider, mimeReader);
             var result = await backfill.RunAsync(cancellationToken);
 
             this.telemetry.RecordCompleted(result, this.timeProvider.GetElapsedTime(startedAt));

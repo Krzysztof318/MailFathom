@@ -252,7 +252,7 @@ internal sealed partial class MailboxWriteConnectionPool : IAsyncDisposable
                     await this.CloseHeldConnectionAsync();
                 }
 
-                this.connection ??= this.OpenConnection(folder, transportSecurityPolicy);
+                this.connection ??= await this.OpenConnectionAsync(folder, transportSecurityPolicy, cancellationToken);
 
                 if (folder is null)
                 {
@@ -311,14 +311,21 @@ internal sealed partial class MailboxWriteConnectionPool : IAsyncDisposable
             }
         }
 
-        private MailKitImapConnection OpenConnection(
+        private async Task<MailKitImapConnection> OpenConnectionAsync(
             MailFolderResolution? folder,
-            MailTransportSecurityPolicy transportSecurityPolicy)
+            MailTransportSecurityPolicy transportSecurityPolicy,
+            CancellationToken cancellationToken)
         {
             var scope = pool.scopeFactory.CreateScope();
 
             try
             {
+                // The connection reads its endpoint, credentials, and token source from this scope for as long as it is
+                // held, so the scope is prepared with the account before any of them is resolved.
+                await scope.ServiceProvider
+                    .GetRequiredService<IMailAccountSettingsScope>()
+                    .UseAccountSettingsAsync(accountId, cancellationToken);
+
                 var settingsProvider = scope.ServiceProvider.GetRequiredService<IImapAccountSettingsProvider>();
                 var accessTokenSource = scope.ServiceProvider.GetRequiredService<IMailAccessTokenSource>();
 

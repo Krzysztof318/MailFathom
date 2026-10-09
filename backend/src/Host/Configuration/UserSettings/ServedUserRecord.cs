@@ -11,7 +11,7 @@ namespace MailFathom.Host.Configuration.UserSettings;
 /// <param name="HeldBack">Every declaration refused, which is empty when the whole row bound.</param>
 /// <remarks>
 /// The two travel together because a partly served user is the ordinary answer rather than an exception: a record that
-/// bound with one of five mailboxes left out is both a roster entry to publish and a refusal to report, and a caller
+/// bound with one of five mailboxes left out is both a user to serve and a refusal to report, and a caller
 /// handed only the first would serve the user while nobody learned which mailbox stopped.
 /// </remarks>
 internal sealed record ServedUserRecord(

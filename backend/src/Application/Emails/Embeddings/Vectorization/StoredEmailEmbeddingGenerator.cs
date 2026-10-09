@@ -182,7 +182,8 @@ public sealed class StoredEmailEmbeddingGenerator
             // The passages are this account's mail on its way to a provider, and the adapter that sends them guards each
             // one several layers below here. This is where the answer to which mailbox it is exists, so it is stated
             // here — as the account, so the text is redacted under the posture written on the mailbox it came out of.
-            using var actingFor = this.egressGuard.ActingFor(account.Value);
+            using var actingFor = this.egressGuard.ActingFor(
+                await this.egressGuard.ReadPostureOfAsync(account.Value, cancellationToken));
 
             IReadOnlyList<EmbeddingVector> vectors;
             try

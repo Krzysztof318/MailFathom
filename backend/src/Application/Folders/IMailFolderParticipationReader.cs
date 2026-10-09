@@ -18,8 +18,9 @@ namespace MailFathom.Application.Folders;
 /// <para>
 /// This is the answer about one folder, for a write path that holds one email and asks about that email's folder. A
 /// read narrows a table and needs the whole admitted set as a value it can put into a predicate, which
-/// <see cref="IDeploymentMailFolders" /> answers from the account records. This answer reads the roster until #2330
-/// moves it, so the two agree only once the roster has republished the account's last write.
+/// <see cref="IDeploymentMailFolders" /> answers from the account records. This answer reads the settings its scope was
+/// prepared with until #2330 moves it, and those were read from the account records when the scope was prepared, so the
+/// two agree for every scope prepared after the account's last write committed.
 /// </para>
 /// </remarks>
 public interface IMailFolderParticipationReader

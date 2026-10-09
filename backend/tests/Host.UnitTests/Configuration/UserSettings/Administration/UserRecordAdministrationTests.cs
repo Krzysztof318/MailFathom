@@ -7,7 +7,6 @@ using MailFathom.Application.StoredFiles;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Failures;
 using MailFathom.Host.Configuration;
-using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.SensitiveContent;
 using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.Configuration.UserSettings.Administration;
@@ -151,11 +150,12 @@ public sealed class UserRecordAdministrationTests
     }
 
     /// <summary>
-    /// A committed record is announced so a replica that did not commit it reads it at once, and only once the roster is
-    /// released, so a backplane slow to answer holds no other roster write behind it.
+    /// A committed record is announced so a replica that did not commit it reads it at once, and only once this replica
+    /// holds the user at the version it committed, so the replica that wrote the record is never the one still serving
+    /// the one it replaced.
     /// </summary>
     [Fact]
-    public async Task ApplyOwnRecordAsync_ACommittedRecord_AnnouncesTheChangeOnceTheRosterIsReleased()
+    public async Task ApplyOwnRecordAsync_ACommittedRecord_HoldsItBeforeAnnouncingTheChange()
     {
         // Arrange
         var own = Guid.Parse("0197a3c0-0000-7000-8000-000000000001");
@@ -163,7 +163,9 @@ public sealed class UserRecordAdministrationTests
         harness.Holding(SyntheticUser.Deployment, EmptyRecord, version: 3);
         harness.Files.HoldsAsync(SyntheticUser.Deployment, StoredFileId.Create(own), Arg.Any<CancellationToken>())
             .Returns(true);
-        var heard = await RosterAnnouncementListener.ListenAsync(harness.Backplane, harness.ServedUsers);
+        var heard = await RosterAnnouncementListener.ListenAsync(
+            harness.Backplane,
+            () => harness.ServedUsers.Peek(SyntheticUser.Deployment) is not null);
 
         // Act
         await harness.Records.ApplyOwnRecordAsync(
@@ -185,7 +187,7 @@ public sealed class UserRecordAdministrationTests
         harness.Holding(SyntheticUser.Deployment, EmptyRecord, version: 3);
         harness.Files.HoldsAsync(SyntheticUser.Deployment, StoredFileId.Create(foreign), Arg.Any<CancellationToken>())
             .Returns(false);
-        var heard = await RosterAnnouncementListener.ListenAsync(harness.Backplane, harness.ServedUsers);
+        var heard = await RosterAnnouncementListener.ListenAsync(harness.Backplane, () => true);
 
         // Act
         await harness.Records.ApplyOwnRecordAsync(
@@ -841,15 +843,6 @@ public sealed class UserRecordAdministrationTests
             """,
             Version: 1);
 
-    private static ServedUser Serving(UserId user, params string[] accountIds) =>
-        new(
-            user,
-            $"user-{user.Value:D}",
-            [.. accountIds.Select(accountId => new MailSynchronizationAccountOptions
-            {
-                AccountId = accountId,
-            })]);
-
     /// <summary>A mailbox assigned to the user whose credential is a well-formed reference this deployment resolves to nothing.</summary>
     /// <remarks>
     /// The account binds, the scheme is one the deployment registers, and the secret name is the account's own, so the
@@ -905,10 +898,7 @@ public sealed class UserRecordAdministrationTests
                     Arg.Any<CancellationToken>())
                 .Returns(call => (long?)call.ArgAt<long>(3) + 1);
 
-            // The roster is settled with somebody the tests never write for, so the default deployment reads as a
-            // user nothing declares — which is the ordinary case — until a test states otherwise.
-            this.ServedUsers.Resolved(
-                [Serving(UserId.Create(new Guid("99999999-9999-9999-9999-999999999999")))]);
+            this.ServedUsers = ResolvedServedUsers.Over(this.Documents);
 
             var settings = new ConfigurationBuilder()
                 .AddInMemoryCollection(configuration ?? [])
@@ -942,12 +932,11 @@ public sealed class UserRecordAdministrationTests
 
         internal IUserSettingsDocumentWriter Store { get; }
 
-        internal ServedUsers ServedUsers { get; } = new();
+        /// <summary>Gets the users this replica holds, read from <see cref="Documents" />, which holds nobody until a test says so.</summary>
+        internal ServedUsers ServedUsers { get; }
 
         internal void Holding(UserId user, string json, long version, params MailAccountRecord[] accounts) =>
             this.Documents.ReadAsync(user, Arg.Any<CancellationToken>())
                 .Returns(new UserSettingsDocument(user, $"user-{user.Value:D}", json, version) { MailAccounts = accounts });
-
-        internal void Roster(params ServedUser[] served) => this.ServedUsers.Resolved(served);
     }
 }

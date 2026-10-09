@@ -87,7 +87,7 @@ internal sealed partial class SecretConfigurationStartupValidator : IHostedLifec
         this.LogActiveInterpretation(this.resolutionOptions.Interpretation);
 
         // The mail section is absent: every mailbox is one user's own record, and the secrets it names are judged per
-        // user by ServedUsersStartupGate, which is the first thing to hold both the roster and those records.
+        // user by ServedUserResolution when that user's record is read and composed, which a start does for nobody.
         var failures = new List<string>(
             await this.validator.FindPersistenceConfigurationErrorsAsync(
                 this.persistenceSettings.Current,

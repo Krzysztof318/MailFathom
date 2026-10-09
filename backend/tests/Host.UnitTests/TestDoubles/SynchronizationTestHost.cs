@@ -401,6 +401,7 @@ internal static class SynchronizationTestHost
         // snapshot rather than from the one the container was composed with. The host wires it exactly this way, which
         // is what lets a test replace the published snapshot and watch the next run pick the new account list up.
         services.AddSingleton(publishedSettings);
+        services.AddSingleton<IMailSynchronizationAccountSource>(new SnapshotMailSynchronizationAccounts(publishedSettings));
         services.AddScoped<ScopedMailSynchronizationSettings>();
         services.AddScoped(provider => provider.GetRequiredService<ScopedMailSynchronizationSettings>().Current);
         services.AddScoped<IMailTransportSecurityPolicyReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.TransportSecurityPolicies);
@@ -412,7 +413,7 @@ internal static class SynchronizationTestHost
         services.AddSingleton(ResolvedServedUsers.Serving([.. options.ServedUsers ?? []]));
         services.AddSingleton<IDeploymentUserSource>(provider => provider.GetRequiredService<ServedUsers>());
         services.AddScoped<IDeploymentMailAccountCatalog>(provider => new ConfiguredMailAccountCatalog(
-            provider.GetRequiredService<MailSynchronizationOptions>(),
+            provider.GetRequiredService<ISettingsSnapshot<MailSynchronizationOptions>>(),
             ServedMailAccountReaders.HoldingNothing()));
         services.AddSingleton<IMailAccountAssignments>(AssignmentsOf(options));
 

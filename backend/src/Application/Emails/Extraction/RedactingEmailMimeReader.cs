@@ -72,7 +72,7 @@ public sealed class RedactingEmailMimeReader : IEmailMimeReader
         // A posture republished while this message is being scanned then leaves the row stamped with the older one,
         // which reads as stale and is re-derived — the safe direction, where a stamp taken at the write would record a
         // posture the text never went through and the row would never be revisited.
-        var redactedUnder = this.guard.StampFor(account);
+        var redactedUnder = await this.guard.StampForAsync(account, cancellationToken);
         var extraction = await this.inner.ReadMetadataAsync(account, rawMime, cancellationToken);
 
         // A message nobody could parse carries no text to redact, and neither does one whose body held no words or

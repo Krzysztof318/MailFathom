@@ -33,9 +33,10 @@ namespace MailFathom.Application.SensitiveContent;
 /// </para>
 /// <para>
 /// It is a port because the postures are composed from configuration, which is the host's, while every path that scans
-/// lives above it. The answer about one account is synchronous, because a path that scans holds the account it scans
-/// for. The three answers about more than one account — every account, or every account of one user — are read from the
-/// account records themselves, because no replica holds every account to walk. A work unit that enters an acting scope
+/// lives above it. The answer about one account is read from that account's record, and a replica may reuse it for a
+/// short while, because a path that scans asks about the account it scans for on every message. The answers about more
+/// than one account — every account, or every account of one user — are read from the account records themselves,
+/// because no replica holds every account to walk. A work unit that enters an acting scope
 /// reads the answer it needs once, when it begins, rather than in front of each value it guards. A flow acting for
 /// nobody has no such beginning, so the egress guard asks <see cref="IsActiveForAnyAccountAsync" /> once per value it
 /// guards there.
@@ -53,24 +54,34 @@ public interface ISensitiveContentPostures
     /// <returns><see langword="true" /> when the deployment, or any account it serves, switched a scanner on.</returns>
     Task<bool> IsActiveForAnyAccountAsync(CancellationToken cancellationToken);
 
-    /// <summary>Gets what every account this deployment serves has its mail scanned under, ordered by account.</summary>
+    /// <summary>Gets what mail is scanned under where its account's own record asks for nothing more.</summary>
+    /// <remarks>
+    /// The deployment's own section, which is fixed for the life of the process. It is also what mail of an account this
+    /// deployment does not serve is judged against: such mail is not readable through any path that resolves a scope, so
+    /// it is reached only by work racing an erasure or by a walk over every stored message, and this is the stricter of
+    /// the two candidates.
+    /// </remarks>
+    SensitiveContentPosture Deployment { get; }
+
+    /// <summary>Reads what every account whose own record asks for more than <see cref="Deployment" /> has its mail scanned under, ordered by account.</summary>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>Those accounts with their postures; every account left out is scanned under <see cref="Deployment" />.</returns>
     /// <remarks>
     /// For the one consumer that judges rows belonging to several accounts in one query — the walk that re-derives what
-    /// was written under a posture nobody runs any more. The order is fixed so a value composed from it, such as the
-    /// configuration a resume position was reached under, does not depend on the order the roster was published in.
-    /// Everything else resolves the account the mail belongs to and calls <see cref="ForAccount" />.
+    /// was written under a posture nobody runs any more. Naming only the accounts that differ is what keeps that walk's
+    /// cost following the accounts that opted into something rather than every account the deployment serves. The order
+    /// is fixed so a value composed from it, such as the configuration a resume position was reached under, does not
+    /// depend on the order the records were read in. Everything else resolves the account the mail belongs to and calls
+    /// <see cref="ForAccountAsync" />.
     /// </remarks>
-    IReadOnlyList<MailAccountSensitiveContentPosture> Current { get; }
+    Task<IReadOnlyList<MailAccountSensitiveContentPosture>> ReadAccountsBeyondDeploymentAsync(CancellationToken cancellationToken);
 
     /// <summary>Finds what the mail in one account is scanned under.</summary>
     /// <param name="account">The account whose mail is about to be scanned, stored, or handed out.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>That account's posture, which scans nothing where neither the deployment nor the account switched anything on.</returns>
-    /// <remarks>
-    /// An account this deployment does not serve is answered with the deployment's own posture rather than with
-    /// nothing. Its mail is not readable through any path that resolves a scope, so the answer is reached only by work
-    /// racing an erasure, and the deployment's posture is the stricter of the two candidates.
-    /// </remarks>
-    SensitiveContentPosture ForAccount(MailAccountId account);
+    /// <remarks>An account this deployment does not serve is answered with <see cref="Deployment" />.</remarks>
+    Task<SensitiveContentPosture> ForAccountAsync(MailAccountId account, CancellationToken cancellationToken);
 
     /// <summary>Finds what a read spanning every account one user is assigned is scanned under.</summary>
     /// <param name="user">The user whose mail is about to be handed out.</param>

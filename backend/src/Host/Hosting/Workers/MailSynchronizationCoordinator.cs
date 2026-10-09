@@ -22,7 +22,7 @@ namespace MailFathom.Host.Hosting.Workers;
 /// the supervisor of the account it runs for.
 /// </para>
 /// <para>
-/// Each pass reads the accounts it supervises from the account records, page by page, rather than from a roster every
+/// Each pass reads the accounts it supervises from the account records, page by page, rather than from a set of users every
 /// replica composes. It reconciles when a committed account change is announced — by this replica or, over the signal
 /// backplane, by another — when the bound settings reload, when an erasure withholds or releases an account, when a
 /// supervisor ends, and on its own interval, which is how a change reaches a replica that heard no announcement. A

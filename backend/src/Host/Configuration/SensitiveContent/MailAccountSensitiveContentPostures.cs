@@ -9,8 +9,7 @@ using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Redaction;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
-using MailFathom.Host.Configuration.Mail;
-using MailFathom.Host.Configuration.UserSettings;
+using MailFathom.Host.Hosting.Workers;
 using MailFathom.Infrastructure.Persistence.Users.AccountSettings;
 
 namespace MailFathom.Host.Configuration.SensitiveContent;
@@ -29,7 +28,7 @@ namespace MailFathom.Host.Configuration.SensitiveContent;
 /// A user's own answer is composed beside the accounts', as the union over the accounts they are assigned, for the one
 /// reader that cannot name an account: a read spanning a person's whole mail. It is the strictest of their mailboxes
 /// rather than any one of them, which only ever redacts more than the message's own account asked for. That answer, and
-/// the two about every account, are read from the account records rather than from the roster, because no replica
+/// the two about every account, are read from the account records, because no replica
 /// holds every account to walk: what is read is the handful of distinct answers the accounts gave, never the accounts.
 /// </para>
 /// <para>
@@ -40,9 +39,10 @@ namespace MailFathom.Host.Configuration.SensitiveContent;
 /// <see cref="SensitiveContentScanConcurrency" />.
 /// </para>
 /// <para>
-/// The answer about one account follows the roster rather than being read per call: it is published by the startup gate
-/// and republished by each record commit, and this recomposes when it changes. A deployment before its gate has run
-/// serves the deployment's own posture to whoever asks, which is the answer every mailbox had before any record existed.
+/// The answer about one account is read from that account's record and reused for <see cref="Freshness" />, which is the
+/// interval within which every other replica takes a committed record as well: one account's mail is read message by
+/// message, and a read per message would cost a statement each. Nothing here holds every account, so what a replica
+/// keeps follows the accounts it is working on.
 /// </para>
 /// </remarks>
 internal sealed class MailAccountSensitiveContentPostures : ISensitiveContentPostures
@@ -52,15 +52,13 @@ internal sealed class MailAccountSensitiveContentPostures : ISensitiveContentPos
     private readonly Func<IEnumerable<ISensitiveContentScanner>> scanners;
     private readonly TimeProvider timeProvider;
     private readonly SensitiveContentScanConcurrency concurrency;
-    private readonly ServedUsers servedUsers;
     private readonly IServedMailAccountReader servedAccounts;
-    private readonly Lock mutex = new();
 
     /// <summary>Every posture an answer read from the account records composed to, bounded by how many distinct answers the scanners allow.</summary>
     private readonly ConcurrentDictionary<EffectivePosture, SensitiveContentPosture> composedAnswers = new();
 
-    /// <summary>What the roster this instance last read composed to, rebuilt when that roster changes.</summary>
-    private Composition? composed;
+    /// <summary>The answer about each account read within <see cref="Freshness" />, and the moment it was read.</summary>
+    private readonly ConcurrentDictionary<MailAccountId, HeldPosture> byAccount = new();
 
     /// <summary>Initializes the postures of a deployment, whether or not anybody's mail is scanned.</summary>
     /// <param name="deployment">The bound <c>SensitiveContent</c> section, which every posture is composed over.</param>
@@ -68,8 +66,7 @@ internal sealed class MailAccountSensitiveContentPostures : ISensitiveContentPos
     /// <param name="scanners">Resolves the registered detectors, and is asked only where a posture runs one.</param>
     /// <param name="timeProvider">Times each scan's budget and stamps its findings.</param>
     /// <param name="concurrency">The process-wide budget of scans running at once, which every posture shares.</param>
-    /// <param name="servedUsers">The roster whose records carry what each account asked for.</param>
-    /// <param name="servedAccounts">Reads what the accounts every question about more than one account spans asked for.</param>
+    /// <param name="servedAccounts">Reads what each account asked for, from the account records.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     /// <remarks>
     /// The detectors arrive behind a delegate rather than as a resolved sequence, because resolving them constructs a
@@ -82,7 +79,6 @@ internal sealed class MailAccountSensitiveContentPostures : ISensitiveContentPos
         Func<IEnumerable<ISensitiveContentScanner>> scanners,
         TimeProvider timeProvider,
         SensitiveContentScanConcurrency concurrency,
-        ServedUsers servedUsers,
         IServedMailAccountReader servedAccounts)
     {
         ArgumentNullException.ThrowIfNull(deployment);
@@ -90,7 +86,6 @@ internal sealed class MailAccountSensitiveContentPostures : ISensitiveContentPos
         ArgumentNullException.ThrowIfNull(scanners);
         ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(concurrency);
-        ArgumentNullException.ThrowIfNull(servedUsers);
         ArgumentNullException.ThrowIfNull(servedAccounts);
 
         this.deployment = deployment;
@@ -98,14 +93,23 @@ internal sealed class MailAccountSensitiveContentPostures : ISensitiveContentPos
         this.scanners = scanners;
         this.timeProvider = timeProvider;
         this.concurrency = concurrency;
-        this.servedUsers = servedUsers;
         this.servedAccounts = servedAccounts;
+        this.Deployment = this.PostureOf(Compose(deployment, [], []));
     }
+
+    /// <summary>How long an answer about one account is reused before its record is read again.</summary>
+    internal static TimeSpan Freshness => ConfigurationConvergenceWorker.Interval;
+
+    /// <summary>How many accounts' answers are held before the expired ones are let go.</summary>
+    internal const int HeldAccountsBeforeSweep = 4096;
+
+    /// <inheritdoc />
+    public SensitiveContentPosture Deployment { get; }
 
     /// <inheritdoc />
     public async Task<bool> IsActiveForAnyAccountAsync(CancellationToken cancellationToken)
     {
-        if (this.Composed().Deployment.IsActive)
+        if (this.Deployment.IsActive)
         {
             return true;
         }
@@ -116,14 +120,38 @@ internal sealed class MailAccountSensitiveContentPostures : ISensitiveContentPos
     }
 
     /// <inheritdoc />
-    public IReadOnlyList<MailAccountSensitiveContentPosture> Current => this.Composed().Accounts;
+    public async Task<IReadOnlyList<MailAccountSensitiveContentPosture>> ReadAccountsBeyondDeploymentAsync(
+        CancellationToken cancellationToken)
+    {
+        var declarations = await this.servedAccounts.ReadAccountsRequestingScanningAsync(cancellationToken);
+
+        return
+        [
+            .. declarations
+                .Select(declared => new MailAccountSensitiveContentPosture(
+                    declared.Account,
+                    this.PostureOf(this.Compose(declared.Request))))
+                .Where(account => !ReferenceEquals(account.Posture, this.Deployment))
+                .OrderBy(account => account.Account.Value, StringComparer.Ordinal),
+        ];
+    }
 
     /// <inheritdoc />
-    public SensitiveContentPosture ForAccount(MailAccountId account)
+    public async Task<SensitiveContentPosture> ForAccountAsync(MailAccountId account, CancellationToken cancellationToken)
     {
-        var current = this.Composed();
+        if (this.byAccount.TryGetValue(account, out var held)
+            && this.timeProvider.GetElapsedTime(held.ReadAt) < Freshness)
+        {
+            return held.Posture;
+        }
 
-        return current.ByAccount.TryGetValue(account, out var posture) ? posture : current.Deployment;
+        var request = await this.servedAccounts.ReadScanningRequestAsync(account, cancellationToken);
+        var posture = request is null ? this.Deployment : this.PostureOf(this.Compose(request));
+
+        this.LetGoOfExpiredAnswers();
+        this.byAccount[account] = new HeldPosture(posture, this.timeProvider.GetTimestamp());
+
+        return posture;
     }
 
     /// <inheritdoc />
@@ -147,7 +175,7 @@ internal sealed class MailAccountSensitiveContentPostures : ISensitiveContentPos
         SensitiveContentScannerKind scanner,
         CancellationToken cancellationToken)
     {
-        if (this.Composed().Deployment.Runs(scanner))
+        if (this.Deployment.Runs(scanner))
         {
             return true;
         }
@@ -191,15 +219,6 @@ internal sealed class MailAccountSensitiveContentPostures : ISensitiveContentPos
         return new EffectivePosture(switchedOn, screening);
     }
 
-    /// <summary>Composes what one account asked for, as its own declaration states it.</summary>
-    private static EffectivePosture Compose(
-        SensitiveContentOptions deployment,
-        MailAccountSensitiveContentOptions account) =>
-        Compose(
-            deployment,
-            [.. Enum.GetValues<SensitiveContentScannerKind>().Where(scanner => account.For(scanner).Enabled is true)],
-            account.ScreenedScanners);
-
     /// <summary>Composes one distinct answer read from the account records over the deployment's own.</summary>
     private EffectivePosture Compose(MailAccountScanningRequest request) =>
         Compose(this.deployment, [.. request.ScansFor], [.. request.ScreensOutgoingMailFor]);
@@ -222,90 +241,23 @@ internal sealed class MailAccountSensitiveContentPostures : ISensitiveContentPos
             [.. composed.SelectMany(answer => answer.Screening).Distinct().Order()]);
     }
 
-    /// <summary>Reads the composition, rebuilding it when the roster it was composed from has been replaced.</summary>
+    /// <summary>Lets go of every answer read longer ago than <see cref="Freshness" />, once enough accounts are held for that to matter.</summary>
     /// <remarks>
-    /// The roster the last composition was built from is what says whether it is still current, compared by identity
-    /// because the roster is replaced whole rather than edited. Rebuilding on read rather than from a change-token
-    /// callback is what keeps a posture from being composed against a roster the startup gate has not finished
-    /// settling: the first call after a change pays for the rebuild, and every other call reads a finished answer.
+    /// ponytail: a sweep over every held answer whenever the count passes the threshold; a replica touching more distinct
+    /// accounts than that within one interval sweeps on every miss, and a bounded cache with its own eviction is the
+    /// upgrade if that ever shows up in a profile.
     /// </remarks>
-    private Composition Composed()
+    private void LetGoOfExpiredAnswers()
     {
-        lock (this.mutex)
+        if (this.byAccount.Count < HeldAccountsBeforeSweep)
         {
-            var roster = this.servedUsers.TryGetUsers();
-
-            if (this.composed is { } current && ReferenceEquals(current.Roster, roster))
-            {
-                return current;
-            }
-
-            this.composed = this.Build(roster);
-
-            return this.composed;
-        }
-    }
-
-    /// <summary>Builds every posture one roster produces, sharing one redaction between accounts that read the same one.</summary>
-    /// <remarks>
-    /// An account assigned to two users is one mailbox with one record, so it is composed once and reached under one
-    /// answer however many people it is declared for. An account whose identifier is unusable is passed over, because
-    /// nothing that asks here could name it.
-    /// </remarks>
-    private Composition Build(IReadOnlyList<ServedUser>? roster)
-    {
-        var built = new Dictionary<EffectivePosture, SensitiveContentPosture>();
-        var deploymentAnswer = Compose(this.deployment, [], []);
-        var deploymentPosture = this.PostureOf(built, deploymentAnswer);
-
-        if (roster is null)
-        {
-            return new Composition(
-                null,
-                deploymentPosture,
-                new Dictionary<MailAccountId, SensitiveContentPosture>(),
-                []);
+            return;
         }
 
-        var declared = roster
-            .SelectMany(served => served.MailAccounts.Select(account => new
-            {
-                Account = MailSynchronizationOptions.TryReadAccountId(account.AccountId),
-                Answer = Compose(this.deployment, account.SensitiveContent),
-            }))
-            .Where(entry => entry.Account is not null)
-            .ToArray();
-
-        var byAccount = declared
-            .DistinctBy(entry => entry.Account, StringComparer.Ordinal)
-            .ToDictionary(
-                entry => MailAccountId.Create(entry.Account!),
-                entry => this.PostureOf(built, entry.Answer));
-
-        return new Composition(
-            roster,
-            deploymentPosture,
-            byAccount,
-            [.. byAccount
-                .OrderBy(entry => entry.Key.Value, StringComparer.Ordinal)
-                .Select(entry => new MailAccountSensitiveContentPosture(entry.Key, entry.Value))]);
-    }
-
-    /// <summary>Finds the posture one effective answer produces, composing it the first time that answer is met.</summary>
-    private SensitiveContentPosture PostureOf(
-        Dictionary<EffectivePosture, SensitiveContentPosture> built,
-        EffectivePosture effective)
-    {
-        if (built.TryGetValue(effective, out var already))
+        foreach (var expired in this.byAccount.Where(entry => this.timeProvider.GetElapsedTime(entry.Value.ReadAt) >= Freshness).ToArray())
         {
-            return already;
+            this.byAccount.TryRemove(expired);
         }
-
-        var composed = this.PostureFor(effective);
-
-        built[effective] = composed;
-
-        return composed;
     }
 
     /// <summary>Composes one posture, which constructs a redaction only where something is switched on.</summary>
@@ -362,14 +314,8 @@ internal sealed class MailAccountSensitiveContentPostures : ISensitiveContentPos
         }
     }
 
-    /// <summary>What one roster composed to, held whole so a reader never observes a half-rebuilt set.</summary>
-    /// <param name="Roster">The roster this was built from, which is what says whether it is still current.</param>
-    /// <param name="Deployment">The posture of an account this roster does not name, which is the deployment's own.</param>
-    /// <param name="ByAccount">The posture of each account the roster declares.</param>
-    /// <param name="Accounts">The account postures as an ordered list, for the walk that judges every account's rows at once.</param>
-    private sealed record Composition(
-        IReadOnlyList<ServedUser>? Roster,
-        SensitiveContentPosture Deployment,
-        IReadOnlyDictionary<MailAccountId, SensitiveContentPosture> ByAccount,
-        IReadOnlyList<MailAccountSensitiveContentPosture> Accounts);
+    /// <summary>One account's answer and the timestamp it was read at.</summary>
+    /// <param name="Posture">What the account's mail is scanned under.</param>
+    /// <param name="ReadAt">The <see cref="TimeProvider.GetTimestamp" /> reading taken when the record was read.</param>
+    private sealed record HeldPosture(SensitiveContentPosture Posture, long ReadAt);
 }

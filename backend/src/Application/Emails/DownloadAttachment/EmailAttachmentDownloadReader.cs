@@ -268,7 +268,7 @@ public sealed class EmailAttachmentDownloadReader
         IOpenedEmailAttachment attachment,
         CancellationToken cancellationToken)
     {
-        if (!this.screen.IsActiveFor(account))
+        if (!await this.screen.IsActiveForAsync(account, cancellationToken))
         {
             return AttachmentDownloadOutcome.Served(attachment);
         }

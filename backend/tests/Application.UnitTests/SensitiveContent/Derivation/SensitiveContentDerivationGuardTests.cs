@@ -69,13 +69,16 @@ public sealed class SensitiveContentDerivationGuardTests
         // Assert
         Assert.Equal("the key is [redacted:CloudKey]", scanned);
         Assert.Equal($"the key is {Marker}", unscanned);
-        Assert.NotNull(guard.StampFor(FixedSensitiveContentPostures.SoleAccount));
-        Assert.Null(guard.StampFor(AnotherAccount));
+        Assert.NotNull(await guard.StampForAsync(FixedSensitiveContentPostures.SoleAccount, TestContext.Current.CancellationToken));
+        Assert.Null(await guard.StampForAsync(AnotherAccount, TestContext.Current.CancellationToken));
     }
 
-    /// <summary>The walk that re-derives stale rows reads every account from here, each beside its own stamp.</summary>
+    /// <summary>
+    /// The walk that re-derives stale rows reads every account asking for more than the deployment from here, each beside
+    /// its own stamp, and judges every other account's rows by the deployment's own.
+    /// </summary>
     [Fact]
-    public void Current_ADeploymentServingTwoAccounts_ReportsBothOfThemBesideWhatTheirRowsAreWrittenUnder()
+    public async Task ReadAccountsBeyondDeploymentAsync_ADeploymentServingTwoAccounts_ReportsOnlyTheOneAskingForMoreThanTheDeployment()
     {
         // Arrange
         using var derivation = ScanningSensitiveContentDerivation.Finding(Marker, this.timeProvider);
@@ -89,14 +92,13 @@ public sealed class SensitiveContentDerivationGuardTests
             this.timeProvider);
 
         // Act
-        var current = guard.Current;
+        var beyondDeployment = await guard.ReadAccountsBeyondDeploymentAsync(TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(
-            [FixedSensitiveContentPostures.SoleAccount, AnotherAccount],
-            current.Select(posture => posture.Account));
-        Assert.NotNull(current[0].Posture.Stamp);
-        Assert.Null(current[1].Posture.Stamp);
+        var scanned = Assert.Single(beyondDeployment);
+        Assert.Equal(FixedSensitiveContentPostures.SoleAccount, scanned.Account);
+        Assert.NotNull(scanned.Posture.Stamp);
+        Assert.Null(guard.StampForEveryOtherAccount);
     }
 
     /// <summary>A row's stamp is what makes a later configuration change answerable rather than silent.</summary>
@@ -107,7 +109,9 @@ public sealed class SensitiveContentDerivationGuardTests
         using var derivation = ScanningSensitiveContentDerivation.Finding(Marker, this.timeProvider);
 
         // Act
-        var stamp = derivation.Guard.StampFor(ScanningSensitiveContentDerivation.Account);
+        var stamp = await derivation.Guard.StampForAsync(
+            ScanningSensitiveContentDerivation.Account,
+            TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(await derivation.Guard.IsActiveAsync(TestContext.Current.CancellationToken));
@@ -130,7 +134,7 @@ public sealed class SensitiveContentDerivationGuardTests
 
         // Assert
         Assert.False(await guard.IsActiveAsync(TestContext.Current.CancellationToken));
-        Assert.Null(guard.StampFor(ScanningSensitiveContentDerivation.Account));
+        Assert.Null(await guard.StampForAsync(ScanningSensitiveContentDerivation.Account, TestContext.Current.CancellationToken));
         Assert.Equal($"the key is {Marker}", stored);
     }
 
@@ -207,12 +211,12 @@ public sealed class SensitiveContentDerivationGuardTests
         var guard = ScanningSensitiveContentDerivation.Inactive();
 
         // Act
-        var stamp = guard.StampFor(ScanningSensitiveContentDerivation.Account);
+        var stamp = await guard.StampForAsync(ScanningSensitiveContentDerivation.Account, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Null(stamp);
         Assert.False(await guard.IsActiveAsync(TestContext.Current.CancellationToken));
-        Assert.Empty(guard.Current);
+        Assert.Empty(await guard.ReadAccountsBeyondDeploymentAsync(TestContext.Current.CancellationToken));
     }
 
     /// <summary>The guard is composed from the postures alone, so a deployment cannot hand it one without the other.</summary>

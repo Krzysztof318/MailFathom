@@ -21,6 +21,8 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Transport;
+using MailFathom.Host.Configuration;
+using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Hosting.Workers;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Observability;
@@ -157,6 +159,29 @@ public sealed class OutboxDeliveryWorkerTests
         Assert.Empty(context.Claims);
     }
 
+    /// <summary>
+    /// An account whose record is gone by the time its signal is taken has no settings to deliver under, so it is passed
+    /// over rather than claimed, and the loop goes on to the next account it was asked about.
+    /// </summary>
+    [Fact]
+    public async Task ExecuteAsync_AnAccountNoLongerServed_ClaimsNothingForItAndServesTheNext()
+    {
+        // Arrange
+        var home = MailAccountId.Create("home");
+        var context = new WorkerContext(unserved: Work);
+
+        // Act
+        await context.RunUntilAsync(async () =>
+        {
+            context.Signal.Signal(Work);
+            context.Signal.Signal(home);
+            await context.WaitForClaimsAsync(1);
+        });
+
+        // Assert
+        Assert.Equal(home, Assert.Single(context.Claims).Account);
+    }
+
     /// <summary>Assembles the worker over a scoped pass whose store and policy the test writes.</summary>
     private sealed class WorkerContext
     {
@@ -170,7 +195,7 @@ public sealed class OutboxDeliveryWorkerTests
 
         private int awaitedClaimCount = int.MaxValue;
 
-        internal WorkerContext(bool submits = true)
+        internal WorkerContext(bool submits = true, MailAccountId? unserved = null)
         {
             this.OutgoingEmails.ClaimAsync(Arg.Any<OutgoingEmailClaimRequest>(), Arg.Any<CancellationToken>())
                 .Returns(callInfo =>
@@ -256,6 +281,15 @@ public sealed class OutboxDeliveryWorkerTests
             collection.AddScoped<MailDraftPass>();
 
             collection.AddScoped<MailOutboxPass>();
+
+            // A pass prepares its scope with the account's settings before it composes anything, and every account these
+            // tests signal is one the deployment serves unless a test names one it no longer does.
+            var accounts = Substitute.For<IMailSynchronizationAccountSource>();
+            accounts.ReadRunSettingsAsync(Arg.Any<MailAccountId>(), Arg.Any<MailSynchronizationOptions?>(), Arg.Any<CancellationToken>())
+                .Returns(callInfo => callInfo.ArgAt<MailAccountId>(0) == unserved ? null : new MailSynchronizationOptions());
+            collection.AddScoped(_ => new ScopedMailSynchronizationSettings(
+                Substitute.For<ISettingsSnapshot<MailSynchronizationOptions>>(),
+                accounts));
 
             this.services = collection.BuildServiceProvider();
         }

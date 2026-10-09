@@ -10,9 +10,9 @@ namespace MailFathom.Application.Access;
 /// <remarks>
 /// <para>
 /// It is a port because the answer comes out of that user's record, which is the host's, while every use case that
-/// composes text for somebody lives above it. Resolution is synchronous and reaches no database: the answer follows
-/// the roster the startup gate published and each user-record commit republishes, so a derivation never puts a read in
-/// front of the call it is about to make.
+/// composes text for somebody lives above it. Resolution is synchronous and reaches no database: the answer comes
+/// from the record the host read when the work acting for that person was prepared, and follows each commit to it, so a
+/// derivation never puts a read in front of the call it is about to make.
 /// </para>
 /// <para>
 /// The answer is the user's rather than one of their mailboxes' because what it is asked for belongs to the person: a

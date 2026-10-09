@@ -96,6 +96,16 @@ internal sealed class PersistedServedMailAccounts(
                WHERE held."MailAccountId" = account."Id" AND held."UserId" = @user));
          """;
 
+    private const string SelectScanningDeclarations =
+        $"""
+         SELECT account."Id", account."ScansFor", account."ScreensOutgoingMailFor"
+         FROM settings_mail_accounts AS account
+         WHERE {Served}
+           AND (@everyAccount OR account."Id" = @account)
+           AND (NOT @everyAccount OR cardinality(account."ScansFor") > 0 OR cardinality(account."ScreensOutgoingMailFor") > 0)
+         ORDER BY account."Id";
+         """;
+
     private const string SelectFolders =
         $"""
          SELECT folder."MailAccountId", folder."Alias"
@@ -158,8 +168,8 @@ internal sealed class PersistedServedMailAccounts(
     /// <remarks>
     /// <para>
     /// A document past <see cref="UserSettingsDocument.MaximumOctets" /> is left in the database rather than sent, and so
-    /// is left out of the answer, because it is the record the roster refuses to bind too: no write of this build leaves
-    /// one, and an account the roster does not serve has no rule judged against it.
+    /// is left out of the answer, because it is the record composing a user refuses to bind too: no write of this build
+    /// leaves one, and an account no user is served with has no rule judged against it.
     /// </para>
     /// <para>
     /// It takes no ceiling on the number of accounts, for the reason <see cref="IMailAccountRecordStore.ReadSolelyAssignedAsync" />
@@ -251,6 +261,26 @@ internal sealed class PersistedServedMailAccounts(
     }
 
     /// <inheritdoc />
+    public async Task<MailAccountScanningRequest?> ReadScanningRequestAsync(
+        MailAccountId account,
+        CancellationToken cancellationToken)
+    {
+        if (!Guid.TryParse(account.Value, out var id))
+        {
+            return null;
+        }
+
+        var declarations = await this.ReadScanningDeclarationsAsync(id, cancellationToken);
+
+        return declarations.SingleOrDefault()?.Request;
+    }
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<MailAccountScanningDeclaration>> ReadAccountsRequestingScanningAsync(
+        CancellationToken cancellationToken) =>
+        this.ReadScanningDeclarationsAsync(account: null, cancellationToken);
+
+    /// <inheritdoc />
     public Task<IReadOnlyList<MailFolderIdentity>> ReadAsync(
         MailFolderSelection selection,
         CancellationToken cancellationToken) =>
@@ -295,6 +325,32 @@ internal sealed class PersistedServedMailAccounts(
         }
 
         return [.. served.OrderBy(account => account.Id.ToString("D"), StringComparer.Ordinal)];
+    }
+
+    private async Task<IReadOnlyList<MailAccountScanningDeclaration>> ReadScanningDeclarationsAsync(
+        Guid? account,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await dataSource().OpenConnectionAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(SelectScanningDeclarations, connection) { CommandTimeout = this.CommandTimeoutSeconds };
+
+        command.Parameters.AddWithValue("everyAccount", account is null);
+        command.Parameters.AddWithValue("account", account ?? Guid.Empty);
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        var declarations = new List<MailAccountScanningDeclaration>();
+
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            declarations.Add(new MailAccountScanningDeclaration(
+                MailAccountId.Create(reader.GetGuid(0).ToString("D")),
+                new MailAccountScanningRequest(
+                    ToScannerKinds(reader.GetFieldValue<int[]>(1)),
+                    ToScannerKinds(reader.GetFieldValue<int[]>(2)))));
+        }
+
+        return declarations;
     }
 
     private static SensitiveContentScannerKind[] ToScannerKinds(int[] column) =>
