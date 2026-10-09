@@ -48,7 +48,7 @@ internal sealed partial class DefaultAdministratorStartupGate(
             .StartAsync(passwordSetting, PasswordVariableName, cancellationToken);
 
         recorded.Record(start.Administrator);
-        this.Report(start, settingPresent: !string.IsNullOrEmpty(passwordSetting));
+        this.Report(start);
 
         if (!reverseProxySettings.Value.ForwardsTheClientAddress()
             && await scope.ServiceProvider
@@ -64,7 +64,7 @@ internal sealed partial class DefaultAdministratorStartupGate(
     /// <inheritdoc />
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
-    private void Report(DefaultAdministratorStart start, bool settingPresent)
+    private void Report(DefaultAdministratorStart start)
     {
         var endpoint = adminEndpointSettings.Value;
 
@@ -86,7 +86,7 @@ internal sealed partial class DefaultAdministratorStartupGate(
             case DefaultAdministratorPasswordOutcome.AlreadyHeld:
                 this.LogPasswordAlreadyHeld();
                 break;
-            case null when settingPresent:
+            case DefaultAdministratorPasswordOutcome.AlreadyApplied:
                 this.LogPasswordSettingIgnored();
                 break;
         }

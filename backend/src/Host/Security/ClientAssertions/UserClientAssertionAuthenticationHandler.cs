@@ -22,9 +22,9 @@ namespace MailFathom.Host.Security.ClientAssertions;
 /// — lives below this boundary, where a test reaches it without a request pipeline.
 /// </para>
 /// <para>
-/// It carries no key list, which is the whole difference between it and the handler beside it. An assertion names the
-/// fingerprint of the key that signed it, that fingerprint resolves a credential row, and the user and the grant both
-/// arrive from the row rather than from a configuration entry the host resolved at startup.
+/// It carries no key list. An assertion names the fingerprint of the key that signed it, that fingerprint resolves a
+/// credential row, and the user and the narrowing both arrive from the row; the surface keeps the user's grant to the
+/// half it guards.
 /// </para>
 /// <para>
 /// Every refusal produces one indistinguishable answer: an empty <c>401</c> carrying the same challenge every other
@@ -74,7 +74,7 @@ internal sealed class UserClientAssertionAuthenticationHandler
             ClientAssertionAuthentication.KeyNameClaimType,
             ClientAssertionAuthentication.RoleClaimType,
             this.Options.Surface.ClientAssertionSchemeName,
-            UserCredentialAdmission.PermissionsPresentedOn(this.Options.Surface, admitted));
+            admitted.Permissions);
 
         // The user is what the registered key resolved, so the principal carries them rather than leaving the surface
         // to answer for whose mail the request acts on. The credential travels beside them because a session minted
@@ -98,8 +98,8 @@ internal sealed class UserClientAssertionAuthenticationHandler
 
 /// <summary>Which surface a user-facing assertion scheme protects, and therefore which audience it requires.</summary>
 /// <remarks>
-/// There is no key list here and no grant, unlike the configured scheme's options: the keys are rows in the
-/// deployment's own database and what each one keeps of its user's grant is recorded beside it. What is left is the
+/// There is no key list here and no grant: the keys are rows in the deployment's own database and what each one keeps
+/// of its user's grant is recorded beside it. What is left is the
 /// surface, which names the audience an assertion must carry and the identity a success reports itself under.
 /// </remarks>
 internal sealed class UserClientAssertionAuthenticationSchemeOptions : AuthenticationSchemeOptions

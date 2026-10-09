@@ -24,7 +24,7 @@ public sealed class DefaultAdministratorBootstrapTests
     private static readonly UserId Administrator = UserId.Create(Guid.Parse("2b6e4f1a-7c3d-4e8f-9a0b-1c2d3e4f5a6b"));
 
     [Fact]
-    public async Task StartAsync_AFirstStartCarryingASetting_GivesTheAdministratorThatPasswordOnTheMailHalfAlone()
+    public async Task StartAsync_AFirstStartCarryingASetting_GivesTheAdministratorThatPassword()
     {
         // Arrange
         var harness = new BootstrapHarness(new DefaultAdministratorRecord(Administrator, PasswordSettingApplied: false));
@@ -42,8 +42,6 @@ public sealed class DefaultAdministratorBootstrapTests
             Arg.Any<Guid>(),
             Arg.Is<UserCredentialLookup>(lookup => lookup.Value == DefaultAdministratorBootstrap.Username),
             RecordingPasswordHasher.StoredHash,
-            Arg.Is<IReadOnlyList<MailFathomPermission>>(permissions =>
-                permissions!.SequenceEqual(MailFathomPermission.PublishedFor(ProtectedSurface.Mail))),
             Arg.Any<DateTimeOffset>(),
             Arg.Any<CancellationToken>());
     }
@@ -59,9 +57,9 @@ public sealed class DefaultAdministratorBootstrapTests
         var start = await harness.StartAsync(ChosenPassword);
 
         // Assert
-        Assert.Null(start.PasswordSetting);
+        Assert.Equal(DefaultAdministratorPasswordOutcome.AlreadyApplied, start.PasswordSetting);
         Assert.Equal(0, harness.Hasher.HashCount);
-        await harness.Store.DidNotReceiveWithAnyArgs().ApplyPasswordSettingAsync(default, default, default, default!, default!, default, TestContext.Current.CancellationToken);
+        await harness.Store.DidNotReceiveWithAnyArgs().ApplyPasswordSettingAsync(default, default, default, default!, default, TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -75,9 +73,9 @@ public sealed class DefaultAdministratorBootstrapTests
 
         // Assert
         Assert.Equal(Administrator, start.Administrator);
-        Assert.Null(start.PasswordSetting);
+        Assert.Equal(DefaultAdministratorPasswordOutcome.NotCarried, start.PasswordSetting);
         await harness.Store.ReceivedWithAnyArgs(1).RecordOnceAsync(default, default, default, TestContext.Current.CancellationToken);
-        await harness.Store.DidNotReceiveWithAnyArgs().ApplyPasswordSettingAsync(default, default, default, default!, default!, default, TestContext.Current.CancellationToken);
+        await harness.Store.DidNotReceiveWithAnyArgs().ApplyPasswordSettingAsync(default, default, default, default!, default, TestContext.Current.CancellationToken);
     }
 
     /// <summary>Removing the default administrator is final, so a later start brings back nobody to give the setting to.</summary>
@@ -92,9 +90,9 @@ public sealed class DefaultAdministratorBootstrapTests
 
         // Assert
         Assert.Null(start.Administrator);
-        Assert.Null(start.PasswordSetting);
+        Assert.Equal(DefaultAdministratorPasswordOutcome.AdministratorRemoved, start.PasswordSetting);
         Assert.False(start.SignsInWithShippedPassword);
-        await harness.Store.DidNotReceiveWithAnyArgs().ApplyPasswordSettingAsync(default, default, default, default!, default!, default, TestContext.Current.CancellationToken);
+        await harness.Store.DidNotReceiveWithAnyArgs().ApplyPasswordSettingAsync(default, default, default, default!, default, TestContext.Current.CancellationToken);
     }
 
     /// <summary>The shipped value is public whatever its length, so holding it to the minimum would protect nothing.</summary>
@@ -125,7 +123,7 @@ public sealed class DefaultAdministratorBootstrapTests
         Assert.Equal(MailFathomErrorCode.DefaultAdministratorUnusable, refusal.ErrorCode);
         Assert.Contains(SettingName, refusal.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("too-short", refusal.Message, StringComparison.Ordinal);
-        await harness.Store.DidNotReceiveWithAnyArgs().ApplyPasswordSettingAsync(default, default, default, default!, default!, default, TestContext.Current.CancellationToken);
+        await harness.Store.DidNotReceiveWithAnyArgs().ApplyPasswordSettingAsync(default, default, default, default!, default, TestContext.Current.CancellationToken);
     }
 
     /// <summary>A setting already applied is ignored whatever it now holds, so a value the policy would refuse no longer stops a start.</summary>
@@ -140,7 +138,35 @@ public sealed class DefaultAdministratorBootstrapTests
 
         // Assert
         Assert.Equal(Administrator, start.Administrator);
-        Assert.Null(start.PasswordSetting);
+        Assert.Equal(DefaultAdministratorPasswordOutcome.AlreadyApplied, start.PasswordSetting);
+    }
+
+    /// <summary>The store would write nothing over a password the administrator already holds, so a value nobody will apply is no reason to stop a start, and it is left unrecorded rather than applied.</summary>
+    [Fact]
+    public async Task StartAsync_AValueThePolicyRefusesWhileTheAdministratorHoldsAPassword_IsLeftUnapplied()
+    {
+        // Arrange
+        var harness = new BootstrapHarness(new DefaultAdministratorRecord(Administrator, PasswordSettingApplied: false));
+        harness.Credentials.ReadForUserAsync(Administrator, Arg.Any<CancellationToken>())
+            .Returns([
+                new UserCredential(
+                    Guid.Parse("5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a"),
+                    Administrator,
+                    UserCredentialMethod.Password,
+                    UserCredentialLookup.ForUsername(UserCredentialUsername.Create(DefaultAdministratorBootstrap.Username)),
+                    Permissions: null,
+                    Enabled: true,
+                    Version: 1,
+                    new DateTimeOffset(2026, 10, 9, 12, 0, 0, TimeSpan.Zero),
+                    new DateTimeOffset(2026, 10, 9, 12, 0, 0, TimeSpan.Zero)),
+            ]);
+
+        // Act
+        var start = await harness.StartAsync("too-short");
+
+        // Assert
+        Assert.Equal(DefaultAdministratorPasswordOutcome.AlreadyHeld, start.PasswordSetting);
+        await harness.Store.DidNotReceiveWithAnyArgs().ApplyPasswordSettingAsync(default, default, default, default!, default, TestContext.Current.CancellationToken);
     }
 
     /// <summary>Applying a password to a username somebody else signs in with would sign that person in as the administrator.</summary>
@@ -226,6 +252,7 @@ public sealed class DefaultAdministratorBootstrapTests
             this.Store.RecordOnceAsync(Arg.Any<UserId>(), Arg.Any<Guid>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
                 .Returns(record);
             this.AnswerApplyWith(DefaultAdministratorPasswordOutcome.Applied);
+            this.Credentials.ReadForUserAsync(Arg.Any<UserId>(), Arg.Any<CancellationToken>()).Returns([]);
 
             this.Bootstrap = new DefaultAdministratorBootstrap(
                 AccessAuthorizations.ForPrincipal(principal ?? AuthorizedPrincipal.Process),
@@ -251,7 +278,6 @@ public sealed class DefaultAdministratorBootstrapTests
                 Arg.Any<Guid>(),
                 Arg.Any<UserCredentialLookup>(),
                 Arg.Any<string>(),
-                Arg.Any<IReadOnlyList<MailFathomPermission>>(),
                 Arg.Any<DateTimeOffset>(),
                 Arg.Any<CancellationToken>())
             .Returns(outcome);

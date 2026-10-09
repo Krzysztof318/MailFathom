@@ -50,7 +50,7 @@ internal sealed class AdminApiClient
     /// would send an operator to rotate a key that is working when what they have to do is widen its grant.
     /// </remarks>
     private const string CredentialRefused =
-        "The deployment refused the credential. Check that it is presented on the administrative endpoint, that its user holds an administrative role, and that it is enabled.";
+        "The deployment refused the credential. Check that it is presented on the administrative endpoint, that what it narrows its user's grant to still holds an administrative permission, that it is enabled and has not expired, and that this machine is on a network the credential accepts.";
 
     /// <summary>What the two decisions about a move say when the deployment has never been asked for one.</summary>
     /// <remarks>

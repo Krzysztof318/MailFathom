@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Host.Configuration.Endpoints;
+using MailFathom.Host.Security.Basic;
 using MailFathom.Host.Security.Transport;
 using MailFathom.Infrastructure.Security.Transport;
 using Microsoft.AspNetCore.Cors.Infrastructure;
@@ -73,9 +74,10 @@ internal static class AdminTransportSecurityExtensions
 
     /// <summary>Names the registered scheme that answers a request presenting no credential at all.</summary>
     /// <remarks>
-    /// Chosen as the client surface chooses it and for the same reasons: Basic first where a password is accepted, since
-    /// a person is only asked for one by a Basic challenge, and otherwise whichever of the three bearer schemes is
-    /// certain to exist. One always does: an endpoint reaching this point configured at least one method.
+    /// Chosen as the client surface chooses it: Basic first where a password is accepted, and otherwise whichever of the
+    /// three bearer schemes is certain to exist. One always does: an endpoint reaching this point configured at least one
+    /// method. Unlike the client surface, Basic answers here with the bearer challenge alone, because every
+    /// administrative route carries <see cref="NoPasswordChallenge" />.
     /// </remarks>
     private static string ChallengeSchemeFor(AdminEndpointOptions endpointSettings)
     {
@@ -98,8 +100,10 @@ internal static class AdminTransportSecurityExtensions
     /// <summary>Builds the CORS policy from the configured origins.</summary>
     /// <remarks>
     /// Credentials are never allowed, under any policy, for the reason the other two surfaces state: a browser that
-    /// could attach an ambient cookie would let a page act as whoever is logged in somewhere else, and this surface's
-    /// credential is a bearer token the client sets deliberately.
+    /// could attach an ambient cookie would let a page act as whoever is logged in somewhere else. This surface's
+    /// credential is one the client sets deliberately — a bearer token, or a password <c>mfctl</c> sends in a Basic
+    /// header of its own composing — and never one a browser holds, because no administrative route asks a browser for a
+    /// password; <see cref="NoPasswordChallenge" /> holds why.
     /// </remarks>
     private static void ConfigureCorsPolicy(CorsPolicyBuilder policy, BrowserOriginPolicy originPolicy)
     {

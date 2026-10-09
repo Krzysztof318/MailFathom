@@ -6,6 +6,7 @@ using System.Security.Claims;
 using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Endpoints;
+using MailFathom.Host.Security.Basic;
 using MailFathom.Host.Security.Endpoints;
 using MailFathom.Host.Security.Transport;
 using MailFathom.Versioning;
@@ -171,6 +172,11 @@ internal static class AdminApiEndpoints
         // it is the group that decides which half of the published set these grants come from. Group filters reach every
         // route the group holds, whenever it was added, so nothing here depends on this line staying first.
         api.AddEndpointFilter(RouteAuthorization.RefusingUnpermitted(ProtectedSurface.Administration));
+
+        // A password is accepted here and never asked for. A browser answers a Basic challenge with a dialog and then
+        // attaches what was typed to every request it sends this origin, a cross-site form post included, and this
+        // surface runs no origin check that would refuse one; mfctl chooses its own mode and never reads the challenge.
+        api.WithMetadata(NoPasswordChallenge.Instance);
 
         // TypedResults rather than Results, so the response type reaches the endpoint's metadata and the generated
         // OpenAPI document describes what this answers with rather than an untyped 200.

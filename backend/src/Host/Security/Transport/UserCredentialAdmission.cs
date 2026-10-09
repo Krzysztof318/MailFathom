@@ -19,9 +19,10 @@ namespace MailFathom.Host.Security.Transport;
 /// Three things are asked, in the order a refusal is cheapest. The credential lists the surface and the user is served
 /// there, which <see cref="TransportSurface.Admits" /> reads. The request arrived from a network the credential is
 /// restricted to, read from the peer address the forwarded-headers policy left, which is the client's behind a proxy
-/// this deployment named. And on the administrative surface, the user holds at least one administrative permission at
-/// some scope, which is what makes a user an administrator at all: the credential is the way in, and the assignment is
-/// what there is to come in for.
+/// this deployment named. And on the administrative surface, the user's grant narrowed by the credential still holds at
+/// least one administrative permission at some scope, which is what makes a user an administrator at all: the
+/// credential is the way in, and the assignment is what there is to come in for. A credential narrowed to mail names
+/// alone, or to the empty list, is therefore refused there however much its user holds.
 /// </para>
 /// </remarks>
 internal static class UserCredentialAdmission
@@ -58,29 +59,11 @@ internal static class UserCredentialAdmission
             .GetRequiredService<UserGrantResolver>()
             .ResolveAsync(admitted.User, context.RequestAborted);
 
-        return held.NarrowedTo(AdministrativePermissions).Permissions.Count == 0
-            ? "The credential's user holds no administrative assignment."
+        return held
+            .NarrowedTo(MailFathomPermission.PublishedFor(ProtectedSurface.Administration))
+            .NarrowedTo(admitted.Permissions)
+            .Permissions.Count == 0
+            ? "The credential's narrowed grant holds no administrative permission."
             : null;
     }
-
-    /// <summary>Gets what a credential the surface admitted carries onto the identity, before the user's own grant narrows it.</summary>
-    /// <param name="surface">The surface that judged the credential.</param>
-    /// <param name="admitted">What the credential resolved to.</param>
-    /// <returns>The credential's own permissions on a mail-serving surface, and the whole administrative half on the administrative one.</returns>
-    /// <remarks>
-    /// A credential's permission list names mail operations alone, so on the administrative surface it narrows nothing:
-    /// what an administrator may do there is their assignments, read per request. An OAuth token whose scopes narrow a
-    /// grant narrows this list in turn, which is how a token minted for reading the deployment cannot change it.
-    /// </remarks>
-    internal static IReadOnlyList<MailFathomPermission> PermissionsPresentedOn(
-        TransportSurface surface,
-        AdmittedUserCredential admitted)
-    {
-        ArgumentNullException.ThrowIfNull(admitted);
-
-        return surface == TransportSurface.Admin ? AdministrativePermissions : admitted.Permissions;
-    }
-
-    private static IReadOnlyList<MailFathomPermission> AdministrativePermissions =>
-        MailFathomPermission.PublishedFor(ProtectedSurface.Administration);
 }

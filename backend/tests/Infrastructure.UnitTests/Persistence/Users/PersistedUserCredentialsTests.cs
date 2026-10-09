@@ -105,15 +105,15 @@ public sealed class PersistedUserCredentialsTests
         Assert.Null(reported);
     }
 
-    /// <summary>A row naming nothing is admitted kept to every mail name this build publishes, which takes nothing from its user's grant.</summary>
+    /// <summary>A row naming nothing is admitted kept to every name this build publishes, of both halves, which takes nothing from its user's grant on any surface.</summary>
     [Fact]
-    public void NarrowingAdmittedBy_ARowNamingNothing_AdmitsTheWholeMailHalf()
+    public void NarrowingAdmittedBy_ARowNamingNothing_AdmitsEveryPublishedName()
     {
         // Act
         var admitted = PersistedUserCredentials.NarrowingAdmittedBy(null);
 
         // Assert
-        Assert.Equal(MailFathomPermission.PublishedFor(ProtectedSurface.Mail), admitted);
+        Assert.Equal(MailFathomPermission.All, admitted);
     }
 
     /// <summary>A row naming some keeps them in the published order, drops a name this build no longer publishes, and keeps the empty list empty.</summary>

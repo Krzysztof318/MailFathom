@@ -220,7 +220,7 @@ internal static partial class TransportSecurityExtensions
 
         identity.AddClaims(TransportGrant.ClaimsFor(TransportGrant.HeldByToken(
             identity,
-            UserCredentialAdmission.PermissionsPresentedOn(surface, admitted),
+            admitted.Permissions,
             narrowedByTokenScopes)));
         identity.AddClaim(TransportCallerUser.ClaimFor(admitted.User));
         identity.AddClaim(TransportCallerCredential.ClaimFor(admitted.CredentialId));

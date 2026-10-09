@@ -186,7 +186,25 @@ public sealed class AdminEndpointOptionsTests
         Assert.StartsWith("AdminEndpoint:Administrators is no longer read", reported, StringComparison.Ordinal);
     }
 
+    /// <summary>A credential naming no endpoint is presented on the MCP and client ones alone, so the shared remedy followed here would mint one this endpoint refuses.</summary>
+    [Fact]
+    public void FindConfigurationErrors_ARetiredKeyUnderTheAuthenticationList_NamesTheAdministrativeSurfaceInItsRemedy()
+    {
+        // Arrange
+        var configuration = Configuration(new Dictionary<string, string?>
+        {
+            ["AdminEndpoint:Enabled"] = "true",
+            ["AdminEndpoint:Authentication:0:Method"] = "api-key",
+            ["AdminEndpoint:Authentication:0:ApiKey:SecretReference"] = "systemd-credential:admin-key",
+        });
 
+        // Act
+        var reported = Assert.Single(AdminEndpointOptions.ReadFrom(configuration).FindConfigurationErrors());
+
+        // Assert
+        Assert.StartsWith("AdminEndpoint:Authentication:0:ApiKey", reported, StringComparison.Ordinal);
+        Assert.Contains("--surface admin", reported, StringComparison.Ordinal);
+    }
 
     [Theory]
     [InlineData("not-an-address")]

@@ -10,7 +10,7 @@ namespace MailFathom.Application.Access.Credentials;
 /// <param name="Id">The credential's stable identifier, which is what a successful request is recorded under.</param>
 /// <param name="User">The user the request will act for once the credential is judged.</param>
 /// <param name="Method">How the credential is presented, which decides what <paramref name="Material" /> holds.</param>
-/// <param name="Permissions">The names a request this credential admits is kept to, in the published order — every name the mail half publishes where the credential names none, so its user's grant alone decides.</param>
+/// <param name="Permissions">The names a request this credential admits is kept to, in the published order — every name this build publishes where the credential names none, so its user's grant alone decides.</param>
 /// <param name="Enabled">Whether the credential still authenticates anything.</param>
 /// <param name="Material">The stored record the presented credential is judged against, or <see langword="null" /> for a method whose lookup is the whole of what is kept.</param>
 /// <param name="EndpointAccess">Which endpoints the credential's user may be served on, read in the same statement that resolved the credential.</param>

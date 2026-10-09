@@ -38,10 +38,18 @@ public sealed class DefaultAdministratorUnusableException : MailFathomException
     }
 
     /// <summary>Describes a username the default administrator's password would collide with.</summary>
+    /// <param name="variableName">The environment variable the password was read from, which has to be unset for the deployment to start at all.</param>
     /// <returns>The exception.</returns>
-    public static DefaultAdministratorUnusableException UsernameTaken() => new(
-        $"A password credential signed in as '{DefaultAdministratorBootstrap.Username}' in no organization belongs to another user, so applying "
-        + "the default administrator's password would either fail or sign that user in as the administrator. Remove that "
-        + "credential with 'mfctl credential delete' and provision that user's password again under another username "
-        + "with 'mfctl credential create', then start again.");
+    /// <remarks>The remedy opens by unsetting the variable, because both commands it names need a running deployment and every start is refused while the variable is set.</remarks>
+    public static DefaultAdministratorUnusableException UsernameTaken(string variableName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(variableName);
+
+        return new(
+            $"A password credential signed in as '{DefaultAdministratorBootstrap.Username}' in no organization belongs to another user, so applying "
+            + "the default administrator's password would either fail or sign that user in as the administrator. Unset "
+            + $"{variableName} and start the deployment, remove that credential with 'mfctl credential delete' and "
+            + "provision that user's password again under another username with 'mfctl credential create', then set "
+            + $"{variableName} again and restart.");
+    }
 }

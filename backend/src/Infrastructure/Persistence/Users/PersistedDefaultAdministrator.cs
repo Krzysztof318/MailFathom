@@ -85,12 +85,10 @@ internal sealed class PersistedDefaultAdministrator(MailFathomDbContext dbContex
         Guid credentialId,
         UserCredentialLookup lookup,
         string passwordHash,
-        IReadOnlyList<MailFathomPermission> permissions,
         DateTimeOffset appliedAt,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(passwordHash);
-        ArgumentNullException.ThrowIfNull(permissions);
 
         if (!administrator.IsSpecified || credentialId == Guid.Empty || !lookup.IsSpecified)
         {
@@ -121,7 +119,6 @@ internal sealed class PersistedDefaultAdministrator(MailFathomDbContext dbContex
             credentialId,
             lookup.Value,
             passwordHash,
-            [.. permissions.Select(permission => permission.Name)],
             appliedAt,
             cancellationToken);
 
@@ -185,7 +182,6 @@ internal sealed class PersistedDefaultAdministrator(MailFathomDbContext dbContex
         Guid credentialId,
         string lookup,
         string passwordHash,
-        string[] permissions,
         DateTimeOffset appliedAt,
         CancellationToken cancellationToken)
     {
@@ -205,7 +201,7 @@ internal sealed class PersistedDefaultAdministrator(MailFathomDbContext dbContex
             $"""
              INSERT INTO user_credentials
                  ("Id", "UserId", "Method", "OrganizationId", "Lookup", "Material", "Permissions", "Surfaces", "AllowedSourceNetworks", "Enabled", "Version", "CreatedAt", "MaterialChangedAt")
-             VALUES ({credentialId}, {userId}, {passwordMethod}, NULL, {lookup}, {passwordHash}, {permissions}, {administrationOnly}, {fromAnywhere}, TRUE, 1, {appliedAt}, {appliedAt})
+             VALUES ({credentialId}, {userId}, {passwordMethod}, NULL, {lookup}, {passwordHash}, NULL, {administrationOnly}, {fromAnywhere}, TRUE, 1, {appliedAt}, {appliedAt})
              ON CONFLICT DO NOTHING
              """,
             cancellationToken);

@@ -91,11 +91,9 @@ internal static class TransportAccessPolicy
     /// <remarks>
     /// <para>
     /// Each claim type is read rather than one of them standing for the others, because each names a different kind of
-    /// credential and a principal carrying none of them has to fall through to the token rules. What each one names
-    /// follows the surface: on the administrative surface an API key and a client public key are stated in
-    /// configuration, and on a mail-serving surface all three name one of this deployment's own credential rows. The
-    /// distinction does not matter here — the identity is established before this runs either way, and what is left to
-    /// decide is that it was not an unrecognized subject.
+    /// credential and a principal carrying none of them has to fall through to the token rules. On every surface all
+    /// three name one of this deployment's own credential rows, and the identity is established before this runs, so
+    /// what is left to decide is that it was not an unrecognized subject.
     /// </para>
     /// <para>
     /// A session token is the fourth, and it is read as its own claim rather than as the credential it was minted for:

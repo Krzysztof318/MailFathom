@@ -92,7 +92,9 @@ A request is served when three things hold, in this order:
    `mfctl credential create --surface admin` — see [user credentials](#user-credentials).
 2. **The request arrived from a network the credential accepts**, where it names any — see
    [where a credential may be presented from](#where-a-credential-may-be-presented-from).
-3. **The credential's user holds at least one administrative permission**, at any scope.
+3. **The credential's user holds at least one administrative permission**, at any scope, that the credential's own
+   `--permission` list keeps where it names one. A credential narrowed to mail names alone, or to nothing, is therefore
+   refused here however much its user holds.
 
 A credential failing any of the three is answered `401`, the answer a credential nobody holds gets, so a refusal says
 nothing about whether what was presented was good somewhere else. A user's mail endpoint switches do not decide this
@@ -101,7 +103,11 @@ surface: they keep a user off the MCP and client endpoints, and the default admi
 `AdminEndpoint:Authentication` names the methods the endpoint accepts, one entry per method, in the shape the MCP and
 client endpoints take — [the MCP endpoint](mcp-endpoint.md#authentication) documents each method, its own block, and
 what startup refuses in an entry. `password`, `api-key`, `public-key`, and `oauth-subject` are all accepted here, and a
-`password` entry's `Basic` block bounds how often a password may be tried exactly as it does there. The entries are this
+`password` entry's `Basic` block bounds how often a password may be tried exactly as it does there. A password is
+accepted here and never asked for: a refused request carries the bearer challenge alone, never
+`WWW-Authenticate: Basic`, because a browser answers that challenge with a dialog and then attaches what was typed to
+every request it sends the origin, a cross-site form post included, and nothing on this surface checks an origin.
+`mfctl login --mode password` composes the header itself. The entries are this
 endpoint's own: a method accepted on the MCP endpoint is not thereby accepted here, even where both name one
 authorization server.
 
@@ -163,8 +169,10 @@ carrying it is not where it is read from.
   rule it broke and never the value. Once the setting was applied, no value it carries stops a start.
 - **Every start warns while `admin` still signs in with `admin`**, until the password is rotated.
 - **A password credential signed in as `admin` in no organization that belongs to another user stops the start that
-  would apply the setting**, because applying it would either fail or sign that user in as the administrator. Remove that credential and provision
-  the user's password under another username, then start again.
+  would apply the setting**, because applying it would either fail or sign that user in as the administrator. Unset
+  the variable and start, remove that credential and provision the user's password under another username, then set
+  the variable again and restart. The same check comes first for a value the policy refuses: where `admin` already
+  holds a password, nothing would be written, so the start goes on and the value is left unrecorded.
 
 The Compose and Quadlet assets set the variable to `admin`, which is safe only while the administrative port stays on
 loopback; the Helm chart sets none and reads it from a Secret when one is named. A deployment that never sets it has an
@@ -204,9 +212,11 @@ more way in. [The stored schema](../architecture/stored-email-schema.md#the-defa
 
 A caller here holds the administrative half of its user's grant — what the roles assigned to the user list from the
 administrative names, at the scope each assignment gives — and that grant holds on every credential the user presents
-here. A credential's own `--permission` list names mail operations alone, so it narrows nothing on this surface; a token
-on an `oauth-subject` entry carrying `PermissionsFromTokenScopes` is kept to what its scopes carry as well, which is how a
-token minted to read the deployment cannot change it. The grant is read per request, so a revoked assignment reaches a
+here, narrowed by what the credential keeps. A credential's own `--permission` list may name names of both halves, and
+each surface reads the half it guards, so `--permission mailfathom.admin.read` makes a credential that reads this
+deployment's state and changes nothing; a credential naming no permission keeps whatever its user's roles grant. A
+token on an `oauth-subject` entry carrying `PermissionsFromTokenScopes` is kept to what its scopes carry as well, which
+is how a token minted to read the deployment cannot change it. The grant is read per request, so a revoked assignment reaches a
 signed-in administrator on their next command within the bound
 [how a caller's grant is computed](permissions.md#how-a-callers-grant-is-computed) states. This surface's half of the
 published set is allocated so that the separations an operator would plausibly want to make are the ones they can:
@@ -1923,7 +1933,11 @@ accepted from, and can be disabled, rotated, or removed the same way:
 Reading and writing are separately granted. A listing says which credentials exist and whose they are, which is
 `mailfathom.admin.read`; provisioning, rotating, disabling, and removing decide who can read somebody's mail, which is
 `mailfathom.admin.credentials.write` — so a credential provisioned to read this deployment's state has not thereby been
-given one that can mint a way into a mailbox.
+given one that can mint a way into a mailbox. **Provisioning, rotating, and enabling one also needs every
+administrative name its user holds**, because placing a credential is a way in as that user: a caller kept to
+`mailfathom.admin.credentials.write` cannot mint itself, or a root, a key that administers with everything that user
+holds, and is refused naming the first name it lacks. Disabling and removing one widen nobody and need the write
+permission alone. The scope each name is held at is not compared, and neither is the mail half.
 
 ```console
 $ mfctl credential create --method password --username user

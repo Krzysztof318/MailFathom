@@ -8,9 +8,9 @@ namespace MailFathom.Application.Access.DefaultAdministrator;
 
 /// <summary>What one start established about the default administrator, which the startup record reports.</summary>
 /// <param name="Administrator">The default administrator, or <see langword="null" /> where it was removed, which is final.</param>
-/// <param name="PasswordSetting">What this start did with the password setting, or <see langword="null" /> where it carried none or the setting had already been applied.</param>
+/// <param name="PasswordSetting">What this start did with the password setting.</param>
 /// <param name="SignsInWithShippedPassword">Whether the administrator's password is still the one every copy of the deployment assets ships with.</param>
 public sealed record DefaultAdministratorStart(
     UserId? Administrator,
-    DefaultAdministratorPasswordOutcome? PasswordSetting,
+    DefaultAdministratorPasswordOutcome PasswordSetting,
     bool SignsInWithShippedPassword);

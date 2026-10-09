@@ -9,8 +9,8 @@ namespace MailFathom.Host.Configuration.Access;
 
 /// <summary>The rules a user-facing endpoint's list of accepted methods follows, wherever that list is configured.</summary>
 /// <remarks>
-/// Both mail-serving surfaces configure the same list under the same key, and a rule about it is a rule about the list
-/// rather than about the endpoint holding one. Keeping them here is what stops the two endpoints from drifting into two
+/// All three surfaces configure the same list under the same key, and a rule about it is a rule about the list rather
+/// than about the endpoint holding one. Keeping them here is what stops the endpoints from drifting into several
 /// readings of one setting, each refusing the same arrangement in its own words or one of them not refusing it at all.
 /// </remarks>
 internal static class UserFacingAuthenticationConfiguration

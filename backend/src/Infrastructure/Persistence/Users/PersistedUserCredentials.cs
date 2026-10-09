@@ -539,12 +539,12 @@ internal sealed class PersistedUserCredentials(MailFathomDbContext dbContext, Ti
 
     /// <summary>Reads a stored narrowing into the names a request this credential admits is kept to.</summary>
     /// <remarks>
-    /// A credential naming nothing keeps every name the mail half publishes in this build, which takes nothing away from
-    /// its user's grant: the grant is kept to that half anyway, so the user's roles alone decide what the caller holds,
+    /// A credential naming nothing keeps every name this build publishes, which takes nothing away from its user's grant:
+    /// each surface keeps the grant to the half it guards anyway, so the user's roles alone decide what the caller holds,
     /// and a name a later build publishes reaches the caller only once a role carries it.
     /// </remarks>
     internal static IReadOnlyList<MailFathomPermission> NarrowingAdmittedBy(string[]? storedPermissions) =>
-        NarrowingOf(storedPermissions) ?? MailFathomPermission.PublishedFor(ProtectedSurface.Mail);
+        NarrowingOf(storedPermissions) ?? MailFathomPermission.All;
 
     private static string[]? StoredGrant(IReadOnlyList<MailFathomPermission>? permissions) => permissions is null
         ? null

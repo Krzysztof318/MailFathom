@@ -82,7 +82,7 @@ internal sealed record UserCredentialEnablementRequest(bool? Enabled);
 /// <param name="Method">The published name of the method the credential is presented by.</param>
 /// <param name="Lookup">What the credential is resolved by, or <see langword="null" /> where that value is derived from the secret.</param>
 /// <param name="Permissions">The published permission names the credential narrows its user's grant to, or <see langword="null" /> where it names none and holds what the user holds.</param>
-/// <param name="EffectivePermissions">The published permission names a request this credential admits holds now: the user's grant, kept to the mail half and to <paramref name="Permissions" />. A token's scopes may narrow it further.</param>
+/// <param name="EffectivePermissions">The published permission names a request this credential admits holds now: the user's grant, kept to the half each endpoint the credential is presented on reads and to <paramref name="Permissions" />. A token's scopes may narrow it further.</param>
 /// <param name="Enabled">Whether it currently authenticates anything.</param>
 /// <param name="Version">How many times the record has been written, counting the act that provisioned it.</param>
 /// <param name="CreatedAt">When the credential was provisioned.</param>

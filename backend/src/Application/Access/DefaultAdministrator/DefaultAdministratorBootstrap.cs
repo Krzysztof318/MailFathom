@@ -95,12 +95,18 @@ public sealed class DefaultAdministratorBootstrap
 
         if (record.Administrator is not { } administrator)
         {
-            return new DefaultAdministratorStart(Administrator: null, PasswordSetting: null, SignsInWithShippedPassword: false);
+            return new DefaultAdministratorStart(
+                Administrator: null,
+                DefaultAdministratorPasswordOutcome.AdministratorRemoved,
+                SignsInWithShippedPassword: false);
         }
 
-        var applied = password is null || record.PasswordSettingApplied
-            ? (DefaultAdministratorPasswordOutcome?)null
-            : await this.ApplyAsync(administrator, password, settingName, now, cancellationToken);
+        var applied = password switch
+        {
+            null => DefaultAdministratorPasswordOutcome.NotCarried,
+            _ when record.PasswordSettingApplied => DefaultAdministratorPasswordOutcome.AlreadyApplied,
+            _ => await this.ApplyAsync(administrator, password, settingName, now, cancellationToken),
+        };
 
         return new DefaultAdministratorStart(
             administrator,
@@ -108,8 +114,13 @@ public sealed class DefaultAdministratorBootstrap
             await this.SignsInWithShippedPasswordAsync(administrator, cancellationToken));
     }
 
-    /// <summary>Gives the default administrator the password the setting carries, refusing a value the policy refuses.</summary>
-    /// <remarks>The policy is asked here rather than on every start, because a setting already applied is ignored whatever it now holds, and a value nobody will apply is no reason to stop a start.</remarks>
+    /// <summary>Gives the default administrator the password the setting carries, refusing a value the policy refuses where it would be written.</summary>
+    /// <remarks>
+    /// The policy is asked here rather than on every start, because a setting already applied is ignored whatever it now
+    /// holds, and a value nobody will apply is no reason to stop a start. That is also why an administrator already
+    /// holding a password answers before a refused value stops anything: the store would write nothing over it. The
+    /// refused value is then left unrecorded rather than recorded as applied, so it never reaches a password at all.
+    /// </remarks>
     private async Task<DefaultAdministratorPasswordOutcome> ApplyAsync(
         UserId administrator,
         string password,
@@ -119,7 +130,9 @@ public sealed class DefaultAdministratorBootstrap
     {
         if (password != ShippedPassword && UserPasswordPolicy.FindRefusal(password) is { } refusal)
         {
-            throw DefaultAdministratorUnusableException.PasswordRefused(settingName, refusal);
+            return await this.HoldsPasswordAsync(administrator, cancellationToken)
+                ? DefaultAdministratorPasswordOutcome.AlreadyHeld
+                : throw DefaultAdministratorUnusableException.PasswordRefused(settingName, refusal);
         }
 
         var outcome = await this.store.ApplyPasswordSettingAsync(
@@ -127,14 +140,17 @@ public sealed class DefaultAdministratorBootstrap
             Guid.CreateVersion7(now),
             UserCredentialLookup.ForUsername(UserCredentialUsername.Create(Username)),
             this.passwordHasher.Hash(password),
-            MailFathomPermission.PublishedFor(ProtectedSurface.Mail),
             now,
             cancellationToken);
 
         return outcome == DefaultAdministratorPasswordOutcome.UsernameTaken
-            ? throw DefaultAdministratorUnusableException.UsernameTaken()
+            ? throw DefaultAdministratorUnusableException.UsernameTaken(settingName)
             : outcome;
     }
+
+    private async Task<bool> HoldsPasswordAsync(UserId administrator, CancellationToken cancellationToken) =>
+        (await this.credentials.ReadForUserAsync(administrator, cancellationToken))
+            .Any(credential => credential.Method == UserCredentialMethod.Password);
 
     private async Task<bool> SignsInWithShippedPasswordAsync(UserId administrator, CancellationToken cancellationToken)
     {

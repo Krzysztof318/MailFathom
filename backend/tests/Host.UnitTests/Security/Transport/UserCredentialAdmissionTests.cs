@@ -132,40 +132,50 @@ public sealed class UserCredentialAdmissionTests
         Assert.Null(refusal);
     }
 
-    [Fact]
-    public void PermissionsPresentedOn_TheAdministrativeEndpoint_IsTheWholeAdministrativeHalfWhateverTheCredentialNames()
+    /// <summary>A narrowing is the operator's statement of what one credential may do, so the most privileged surface honours it rather than handing the user's whole grant through.</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task FindRefusalAsync_AnAdministrativeCredentialNarrowedToNoAdministrativeName_IsRefusedHoweverMuchItsUserHolds(bool keepsAMailName)
     {
         // Arrange
-        var credential = AdministrativeCredential();
+        var context = RequestFrom(Office, ScopedGrant.AtDeployment(MailFathomPermission.All));
+        IReadOnlyList<MailFathomPermission> narrowing = keepsAMailName ? [MailFathomPermission.MailRead] : [];
 
         // Act
-        var presented = UserCredentialAdmission.PermissionsPresentedOn(TransportSurface.Admin, credential);
+        var refusal = await UserCredentialAdmission.FindRefusalAsync(context, TransportSurface.Admin, AdministrativeCredential(narrowing));
 
         // Assert
-        Assert.Equal(MailFathomPermission.PublishedFor(ProtectedSurface.Administration), presented);
+        Assert.NotNull(refusal);
     }
 
     [Fact]
-    public void PermissionsPresentedOn_AMailEndpoint_IsWhatTheCredentialNames()
+    public async Task FindRefusalAsync_AnAdministrativeCredentialNarrowedToANameItsUserHolds_IsAdmitted()
     {
         // Arrange
-        var credential = Credential();
+        var context = RequestFrom(Office, ScopedGrant.AtDeployment(MailFathomPermission.All));
 
         // Act
-        var presented = UserCredentialAdmission.PermissionsPresentedOn(TransportSurface.Mcp, credential);
+        var refusal = await UserCredentialAdmission.FindRefusalAsync(
+            context,
+            TransportSurface.Admin,
+            AdministrativeCredential([MailFathomPermission.AdminRead]));
 
         // Assert
-        Assert.Equal([MailFathomPermission.MailRead], presented);
+        Assert.Null(refusal);
     }
 
     private static AdmittedUserCredential Credential(UserCredentialReach? reach = null) =>
-        new(Guid.Parse("7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d"), User, [MailFathomPermission.MailRead], UserEndpointAccess.Everywhere)
+        Credential(reach ?? UserCredentialReach.Default, [MailFathomPermission.MailRead]);
+
+    private static AdmittedUserCredential Credential(UserCredentialReach reach, IReadOnlyList<MailFathomPermission> narrowing) =>
+        new(Guid.Parse("7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d"), User, narrowing, UserEndpointAccess.Everywhere)
         {
-            Reach = reach ?? UserCredentialReach.Default,
+            Reach = reach,
         };
 
-    private static AdmittedUserCredential AdministrativeCredential() =>
-        Credential(new UserCredentialReach([UserCredentialSurface.Administration], []));
+    private static AdmittedUserCredential AdministrativeCredential(IReadOnlyList<MailFathomPermission>? narrowing = null) =>
+        Credential(new UserCredentialReach([UserCredentialSurface.Administration], []), narrowing ?? MailFathomPermission.All);
 
     private static DefaultHttpContext RequestFrom(IPAddress source, ScopedGrant grant)
     {

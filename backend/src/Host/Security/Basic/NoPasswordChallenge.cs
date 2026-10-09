@@ -19,6 +19,11 @@ namespace MailFathom.Host.Security.Basic;
 /// library that builds its own call and takes no option for the credentials mode. Marking such a route leaves the bare
 /// bearer challenge every method on the surface produces, which is what the caller was carrying anyway.
 /// </para>
+/// <para>
+/// Every administrative route carries it as well, for a reason of its own: a browser keeps a password it was prompted
+/// for and attaches it to whatever request it next sends that origin, and the administrative surface has no origin
+/// check behind it to refuse a cross-site form post carrying one. Its only client, <c>mfctl</c>, never reads a challenge.
+/// </para>
 /// </remarks>
 internal sealed class NoPasswordChallenge
 {

@@ -35,12 +35,11 @@ public interface IDefaultAdministratorStore
     /// <param name="credentialId">The identifier the credential is provisioned under where this call writes it.</param>
     /// <param name="lookup">The username the credential is signed in with.</param>
     /// <param name="passwordHash">The stored record of the password.</param>
-    /// <param name="permissions">What the credential grants on a mail-serving surface, which it is never presented on.</param>
     /// <param name="appliedAt">When the setting is applied.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>What the call did, or why it did nothing.</returns>
     /// <remarks>
-    /// The credential, presented on the administrative endpoint alone, and the record that the setting was applied commit
+    /// The credential, presented on the administrative endpoint alone and narrowing nothing its user holds, and the record that the setting was applied commit
     /// together. A deployment whose administrator already holds a password credential records the setting as applied and
     /// writes nothing else, so a credential deleted later cannot bring the setting back on the next start.
     /// </remarks>
@@ -49,7 +48,6 @@ public interface IDefaultAdministratorStore
         Guid credentialId,
         UserCredentialLookup lookup,
         string passwordHash,
-        IReadOnlyList<MailFathomPermission> permissions,
         DateTimeOffset appliedAt,
         CancellationToken cancellationToken);
 }

@@ -247,8 +247,8 @@ because that is what a data-subject request is answered from, and so is emptying
 
 **What a user may do is granted to the user, through roles.** The deployment records roles, groups,
 and role assignments, and seeds three roles — `Mail user`, `Organization administrator`, and `Administrator` — when it
-is migrated. A user's credential then narrows what the user holds on a mail surface rather than granting it, and on the
-administrative endpoint the user's roles are the whole of the grant.
+is migrated. A user's credential then narrows what the user holds rather than granting it, on the administrative
+endpoint as on the mail surfaces.
 [The stored schema](../architecture/stored-email-schema.md#the-roles-groups-and-assignments-a-grant-is-read-from)
 describes the tables and what each seeded role lists.
 
@@ -265,7 +265,8 @@ revoke, narrow, or delete what gave it. A name a stored role lists that this bui
 lists that the user's roles do not grant grants nothing, and a name kept stays at every scope it was held at. The
 administrative half of a user's grant is dropped on a mail surface, since no check there reads it. A surface requiring no
 credential has nothing to narrow with, so its caller holds what the user that deployment serves is granted on the mail
-half.
+half. **A caller on the administrative endpoint holds the same grant kept to the administrative half instead**, narrowed
+by its credential and its token the same way, and is admitted only while that leaves at least one name.
 
 **A mail permission is held whatever scope gave it.** It reaches its holder's own mail, and which mail that is follows
 from the credential rather than from the grant — [what a permission does not decide](#what-a-permission-does-not-decide).
@@ -294,10 +295,14 @@ $ mfctl credential create --method api-key --user 6f1c… \
 `mfctl credential list` reads back both halves for each credential: what it names, and what that leaves it holding under
 its user's current grant. A credential naming a permission its user's roles do not grant holds nothing by it, and the
 name is accepted rather than refused, because the user's grant moves while the credential's list does not: naming is a
-ceiling, and the grant itself comes from [the user's roles](#how-a-callers-grant-is-computed).
+ceiling, and the grant itself comes from [the user's roles](#how-a-callers-grant-is-computed). Names of both halves are
+accepted, and each surface reads the half it guards: on a credential presented on the administrative endpoint,
+`--permission mailfathom.admin.read` keeps it to reading the deployment's state, and a list naming no administrative
+name keeps it out of that endpoint altogether. The listing reports what is held of each half the credential is
+presented on.
 
-**Naming no permission records no narrowing**, so the credential holds exactly what its user's roles grant on the mail
-half, now and after every change to them. Nothing reaches it on an upgrade: a permission a later release publishes is
+**Naming no permission records no narrowing**, so the credential holds exactly what its user's roles grant of the half
+each surface it is presented on reads, now and after every change to them. Nothing reaches it on an upgrade: a permission a later release publishes is
 held through such a credential only once a role its user holds lists it, which is an operator writing that name into a
 role rather than the release widening anything. `mailfathom.mail.send` is the sharpest name such a credential holds
 wherever the user's roles grant it, since with it comes the ability to send mail from the user's address to anybody;

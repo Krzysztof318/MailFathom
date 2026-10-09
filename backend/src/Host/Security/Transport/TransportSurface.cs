@@ -188,9 +188,9 @@ internal readonly record struct TransportSurface
     /// <exception cref="InvalidOperationException">Thrown when the value is the struct default rather than a surface.</exception>
     internal string RoutingSchemeName => $"MailFathom:{this.Name}:Transport";
 
-    /// <summary>Gets the scheme judging a presented key, against this surface's configured keys on the administrative surface and against the credentials this deployment stores on the two mail-serving ones.</summary>
+    /// <summary>Gets the scheme judging a presented key against the credentials this deployment stores.</summary>
     /// <exception cref="InvalidOperationException">Thrown when the value is the struct default rather than a surface.</exception>
-    /// <remarks>One name registering two handlers, because what a surface publishes to a client is a scheme rather than where the deployment keeps what it compares against. Which handler the name carries is decided where the scheme is registered.</remarks>
+    /// <remarks>Composed from the surface's name, because what a surface publishes to a client is a scheme of its own: every surface judges the same rows, and which of them may be presented here is the credential's surfaces, which admission reads.</remarks>
     internal string ApiKeySchemeName => $"MailFathom:{this.Name}:ApiKey";
 
     /// <summary>Gets the scheme judging a user's username and password against the credentials this deployment stores.</summary>
@@ -203,9 +203,9 @@ internal readonly record struct TransportSurface
     /// <remarks>Composed from the surface's name like the others, and what it keeps apart is the registration rather than the sessions: one process-wide store holds those, keyed by the token alone, so a token authenticates wherever this scheme is registered. One surface asks for the exchange today, which is what makes that the same thing.</remarks>
     internal string SessionTokenSchemeName => $"MailFathom:{this.Name}:SessionToken";
 
-    /// <summary>Gets the scheme verifying a signed assertion, against this surface's configured client public keys on the administrative surface and against the credentials this deployment stores on the two mail-serving ones.</summary>
+    /// <summary>Gets the scheme verifying a signed assertion against the client public keys this deployment stores.</summary>
     /// <exception cref="InvalidOperationException">Thrown when the value is the struct default rather than a surface.</exception>
-    /// <remarks>One name registering two handlers, for the reason <see cref="ApiKeySchemeName" /> gives. What the name keeps apart either way is the audience, which is what stops an assertion minted for one surface verifying on another.</remarks>
+    /// <remarks>Composed from the surface's name for the reason <see cref="ApiKeySchemeName" /> gives. What the name keeps apart beside that is the audience, which is what stops an assertion minted for one surface verifying on another.</remarks>
     internal string ClientAssertionSchemeName => $"MailFathom:{this.Name}:ClientAssertion";
 
     /// <summary>Gets the audience an assertion presented here must name.</summary>

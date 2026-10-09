@@ -20,7 +20,10 @@ namespace MailFathom.Cli.Commands;
 /// which is the difference between signing in and writing a file. That holds whichever way the credential was obtained.
 /// </para>
 /// <para>
-/// Four modes, and which one runs is stated rather than guessed. <see cref="SignInMode.Key" /> reads one opaque
+/// Five modes, and which one runs is stated rather than guessed. <see cref="SignInMode.Password" /> prompts for a
+/// password without echoing it, signs in as the default administrator <c>admin</c> unless another username is named,
+/// and stores a profile every later command presents as a Basic credential; it is the mode a fresh deployment is first
+/// administered in, since <c>admin</c> holds no other credential. <see cref="SignInMode.Key" /> reads one opaque
 /// credential from standard input, which is how an API key is presented and how a script signs in.
 /// <see cref="SignInMode.KeyPair" /> names a private key on this machine and stores no credential at all: every later
 /// command signs a fresh short-lived assertion with it, which is the mode a scheduled job wants, since the deployment

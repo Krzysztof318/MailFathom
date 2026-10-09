@@ -572,26 +572,33 @@ public sealed class UserCredentialEndpointsTests
         Assert.Contains("mailfathom.mail.teleport", refusal, StringComparison.Ordinal);
     }
 
-    /// <summary>A credential reaches one user's mail, so a permission of the administrative surface is refused here too.</summary>
+    /// <summary>Each surface reads the half it guards, so an administrative name narrows what the credential may do on the administrative endpoint rather than being refused.</summary>
     [Fact]
-    public async Task ProvisionAsync_AGrantNamingAnAdministrativePermission_IsRefused()
+    public async Task ProvisionAsync_AGrantNamingAnAdministrativePermission_ReachesTheStore()
     {
         // Arrange
         var harness = new EndpointHarness(MailFathomPermission.AdminCredentialsWrite);
 
         // Act
-        var result = await UserCredentialEndpoints.ProvisionAsync(
+        await UserCredentialEndpoints.ProvisionAsync(
             SyntheticUser.Deployment.Value,
-            PasswordRequest("user", Password, [MailFathomPermission.AdminErase.Name]),
+            PasswordRequest("user", Password, [MailFathomPermission.AdminRead.Name]),
             harness.Administration,
             harness.PublicKeys,
             harness.ReverseProxy,
             TestContext.Current.CancellationToken);
 
         // Assert
-        var refusal = AssertRefusal(result.Result, StatusCodes.Status400BadRequest);
-
-        Assert.Contains(MailFathomPermission.AdminErase.Name, refusal, StringComparison.Ordinal);
+        await harness.Credentials.Received(1).CreateAsync(
+            Arg.Any<Guid>(),
+            Arg.Any<UserId>(),
+            Arg.Any<UserCredentialMethod>(),
+            Arg.Any<UserCredentialLookup>(),
+            Arg.Any<string>(),
+            Arg.Is<IReadOnlyList<MailFathomPermission>>(grant =>
+                grant != null && grant.Count == 1 && grant[0] == MailFathomPermission.AdminRead),
+            Arg.Any<UserCredentialReach>(),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]

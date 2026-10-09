@@ -160,6 +160,11 @@ internal sealed class AdminEndpointOptions
         ? TransportListenerConfiguration.ListenerPorts(this.Transport, this.Port, this.Https)
         : new HashSet<int>();
 
+    /// <summary>What a retired setting's remedy needs on this endpoint beside the command it names.</summary>
+    /// <remarks>The remedy is written for every surface, and a credential naming no endpoint is presented on the MCP and client ones alone, so following it here without this would mint a credential this endpoint refuses.</remarks>
+    private const string RetiredSettingSurfaceRemedy =
+        "On this endpoint, add '--surface admin' to that command and name a user holding an administrative role, such as the default administrator 'admin'.";
+
     /// <summary>Reads the section the way composition does, defaults included.</summary>
     /// <param name="configuration">The application configuration.</param>
     /// <returns>The bound settings.</returns>
@@ -177,7 +182,9 @@ internal sealed class AdminEndpointOptions
         IReadOnlyList<string> withdrawnSettings =
         [
             .. FindWithdrawnAdministratorsErrors(section),
-            .. UserFacingAuthenticationConfiguration.FindRetiredSettingErrors(SectionName, section),
+            .. UserFacingAuthenticationConfiguration
+                .FindRetiredSettingErrors(SectionName, section)
+                .Select(error => $"{error} {RetiredSettingSurfaceRemedy}"),
         ];
 
         if (withdrawnSettings.Count > 0)

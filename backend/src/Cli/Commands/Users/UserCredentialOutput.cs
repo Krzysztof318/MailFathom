@@ -181,8 +181,15 @@ internal static class UserCredentialOutput
     {
         null => "unreported",
         { Count: 0 } => "nothing",
-        _ => permissions.Count == MailFathomPermission.PublishedFor(ProtectedSurface.Mail).Count
-            ? WholeSurface
-            : string.Join(", ", permissions),
+        _ => NamesEveryNameOfWhatItReads(permissions) ? WholeSurface : string.Join(", ", permissions),
     };
+
+    /// <summary>Reports whether a list is the whole mail half, the whole administrative half, or both, which reads better as one word than as a column of names.</summary>
+    private static bool NamesEveryNameOfWhatItReads(IReadOnlyList<string> permissions) =>
+        new[]
+        {
+            MailFathomPermission.PublishedFor(ProtectedSurface.Mail),
+            MailFathomPermission.PublishedFor(ProtectedSurface.Administration),
+            MailFathomPermission.All,
+        }.Any(whole => whole.Count == permissions.Count && whole.All(permission => permissions.Contains(permission.Name)));
 }
