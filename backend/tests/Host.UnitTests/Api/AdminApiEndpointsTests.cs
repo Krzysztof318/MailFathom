@@ -29,6 +29,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Cors.Infrastructure;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
@@ -533,6 +534,52 @@ public sealed class AdminApiEndpointsTests
 
         // Assert
         Assert.Equal(StatusCodes.Status403Forbidden, request.Response.StatusCode);
+    }
+
+    /// <summary>
+    /// Every route family the endpoint maps asks its permission at the deployment scope, so an organization's
+    /// administrator holding the whole administrative half over their organization alone is refused on each of them —
+    /// and told, on each, that the scope is what is missing. A route added later is covered by this without being named.
+    /// </summary>
+    [Fact]
+    public async Task MapAdminApi_EveryPublishedRoute_RefusesACallerHoldingItsPermissionOnlyOverOneOrganization()
+    {
+        // Arrange
+        var organization = AssignmentScope.Organization(new Guid("0198f0aa-0000-7000-8000-0000000000a1"));
+        var endpoints = BuildRouteBuilder(AccessAuthorizations.ForPrincipal(AuthorizedPrincipal.Caller(
+            "organization-administrator",
+            ScopedGrant.Of(MailFathomPermission.PublishedFor(ProtectedSurface.Administration)
+                .Select(permission => (permission, organization))))));
+        endpoints.MapAdminApi();
+
+        var published = endpoints.Materialize()
+            .OfType<RouteEndpoint>()
+            .Where(endpoint => endpoint.Metadata.GetMetadata<RoutePermission>() is { Permission.IsSpecified: true })
+            .ToArray();
+
+        // Act
+        var answers = await Task.WhenAll(published.Select(async endpoint =>
+        {
+            var request = new DefaultHttpContext { RequestServices = endpoints.ServiceProvider };
+            request.SetEndpoint(endpoint);
+
+            var answer = await RouteAuthorization.RefuseUnpermittedAsync(
+                EndpointFilterInvocationContext.Create(request),
+                static _ => ValueTask.FromResult<object?>("served"),
+                ProtectedSurface.Administration);
+
+            return (Route: $"{endpoint.RoutePattern.RawText} -> {Describe(endpoint)}", Answer: answer);
+        }));
+
+        // Assert
+        Assert.NotEmpty(answers);
+        Assert.All(
+            answers,
+            answer => Assert.True(
+                answer.Answer is ProblemHttpResult { StatusCode: StatusCodes.Status403Forbidden } refusal
+                    && refusal.ProblemDetails.Extensions.TryGetValue(RouteAuthorization.HeldBelowDeploymentExtension, out var held)
+                    && held is true,
+                answer.Route));
     }
 
     /// <summary>Reads back what each mapped route decided, as one line per verb and path.</summary>

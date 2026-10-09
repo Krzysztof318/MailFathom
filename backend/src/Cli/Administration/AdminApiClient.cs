@@ -2482,7 +2482,8 @@ internal sealed class AdminApiClient
     /// The deployment names the one permission that would have sufficed, and this is what turns that into an
     /// instruction: which permission, where it is written, and what the alternative is. The command never says which
     /// entry — it holds one credential and no view of the deployment's configuration — so it names the section and
-    /// leaves the entry to whoever edits it.
+    /// leaves the entry to whoever edits it. A refusal saying the permission is held only below the deployment asks for
+    /// the scope rather than the name, since granting the name again would change nothing.
     /// </para>
     /// <para>
     /// A refusal carrying no permission is repeated as it was written. That is the deployment saying something other
@@ -2495,6 +2496,11 @@ internal sealed class AdminApiClient
         CancellationToken cancellationToken)
     {
         var problem = await ReadProblemAsync(response, cancellationToken);
+
+        if (problem is { Permission: { Length: > 0 } scopedPermission, HeldBelowDeployment: true })
+        {
+            return $"The deployment refused the operation: this credential holds '{scopedPermission}' only over an organization or a user, and the operation concerns the whole deployment. Assign the user a role holding it at the deployment scope, or sign in as an administrator who holds it there.";
+        }
 
         if (problem?.Permission is { Length: > 0 } permission)
         {

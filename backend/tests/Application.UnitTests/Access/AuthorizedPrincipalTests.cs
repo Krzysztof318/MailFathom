@@ -83,6 +83,52 @@ public sealed class AuthorizedPrincipalTests
         Assert.True(caller.Holds(MailFathomPermission.AdminRead));
     }
 
+    /// <summary>What tells a refusal of an operation that is the deployment's alone apart from a refusal for want of the grant.</summary>
+    [Fact]
+    public void HoldsOnlyBelowDeployment_AnAdministrativePermissionHeldOnlyOverOneOrganization_IsHeldOnlyBelow()
+    {
+        // Arrange
+        var caller = AuthorizedPrincipal.Caller(
+            "organization-administrator",
+            ScopedGrant.Of([
+                (MailFathomPermission.AdminRead, AssignmentScope.Organization(new Guid("0198f0aa-0000-7000-8000-0000000000d3"))),
+            ]));
+
+        // Act & Assert
+        Assert.True(caller.HoldsOnlyBelowDeployment(MailFathomPermission.AdminRead));
+    }
+
+    /// <summary>Held over the deployment as well, or not held at all, is not held only below it — the refusal then is for want of the grant.</summary>
+    [Fact]
+    public void HoldsOnlyBelowDeployment_HeldOverTheDeploymentOrNotAtAll_IsNotHeldOnlyBelow()
+    {
+        // Arrange
+        var caller = AuthorizedPrincipal.Caller(
+            "administrator",
+            ScopedGrant.Of([
+                (MailFathomPermission.AdminRead, AssignmentScope.Organization(new Guid("0198f0aa-0000-7000-8000-0000000000d4"))),
+                (MailFathomPermission.AdminRead, AssignmentScope.Deployment),
+            ]));
+
+        // Act & Assert
+        Assert.False(caller.HoldsOnlyBelowDeployment(MailFathomPermission.AdminRead));
+        Assert.False(caller.HoldsOnlyBelowDeployment(MailFathomPermission.AdminOperate));
+    }
+
+    /// <summary>A mail permission's scope is never read, so it is never held only below the deployment.</summary>
+    [Fact]
+    public void HoldsOnlyBelowDeployment_AMailPermissionHeldAtTheUsersOwnScope_IsNotHeldOnlyBelow()
+    {
+        // Arrange
+        var caller = AuthorizedPrincipal.CallerActingFor(
+            SyntheticUser.Deployment,
+            "user-key",
+            ScopedGrant.Of([(MailFathomPermission.MailRead, AssignmentScope.User(SyntheticUser.Deployment))]));
+
+        // Act & Assert
+        Assert.False(caller.HoldsOnlyBelowDeployment(MailFathomPermission.MailRead));
+    }
+
     /// <summary>A refusal has to name something an operator can act on, so an entry with no name is a defect rather than an anonymous caller.</summary>
     [Theory]
     [InlineData("")]

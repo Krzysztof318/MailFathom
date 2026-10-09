@@ -163,6 +163,14 @@ public sealed class AccessAuthorization
         && this.principals.Current is { Kind: AuthorizedPrincipalKind.Caller } caller
         && caller.Holds(permission);
 
+    /// <summary>Reports whether the caller reaching this work holds one administrative capability only below the deployment, which is what a refusal of an operation that is the deployment's alone says on top of naming the permission.</summary>
+    /// <param name="permission">The capability the refused operation required.</param>
+    /// <returns><see langword="true" /> when an admitted caller holds it at an organization or a user and not over the whole deployment.</returns>
+    public bool PermitsOnlyBelowDeployment(MailFathomPermission permission) =>
+        permission.IsSpecified
+        && this.principals.Current is { Kind: AuthorizedPrincipalKind.Caller } caller
+        && caller.HoldsOnlyBelowDeployment(permission);
+
     /// <summary>Requires that the work in hand is being done for one user, and answers which.</summary>
     /// <returns>The user whose mail this unit of work may act on.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the work was reached under no principal, or under one acting for no user.</exception>

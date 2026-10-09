@@ -427,6 +427,33 @@ public sealed class LoginCommandTests : IDisposable
     }
 
     /// <summary>
+    /// An organization's administrator holds nothing over the whole deployment, so the scopes are what tell them what
+    /// they may administer — and a name their role carries that acts nowhere below the deployment is named as such.
+    /// </summary>
+    [Fact]
+    public async Task Status_ADeploymentReportingANarrowerScope_NamesItWithWhatItHoldsAndWhatReachesNothing()
+    {
+        // Arrange
+        var store = this.CreateStore();
+        store.Save("production", EndpointAddress, "not-a-real-key", "workstation");
+        using var handler = FakeAdminEndpoint.AnsweringBody(
+            HttpStatusCode.OK,
+            $$"""
+            {"service":"MailFathom","version":"{{FakeAdminEndpoint.CommandVersion}}","credential":"workstation","permissions":[],"scopes":[{"scope":"organization","target":"0198f0c4-0000-7000-8000-000000000001","permissions":["mailfathom.admin.read"],"reachingNothing":["mailfathom.admin.spend"]}]}
+            """);
+
+        // Act
+        var exitCode = await RunAsync(this.Context(store, handler), "status");
+
+        // Assert
+        Assert.Equal(0, exitCode);
+        Assert.Contains(
+            this.console.Lines,
+            line => line.Contains("Over organization 0198f0c4-0000-7000-8000-000000000001 it holds mailfathom.admin.read.", StringComparison.Ordinal)
+                && line.Contains("mailfathom.admin.spend reaches nothing there", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// A credential granted nothing signs in exactly as one granted everything does, so saying so is the difference
     /// between an operator understanding what they hold and meeting a refusal on the next command.
     /// </summary>

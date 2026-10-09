@@ -63,6 +63,11 @@ internal static class StatusCommand
 
         context.Console.WriteLine(DescribeGrant(session.Permissions));
 
+        foreach (var scope in (session.Scopes ?? []).Where(scope => scope.Target is not null))
+        {
+            context.Console.WriteLine(DescribeScope(scope));
+        }
+
         if (DocumentationAddress.ForVersion(session.Version) is { } documentation)
         {
             context.Console.WriteLine($"Documentation for that version: {documentation}");
@@ -83,4 +88,20 @@ internal static class StatusCommand
         { Count: 0 } => "It holds no administrative permission, so every operation but this one is refused.",
         _ => $"It holds {string.Join(", ", permissions)}.",
     };
+
+    /// <summary>States what the credential holds over one organization or one user, which reaches only what that scope covers.</summary>
+    /// <remarks>
+    /// A name held there that no operation below the deployment covers is named apart, so an operator granted a role
+    /// carrying it over one organization is not left to believe it acts there.
+    /// </remarks>
+    private static string DescribeScope(AdminSessionScope scope)
+    {
+        var held = scope.Permissions is { Count: > 0 } permissions
+            ? $"Over {scope.Scope} {scope.Target} it holds {string.Join(", ", permissions)}."
+            : $"Over {scope.Scope} {scope.Target} it holds nothing that reaches an operation.";
+
+        return scope.ReachingNothing is { Count: > 0 } inert
+            ? $"{held} {string.Join(", ", inert)} reaches nothing there, because only the deployment scope grants it."
+            : held;
+    }
 }

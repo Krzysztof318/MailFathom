@@ -43,6 +43,12 @@
             },
             "type": "array"
           },
+          "scopes": {
+            "items": {
+              "$ref": "#/components/schemas/AdminSessionScope"
+            },
+            "type": "array"
+          },
           "service": {
             "type": "string"
           },
@@ -54,7 +60,41 @@
           "service",
           "version",
           "credential",
-          "permissions"
+          "permissions",
+          "scopes"
+        ],
+        "type": "object"
+      },
+      "AdminSessionScope": {
+        "properties": {
+          "permissions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "reachingNothing": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "target": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "scope",
+          "target",
+          "permissions",
+          "reachingNothing"
         ],
         "type": "object"
       },

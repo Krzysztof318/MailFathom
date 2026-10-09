@@ -231,6 +231,31 @@ public sealed class JobCommandTests : IDisposable
                 && line.Contains("administrative role", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// A credential holding the permission over one organization alone already has the name, so the refusal asks for the
+    /// deployment scope instead of telling the operator to grant what is held.
+    /// </summary>
+    [Fact]
+    public async Task DeadLetters_ADeploymentRefusingACallerHoldingItOnlyBelowTheDeployment_AsksForTheDeploymentScope()
+    {
+        // Arrange
+        using var deployment = FakeJobDeployment.Serving(
+            deadLetters: (
+                HttpStatusCode.Forbidden,
+                """{"detail":"The credential holds 'mailfathom.admin.read' only over an organization or a user, and this operation is the deployment's alone.","permission":"mailfathom.admin.read","heldBelowDeployment":true}"""));
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "jobs", "dead-letters", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Failure, exitCode);
+        Assert.Contains(
+            this.harness.Console.Errors,
+            line => line.Contains("mailfathom.admin.read", StringComparison.Ordinal)
+                && line.Contains("at the deployment scope", StringComparison.Ordinal)
+                && !line.Contains("provision a credential", StringComparison.Ordinal));
+    }
+
     /// <summary>A refusal naming no permission is repeated as it was written, because widening a grant would not have helped.</summary>
     [Fact]
     public async Task DeadLetters_ADeploymentRefusingWithoutNamingAPermission_RepeatsWhatItSaid()

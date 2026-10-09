@@ -273,6 +273,35 @@ from the credential rather than from the grant — [what a permission does not d
 **An administrative permission answers a question naming no target only at deployment scope**, so a caller granted
 `mailfathom.admin.read` over one organization alone is refused a check that names none.
 
+### What only the deployment scope grants
+
+**Some administrative operations are the deployment's alone**, whatever target a caller's grant covers: an operation
+naming no target concerns every organization at once, and four that do name one reach beyond it. Each is admitted only
+to a caller holding its permission at deployment scope:
+
+| Permission | Only at deployment scope |
+| --- | --- |
+| `mailfathom.admin.read` | Every read of the deployment's own configuration, the embedding status and the activation preview, the loaded rules, the stopped jobs naming no account, the outbox's counts and listing, and where a content move or a release of what one left behind has got to |
+| `mailfathom.admin.operate` | Cancelling a reindex, starting, pausing, and resuming a content move, and retrying or dropping a stopped job naming no account |
+| `mailfathom.admin.credentials.write` | Changing an organization's short name, a namespace unique across the deployment that every member's login is spelled in |
+| `mailfathom.admin.spend` | Activating the embedding model, which is the whole of what the name covers |
+| `mailfathom.admin.erase` | Releasing the database copies a finished content move left behind |
+| `mailfathom.admin.configuration.write` | Writing the persisted configuration, creating and deleting an organization, and recording a user or a mail account in no organization |
+
+`mailfathom.admin.audit.read`, `mailfathom.admin.export`, and `mailfathom.admin.custody.write` have none: each operation
+they cover names the user or the mail account it concerns.
+
+A caller holding one of these permissions only over an organization or a user is refused the operation in the
+administrative endpoint's usual shape, naming the permission and saying that it is held only below the deployment —
+[what a refusal says](admin-endpoint.md#what-a-refusal-says) shows the document. The administrative endpoint asks every
+other route's permission at deployment scope as well, so a grant below the deployment admits its holder to the
+endpoint and to its session route, and is refused on every other route in that same shape.
+
+**`mailfathom.admin.spend` held below the deployment reaches nothing.** A role is assigned whole, so a role carrying it —
+the seeded `Administrator` among them — may be assigned over an organization or a user and grants its other names there.
+The spending name is not refused there, and it is not counted either: `GET /api/admin/session` and `mfctl status` report
+it apart from what that scope reaches, so nobody reads it as a grant the deployment fails to enforce.
+
 **The grant is computed per request and remembered per user by each replica.** A change to an assignment, a role's
 permissions, a group's membership, or a user's organization forgets what every replica remembered: the replica writing it
 at once, the others through the [configuration change announcement](configuration-sources.md#what-reaches-every-replica) where a

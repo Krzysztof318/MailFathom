@@ -242,6 +242,44 @@ It holds mailfathom.admin.read, mailfathom.admin.operate.
 
 A caller of an endpoint naming no method is named `user <the default administrator> credential none`.
 
+The route reports the grant twice over. `permissions` names what the caller holds over the whole deployment, which is
+what every operation naming no target asks for. `scopes` names each scope the caller holds anything at — the deployment
+first, then each organization, then each user, by identifier — with the names held there, and with any name held there
+that [only the deployment scope grants](permissions.md#what-only-the-deployment-scope-grants) listed apart under
+`reachingNothing`:
+
+```json
+{
+  "service": "MailFathom",
+  "version": "0.2.0",
+  "credential": "user 0198f0c4-… credential 41d7e2b0-…",
+  "permissions": [],
+  "scopes": [
+    {
+      "scope": "organization",
+      "target": "0198f0aa-…",
+      "permissions": ["mailfathom.admin.read", "mailfathom.admin.operate"],
+      "reachingNothing": ["mailfathom.admin.spend"]
+    }
+  ]
+}
+```
+
+`mfctl status` prints each scope narrower than the deployment on a line of its own, so an organization's administrator
+reads what they may administer before a refusal tells them:
+
+```text
+It holds no administrative permission, so every operation but this one is refused.
+Over organization 0198f0aa-… it holds mailfathom.admin.read, mailfathom.admin.operate. mailfathom.admin.spend reaches nothing there, because only the deployment scope grants it.
+```
+
+**Some operations are the deployment's alone**, and a grant below the deployment never reaches them: the configuration
+reads and writes under `/api/admin/configuration`, the embedding routes under `/api/admin/embeddings`, the loaded rules,
+the stopped jobs naming no account, the outbox's summary and listing, the content move and the release of what it left
+behind, creating and deleting an organization, and changing its short name.
+[What only the deployment scope grants](permissions.md#what-only-the-deployment-scope-grants) lists them per
+permission. This endpoint asks every route's permission at deployment scope, the routes naming a target included.
+
 Startup records what every `Authentication` entry admits, one line each:
 
 ```text
@@ -285,6 +323,28 @@ because its user's roles do not grant it or because the credential's own permiss
 it out. Give the user an administrative role that holds it, provision a credential whose list keeps it, or sign in as
 an administrator who already holds it.
 ```
+
+A caller holding that permission only over an organization or a user is refused an operation that is the deployment's
+alone all the same, and the document says so, carrying `heldBelowDeployment` beside the name:
+
+```json
+{
+  "status": 403,
+  "detail": "The credential holds 'mailfathom.admin.read' only over an organization or a user, and this operation is the deployment's alone.",
+  "permission": "mailfathom.admin.read",
+  "heldBelowDeployment": true
+}
+```
+
+What is missing there is the scope rather than the name, so `mfctl` asks for that instead:
+
+```text
+The deployment refused the operation: this credential holds 'mailfathom.admin.read' only over an organization or a
+user, and the operation concerns the whole deployment. Assign the user a role holding it at the deployment scope, or
+sign in as an administrator who holds it there.
+```
+
+Saying so discloses nothing about the deployment, because the operation names no target that could be somebody else's.
 
 Naming the permission is a deliberate difference from the MCP surface, which discloses nothing to a refused caller.
 [ADR 0012](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0012-authorization-model-named-permissions-and-where-they-are-enforced.md)
@@ -346,7 +406,7 @@ and a request with none is refused as any other.
 
 | Route | Permission | What it does |
 | --- | --- | --- |
-| `GET /api/admin/session` | none | Reports the credential that authenticated and the running version. `login` and `status` report what it answers; every other command reads it first to [check the two versions against each other](#take-the-command-from-the-deployments-own-release-line). |
+| `GET /api/admin/session` | none | Reports the credential that authenticated, the running version, and what it holds at each scope. `login` and `status` report what it answers; every other command reads it first to [check the two versions against each other](#take-the-command-from-the-deployments-own-release-line). |
 | `POST /api/admin/mailbox/refresh-token` | `mailfathom.admin.credentials.write` | Stores a mailbox refresh token for one configured account, sealed under the deployment's data-encryption key. This is what [`mfctl mailbox authorize --account`](mailbox-oauth.md#sending-the-token-to-the-deployment) sends. |
 | `GET /api/admin/mailbox/synchronization` | `mailfathom.admin.read` | Reports what synchronization is doing, per account and per mapped folder. This is what [`mfctl mailbox status`](#reading-what-synchronization-is-doing) asks. |
 | `GET /api/admin/mailbox/rewind` | `mailfathom.admin.read` | Reports how much mail discarding an account's synchronization progress would have fetched again, discarding nothing. |

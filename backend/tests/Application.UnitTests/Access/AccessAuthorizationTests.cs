@@ -374,6 +374,26 @@ public sealed class AccessAuthorizationTests
         Assert.False(signedCapability.Permits(permission));
     }
 
+    /// <summary>A caller holding an administrative name over one organization alone is refused it and told why; nobody else is.</summary>
+    [Fact]
+    public void PermitsOnlyBelowDeployment_ACallerHoldingItOverOneOrganization_ReportsItHeldOnlyBelow()
+    {
+        // Arrange
+        var scoped = AuthorizationOver(AuthorizedPrincipal.Caller(
+            ConfiguredCredentialName,
+            ScopedGrant.Of([
+                (MailFathomPermission.AdminRead, AssignmentScope.Organization(new Guid("0198f0aa-0000-7000-8000-0000000000e1"))),
+            ])));
+        var unscoped = AuthorizationOver(principal: null);
+
+        // Act, Assert
+        Assert.False(scoped.Permits(MailFathomPermission.AdminRead));
+        Assert.True(scoped.PermitsOnlyBelowDeployment(MailFathomPermission.AdminRead));
+        Assert.False(scoped.PermitsOnlyBelowDeployment(MailFathomPermission.AdminOperate));
+        Assert.False(scoped.PermitsOnlyBelowDeployment(default));
+        Assert.False(unscoped.PermitsOnlyBelowDeployment(MailFathomPermission.AdminRead));
+    }
+
     /// <summary>An entrypoint that stated nothing is reported as holding nothing rather than as a question nobody answered.</summary>
     [Fact]
     public void Permits_ReachedUnderNoPrincipal_ReportsNothingHeld()
