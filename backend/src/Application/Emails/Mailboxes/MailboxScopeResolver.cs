@@ -101,8 +101,11 @@ public sealed class MailboxScopeResolver
     /// keep complete. It is stated as what is admitted rather than as what is withheld, because the store holds rows of
     /// folders configuration no longer names and no list of withheld names reaches those: a folder nobody mapped is a
     /// folder MailFathom does not have, and it stays out by not being admitted. A tool that read the mailbox some other
-    /// way would bypass this, which is why the two reads that reach an email by its identifier ask the same
-    /// configuration directly rather than building a scope.
+    /// way would bypass this, which is why the two reads that reach an email by its identifier ask the folder mapping
+    /// directly rather than building a scope. Until #2321 moves them, those two read the mapping the roster publishes
+    /// while a scope reads the account's settings columns, so the two agree once the roster has republished the
+    /// account's last write — within one convergence interval of its commit on every replica but the one that wrote it.
+    /// For that long a folder the write withheld stays readable by identifier while it is already out of every scope.
     /// </para>
     /// <para>
     /// The junk folder is withheld here too, and it is a different kind of decision from the one above: an operator did
@@ -159,11 +162,10 @@ public sealed class MailboxScopeResolver
             ? [.. assignedAccounts.Select(static account => account.Id)]
             : requestedAccountIds;
 
-        // A user assigned no account leaves before the folder decisions are applied, because those are the
-        // deployment's and reach every account it serves. Carrying an empty account list through them would produce a
-        // scope naming no account while admitting every other mailbox's folders, which reads as a scope over the
-        // deployment rather than over nothing. The scope that admits nothing is what such a caller resolves to
-        // instead, and the predicate's unconditional account containment is the second half of the same answer.
+        // A user assigned no account leaves before the folder decisions are read, because those are read for the
+        // accounts in scope and an empty list of accounts has no folders to restrict a scope to. The scope that admits
+        // nothing is what such a caller resolves to instead, and the predicate's unconditional account containment is
+        // the second half of the same answer.
         //
         // The junk-mail answer is still recorded on it, for the reason WithJunkMail records one when no account maps a
         // junk folder: the answer is part of what a continuation cursor was issued for, and a page that reported the
@@ -224,13 +226,15 @@ public sealed class MailboxScopeResolver
     /// <remarks>
     /// This is <see cref="ReadableScopeAsync" /> asked about one email instead of about a query, and it exists because
     /// several reads reach an email by its identifier and build no scope at all. Both questions are answered from the
-    /// same catalog and the same folder mapping here, so a folder an operator withheld cannot be readable through one
-    /// entry point and withheld through another, and an account this caller is not assigned cannot be reachable by
-    /// identifier while it is unreachable by name. It is a mapping being asked to admit the folder rather than a list
-    /// being asked whether it names it, so an email stored under an alias no mapping names is unreadable by the same
-    /// answer that withholds a mapped folder. A caller that may not read the email is told it was not found rather than
-    /// refused, for the reason an account this deployment no longer serves is: a refusal would confirm the identifier
-    /// exists.
+    /// same catalog here, so an account this caller is not assigned cannot be reachable by identifier while it is
+    /// unreachable by name. The folder is a different matter until #2321 moves this read: it asks the mapping the roster
+    /// publishes, while a scope reads the account's settings columns, so a folder a write withheld stays readable here
+    /// until the roster republishes that write — within one convergence interval of its commit on every replica but the
+    /// one that wrote it — while it is already out of every scope. It is a mapping being asked to admit the folder
+    /// rather than a list being asked whether it names it, so an email stored under an alias no mapping names is
+    /// unreadable by the same answer that withholds a mapped folder. A caller that may not read the email is told it was
+    /// not found rather than refused, for the reason an account this deployment no longer serves is: a refusal would
+    /// confirm the identifier exists.
     /// </remarks>
     public bool IsReadableByTools(MailAccountId accountId, MailFolderAlias folderAlias) =>
         this.accountCatalog.AssignedAccounts.Any(account => account.Id == accountId)

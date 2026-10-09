@@ -256,6 +256,7 @@ inside each user's document could not be.
 | `ClassifiesSpam` | Whether the document switches spam classification on for this mailbox |
 | `ScansFor` | The sensitive-content scanners the document switches on, as `integer[]`: `0` secrets, `1` personal data |
 | `ScreensOutgoingMailFor` | The scanners whose findings stop this mailbox's outgoing mail, in the same encoding |
+| `SettingsVersion` | The `Version` of the document the five columns above and the account's folder rows were read out of, `0` where nothing has read them yet |
 
 | Column of `mail_account_assignments` | What it records |
 |---|---|
@@ -279,9 +280,12 @@ Some questions are about every mailbox the deployment serves rather than one: wh
 junk, which accounts classify spam and which of their folders that covers, whether any mailbox is scanned, and the
 strictest posture across one user's mailboxes. Those are answered by a query rather than by binding every account's
 document, so the settings they filter on are held relationally beside the document — the five columns above, and one row
-per mapped folder in `mail_account_folder_settings`. **The account write is the only writer of both**: it reads them out
-of the document it is committing, binding it exactly as a mailbox run binds it, and writes them in the same transaction,
-so a column never describes a document other than the one beside it.
+per mapped folder in `mail_account_folder_settings`. **The account write reads them out of the document it is
+committing**, binding it exactly as a mailbox run binds it, and writes them in the same transaction with
+`SettingsVersion` set to the version it committed. A row whose `SettingsVersion` differs from its `Version` is one a
+build older than these columns wrote the document of alone; every replica reads up to a hundred such rows again from
+their documents on each [convergence interval](../operations/database-schema.md#ordering-a-deployment), writing them
+only where the account still stands at the version it read, so the columns trail such a write by at most one interval.
 
 | Column of `mail_account_folder_settings` | What it records |
 |---|---|

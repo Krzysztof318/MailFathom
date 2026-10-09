@@ -19,7 +19,14 @@ namespace MailFathom.Infrastructure.Persistence.Entities;
 /// The settings a question about every account at once filters on are columns too, beside the document they are read
 /// out of: whether the document binds at all, how the account is synchronized, whether it classifies spam, and what it
 /// asks to be scanned for. Its folders are rows of <see cref="MailAccountFolderSettingsEntity" />. Every write of the
-/// document writes them in the same statement run, so the two never disagree.
+/// document by this build writes them in the same transaction, and records in <see cref="SettingsVersion" /> the version
+/// of the document they were read out of.
+/// </para>
+/// <para>
+/// A build older than these columns rewrites the document alone during a rolling upgrade, so a row whose
+/// <see cref="SettingsVersion" /> differs from <see cref="Version" /> holds settings read out of an earlier document, or
+/// none at all. Such a row is read again out of its document within one convergence interval of the write, and until then
+/// every question about every account answers from what it held before.
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "EF Core materializes this entity through the DbSet and model metadata.")]
@@ -57,6 +64,9 @@ internal sealed class MailAccountRecordEntity
     public int[] ScreensOutgoingMailFor { get; set; } = [];
 
     public long Version { get; set; }
+
+    /// <summary>The <see cref="Version" /> of the document the settings columns and folder rows were read out of.</summary>
+    public long SettingsVersion { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }
 

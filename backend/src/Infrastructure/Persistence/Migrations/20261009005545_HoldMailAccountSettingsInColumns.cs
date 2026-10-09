@@ -43,6 +43,13 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                 nullable: false,
                 defaultValueSql: "'{}'::integer[]");
 
+            migrationBuilder.AddColumn<long>(
+                name: "SettingsVersion",
+                table: "settings_mail_accounts",
+                type: "bigint",
+                nullable: false,
+                defaultValue: 0L);
+
             migrationBuilder.AddColumn<int>(
                 name: "SynchronizationMode",
                 table: "settings_mail_accounts",
@@ -78,8 +85,9 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
             // as text, an unset participation switch reading as true, no folders reading as the inbox alone, and spam
             // classification scanning the inbox aliases when it names no folders. The helpers live in pg_temp, so they
             // end with the session that ran the migration and leave nothing in the schema.
-            // ponytail: every object document is marked readable; one the host's strict binding would refuse is served
-            // by the deployment-wide answers until its next write re-reads it, where the projection is computed in C#.
+            // What this reads is an approximation of that binding: every object document is marked readable, including one
+            // the host's strict binding would refuse. It stands only until each account is read again in C#, because the
+            // settings version is left at zero for every row here, which is what the convergence interval reads again.
             migrationBuilder.Sql(
                 """
                 CREATE FUNCTION pg_temp.mf_member(document jsonb, name text) RETURNS jsonb
@@ -218,6 +226,10 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
             migrationBuilder.DropColumn(
                 name: "ScreensOutgoingMailFor",
+                table: "settings_mail_accounts");
+
+            migrationBuilder.DropColumn(
+                name: "SettingsVersion",
                 table: "settings_mail_accounts");
 
             migrationBuilder.DropColumn(

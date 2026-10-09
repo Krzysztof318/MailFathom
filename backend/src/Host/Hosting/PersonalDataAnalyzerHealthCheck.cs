@@ -29,7 +29,9 @@ namespace MailFathom.Host.Hosting;
 /// <b>It asks whether any mailbox is scanned for before it asks the analyzer.</b> The scanner is switched on per mail
 /// account, so a deployment that stood the analyzer up without scanning any account's mail with it is not made unready
 /// by that analyzer's silence — nothing is being refused — while one where a single account switched it on for the mail
-/// in it is. Registration cannot decide this, because it happens before the roster the answer is composed from exists.
+/// in it is. Registration cannot decide this, because the answer is read from the account records on every scrape. A
+/// scrape that cannot read it reports unhealthy, because the scanner's guards read the same records and refuse whatever
+/// they cannot judge, and it names that read rather than the analyzer, which was never asked.
 /// </para>
 /// <para>
 /// It carries the readiness tag alone and must never reach the liveness probe. Restarting this process cannot start a
@@ -94,6 +96,9 @@ internal sealed partial class PersonalDataAnalyzerHealthCheck : IHealthCheck
 
         /// <summary>The last scrape did not.</summary>
         Unavailable = 2,
+
+        /// <summary>The last scrape could not read whether anybody's mail is scanned for personal data, so it never reached the analyzer.</summary>
+        PostureUnreadable = 3,
     }
 
     /// <summary>Builds the registration this check is added to the health-check service through.</summary>
@@ -122,13 +127,34 @@ internal sealed partial class PersonalDataAnalyzerHealthCheck : IHealthCheck
         HealthCheckContext context,
         CancellationToken cancellationToken = default)
     {
-        if (!await this.postures.RunsForAnyAccountAsync(SensitiveContentScannerKind.Pii, cancellationToken))
+        bool scansForPersonalData;
+
+        try
+        {
+            scansForPersonalData = await this.postures.RunsForAnyAccountAsync(SensitiveContentScannerKind.Pii, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception failure)
+        {
+            if (this.Observed(AnalyzerAvailability.PostureUnreadable) is not AnalyzerAvailability.PostureUnreadable)
+            {
+                this.LogPostureUnreadable(failure);
+            }
+
+            return HealthCheckResult.Unhealthy(
+                "Whether any mailbox is scanned for personal data could not be read, so the analyzer was not asked.");
+        }
+
+        if (!scansForPersonalData)
         {
             // Forgotten rather than recorded as available, so a user who switches the scanner on after an outage
             // began meets a check that reports that outage instead of one holding a verdict about nobody's mail. The
             // transition out of an outage is still written: the probe flips to ready here, and an operator whose log
             // ends at the Error record would otherwise have nothing saying the instance is back in traffic.
-            if (this.Observed(AnalyzerAvailability.Unobserved) is AnalyzerAvailability.Unavailable)
+            if (this.Observed(AnalyzerAvailability.Unobserved) is AnalyzerAvailability.Unavailable or AnalyzerAvailability.PostureUnreadable)
             {
                 this.LogAnalyzerNoLongerAsked();
             }
@@ -192,6 +218,12 @@ internal sealed partial class PersonalDataAnalyzerHealthCheck : IHealthCheck
         Level = LogLevel.Error,
         Message = "The personal-data analyzer is not answering, so this instance reports unready and refuses every read, derived write, and egress the scanner guards. It is not restarted, and it becomes ready by itself once the analyzer answers: correct SensitiveContent:PersonalDataAnalyzer:Endpoint, start the analyzer beside this service, or switch the scanner off.")]
     private partial void LogAnalyzerUnavailable(Exception failure);
+
+    /// <summary>Reports the posture read as the reason this instance is unready, once, rather than the analyzer nobody asked.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "Whether any mailbox is scanned for personal data could not be read from the account records, so this instance reports unready without asking the personal-data analyzer. It becomes ready by itself once the database answers again.")]
+    private partial void LogPostureUnreadable(Exception failure);
 
     /// <summary>Reports the recovery, which is what tells an operator watching the first record that the outage ended.</summary>
     [LoggerMessage(

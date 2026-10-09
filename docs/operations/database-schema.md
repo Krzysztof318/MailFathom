@@ -385,6 +385,19 @@ are all on this release. Nothing is lost by the columns being there, and no mail
 read, the star, the labels, and the move somebody gave a message while the account was held, which MailFathom still
 holds and which a support request can put back.
 
+**`HoldMailAccountSettingsInColumns` reads an older build's account writes again rather than refusing them.** It adds
+six columns to `settings_mail_accounts`, each with a default, and an empty `mail_account_folder_settings` table, then
+fills both from every account's document, so it reads each account record once and rewrites nothing else. A build older
+than the release carrying it writes an account's document alone: an account it saves keeps the settings the columns held
+before, and an account it creates holds none. Every replica of this release reads such an account again from its
+document within one convergence interval of the write, up to a hundred accounts per interval. Until then, the answers
+asked of every account at once — which mail is classified as spam, which folders a mailbox query admits, and which
+scanners a search across one user's accounts redacts for — answer from what the columns held, and an account the older
+build created takes part in none of them. So a scanner switched on, or a folder withheld from tools, through a replica
+of the previous build reaches those answers one interval later rather than at once. Finish the rollout before changing
+what an account is scanned for. The migration's own reading of each document is an approximation of the host's binding
+and is replaced the same way: every row it fills is read again over the first intervals after the new build starts.
+
 **`KeyMailAccountByUserAndIdentifier` also asks one thing of you after the rollout: authorize every OAuth mailbox
 again.** A sealed refresh token is bound to the account it was stored for, and the account was then the user and the
 identifier together rather than the identifier alone — so a token sealed by an earlier release **does not open**. The

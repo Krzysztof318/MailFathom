@@ -269,6 +269,55 @@ public sealed class PersonalDataAnalyzerHealthCheckTests
             loggerFactory.Records.Select(record => record.Level));
     }
 
+    /// <summary>A database outage is reported as the posture read it is, once, and the analyzer nobody needed is never asked.</summary>
+    [Fact]
+    public async Task CheckHealthAsync_ThePosturesCouldNotBeReadOnEveryScrape_ReportsUnhealthyAndLogsOnce()
+    {
+        // Arrange
+        using var loggerFactory = new RecordingLoggerFactory();
+        var probe = Substitute.For<IPersonalDataAnalyzerProbe>();
+        var postures = Substitute.For<ISensitiveContentPostures>();
+        postures
+            .RunsForAnyAccountAsync(SensitiveContentScannerKind.Pii, Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("The database is not answering."));
+
+        var check = new PersonalDataAnalyzerHealthCheck(
+            probe,
+            postures,
+            loggerFactory.CreateLogger<PersonalDataAnalyzerHealthCheck>());
+
+        // Act
+        var first = await check.CheckHealthAsync(new HealthCheckContext(), TestContext.Current.CancellationToken);
+        var second = await check.CheckHealthAsync(new HealthCheckContext(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal([HealthStatus.Unhealthy, HealthStatus.Unhealthy], [first.Status, second.Status]);
+        Assert.Contains("could not be read", first.Description, StringComparison.Ordinal);
+        Assert.Equal(LogLevel.Error, Assert.Single(loggerFactory.Records).Level);
+        await probe.DidNotReceive().VerifyAvailableAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CheckHealthAsync_TheCallerCancellingThePostureRead_PropagatesTheCancellation()
+    {
+        // Arrange
+        using var cancellation = new CancellationTokenSource();
+        await cancellation.CancelAsync();
+        var postures = Substitute.For<ISensitiveContentPostures>();
+        postures
+            .RunsForAnyAccountAsync(SensitiveContentScannerKind.Pii, Arg.Any<CancellationToken>())
+            .ThrowsAsync(new OperationCanceledException(cancellation.Token));
+
+        var check = new PersonalDataAnalyzerHealthCheck(
+            Substitute.For<IPersonalDataAnalyzerProbe>(),
+            postures,
+            NullLogger<PersonalDataAnalyzerHealthCheck>.Instance);
+
+        // Act, Assert
+        await Assert.ThrowsAsync<OperationCanceledException>(
+            () => check.CheckHealthAsync(new HealthCheckContext(), cancellation.Token));
+    }
+
     /// <summary>The three decisions that make this check what it is, asserted where a registration can lose one silently.</summary>
     [Fact]
     public void Registration_Always_IsUnhealthyOnFailureAndReachesTheReadinessProbeAlone()

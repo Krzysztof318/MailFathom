@@ -1532,6 +1532,11 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer[]")
                         .HasDefaultValueSql("'{}'::integer[]");
 
+                    b.Property<long>("SettingsVersion")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L);
+
                     b.Property<int>("SynchronizationMode")
                         .HasColumnType("integer");
 

@@ -35,8 +35,10 @@ namespace MailFathom.Application.SensitiveContent;
 /// It is a port because the postures are composed from configuration, which is the host's, while every path that scans
 /// lives above it. The answer about one account is synchronous, because a path that scans holds the account it scans
 /// for. The three answers about more than one account — every account, or every account of one user — are read from the
-/// account records themselves, because no replica holds every account to walk; a work unit reads each of them once,
-/// when it begins, rather than in front of each value it guards.
+/// account records themselves, because no replica holds every account to walk. A work unit that enters an acting scope
+/// reads the answer it needs once, when it begins, rather than in front of each value it guards. A flow acting for
+/// nobody has no such beginning, so the egress guard asks <see cref="IsActiveForAnyAccountAsync" /> once per value it
+/// guards there.
 /// </para>
 /// </remarks>
 public interface ISensitiveContentPostures

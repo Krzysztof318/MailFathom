@@ -1296,9 +1296,11 @@ internal static class HostComposition
         // and every hosted service is constructed before any is started — asking for it here would build the pool
         // before startup composed the connection string it needs.
         builder.Services.AddSingleton<ServedUsersConvergence>();
+        builder.Services.AddSingleton<MailAccountSettingsReconciliation>();
         builder.Services.AddHostedService(provider => new ConfigurationConvergenceWorker(
             provider.GetRequiredService<ConfigurationChangeAnnouncements>(),
             provider.GetRequiredService<ServedUsersConvergence>(),
+            provider.GetRequiredService<MailAccountSettingsReconciliation>(),
             provider.GetService<RootSettingsReloader>,
             provider.GetRequiredService<TimeProvider>(),
             provider.GetRequiredService<ILogger<ConfigurationConvergenceWorker>>()));

@@ -21,6 +21,11 @@ namespace MailFathom.Host.Hosting.Workers;
 /// trip wherever its announcement arrives.
 /// </para>
 /// <para>
+/// The same interval reads again the settings columns of an account a build older than them wrote the document of alone.
+/// That is a write to the shared rows rather than to this replica, and every replica makes it, which is safe because it
+/// is conditional on the version each one read.
+/// </para>
+/// <para>
 /// A reading that fails is reported and made again on the next interval, and never ends the worker. A database briefly
 /// out of reach says nothing about whether a change is waiting, and every failure beneath this leaves the version in
 /// force where it was.
@@ -37,6 +42,7 @@ internal sealed partial class ConfigurationConvergenceWorker : BackgroundService
 
     private readonly ConfigurationChangeAnnouncements announcements;
     private readonly ServedUsersConvergence users;
+    private readonly MailAccountSettingsReconciliation accountSettings;
     private readonly Func<RootSettingsReloader?> rootSettings;
     private readonly TimeProvider timeProvider;
     private readonly ILogger<ConfigurationConvergenceWorker> logger;
@@ -44,6 +50,7 @@ internal sealed partial class ConfigurationConvergenceWorker : BackgroundService
     /// <summary>Initializes the worker over the readings it runs.</summary>
     /// <param name="announcements">What another replica's change is heard through.</param>
     /// <param name="users">Brings the roster up to the users' records.</param>
+    /// <param name="accountSettings">Brings the settings columns of an account an older build wrote up to its document.</param>
     /// <param name="rootSettings">Resolves what brings the persisted layer up to the deployment's document, answering <see langword="null" /> where the host composed no persisted layer.</param>
     /// <param name="timeProvider">What the interval is measured by.</param>
     /// <param name="logger">Records a reading that failed.</param>
@@ -51,18 +58,21 @@ internal sealed partial class ConfigurationConvergenceWorker : BackgroundService
     public ConfigurationConvergenceWorker(
         ConfigurationChangeAnnouncements announcements,
         ServedUsersConvergence users,
+        MailAccountSettingsReconciliation accountSettings,
         Func<RootSettingsReloader?> rootSettings,
         TimeProvider timeProvider,
         ILogger<ConfigurationConvergenceWorker> logger)
     {
         ArgumentNullException.ThrowIfNull(announcements);
         ArgumentNullException.ThrowIfNull(users);
+        ArgumentNullException.ThrowIfNull(accountSettings);
         ArgumentNullException.ThrowIfNull(rootSettings);
         ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(logger);
 
         this.announcements = announcements;
         this.users = users;
+        this.accountSettings = accountSettings;
         this.rootSettings = rootSettings;
         this.timeProvider = timeProvider;
         this.logger = logger;
@@ -91,6 +101,7 @@ internal sealed partial class ConfigurationConvergenceWorker : BackgroundService
             }
 
             await this.ReadInIsolationAsync(this.users.ConvergeAsync, stoppingToken);
+            await this.ReadInIsolationAsync(this.accountSettings.ReconcileAsync, stoppingToken);
         }
     }
 

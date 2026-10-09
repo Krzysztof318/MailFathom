@@ -59,6 +59,7 @@ internal sealed class PersistedServedMailAccounts(
          SELECT account."Id", account."EmailAddress", account."DisplayName", account."Document"::text, account."Version"
          FROM settings_mail_accounts AS account
          WHERE {Served}
+           AND octet_length(account."Document"::text) <= @maximumOctets
          ORDER BY account."Id";
          """;
 
@@ -113,10 +114,25 @@ internal sealed class PersistedServedMailAccounts(
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// A document past <see cref="UserSettingsDocument.MaximumOctets" /> is left in the database rather than sent, and so
+    /// is left out of the answer, because it is the record the roster refuses to bind too: no write of this build leaves
+    /// one, and an account the roster does not serve has no rule judged against it.
+    /// </para>
+    /// <para>
+    /// It takes no ceiling on the number of accounts, for the reason <see cref="IMailAccountRecordStore.ReadSolelyAssignedAsync" />
+    /// takes none: what asks is judging a rule set against every account it could reach, and a truncated answer would
+    /// pass a rule that names an account past the cut. What bounds it is the deployment — the accounts assigned to the
+    /// users it holds, at most <see cref="MailAccountRecord.MaximumAssignedPerUser" /> each — under that bound per
+    /// document.
+    /// </para>
+    /// </remarks>
     public async Task<IReadOnlyList<MailAccountRecord>> ReadServedRecordsAsync(CancellationToken cancellationToken)
     {
         await using var connection = await dataSource().OpenConnectionAsync(cancellationToken);
         await using var command = new NpgsqlCommand(SelectServedRecords, connection) { CommandTimeout = this.CommandTimeoutSeconds };
+        command.Parameters.AddWithValue("maximumOctets", UserSettingsDocument.MaximumOctets);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 
         var records = new List<MailAccountRecord>();

@@ -256,6 +256,28 @@ internal sealed class InMemoryMailAccountRecordStore : IMailAccountRecordStore
                 .Order(),
         ]);
 
+    /// <inheritdoc />
+    /// <remarks>An account whose settings nothing recorded — one a test held rather than wrote — is one whose settings nothing has read.</remarks>
+    public Task<IReadOnlyList<MailAccountRecord>> ReadWithUnreadSettingsAsync(int limit, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<MailAccountRecord>>(
+            [.. this.accounts.Where(account => !this.Settings.ContainsKey(account.Id)).OrderBy(account => account.Id).Take(limit)]);
+
+    /// <inheritdoc />
+    public Task<bool> RecordSettingsAsync(
+        MailAccountRecord account,
+        MailAccountQueryableSettings settings,
+        CancellationToken cancellationToken)
+    {
+        if (this.Find(account.Id)?.Version != account.Version)
+        {
+            return Task.FromResult(false);
+        }
+
+        this.Settings[account.Id] = settings;
+
+        return Task.FromResult(true);
+    }
+
     private static Task<MailAccountWrite> Written(MailAccountWriteResult result, long version) =>
         Task.FromResult(new MailAccountWrite(result, version));
 

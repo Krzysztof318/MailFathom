@@ -186,6 +186,7 @@ public sealed class ConfigurationConvergenceWorkerTests
         return new ConfigurationConvergenceWorker(
             new ConfigurationChangeAnnouncements(connect, new RecordingLogger<ConfigurationChangeAnnouncements>()),
             users,
+            new MailAccountSettingsReconciliation(MailAccountRecordScopes.Resolving(new InMemoryMailAccountRecordStore())),
             () => rootSettings,
             clock,
             logger ?? new RecordingLogger<ConfigurationConvergenceWorker>());

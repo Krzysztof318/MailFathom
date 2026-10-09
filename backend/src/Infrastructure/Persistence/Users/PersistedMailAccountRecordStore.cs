@@ -163,7 +163,7 @@ internal sealed class PersistedMailAccountRecordStore(
                      """,
                     token);
 
-                await WriteQueryableSettingsAsync(context, account.Id, settings, token);
+                await WriteQueryableSettingsAsync(context, account.Id, 1, settings, token);
 
                 return new MailAccountWrite(MailAccountWriteResult.Committed, 1);
             },
@@ -214,7 +214,7 @@ internal sealed class PersistedMailAccountRecordStore(
                     }
 
                     await StepAssignedUsersAsync(context, account.Id, now, token);
-                    await WriteQueryableSettingsAsync(context, account.Id, settings, token);
+                    await WriteQueryableSettingsAsync(context, account.Id, saved[0], settings, token);
 
                     return new MailAccountWrite(MailAccountWriteResult.Committed, saved[0]);
                 },
@@ -388,6 +388,40 @@ internal sealed class PersistedMailAccountRecordStore(
             .ToListAsync(cancellationToken);
     }
 
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<MailAccountRecord>> ReadWithUnreadSettingsAsync(int limit, CancellationToken cancellationToken)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
+
+        var accounts = await dbContext.MailAccountRecords
+            .AsNoTracking()
+            .Where(account => account.SettingsVersion != account.Version)
+            .OrderBy(account => account.Id)
+            .Take(limit)
+            .ToListAsync(cancellationToken);
+
+        return [.. accounts.Select(ToRecord)];
+    }
+
+    /// <inheritdoc />
+    public Task<bool> RecordSettingsAsync(
+        MailAccountRecord account,
+        MailAccountQueryableSettings settings,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(account);
+        ArgumentNullException.ThrowIfNull(settings);
+
+        return commitPolicy.CommitAsync(
+            async (session, token) =>
+            {
+                var context = await EfCorePersistenceSessionAccessor.JoinAsync(session, token);
+
+                return await WriteQueryableSettingsAsync(context, account.Id, account.Version, settings, token);
+            },
+            cancellationToken);
+    }
+
     /// <summary>Reads the organizations of an account and a user under their locks, and reports them where the two differ.</summary>
     /// <returns>The two organizations where an assignment between them would straddle both, or <see langword="null" /> where they agree or either row is gone — which the insert after this settles.</returns>
     /// <remarks>
@@ -453,14 +487,16 @@ internal sealed class PersistedMailAccountRecordStore(
             cancellationToken);
 
     /// <summary>Writes the settings a question about every account filters on, replacing whatever the account held before.</summary>
+    /// <returns>Whether the account still stood at <paramref name="readFrom" />; nothing is written where it had moved on.</returns>
     /// <remarks>
     /// Written inside the transaction that wrote the document, so a reader meets either both as they stood or both as
-    /// they stand now. The folders are replaced whole rather than reconciled, because they are a reading of the document
-    /// and the document was just replaced whole.
+    /// they stand now, and stamped with the version of the document they were read out of. The folders are replaced whole rather than
+    /// reconciled, because they are a reading of the document and the document was just replaced whole.
     /// </remarks>
-    private static async Task WriteQueryableSettingsAsync(
+    private static async Task<bool> WriteQueryableSettingsAsync(
         MailFathomDbContext context,
         Guid accountId,
+        long readFrom,
         MailAccountQueryableSettings settings,
         CancellationToken cancellationToken)
     {
@@ -468,17 +504,24 @@ internal sealed class PersistedMailAccountRecordStore(
         var screensOutgoingMailFor = ToColumn(settings.ScreensOutgoingMailFor);
         var synchronizationMode = (int)settings.SynchronizationMode;
 
-        await context.Database.ExecuteSqlAsync(
+        var recorded = await context.Database.ExecuteSqlAsync(
             $"""
              UPDATE settings_mail_accounts
              SET "HasReadableSettings" = {settings.IsReadable},
                  "SynchronizationMode" = {synchronizationMode},
                  "ClassifiesSpam" = {settings.ClassifiesSpam},
                  "ScansFor" = {scansFor},
-                 "ScreensOutgoingMailFor" = {screensOutgoingMailFor}
+                 "ScreensOutgoingMailFor" = {screensOutgoingMailFor},
+                 "SettingsVersion" = "Version"
              WHERE "Id" = {accountId}
+               AND "Version" = {readFrom}
              """,
             cancellationToken);
+
+        if (recorded == 0)
+        {
+            return false;
+        }
 
         await context.Database.ExecuteSqlAsync(
             $"""DELETE FROM mail_account_folder_settings WHERE "MailAccountId" = {accountId}""",
@@ -488,7 +531,7 @@ internal sealed class PersistedMailAccountRecordStore(
 
         if (folders.Length == 0)
         {
-            return;
+            return true;
         }
 
         var aliases = folders.Select(folder => folder.Alias.Value).ToArray();
@@ -507,6 +550,8 @@ internal sealed class PersistedMailAccountRecordStore(
                  AS folder(alias, special_use, synchronized, visible_to_tools, generating_embeddings, classified_for_spam)
              """,
             cancellationToken);
+
+        return true;
     }
 
     private static int[] ToColumn(IReadOnlyList<SensitiveContentScannerKind> scanners) =>

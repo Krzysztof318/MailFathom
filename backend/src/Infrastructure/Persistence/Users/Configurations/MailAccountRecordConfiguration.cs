@@ -57,5 +57,9 @@ internal sealed class MailAccountRecordConfiguration : IEntityTypeConfiguration<
         entity.Property(account => account.ClassifiesSpam).HasDefaultValue(false);
         entity.Property(account => account.ScansFor).HasDefaultValueSql("'{}'::integer[]").IsRequired();
         entity.Property(account => account.ScreensOutgoingMailFor).HasDefaultValueSql("'{}'::integer[]").IsRequired();
+
+        // No document version is zero, so a row a build older than these columns inserts reads as one whose settings
+        // nothing has read yet.
+        entity.Property(account => account.SettingsVersion).HasDefaultValue(0L);
     }
 }
