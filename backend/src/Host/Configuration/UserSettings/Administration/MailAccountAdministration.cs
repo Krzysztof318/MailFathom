@@ -938,9 +938,11 @@ internal sealed class MailAccountAdministration(
     /// <param name="actingUser">The user making the change on their own behalf, or <see langword="null" /> for an administrator.</param>
     /// <param name="cancellationToken">Cancels the reads.</param>
     /// <remarks>
-    /// Which secrets the change may newly name is asked first and follows who is making it: a user their own material,
-    /// an administrator holding <see cref="MailFathomPermission.AdminConfigurationWrite" /> below the deployment the
-    /// material of the users the account is assigned to, and one holding it over the whole deployment anything.
+    /// Which secrets the account may carry afterwards is asked first and follows who is making the change. A user may
+    /// newly name their own material. An administrator holding <see cref="MailFathomPermission.AdminConfigurationWrite" />
+    /// below the deployment may change the settings only while every secret they name is the material of a user the
+    /// account is assigned to, so a reference left in place cannot be presented somewhere new. One holding it over the
+    /// whole deployment names anything.
     /// </remarks>
     private async Task<Judgement> JudgeAsync(
         MailAccountRecord candidate,

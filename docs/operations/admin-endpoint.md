@@ -455,13 +455,18 @@ a user scope, where the account is assigned to somebody else too — reads the u
 it does cover, and leaves that one out rather than refusing the user. The synchronization status answers the same
 way: the accounts the scope covers, and nothing about the rest.
 
-**A mail account declared under a grant below the deployment may newly name only a secret provisioned for a user the
-account is assigned to** — material whose own name begins with `user-`, that user's identifier, and `-`. The server an
-account names is whatever its declaration says, so any other reference would present what stands behind it to a
-machine the writer chose: the database password, a private key, another organization's mailbox credential. A
-reference the account already carries stays, so an unrelated edit beside it is not refused, and an administrator
-holding `mailfathom.admin.configuration.write` over the whole deployment names any reference as before. A declaration
-introducing another is refused in the write's own answer, naming the setting, and nothing is written.
+**A grant below the deployment changes a mail account's settings only while every secret they name was provisioned for
+a user the account is assigned to** — material whose own name begins with `user-`, that user's identifier, and `-`. The
+server an account names is whatever its declaration says, so any other reference would present what stands behind it
+to a machine the writer chose: the database password, a private key, a client secret a whole workspace shares. That
+holds for a reference left in place as much as for one newly written, because moving the host or the token endpoint
+beside it presents it somewhere new all the same, so the rule names no particular setting and judges any change to
+them. An account carrying such a reference is therefore the deployment's to redeclare. A narrower grant still reads
+it, renames it, assigns and unassigns it, operates on its mailbox, and erases it, and redeclares it once its
+references are material held for its users, which `POST /api/admin/users/{userId}/secrets` provisions under that same
+grant. An administrator holding `mailfathom.admin.configuration.write` over the whole deployment names any reference
+as before. A declaration refused this way is refused in the write's own answer, naming each setting, and nothing is
+written.
 
 **A listing never refuses over a scope.** It answers with what the caller's scopes cover, a page at a time, so an
 organization's administrator lists that organization's people and mail accounts and nobody else's, and a caller holding

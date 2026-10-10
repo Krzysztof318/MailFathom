@@ -1017,11 +1017,16 @@ public sealed class MailAccountAdministrationTests
     }
 
     /// <summary>
-    /// A save is the same act as a creation where its credential is concerned: the reference the account already
-    /// carries stays, an unrelated edit beside it commits, and replacing it with another user's material is refused.
+    /// Leaving a reference in place and moving the server it is presented to is the same act as writing the reference:
+    /// an account declared with deployment material would hand that material to a machine the organization's
+    /// administrator chose. Which settings decide the destination is not enumerated, so any of them is refused alike.
     /// </summary>
-    [Fact]
-    public async Task SaveAsync_AnOrganizationsAdministratorReplacingTheReferenceWithAnotherUsersMaterial_IsRefusedAndAnUnrelatedEditCommits()
+    [Theory]
+    [InlineData("\"Host\": \"imap.example.test\"", "\"Host\": \"imap.elsewhere.example.test\"")]
+    [InlineData("\"Host\": \"imap.example.test\"", "\"Host\": \"imap.example.test\", \"OAuth\": { \"TokenEndpoint\": \"https://token.elsewhere.example.test/\" }")]
+    public async Task SaveAsync_AnOrganizationsAdministratorMovingWhereAKeptReferenceNotProvisionedForItsUserIsPresented_IsRefusedAndWritesNothing(
+        string standingSetting,
+        string movedSetting)
     {
         // Arrange
         var work = Mailbox("work@example.test", "work");
@@ -1029,25 +1034,65 @@ public sealed class MailAccountAdministrationTests
         deployment.Holding(Alex, EmptyRecord, version: 1, work);
         deployment.MailAccountRecords.PlaceAccount(work.Id, Organization);
         deployment.Targets.WithUser(Alex, Organization);
-        var standing = Declaration("work@example.test", "work");
 
         // Act
-        var replaced = await deployment.MailAccounts.SaveAsync(
+        var moved = await deployment.MailAccounts.SaveAsync(
             work.Id,
-            Declaration("work@example.test", "work", ProvisionedFor(Sam, "work")),
-            expectedVersion: 1,
-            TestContext.Current.CancellationToken);
-        var renamedHost = await deployment.MailAccounts.SaveAsync(
-            work.Id,
-            standing.Replace("imap.example.test", "imap2.example.test", StringComparison.Ordinal),
+            Declaration("work@example.test", "work").Replace(standingSetting, movedSetting, StringComparison.Ordinal),
             expectedVersion: 1,
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.False(replaced!.IsCommitted);
-        Assert.Contains("was not provisioned for a user this mail account is assigned to", Assert.Single(replaced.Messages), StringComparison.Ordinal);
-        Assert.True(renamedHost!.IsCommitted);
-        Assert.Contains("/run/secrets/work-password", Assert.Single(deployment.MailAccountRecords.Accounts).Document, StringComparison.Ordinal);
+        Assert.False(moved!.IsCommitted);
+        Assert.Contains("was not provisioned for a user this mail account is assigned to", Assert.Single(moved.Messages), StringComparison.Ordinal);
+        Assert.Equal(work.Document, Assert.Single(deployment.MailAccountRecords.Accounts).Document);
+    }
+
+    /// <summary>The control for the refusal above: the settings left as they stand present nothing anywhere new, so the account is still renamed.</summary>
+    [Fact]
+    public async Task SaveAsync_AnOrganizationsAdministratorRenamingAnAccountCarryingAReferenceNotProvisionedForItsUser_Commits()
+    {
+        // Arrange
+        var work = Mailbox("work@example.test", "work");
+        var deployment = ScopedTo(MailFathomPermission.AdminConfigurationWrite, AssignmentScope.Organization(Organization));
+        deployment.Holding(Alex, EmptyRecord, version: 1, work);
+        deployment.MailAccountRecords.PlaceAccount(work.Id, Organization);
+        deployment.Targets.WithUser(Alex, Organization);
+
+        // Act
+        var renamed = await deployment.MailAccounts.SaveAsync(
+            work.Id,
+            Declaration("work@example.test", "work archive"),
+            expectedVersion: 1,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(renamed!.IsCommitted);
+        Assert.Equal("work archive", Assert.Single(deployment.MailAccountRecords.Accounts).DisplayName);
+    }
+
+    /// <summary>An account whose every reference is its own user's material is the organization's to redeclare, its server included.</summary>
+    [Fact]
+    public async Task SaveAsync_AnOrganizationsAdministratorMovingTheServerOfAnAccountWhoseReferenceIsItsUsersMaterial_Commits()
+    {
+        // Arrange
+        var work = Mailbox("work@example.test", "work", ProvisionedFor(Alex, "work"));
+        var deployment = ScopedTo(MailFathomPermission.AdminConfigurationWrite, AssignmentScope.Organization(Organization));
+        deployment.Holding(Alex, EmptyRecord, version: 1, work);
+        deployment.MailAccountRecords.PlaceAccount(work.Id, Organization);
+        deployment.Targets.WithUser(Alex, Organization);
+
+        // Act
+        var moved = await deployment.MailAccounts.SaveAsync(
+            work.Id,
+            Declaration("work@example.test", "work", ProvisionedFor(Alex, "work"))
+                .Replace("imap.example.test", "imap.elsewhere.example.test", StringComparison.Ordinal),
+            expectedVersion: 1,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(moved!.IsCommitted);
+        Assert.Contains("imap.elsewhere.example.test", Assert.Single(deployment.MailAccountRecords.Accounts).Document, StringComparison.Ordinal);
     }
 
     /// <summary>

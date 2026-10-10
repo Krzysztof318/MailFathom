@@ -668,53 +668,71 @@ internal sealed class UserRecordAdministration(
         string standingJson,
         string candidateJson) =>
     [
-        .. FindIntroducedSecretsProvisionedForNoneOf([user], standingJson, candidateJson)
+        .. FindSecretsProvisionedForNoneOf(
+                [user],
+                RedactedDocumentSave.Flatten(candidateJson),
+                SecretValuesOf(RedactedDocumentSave.Flatten(standingJson)))
             .Select(path =>
                 $"{path} names a secret that was not provisioned for you: a reference is a path into what this deployment can read, and the mail server it would be presented to is yours. Name material this deployment holds for you — its own name begins with '{CredentialPrefixFor(user)}' — or ask whoever administers this deployment to declare the mailbox with 'mfctl account add'."),
     ];
 
-    /// <summary>Names every secret-bearing value the candidate carries that an administrator below the deployment may not point a mail account at.</summary>
+    /// <summary>Names every secret-bearing value a mail account's settings may not carry once an administrator below the deployment has changed them.</summary>
     /// <param name="assignees">The users the account is, or would be, assigned to.</param>
     /// <param name="standingJson">The settings the account holds now.</param>
     /// <param name="candidateJson">The settings it would hold.</param>
-    /// <returns>One sentence per reference the change introduced that was provisioned for none of those users.</returns>
+    /// <returns>One sentence per reference provisioned for none of those users, and none where the settings are left exactly as they stand.</returns>
     /// <remarks>
+    /// <para>
     /// The bound <see cref="FindSecretsTheUserMayNotName" /> puts on a user is put on whoever administers them with less
-    /// than the whole deployment, for the same reason: the server a mail account names is whatever its declaration
-    /// says, so a reference written into one presents what stands behind it to a machine the writer chose. An
-    /// administrator of one organization is trusted with that organization's mailboxes and not with the database
-    /// password or another organization's credentials, so the material they may newly name is what was provisioned for
-    /// a user the account is assigned to. A reference the account already carries stays admissible, and a caller
-    /// holding the permission over the whole deployment is not asked this at all.
+    /// than the whole deployment, for the same reason: the server a mail account names is whatever its settings say,
+    /// so a reference presents what stands behind it to a machine whoever wrote them chose. An administrator of one
+    /// organization is trusted with that organization's mailboxes and not with the database password, a client secret
+    /// a whole workspace shares, or another organization's credentials.
+    /// </para>
+    /// <para>
+    /// It judges every reference the settings carry rather than the ones the change introduced, which is where it is
+    /// stricter than the user's bound and has to be. A user's own save reaches their folders and nothing that decides
+    /// where a credential goes; an administrator's reaches the host, the port, and the token endpoint, and moving one
+    /// of those beside a reference left untouched presents that reference somewhere new exactly as writing it would.
+    /// Which settings decide that is not enumerated here, because a list is what a setting added later would be
+    /// missing from: any change to the settings is judged, and settings left exactly as they stand are not, which is
+    /// what lets such a caller assign the account or rename it. A caller holding the permission over the whole
+    /// deployment is not asked this at all.
+    /// </para>
     /// </remarks>
     internal static IReadOnlyList<string> FindSecretsANarrowerScopeMayNotName(
         IReadOnlyCollection<UserId> assignees,
         string standingJson,
-        string candidateJson) =>
-    [
-        .. FindIntroducedSecretsProvisionedForNoneOf(assignees, standingJson, candidateJson)
-            .Select(path =>
-                $"{path} names a secret that was not provisioned for a user this mail account is assigned to: a reference is a path into what this deployment can read, and it is presented to whichever mail server the account names. A grant held below the deployment may name only material this deployment holds for one of those users — its own name begins with 'user-', that user's identifier, and '-'. Name such material, or ask an administrator holding the permission over the whole deployment to declare the reference."),
-    ];
-
-    /// <summary>Lists the paths of the secret-bearing values a change introduced that were provisioned for none of some users, in a stable order.</summary>
-    private static IReadOnlyList<string> FindIntroducedSecretsProvisionedForNoneOf(
-        IReadOnlyCollection<UserId> users,
-        string standingJson,
         string candidateJson)
     {
-        var held = SecretValuesOf(RedactedDocumentSave.Flatten(standingJson));
+        var standing = RedactedDocumentSave.Flatten(standingJson);
+        var candidate = RedactedDocumentSave.Flatten(candidateJson);
+
+        if (candidate.Count == standing.Count
+            && candidate.All(setting => standing.TryGetValue(setting.Key, out var held) && held == setting.Value))
+        {
+            return [];
+        }
 
         return
         [
-            .. RedactedDocumentSave.Flatten(candidateJson)
-                .Where(setting => NamesASecret(setting.Key)
-                    && !held.Contains(setting.Value)
-                    && !users.Any(user => NamesMaterialProvisionedFor(user, setting.Value)))
-                .Select(setting => setting.Key)
-                .Order(StringComparer.OrdinalIgnoreCase),
+            .. FindSecretsProvisionedForNoneOf(assignees, candidate, alreadyHeld: [])
+                .Select(path =>
+                    $"{path} names a secret that was not provisioned for a user this mail account is assigned to: a reference is a path into what this deployment can read, and it is presented to whichever server the account's settings name. A grant held below the deployment may change those settings only while every secret they name is material this deployment holds for one of those users — its own name begins with 'user-', that user's identifier, and '-'. Name such material, or ask an administrator holding the permission over the whole deployment to make the change."),
         ];
     }
+
+    /// <summary>Lists the paths of the secret-bearing values that are neither held already nor provisioned for one of some users, in a stable order.</summary>
+    private static IEnumerable<string> FindSecretsProvisionedForNoneOf(
+        IReadOnlyCollection<UserId> users,
+        Dictionary<string, string> candidate,
+        HashSet<string> alreadyHeld) =>
+        candidate
+            .Where(setting => NamesASecret(setting.Key)
+                && !alreadyHeld.Contains(setting.Value)
+                && !users.Any(user => NamesMaterialProvisionedFor(user, setting.Value)))
+            .Select(setting => setting.Key)
+            .Order(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Reports whether a reference names material an operator provisioned for this user and nobody else.</summary>
     private static bool NamesMaterialProvisionedFor(UserId user, string configuredValue) =>
