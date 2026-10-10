@@ -56,6 +56,24 @@ internal static class FakeSettingsPolicyDeployment
                 $$"""{"committed":false,"version":{{PolicyVersion + 1}},"code":{{code}},"messages":[{{JsonSerializer.Serialize(message)}}]}"""),
             documents);
 
+    /// <summary>Builds a deployment that answers every write as stating what the policy in force already states.</summary>
+    /// <param name="organization">The organization the policy belongs to, or <see langword="null" /> where it is the deployment's own.</param>
+    /// <param name="message">The sentence the answer carries.</param>
+    /// <param name="documents">What each successive read of the policy answers with, the last one repeating.</param>
+    /// <returns>The deployment.</returns>
+    /// <remarks>The answer names no code, which is what tells it from a refusal: nothing was wrong with what was saved.</remarks>
+    internal static FakeHttpMessageHandler FindingNothingToChange(
+        Guid? organization,
+        string message,
+        params string[] documents) =>
+        Answering(
+            organization,
+            PolicyVersion,
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $$"""{"committed":false,"version":{{PolicyVersion}},"code":null,"messages":[{{JsonSerializer.Serialize(message)}}]}"""),
+            documents);
+
     /// <summary>The answer every committed write reports, which moves the policy one version on.</summary>
     private static string WriteCommitted => string.Create(
         CultureInfo.InvariantCulture,

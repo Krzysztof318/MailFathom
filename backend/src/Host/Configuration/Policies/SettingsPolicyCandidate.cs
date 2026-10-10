@@ -31,7 +31,8 @@ namespace MailFathom.Host.Configuration.Policies;
 /// as — so a statement is a sparse record, and a wrong type inside it is the refusal a record would get. What the
 /// binder cannot refuse is asked of each stated value beside it: a number no member of an enumeration carries, a rule
 /// the property declares for itself, a written name the record's own rule does not know, and, of each entry of a
-/// stated list, the rules that entry declares for itself. A rule the record's validator asks of the record as a whole
+/// stated list, the rules that entry declares for itself or the record asks of that entry alone. A rule the record's
+/// validator asks of the record as a whole
 /// is not asked here — that delivery which is enabled names a host, and equally a bound that validator checks on one
 /// property beside the rest — because a statement is not a record and that validator has nothing whole to read:
 /// forcing one property of a block says nothing about its siblings, which each record states for itself.
@@ -69,6 +70,8 @@ internal sealed class SettingsPolicyCandidate
 
     private readonly List<string> refusals = [];
 
+    private readonly HashSet<string> mailAccountValues = new(StringComparer.Ordinal);
+
     private SettingsPolicyCandidate()
     {
     }
@@ -78,6 +81,14 @@ internal sealed class SettingsPolicyCandidate
 
     /// <summary>Gets one sentence per fault, each naming what to correct; empty where the policy may be committed.</summary>
     internal IReadOnlyList<string> Refusals => this.refusals;
+
+    /// <summary>Gets every default and forced value the policy states for a mail account, each as its statement, its property, and its value.</summary>
+    /// <remarks>
+    /// What comparing two policies needs and their documents do not give: a property is named here by the record's own
+    /// path whatever case its keys were written in, so one statement reads the same however it was typed. An editing
+    /// restriction is not among them, because it moves no value an account is served.
+    /// </remarks>
+    internal IReadOnlySet<string> MailAccountValues => this.mailAccountValues;
 
     /// <summary>Judges a saved policy on its own.</summary>
     /// <param name="documentJson">The policy as it was saved.</param>
@@ -198,6 +209,12 @@ internal sealed class SettingsPolicyCandidate
 
         this.Walk(section, statement, document, prefix: string.Empty, values);
 
+        if (section == SettingsPolicySection.MailAccounts)
+        {
+            this.mailAccountValues.UnionWith(
+                values.Select(stated => $"{statement}:{stated.Property.Path}={stated.Value.ToJsonString()}"));
+        }
+
         // Each stated value is bound on its own, as the one property it is stated for. The binder stops at the first
         // value it cannot convert, so a statement bound whole would report one fault of several and leave the rest to
         // be found a save at a time.
@@ -206,7 +223,7 @@ internal sealed class SettingsPolicyCandidate
             if (this.Bind(section, where, property, value) is { } record)
             {
                 this.refusals.AddRange(FindValueRefusals(where, property, record));
-                this.refusals.AddRange(section.FindUnknownWrittenNames(record).Select(refusal => $"{where}: {refusal}"));
+                this.refusals.AddRange(section.FindOwnRuleRefusals(record).Select(refusal => $"{where}: {refusal}"));
             }
         }
     }

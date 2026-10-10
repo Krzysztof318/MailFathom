@@ -324,6 +324,47 @@ public sealed class SettingsPolicyCandidateTests
         Assert.Contains(candidate.Refusals, refusal => refusal.Contains(expected, StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// Two lists carry their entry's rule as a method the account's validator calls rather than as one the entry
+    /// declares. It reads the entry and nothing beside it, so it is asked of a stated list as it is of a record's —
+    /// and its refusal names the entry's position and never the address or the domain the entry holds.
+    /// </summary>
+    [Theory]
+    [InlineData("""{"TrustedSenders":[{"Domain":"partner.example"},{"Domain":"a.example","Address":"b@a.example"}]}""", "MailAccounts:Forced: TrustedSenders entry 1 must name exactly one of")]
+    [InlineData("""{"TrustedSenders":[{"IncludeSubdomains":true}]}""", "MailAccounts:Forced: TrustedSenders entry 0 must name exactly one of")]
+    [InlineData("""{"TrustedSenders":[{"Address":"b@a.example","IncludeSubdomains":true}]}""", "MailAccounts:Forced: TrustedSenders entry 0 must name exactly one of")]
+    [InlineData("""{"ContactCollection":{"Exclusions":[{"Domain":"a.example","AddressPattern":"*@a.example"}]}}""", "MailAccounts:Forced: ContactCollection:Exclusions entry 0 must name exactly one of")]
+    [InlineData("""{"ContactCollection":{"Exclusions":[{"Domain":"partner.example"},{"AddressPattern":"*@*"}]}}""", "MailAccounts:Forced: ContactCollection:Exclusions entry 1 must name exactly one of")]
+    public void Judge_AListEntryTheAccountsOwnRuleRefuses_IsRefusedNamingItsPositionAndNotWhatItHolds(string forced, string expected)
+    {
+        // Arrange
+        var saved = $$$"""{"MailAccounts":{"Forced":{{{forced}}}}}""";
+
+        // Act
+        var candidate = SettingsPolicyCandidate.Judge(saved);
+
+        // Assert
+        Assert.Null(candidate.Json);
+        Assert.StartsWith(expected, Assert.Single(candidate.Refusals), StringComparison.Ordinal);
+        Assert.DoesNotContain("a.example", candidate.Refusals[0], StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("""{"TrustedSenders":[{"Domain":"partner.example","IncludeSubdomains":true},{"Address":"b@a.example"}]}""")]
+    [InlineData("""{"ContactCollection":{"Exclusions":[{"Domain":"partner.example"},{"AddressPattern":"no-reply@*"}]}}""")]
+    public void Judge_AListWhoseEveryEntryTheAccountsOwnRuleAccepts_MayBeCommitted(string forced)
+    {
+        // Arrange
+        var saved = $$$"""{"MailAccounts":{"Forced":{{{forced}}}}}""";
+
+        // Act
+        var candidate = SettingsPolicyCandidate.Judge(saved);
+
+        // Assert
+        Assert.Empty(candidate.Refusals);
+        Assert.NotNull(candidate.Json);
+    }
+
     /// <summary>A name an entry was given is text whoever wrote the policy chose, so one carrying a line break is not repeated back.</summary>
     [Fact]
     public void Judge_AListEntryNamedWithAControlCharacter_IsRefusedWithoutRepeatingTheName()

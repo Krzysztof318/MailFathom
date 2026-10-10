@@ -24,6 +24,7 @@ public interface ISettingsPolicyStore
     /// <param name="organizationId">The organization, or <see langword="null" /> for the deployment.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The policy, stating nothing at <see cref="SettingsPolicyDocument.UnwrittenVersion" /> where the scope stores none; or <see langword="null" /> when the deployment holds no such organization.</returns>
+    /// <exception cref="SettingsPolicyUnreadableException">Thrown when the row holds a document past <see cref="SettingsPolicyDocument.MaximumOctets" />, which is refused rather than read.</exception>
     Task<SettingsPolicyDocument?> ReadAsync(Guid? organizationId, CancellationToken cancellationToken);
 
     /// <summary>Replaces the policy one scope holds, if it still stands at the expected version.</summary>

@@ -218,6 +218,78 @@ public sealed class SettingsPolicyAdministrationTests
         Assert.Equal(0, harness.Store.Commits);
     }
 
+    /// <summary>
+    /// A default or a forced value for a mail account can decide where a mailbox's credential is presented, and nothing
+    /// here reads the accounts it would govern, so a grant held below the deployment does not state one — whichever
+    /// setting it is, and whether the write adds it, changes it, or takes it away.
+    /// </summary>
+    [Theory]
+    [InlineData("{}", """{"MailAccounts":{"Forced":{"Host":"mail.example.org"}}}""")]
+    [InlineData("{}", """{"MailAccounts":{"Defaults":{"Port":993}}}""")]
+    [InlineData("{}", ForcingPolling)]
+    [InlineData(ForcingPolling, """{"MailAccounts":{"Forced":{"Mode":"Push"}}}""")]
+    [InlineData(ForcingPolling, """{"MailAccounts":{"Defaults":{"Mode":"Polling"}}}""")]
+    [InlineData(ForcingPolling, DefaultingPolish)]
+    public async Task ApplyAsync_AMailAccountValueChangedUnderAGrantHeldAtTheOrganization_IsRefusedAndWritesNothing(
+        string inForce,
+        string saved)
+    {
+        // Arrange
+        var harness = PolicyHarness.ForTheOrganizationsAdministrator();
+        harness.Store.Holding(Organization, inForce, version: 4);
+
+        // Act
+        var outcome = await harness.Policies.ApplyAsync(Organization, saved, expectedVersion: 4, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(outcome!.IsCommitted);
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome.Refusal);
+        Assert.Equal(4, outcome.Version);
+        Assert.Contains("held over an organization rather than over the whole deployment", Assert.Single(outcome.Messages), StringComparison.Ordinal);
+        Assert.Equal(0, harness.Store.Commits);
+    }
+
+    /// <summary>The same write under a grant at the deployment is the deployment's to make, so it is not asked.</summary>
+    [Fact]
+    public async Task ApplyAsync_AMailAccountValueUnderAGrantHeldAtTheDeployment_IsWrittenToTheOrganizationsPolicy()
+    {
+        // Arrange
+        var harness = PolicyHarness.ForTheDeploymentsAdministrator();
+
+        // Act
+        var outcome = await harness.Policies.ApplyAsync(
+            Organization,
+            """{"MailAccounts":{"Forced":{"Host":"mail.example.org"}}}""",
+            expectedVersion: 0,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(outcome!.IsCommitted);
+    }
+
+    /// <summary>
+    /// A policy is written whole, so an organization's administrator saves back the values the deployment's stated for
+    /// its mail accounts. Leaving them as they stand is not stating one, however the keys were typed, and what the
+    /// administrator may write beside them — the section about users, and an editing restriction — is written.
+    /// </summary>
+    [Theory]
+    [InlineData("""{"mailaccounts":{"forced":{"mode":"Polling"}},"Users":{"Defaults":{"Language":"Polish"}}}""")]
+    [InlineData("""{"MailAccounts":{"Forced":{"Mode":"Polling"},"Editing":{"Mode":"AllExcept","Properties":["Host"]}}}""")]
+    [InlineData("""{"MailAccounts":{"Forced":{"Mode":"Polling"},"Defaults":{"Delivery":{}}}}""")]
+    public async Task ApplyAsync_APolicyLeavingMailAccountValuesAsTheyStandUnderAGrantHeldAtTheOrganization_IsWritten(string saved)
+    {
+        // Arrange
+        var harness = PolicyHarness.ForTheOrganizationsAdministrator();
+        harness.Store.Holding(Organization, ForcingPolling, version: 4);
+
+        // Act
+        var outcome = await harness.Policies.ApplyAsync(Organization, saved, expectedVersion: 4, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(outcome!.IsCommitted);
+        Assert.Equal(5, outcome.Version);
+    }
+
     /// <summary>A scope that stored no policy takes its first one over version zero, and every later one over the version before it.</summary>
     [Fact]
     public async Task ApplyAsync_AFirstPolicyAndThenASecond_CommitsEachOverTheVersionItWasComposedOver()
@@ -475,6 +547,12 @@ public sealed class SettingsPolicyAdministrationTests
 
         /// <summary>Gets the backplane a commit is announced over, which nobody hears until a test listens.</summary>
         internal InMemoryBackplane Backplane { get; } = new();
+
+        /// <summary>Arranges an administrator who may write the organization's policy and holds nothing over the deployment.</summary>
+        internal static PolicyHarness ForTheOrganizationsAdministrator() =>
+            new(AccessAuthorizations.ForAdministratorScopedAt(
+                AssignmentScope.Organization(Organization),
+                MailFathomPermission.AdminConfigurationWrite));
 
         /// <summary>Arranges an administrator who may read and write every scope's policy.</summary>
         internal static PolicyHarness ForTheDeploymentsAdministrator() =>

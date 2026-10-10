@@ -5,6 +5,7 @@
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Persistence.Policies;
+using MailFathom.Infrastructure.Persistence.Settings;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
@@ -59,6 +60,7 @@ public sealed class PersistedSettingsPoliciesTests
 
         // Assert
         var argument = Assert.IsType<ArgumentException>(refusal);
+        Assert.Contains($"occupies {RootSettingsCommitRules.PersistedOctetsOf(oversized)} octets", argument.Message, StringComparison.Ordinal);
         Assert.Contains($"past the {SettingsPolicyDocument.MaximumOctets}", argument.Message, StringComparison.Ordinal);
     }
 

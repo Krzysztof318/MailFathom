@@ -24,15 +24,27 @@ namespace MailFathom.Host.Configuration.Policies;
 /// and nothing about what any user or mail account is served; what it is judged by is therefore the document alone.
 /// </para>
 /// <para>
+/// That is also why a grant held below the deployment states no default and no forced value for a mail account.
+/// Forcing a host, a port, or a token endpoint decides where a mailbox's credential is presented, and such a grant is
+/// trusted with its organization's mailboxes and not with a credential the deployment holds for somebody else — which
+/// only a reading of the accounts a policy governs can tell apart. Nothing reads them here, and a stored policy
+/// outlives the build that stored it, so the statement is refused rather than committed unjudged. Which settings
+/// decide where a credential goes is not enumerated, because a list is what a setting added later would be missing
+/// from. An editing restriction moves no value and is the organization's administrator's to write, as the whole of
+/// the section about users is.
+/// </para>
+/// <para>
 /// The deployment's policy is the deployment's to write, so it takes the grant over the whole deployment. An
 /// organization's accepts the same grant held at that organization, which is what lets an organization's own
 /// administrator write its policy and no other; an organization the caller's scope does not cover is answered as one
 /// this deployment does not hold, as every other route naming one answers.
 /// </para>
 /// <para>
-/// A policy is never logged and never quoted in a refusal. By the rules it is judged under it carries no name, no
-/// address, and no credential of anybody it governs, but a forced list of trusted senders is still a list of
-/// somebody's correspondents, so it is handled as the records it governs are.
+/// A policy is never logged, and a refusal repeats of it only what <see cref="SettingsPolicyCandidate" /> states: a
+/// language, a zone, or a recording level somebody misspelled, the alias a folder was given, and a key shaped like a
+/// setting's name. By the rules it is judged under it carries no name, no address, and no credential of anybody it
+/// governs, but a forced list of trusted senders is still a list of somebody's correspondents, so it is handled as
+/// the records it governs are.
 /// </para>
 /// </remarks>
 [SuppressMessage(
@@ -95,6 +107,17 @@ internal sealed class SettingsPolicyAdministration(
                 MailFathomErrorCode.ConfigurationCandidateInvalid,
                 inForce.Version,
                 candidate.Refusals);
+        }
+
+        if (!authorization.Permits(MailFathomPermission.AdminConfigurationWrite)
+            && !candidate.MailAccountValues.SetEquals(SettingsPolicyCandidate.Judge(inForce.Json).MailAccountValues))
+        {
+            return SettingsPolicyWriteOutcome.Refused(
+                MailFathomErrorCode.ConfigurationCandidateInvalid,
+                inForce.Version,
+                [
+                    $"The saved policy changes a default or a forced value of the {SettingsPolicySection.MailAccounts.Name} section, and '{MailFathomPermission.AdminConfigurationWrite.Name}' held over an organization rather than over the whole deployment does not state one: such a value can decide where a mailbox's credential is presented. Leave those two statements as version {inForce.Version} has them, or have them written under a grant at the deployment.",
+                ]);
         }
 
         if (JsonNode.DeepEquals(JsonNode.Parse(inForce.Json), JsonNode.Parse(judged)))

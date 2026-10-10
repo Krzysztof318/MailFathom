@@ -301,7 +301,7 @@ to a caller holding its permission at deployment scope:
 | `mailfathom.admin.credentials.write` | Changing an organization's short name, a namespace unique across the deployment that every member's login is spelled in, and moving a user out of every organization |
 | `mailfathom.admin.spend` | Activating the embedding model, which is the whole of what the name covers |
 | `mailfathom.admin.erase` | Releasing the database copies a finished content move left behind |
-| `mailfathom.admin.configuration.write` | Writing the persisted configuration, saving the deployment's own settings policy, creating and deleting an organization, and recording a user or a mail account in no organization |
+| `mailfathom.admin.configuration.write` | Writing the persisted configuration, saving the deployment's own settings policy, stating a default or a forced value for mail accounts in an organization's settings policy, creating and deleting an organization, and recording a user or a mail account in no organization |
 | `mailfathom.admin.roles.write` | Creating, renaming, changing the permissions of, and deleting a role, which is defined once and assigned in every organization, and keeping a group in no organization or an assignment at the deployment scope |
 
 `mailfathom.admin.audit.read`, `mailfathom.admin.export`, and `mailfathom.admin.custody.write` have none: each operation

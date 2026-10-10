@@ -29,9 +29,10 @@ internal sealed class SettingsPolicyConfiguration : IEntityTypeConfiguration<Set
             .AreNullsDistinct(false)
             .HasDatabaseName(PersistenceConstraintNames.SettingsPolicyScopeUniqueIndexName);
 
-        // Cascaded, unlike everything else that names an organization: a member or a mail account is something the
-        // deletion must not take with it, while a policy is nothing but what that organization said about them, and
-        // an organization is deleted only once it has neither.
+        // Cascaded, as the organization's groups and the roles given at it are, and unlike its members and its mail
+        // accounts, which restrict the deletion: those are something a deletion must not take with it, while a policy
+        // is nothing but what that organization said about them, and an organization is deleted only once it has
+        // neither.
         entity.HasOne<OrganizationEntity>()
             .WithMany()
             .HasForeignKey(policy => policy.OrganizationId)

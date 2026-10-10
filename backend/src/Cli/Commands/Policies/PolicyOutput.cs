@@ -25,11 +25,6 @@ internal static class PolicyOutput
             context.Console.WriteLine(
                 $"Committed settings policy version {answer.Version.ToString(CultureInfo.InvariantCulture)}.");
 
-            foreach (var remark in answer.Messages ?? [])
-            {
-                context.Console.WriteNotice(remark);
-            }
-
             return CliExitCode.Success;
         }
 

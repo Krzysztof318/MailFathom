@@ -33,20 +33,21 @@ internal sealed class SettingsPolicySection
         GovernableProperties.Of(
             typeof(MailSynchronizationAccountOptions),
             MailAccountRecordComposition.EmailAddressProperty),
-        record => FindUnwritableLanguage((MailSynchronizationAccountOptions)record));
+        record => FindUnwritableLanguage((MailSynchronizationAccountOptions)record)
+            .Concat(FindUnusableListEntries((MailSynchronizationAccountOptions)record)));
 
     private SettingsPolicySection(
         string name,
         string governs,
         Type recordType,
         GovernableProperties properties,
-        Func<object, IEnumerable<string>> findUnknownWrittenNames)
+        Func<object, IEnumerable<string>> findOwnRuleRefusals)
     {
         this.Name = name;
         this.Governs = governs;
         this.RecordType = recordType;
         this.Properties = properties;
-        this.FindUnknownWrittenNames = findUnknownWrittenNames;
+        this.FindOwnRuleRefusals = findOwnRuleRefusals;
     }
 
     /// <summary>Gets both sections, in the order a policy is read.</summary>
@@ -64,14 +65,15 @@ internal sealed class SettingsPolicySection
     /// <summary>Gets the properties of the governed record a policy may name.</summary>
     internal GovernableProperties Properties { get; }
 
-    /// <summary>Gets what refuses a value the record carries as a written name, which the binder accepts as any text.</summary>
+    /// <summary>Gets what refuses a stated value by a rule the record writes in code, which neither the binder nor the property's own attributes can give.</summary>
     /// <remarks>
     /// A language, a zone, and a recording level are stated by name and bound as text, so that an unknown one is
     /// refused in a sentence naming what the setting takes rather than in the binder's own. That leaves the binder
-    /// unable to refuse one, so the record's own rule is asked of a statement bound sparsely — every such rule being
-    /// about one stated value and nothing beside it.
+    /// unable to refuse one, so the record's own rule is asked of a statement bound sparsely. An entry of a list is
+    /// asked the same way where its rule is one the record's validator calls on the entry rather than one the entry
+    /// declares. Every rule asked here is about one stated value and nothing beside it.
     /// </remarks>
-    internal Func<object, IEnumerable<string>> FindUnknownWrittenNames { get; }
+    internal Func<object, IEnumerable<string>> FindOwnRuleRefusals { get; }
 
     private static IEnumerable<string> FindUnwritableLanguage(MailSynchronizationAccountOptions account)
     {
@@ -81,4 +83,21 @@ internal sealed class SettingsPolicySection
                 $"{nameof(account.Language)} states '{account.Language}', which is not a language MailFathom writes in. It takes {string.Join(" or ", Enum.GetNames<MailAccountLanguage>().Select(language => $"'{language}'"))}.";
         }
     }
+
+    /// <summary>Reports each entry of a stated list that the account's own rule for such an entry refuses.</summary>
+    /// <remarks>
+    /// The two lists whose entries carry their rule as a method the account's validator calls. A list is stated whole,
+    /// so an entry reads nothing the account states elsewhere and the rule is as answerable here as in a record. A
+    /// refusal names the entry's position and never what it holds: a domain and an address are both somebody's.
+    /// </remarks>
+    private static IEnumerable<string> FindUnusableListEntries(MailSynchronizationAccountOptions account) =>
+        (account.TrustedSenders ?? [])
+            .Select((entry, position) => entry is not null && entry.TryCreateEntry(out _)
+                ? null
+                : $"{nameof(account.TrustedSenders)} entry {position} must name exactly one of a usable domain or a usable address, and may ask to include subdomains only where it names a domain.")
+            .Concat((account.ContactCollection?.Exclusions ?? [])
+                .Select((entry, position) => entry is not null && entry.TryCreateExclusion(out _)
+                    ? null
+                    : $"{nameof(account.ContactCollection)}:{nameof(ContactCollectionOptions.Exclusions)} entry {position} must name exactly one of a usable domain or a usable address pattern, may ask to include subdomains only where it names a domain, and may not write a pattern whose only characters are the two wildcards and the at-sign."))
+            .OfType<string>();
 }

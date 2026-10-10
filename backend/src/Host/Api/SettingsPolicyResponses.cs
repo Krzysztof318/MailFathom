@@ -43,8 +43,9 @@ internal sealed record SettingsPolicySaveRequest(long Version, string? Document)
 /// <remarks>
 /// A refusal arrives as an outcome with a success status rather than as an error, for the reason a write to a user's
 /// record does: each is something the administrator corrects and continues from, and each carries the version the
-/// next attempt is composed over. A message names a property by its path and repeats no value the policy states
-/// beyond a language, a zone, or a recording level somebody misspelled.
+/// next attempt is composed over. A message names a property by its path and repeats of what the policy states only
+/// a language, a zone, or a recording level somebody misspelled, the alias a folder was given, and a key shaped like
+/// a setting's name.
 /// </remarks>
 internal sealed record SettingsPolicyWriteResponse(
     bool Committed,

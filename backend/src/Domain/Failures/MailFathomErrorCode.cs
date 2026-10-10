@@ -164,6 +164,16 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode UserSettingsUnwritable { get; } = new(12014);
 
+    /// <summary>Gets subcategory 2, configuration sources: the settings policy a scope stores could not be read.</summary>
+    /// <remarks>
+    /// The counterpart of <see cref="UserSettingsUnreadable" /> for what the deployment or an organization states
+    /// about records rather than for a record itself, and separate from it because what an operator corrects is a
+    /// different row. A policy past what this build reads one from is the case it exists for: the bound is applied in
+    /// the statement, so the row is refused rather than transferred, and the message names the limit and never the
+    /// document.
+    /// </remarks>
+    public static MailFathomErrorCode SettingsPolicyUnreadable { get; } = new(12015);
+
     /// <summary>Gets subcategory 3, mailbox access tokens: an account's authorization server did not issue an access token its OAuth mechanisms require.</summary>
     public static MailFathomErrorCode MailAccessTokenUnavailable { get; } = new(13001);
 
@@ -1136,6 +1146,7 @@ public readonly record struct MailFathomErrorCode
         UserSettingsUnreadable,
         ConfigurationWriteShadowed,
         UserSettingsUnwritable,
+        SettingsPolicyUnreadable,
         MailAccessTokenUnavailable,
         MailboxAuthorizationFailed,
         PrincipalNotAuthorized,

@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Globalization;
 using System.Text.Json;
 using MailFathom.CodeCoverage;
 using MailFathom.Infrastructure.Persistence.Settings;
@@ -15,6 +16,8 @@ namespace MailFathom.Infrastructure.Persistence.Policies;
 /// Every write is one statement, and that statement is the whole of the coordination: a first policy is an insert the
 /// scope's unique index admits once, and a later one is an update conditional on the version it replaces. Two
 /// replicas reaching one scope therefore need nothing between them — whichever statement lands second matches no row.
+/// A read is bounded where it is asked: the statement measures the document and sends it only when it is within what
+/// this build reads a policy from, so a row written beside MailFathom is refused rather than transferred.
 /// </remarks>
 [RequiresIntegrationCoverage]
 internal sealed class PersistedSettingsPolicies(MailFathomDbContext dbContext, TimeProvider timeProvider)
@@ -31,15 +34,32 @@ internal sealed class PersistedSettingsPolicies(MailFathomDbContext dbContext, T
             return null;
         }
 
-        var stored = await dbContext.SettingsPolicies
-            .AsNoTracking()
+        // The cast is what makes both the measurement and the value the text a reader parses, and the length decides
+        // in the one statement whether the document is sent at all. The scope is matched by the query composed over
+        // it, which is what reads a deployment's row — the one naming no organization — as a row.
+        var stored = await dbContext.Database
+            .SqlQuery<StoredSettingsPolicyRow>(
+                $"""
+                SELECT
+                    "OrganizationId",
+                    octet_length("Document"::text) AS "Length",
+                    CASE WHEN octet_length("Document"::text) <= {SettingsPolicyDocument.MaximumOctets} THEN "Document"::text END AS "Document",
+                    "Version"
+                FROM settings_policies
+                """)
             .Where(policy => policy.OrganizationId == organizationId)
-            .Select(policy => new { policy.Document, policy.Version })
             .FirstOrDefaultAsync(cancellationToken);
 
-        return stored is null
-            ? SettingsPolicyDocument.Unwritten(organizationId)
-            : new SettingsPolicyDocument(organizationId, stored.Document, stored.Version);
+        if (stored is null)
+        {
+            return SettingsPolicyDocument.Unwritten(organizationId);
+        }
+
+        return stored.Document is { } document
+            ? new SettingsPolicyDocument(organizationId, document, stored.Version)
+            : throw new SettingsPolicyUnreadableException(string.Create(
+                CultureInfo.InvariantCulture,
+                $"The settings policy of {(organizationId is { } named ? $"organization {named:D}" : "the deployment")} is {stored.Length} octets, past the {SettingsPolicyDocument.MaximumOctets} MailFathom reads a settings policy from, so it was not read. A policy states defaults and forced values rather than carrying a payload: check what wrote the settings_policies row."));
     }
 
     /// <inheritdoc />

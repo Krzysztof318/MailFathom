@@ -2142,13 +2142,14 @@ What a save is refused for, each under `12007` unless the row says otherwise:
 | Refused | Why |
 | --- | --- |
 | A path that names no property of the record | A mistyped path would otherwise be a rule that silently governs nothing. A name that is not a section, a statement, or part of an editing restriction is refused the same way, and so is a name stated twice in different casing |
-| A value its property would refuse in a record | Each stated value is bound on its own by the binder a record is bound by, as the property it is stated for, and held to what that property declares: a value of the wrong type, an unknown setting inside a list entry, a name or number that is no member of the setting's enumeration, a value outside a range the setting declares, and a language, time zone, or telemetry level MailFathom does not know are each refused naming the path. A list is stated whole, so each entry of one is held to that entry's own rules as well — a folder mapping with no alias, or one naming neither a remote path nor a special-use role. A property named with no value, a single value where a list or a block belongs, and an object where a single value belongs are refused too |
+| A value its property would refuse in a record | Each stated value is bound on its own by the binder a record is bound by, as the property it is stated for, and held to what that property declares: a value of the wrong type, an unknown setting inside a list entry, a name or number that is no member of the setting's enumeration, a value outside a range the setting declares, and a language, time zone, or telemetry level MailFathom does not know are each refused naming the path. A list is stated whole, so each entry of one is held to that entry's own rules as well — a folder mapping with no alias, or one naming neither a remote path nor a special-use role, and a trusted sender or a contact-collection exclusion that does not name exactly one usable thing, which is refused by its position in the list and never by the address or the domain it holds. A property named with no value, a single value where a list or a block belongs, and an object where a single value belongs are refused too |
 | A default or a forced value for an identity property | It says who or which rather than how, so one statement for many records could only be wrong. In `Users` these are `DisplayName` and `Portrait`; in `MailAccounts`, `EmailAddress`, `DisplayName`, `UserName`, `Delivery:UserName`, `Delivery:FromAddress`, and `Delivery:FromDisplayName`. Each may still be listed under `Editing` |
 | A default or a forced value for a secret block | A secret reference is admissible for one user, and a policy speaks for every record in its scope. These are `Secrets:Password`, `OAuth:ClientSecret`, `OAuth:RefreshToken`, `TransportSecurity:TrustedCertificateAuthority`, and `Delivery:Secrets:Password` in `MailAccounts`. Each may still be listed under `Editing`, and the settings beside one in its block are ordinary |
 | An administrator-only property listed as the person's to change | `EndpointAccess` and `ClientTelemetryLevel` in `Users` are written by an administrator alone. They take a default and a forced value and may be listed as locked, and a `NoneExcept` list naming one — or a block holding one — is refused, because no editing mode makes it the person's |
 | A client preference other than the telemetry switch | A client preference is the person's own. `ClientPreferences:TelemetryEnabled` takes a forced value under `Users:Forced` and nothing else: a default for it, any statement about another preference, and an editing path reaching `ClientPreferences` are each refused by name |
 | `MailAccounts` in the `Users` section, and `AccountId` in `MailAccounts` | A policy governs the properties of a record, and never which mail accounts a user has or the identifier this deployment generates for one |
 | A policy composed over a version no longer in force, under `12008` | Another writer committed first. The refusal names both versions, `mfctl policy edit` reports which settings differ between them, and nothing of the session is merged on top of what is in force |
+| A default or a forced value in `MailAccounts` changed under a grant held at the organization | Such a value can decide where a mailbox's credential is presented, so it is the deployment's to state, as the paragraph on a grant held at the organization says below |
 | A document that is not one JSON object, or is past the size above | A request carrying no document at all is answered `400` rather than taken as a decision to empty the policy |
 
 **What a record's validator asks of the record as a whole is not asked of a policy.** A statement is a sparse record
@@ -2164,6 +2165,20 @@ takes the permission held at the deployment, and a caller holding it only below 
 or at that organization, which is what lets an organization's own administrator write its policy and no other; a
 grant at one user covers no organization. An organization outside the caller's scope is answered `404`, exactly as
 one this deployment does not hold.
+
+**A grant held at the organization states no default and no forced value for a mail account.** Forcing a host, a
+port, a token endpoint, or a transport security posture decides where a mailbox's credential is presented, and an
+organization's administrator is trusted with that organization's mailboxes and not with a credential the deployment
+holds for somebody else. Telling the two apart takes a reading of the accounts a policy governs, and a save reads
+none, so a save under such a grant whose `MailAccounts:Defaults` or `MailAccounts:Forced` differ from the policy in
+force is refused under `12007`, whichever setting moved and whether it was added, changed, or removed. Which
+settings decide where a credential goes is deliberately not a list. Such an administrator still saves the whole of
+`Users` and `MailAccounts:Editing`, and saves back unchanged whatever the deployment's administrator stated for the
+organization's mail accounts; a grant at the deployment writes every part of every policy.
+
+**A stored policy past the size above is refused rather than read.** No save produces one, so it is a row written
+beside MailFathom. Reading it — `mfctl policy show`, `mfctl policy edit`, and either `GET` — fails under `12015`
+naming the scope and both figures, and the row is corrected where it was written.
 
 **Two administrators saving at once: the second is refused.** The version is checked in the statement that writes the
 policy, so whichever replica each save reached, the one that commits second matches nothing and is answered with the

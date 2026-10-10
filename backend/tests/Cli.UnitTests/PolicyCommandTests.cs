@@ -210,6 +210,31 @@ public sealed class PolicyCommandTests : IDisposable
         Assert.Empty(deployment.RequestsTo(HttpMethod.Post, AdminEndpointRoutes.SettingsPolicyPath(organizationId: null)));
     }
 
+    /// <summary>
+    /// A buffer that differs from what was opened only in how it is written is posted, and the deployment is what finds
+    /// it states nothing new. That is not a refusal, so its sentence is printed as an answer and the invocation succeeds.
+    /// </summary>
+    [Fact]
+    public async Task Edit_ASaveTheDeploymentFindsUnchanged_SaysSoAndSucceeds()
+    {
+        // Arrange
+        const string unchanged = "The saved policy states what the policy in force already states, so nothing was written and version 3 stays in force.";
+
+        using var deployment = FakeSettingsPolicyDeployment.FindingNothingToChange(organization: null, unchanged, OneDefault);
+
+        this.harness.EditsTheBufferInto("""{ "Users": { "Defaults": { "Language": "pl" } } }""");
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "policy", "edit", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Single(deployment.RequestsTo(HttpMethod.Post, AdminEndpointRoutes.SettingsPolicyPath(organizationId: null)));
+        Assert.Contains(unchanged, this.harness.Console.Lines);
+        Assert.Empty(this.harness.Console.Failures);
+        Assert.Empty(this.harness.Console.Errors);
+    }
+
     /// <summary>An emptied buffer abandons the session, and the sentence saying so names whose policy was left alone.</summary>
     [Fact]
     public async Task Edit_AnEmptiedBuffer_LeavesThePolicyAsItWasAndSaysWhoseItIs()
