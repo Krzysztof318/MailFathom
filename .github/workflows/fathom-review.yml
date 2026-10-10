@@ -468,13 +468,18 @@ jobs:
           # requested passes as well, so a pull request somebody had reviewed by hand a few times
           # stopped being reviewed on push while the number of unprompted passes was still small.
           #
-          # Six is the ceiling because it is past where a pass stops paying for itself. #811 took six
-          # rounds and the last two of them each moved two findings, both of which were fixes to
-          # earlier findings rather than anything the first pass had missed; a seventh automatic pass
-          # over the same pull request is usage spent to repeat what has been said. Past it the work
-          # is answering the review rather than asking for another, and a maintainer who disagrees
-          # says so with a label or a comment.
-          automatic_review_limit=6
+          # Nine is the ceiling because it is two allowances added together. Six is where a pass stops
+          # paying for itself as an answer to findings: #811 took six rounds and the last two of them
+          # each moved two findings, both of which were fixes to earlier findings rather than
+          # anything the first pass had missed. The other three are for the pushes that answer
+          # nothing. The ruleset merges only a branch that is current with its base, so with several
+          # pull requests open every merge leaves the others behind, and the rebase that brings one
+          # back is a push like any other and spends a pass. Counted against six alone, those rebases
+          # end the automatic loop on a pull request whose findings are still being answered, and
+          # the push that needs a verdict is the one refused. Past nine the work is answering the
+          # review rather than asking for another, and a maintainer who disagrees says so with a
+          # label or a comment.
+          automatic_review_limit=9
 
           # Counted whenever a review is going to happen rather than only when the ceiling could
           # refuse it, because two decisions read this number now. The ceiling is one; the other is
@@ -532,7 +537,7 @@ jobs:
           #
           # Three is the threshold because the sharp pass is measurably the early one. Across the 60
           # most recently merged pull requests — 59 reviewed, 187 published reviews — 21 reached a
-          # fourth pass, 10 reached the ceiling, and 9 never received an approval at all. Of the 33
+          # fourth pass, 10 reached a sixth, and 9 never received an approval at all. Of the 33
           # reviews published at pass 4 or later, 31 withheld approval and **27 of those carried no
           # P1 at all**: a rule-owed P2 spent the round. The findings sit the same way — 38 of the 43
           # P1s on those pull requests were raised in the first three passes against 5 after them,

@@ -2176,7 +2176,7 @@ fathom_review_reviews_a_push_to_a_published_pull_request() {
   run_fathom_review_gate 'synchronize' "$output_file" "$step_output_file"
 
   assert_contains 'review=true' "$step_output_file"
-  # A push started this run, so the review it produces is one of the six the ceiling counts, and the
+  # A push started this run, so the review it produces is one of the nine the ceiling counts, and the
   # marker the submission writes into the body is what makes it countable.
   assert_contains 'explicit=false' "$step_output_file"
   assert_contains 'the branch was pushed to' "$output_file"
@@ -2189,7 +2189,7 @@ fathom_review_reviews_a_push_below_the_automatic_ceiling() {
   local step_output_file="$test_directory/fathom-review-below-ceiling-step-output"
   local reviews_file="$test_directory/fathom-review-below-ceiling-reviews"
 
-  write_fathom_review_history 5 0 "$reviews_file"
+  write_fathom_review_history 8 0 "$reviews_file"
 
   run_fathom_review_gate 'synchronize' "$output_file" "$step_output_file" 'Krzysztof318' '' "$reviews_file"
 
@@ -2197,7 +2197,7 @@ fathom_review_reviews_a_push_below_the_automatic_ceiling() {
   # The same count the ceiling reasons about is published for the submission step, which spends it on
   # a different decision. Publishing it here is what keeps the two from drifting apart into a review
   # that settles on one pass number and a ceiling that refuses on another.
-  assert_contains 'automatic_reviews=5' "$step_output_file"
+  assert_contains 'automatic_reviews=8' "$step_output_file"
 }
 
 fathom_review_stops_reviewing_a_push_at_the_automatic_ceiling() {
@@ -2205,12 +2205,12 @@ fathom_review_stops_reviewing_a_push_at_the_automatic_ceiling() {
   local step_output_file="$test_directory/fathom-review-ceiling-reached-step-output"
   local reviews_file="$test_directory/fathom-review-ceiling-reached-reviews"
 
-  write_fathom_review_history 6 0 "$reviews_file"
+  write_fathom_review_history 9 0 "$reviews_file"
 
   run_fathom_review_gate 'synchronize' "$output_file" "$step_output_file" 'Krzysztof318' '' "$reviews_file"
 
   assert_contains 'review=false' "$step_output_file"
-  assert_contains 'the automatic review ceiling of 6 is reached' "$output_file"
+  assert_contains 'the automatic review ceiling of 9 is reached' "$output_file"
   # The refusal names the way out, because a maintainer reading it is one label away from the pass
   # the ceiling just declined to spend.
   assert_contains 'label it fathom-review or comment fathom-review' "$output_file"
@@ -2224,7 +2224,7 @@ fathom_review_never_counts_a_requested_review_against_the_ceiling() {
   local step_output_file="$test_directory/fathom-review-requested-uncounted-step-output"
   local reviews_file="$test_directory/fathom-review-requested-uncounted-reviews"
 
-  write_fathom_review_history 5 4 "$reviews_file"
+  write_fathom_review_history 8 4 "$reviews_file"
 
   run_fathom_review_gate 'synchronize' "$output_file" "$step_output_file" 'Krzysztof318' '' "$reviews_file"
 
@@ -2242,7 +2242,7 @@ fathom_review_counts_the_marker_only_where_the_submission_writes_it() {
   local reviews_file="$test_directory/fathom-review-marker-position-reviews"
 
   jq -nc '
-    [range(5) | {user: {login: "fathom-reviewer[bot]"}, body: "# NEEDS CHANGES\n\n<!-- fathom-review: automatic -->"}]
+    [range(8) | {user: {login: "fathom-reviewer[bot]"}, body: "# NEEDS CHANGES\n\n<!-- fathom-review: automatic -->"}]
     + [range(3) | {user: {login: "fathom-reviewer[bot]"},
                    body: "# NEEDS CHANGES\n\nThe gate counts a body ending in <!-- fathom-review: automatic --> and this one quotes it.\n\n<!-- fathom-review: requested -->"}]
   ' > "$reviews_file"
@@ -2306,7 +2306,7 @@ fathom_review_answers_a_request_past_the_automatic_ceiling() {
   local step_output_file="$test_directory/fathom-review-request-past-ceiling-step-output"
   local reviews_file="$test_directory/fathom-review-request-past-ceiling-reviews"
 
-  write_fathom_review_history 9 0 "$reviews_file"
+  write_fathom_review_history 12 0 "$reviews_file"
 
   run_fathom_review_gate 'labeled' "$output_file" "$step_output_file" 'Krzysztof318' 'fathom-review' "$reviews_file"
 
@@ -3549,7 +3549,7 @@ fathom_review_marks_a_review_with_what_started_it() {
 
   ((submit_status == 0))
   # A review carrying findings ends with the marker too, which is the branch the ceiling actually
-  # counts: the automatic passes it refuses a seventh of are the ones that found something.
+  # counts: the automatic passes it refuses a tenth of are the ones that found something.
   assert_json '"<!-- fathom-review: automatic -->"' \
     '.body | split("\n") | map(select(. != "")) | last' "$payload_file"
 }
