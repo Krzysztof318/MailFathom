@@ -6,6 +6,7 @@ using MailFathom.Application.Access;
 using MailFathom.Application.Access.Credentials;
 using MailFathom.Application.Access.Grants;
 using MailFathom.Domain.Access;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -25,7 +26,8 @@ public sealed class UserCredentialAdministrationTests
 
     private const string WrittenPublicKey = "-----BEGIN PUBLIC KEY-----readable-----END PUBLIC KEY-----";
 
-    private static readonly UserId User = UserId.Create(new Guid("0197c0de-0000-7000-8000-00000000ffff"));
+    /// <summary>The one user a scoped administrator's authorization places, as a member of <see cref="AccessAuthorizations.ScopedOrganization" />.</summary>
+    private static readonly UserId User = AccessAuthorizations.ScopedHolder;
 
     private static readonly Guid CredentialId = new("0197c0de-0000-7000-8000-000000000001");
 
@@ -375,10 +377,13 @@ public sealed class UserCredentialAdministrationTests
     }
 
     [Fact]
-    public async Task ProvisionApiKeyAsync_ByACallerHoldingEveryAdministrativeNameTheUserHolds_IsWritten()
+    public async Task ProvisionApiKeyAsync_ByACallerHoldingEveryNameTheUserHolds_IsWritten()
     {
         // Arrange
-        var harness = new AdministrationHarness(MailFathomPermission.AdminCredentialsWrite, MailFathomPermission.AdminErase);
+        var harness = new AdministrationHarness(
+            MailFathomPermission.AdminCredentialsWrite,
+            MailFathomPermission.AdminErase,
+            MailFathomPermission.MailRead);
         harness.Grants.ReadGrantOfAsync(User, Arg.Any<CancellationToken>())
             .Returns(ScopedGrant.AtDeployment([MailFathomPermission.MailRead, MailFathomPermission.AdminErase]));
 
@@ -431,6 +436,155 @@ public sealed class UserCredentialAdministrationTests
 
         // Assert
         Assert.Equal(expectedWritten, refusal is null);
+    }
+
+    public static TheoryData<AssignmentScope> ScopesCoveringTheUser => [.. AccessAuthorizations.ScopesCoveringTheirTarget];
+
+    public static TheoryData<AssignmentScope> ScopesOutsideTheUser => [.. AccessAuthorizations.ScopesOutsideTheirTarget];
+
+    /// <summary>Gets a scope the caller holds a name at beside a wider one the user holds it at.</summary>
+    public static TheoryData<AssignmentScope, AssignmentScope> ScopesNarrowerThanTheUsers => new()
+    {
+        { AssignmentScope.Organization(AccessAuthorizations.ScopedOrganization), AssignmentScope.Deployment },
+        { AssignmentScope.User(User), AssignmentScope.Organization(AccessAuthorizations.ScopedOrganization) },
+    };
+
+    /// <summary>Gets a scope the caller holds a name at beside one the user holds it at that the caller's covers.</summary>
+    public static TheoryData<AssignmentScope, AssignmentScope> ScopesCoveringTheUsers => new()
+    {
+        { AssignmentScope.Organization(AccessAuthorizations.ScopedOrganization), AssignmentScope.Organization(AccessAuthorizations.ScopedOrganization) },
+        { AssignmentScope.Organization(AccessAuthorizations.ScopedOrganization), AssignmentScope.User(User) },
+        { AssignmentScope.User(User), AssignmentScope.User(User) },
+    };
+
+    [Theory]
+    [MemberData(nameof(ScopesOutsideTheUser))]
+    public async Task ReadCredentialsAsync_AUserOutsideTheCallersScope_IsAnsweredAsAUserHoldingNothing(AssignmentScope scope)
+    {
+        // Arrange
+        var harness = new AdministrationHarness(
+            AccessAuthorizations.ForAdministratorScopedAt(scope, MailFathomPermission.AdminRead));
+
+        // Act
+        var listing = await harness.Administration.ReadCredentialsAsync(User, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(listing.Credentials);
+        Assert.Empty(listing.UserGrant.Permissions);
+        Assert.Empty(harness.Credentials.ReceivedCalls());
+    }
+
+    [Theory]
+    [MemberData(nameof(ScopesCoveringTheUser))]
+    public async Task EveryWrite_AUserTheCallersScopeCovers_IsWritten(AssignmentScope scope)
+    {
+        // Arrange
+        var harness = new AdministrationHarness(
+            AccessAuthorizations.ForAdministratorScopedAt(scope, MailFathomPermission.AdminCredentialsWrite));
+
+        // Act
+        var outcomes = await EveryWriteAsync(harness.Administration, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.All(outcomes, outcome => Assert.Equal(UserCredentialWriteOutcome.Written, outcome));
+    }
+
+    /// <summary>A user outside the caller's scope is answered exactly as one this deployment does not hold, by every write that names them.</summary>
+    [Theory]
+    [MemberData(nameof(ScopesOutsideTheUser))]
+    public async Task EveryWrite_AUserOutsideTheCallersScope_IsAnsweredAsAnUnknownUserWithoutTouchingTheStore(AssignmentScope scope)
+    {
+        // Arrange
+        var harness = new AdministrationHarness(
+            AccessAuthorizations.ForAdministratorScopedAt(scope, MailFathomPermission.AdminCredentialsWrite));
+
+        // Act
+        var outcomes = await EveryWriteAsync(harness.Administration, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.All(outcomes, outcome => Assert.Equal(UserCredentialWriteOutcome.UnknownUser, outcome));
+        Assert.Empty(harness.Credentials.ReceivedCalls());
+    }
+
+    /// <summary>Nobody places a way in as somebody who holds a name more widely than they do: not an organization's administrator for a member holding it over the deployment, nor a user's for one holding it over their organization.</summary>
+    [Theory]
+    [MemberData(nameof(ScopesNarrowerThanTheUsers))]
+    public async Task ProvisionApiKeyAsync_AUserHoldingAnAdministrativeNameWiderThanTheCallerDoes_IsRefusedAsHeldTooNarrowly(
+        AssignmentScope callerScope,
+        AssignmentScope userScope)
+    {
+        // Arrange
+        var harness = new AdministrationHarness(AccessAuthorizations.ForAdministratorScopedAt(
+            callerScope,
+            MailFathomPermission.AdminCredentialsWrite,
+            MailFathomPermission.AdminErase));
+        harness.Grants.ReadGrantOfAsync(User, Arg.Any<CancellationToken>())
+            .Returns(ScopedGrant.Of([(MailFathomPermission.AdminErase, userScope)]));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() => harness.Administration.ProvisionApiKeyAsync(
+            User,
+            permissions: null,
+            UserCredentialReach.Default,
+            TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.AdminErase, refusal.RequiredPermission);
+        Assert.Contains("narrower", refusal.Message, StringComparison.Ordinal);
+        Assert.Empty(harness.Credentials.ReceivedCalls());
+    }
+
+    /// <summary>A mail name's scope is never read, so the caller is compared on holding it at all.</summary>
+    [Fact]
+    public async Task ProvisionApiKeyAsync_AMemberHoldingAMailNameTheCallerLacks_IsRefusedWithoutTouchingTheStore()
+    {
+        // Arrange
+        var harness = new AdministrationHarness(AccessAuthorizations.ForAdministratorScopedAt(
+            AssignmentScope.Organization(AccessAuthorizations.ScopedOrganization),
+            MailFathomPermission.AdminCredentialsWrite));
+        harness.Grants.ReadGrantOfAsync(User, Arg.Any<CancellationToken>())
+            .Returns(ScopedGrant.AtDeployment([MailFathomPermission.MailRead]));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() => harness.Administration.ProvisionApiKeyAsync(
+            User,
+            permissions: null,
+            UserCredentialReach.Default,
+            TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.MailRead, refusal.RequiredPermission);
+        Assert.Empty(harness.Credentials.ReceivedCalls());
+    }
+
+    [Theory]
+    [MemberData(nameof(ScopesCoveringTheUsers))]
+    public async Task ProvisionApiKeyAsync_AUserWhoseEveryNameTheCallerHoldsWidelyEnough_IsWritten(
+        AssignmentScope callerScope,
+        AssignmentScope userScope)
+    {
+        // Arrange
+        var harness = new AdministrationHarness(AccessAuthorizations.ForAdministratorScopedAt(
+            callerScope,
+            MailFathomPermission.AdminCredentialsWrite,
+            MailFathomPermission.AdminErase,
+            MailFathomPermission.MailRead));
+        harness.Grants.ReadGrantOfAsync(User, Arg.Any<CancellationToken>())
+            .Returns(ScopedGrant.Of(
+            [
+                (MailFathomPermission.AdminErase, userScope),
+                (MailFathomPermission.MailRead, AssignmentScope.Deployment),
+            ]));
+
+        // Act
+        var provisioning = await harness.Administration.ProvisionApiKeyAsync(
+            User,
+            permissions: null,
+            UserCredentialReach.Default,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(UserCredentialWriteOutcome.Written, provisioning.Outcome);
     }
 
     [Fact]
@@ -629,11 +783,13 @@ public sealed class UserCredentialAdministrationTests
             Arg.Any<CancellationToken>());
     }
 
-    [Fact]
-    public async Task ReadCredentialsAsync_ACallerGrantedTheAdministrativeRead_IsAnsweredWithWhatTheUserHolds()
+    [Theory]
+    [MemberData(nameof(ScopesCoveringTheUser))]
+    public async Task ReadCredentialsAsync_AUserTheCallersScopeCovers_IsAnsweredWithWhatTheUserHolds(AssignmentScope scope)
     {
         // Arrange
-        var harness = new AdministrationHarness(MailFathomPermission.AdminRead);
+        var harness = new AdministrationHarness(
+            AccessAuthorizations.ForAdministratorScopedAt(scope, MailFathomPermission.AdminRead));
         var held = new UserCredential(
             CredentialId,
             User,
@@ -808,6 +964,29 @@ public sealed class UserCredentialAdministrationTests
     private static async Task<PrincipalNotAuthorizedException> RefusalOf(Func<Task> act) =>
         await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(act);
 
+    /// <summary>Asks for one write of each kind that names a user: placing a credential, rotating one, enabling, disabling, and deleting.</summary>
+    private static async Task<UserCredentialWriteOutcome[]> EveryWriteAsync(
+        UserCredentialAdministration administration,
+        CancellationToken cancellationToken) =>
+    [
+        (await administration.ProvisionPasswordAsync(
+            User,
+            UserCredentialUsername.Create("user"),
+            AcceptablePassword.AsMemory(),
+            permissions: null,
+            UserCredentialReach.Default,
+            cancellationToken)).Outcome,
+        (await administration.RotatePasswordAsync(
+            User,
+            CredentialId,
+            UserCredentialUsername.Create("user"),
+            AcceptablePassword.AsMemory(),
+            cancellationToken)).Outcome,
+        await administration.SetEnabledAsync(User, CredentialId, enabled: true, cancellationToken),
+        await administration.SetEnabledAsync(User, CredentialId, enabled: false, cancellationToken),
+        await administration.DeleteAsync(User, CredentialId, cancellationToken),
+    ];
+
     /// <summary>Counts what the use case asked of a hasher, and answers with a fixed stored representation.</summary>
     /// <remarks>
     /// Hand-written rather than substituted, because the members take the password as a <see cref="ReadOnlySpan{T}" />
@@ -873,13 +1052,15 @@ public sealed class UserCredentialAdministrationTests
     {
         internal const string StoredHash = "$mf1$stored$";
 
+        // A caller acting for nobody's mail, which is the only shape the administrative surface produces: the user
+        // every act here names comes from its own argument rather than from whoever was admitted.
         internal AdministrationHarness(params MailFathomPermission[] granted)
+            : this(AccessAuthorizations.ForPrincipal(AuthorizedPrincipal.Caller(AdministratorIdentity, granted)))
         {
-            var principals = Substitute.For<IAuthorizedPrincipalSource>();
-            // A caller acting for nobody's mail, which is the only shape the administrative surface produces: the user
-            // every act here names comes from its own argument rather than from whoever was admitted.
-            principals.Current.Returns(AuthorizedPrincipal.Caller(AdministratorIdentity, granted));
+        }
 
+        internal AdministrationHarness(AccessAuthorization authorization)
+        {
             this.Credentials = Substitute.For<IUserCredentialStore>();
             this.AnswerCreateWith(UserCredentialWriteOutcome.Written);
             this.AnswerReplaceWith(UserCredentialWriteOutcome.Written);
@@ -902,7 +1083,7 @@ public sealed class UserCredentialAdministrationTests
             this.Grants.ReadGrantOfAsync(Arg.Any<UserId>(), Arg.Any<CancellationToken>()).Returns(ScopedGrant.None);
 
             this.Administration = new UserCredentialAdministration(
-                new AccessAuthorization(principals),
+                authorization,
                 this.Credentials,
                 this.PasswordHasher,
                 new StatedApiKeyMinter(),

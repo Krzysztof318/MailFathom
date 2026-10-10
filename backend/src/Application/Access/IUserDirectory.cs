@@ -29,14 +29,20 @@ public interface IUserDirectory
     /// </remarks>
     Task<IReadOnlyList<UserRecord>> ReadUsersAsync(int limit, CancellationToken cancellationToken);
 
-    /// <summary>Reads one page of the users this deployment holds, in identifier order.</summary>
+    /// <summary>Reads one page of the users some scopes cover, in identifier order.</summary>
     /// <param name="query">The page asked for.</param>
+    /// <param name="within">The scopes the listing answers within: every user where the deployment scope is among them, and otherwise the members of each organization and each user named.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The page, and where the following one continues.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="query" /> is <see langword="null" />.</exception>
-    /// <remarks>This is the administrative listing's read, which walks every user a page at a time rather than reading as many as a caller bounds it to.</remarks>
+    /// <returns>The page, and where the following one continues; empty where no scope is given.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="query" /> or <paramref name="within" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// This is the administrative listing's read, which walks the users a page at a time rather than reading as many as a
+    /// caller bounds it to. The scopes filter the query rather than the page, so a page holds as many covered users as it
+    /// is asked for and a caller scoped to one organization never pages through everybody else's.
+    /// </remarks>
     Task<AdministrativeListingPage<UserRecord>> ReadUserPageAsync(
         AdministrativeListingQuery query,
+        IReadOnlySet<AssignmentScope> within,
         CancellationToken cancellationToken);
 
     /// <summary>Reads the envelope of one user this deployment holds.</summary>

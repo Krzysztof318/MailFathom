@@ -32,28 +32,46 @@ internal sealed class PersistedUserProvisioning(MailFathomDbContext dbContext, T
     private const string EmptyDocument = "{}";
 
     /// <inheritdoc />
-    public async Task<bool> ProvisionAsync(UserId user, string displayName, CancellationToken cancellationToken)
+    public async Task<UserProvisioningResult> ProvisionAsync(
+        UserId user,
+        string displayName,
+        Guid? organizationId,
+        CancellationToken cancellationToken)
     {
         var userId = RequireNamed(user);
         ArgumentException.ThrowIfNullOrWhiteSpace(displayName);
+
+        if (organizationId == Guid.Empty)
+        {
+            throw new ArgumentException("A user is recorded into a named organization or into none.", nameof(organizationId));
+        }
 
         var provisionedAt = timeProvider.GetUtcNow();
 
         // The conflict clause names no target, so it covers the label's unique index as well as the primary key. Two
         // administrators recording one label at once each mint an identifier and reach this insert, and a clause
         // guarding the key alone would leave the loser raising the server's own unique-violation sentence instead of
-        // an answer. The read below is what turns the silence into one.
+        // an answer. The organization is selected rather than written as a value, so one deleted a moment earlier
+        // inserts nothing instead of raising its foreign key's violation. The reads below turn the silence into an answer.
         await dbContext.Database.ExecuteSqlAsync(
             $"""
-             INSERT INTO settings_accounts ("Id", "DisplayName", "Document", "Version", "CreatedAt", "UpdatedAt")
-             VALUES ({userId}, {displayName}, CAST({EmptyDocument} AS jsonb), 1, {provisionedAt}, {provisionedAt})
+             INSERT INTO settings_accounts ("Id", "DisplayName", "Document", "Version", "CreatedAt", "UpdatedAt", "OrganizationId")
+             SELECT {userId}, {displayName}, CAST({EmptyDocument} AS jsonb), 1, {provisionedAt}, {provisionedAt}, CAST({organizationId} AS uuid)
+             WHERE CAST({organizationId} AS uuid) IS NULL
+                OR EXISTS (SELECT 1 FROM organizations WHERE "Id" = CAST({organizationId} AS uuid))
              ON CONFLICT DO NOTHING
              """,
             cancellationToken);
 
-        return await dbContext.UserAccounts
-            .AsNoTracking()
-            .AnyAsync(record => record.Id == userId, cancellationToken);
+        if (await dbContext.UserAccounts.AsNoTracking().AnyAsync(record => record.Id == userId, cancellationToken))
+        {
+            return UserProvisioningResult.Provisioned;
+        }
+
+        return organizationId is { } organization
+            && !await dbContext.Organizations.AsNoTracking().AnyAsync(stored => stored.Id == organization, cancellationToken)
+                ? UserProvisioningResult.UnknownOrganization
+                : UserProvisioningResult.LabelTaken;
     }
 
     /// <inheritdoc />

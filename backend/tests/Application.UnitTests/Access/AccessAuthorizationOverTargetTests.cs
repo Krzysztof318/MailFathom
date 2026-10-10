@@ -276,6 +276,112 @@ public sealed class AccessAuthorizationOverTargetTests
         await this.targets.DidNotReceive().PlaceMailAccountsAsync(Arg.Any<IReadOnlyCollection<MailAccountId>>(), Arg.Any<CancellationToken>());
     }
 
+    public static TheoryData<AssignmentScope, bool> ScopesHeldAgainstTheDeployment => new()
+    {
+        { AssignmentScope.Deployment, true },
+        { AssignmentScope.Organization(Organization), false },
+        { AssignmentScope.User(Person), false },
+    };
+
+    public static TheoryData<AssignmentScope, bool> ScopesHeldAgainstAnOrganization => new()
+    {
+        { AssignmentScope.Deployment, true },
+        { AssignmentScope.Organization(Organization), true },
+        { AssignmentScope.Organization(OtherOrganization), false },
+        { AssignmentScope.User(Person), false },
+    };
+
+    public static TheoryData<AssignmentScope, bool> ScopesHeldAgainstAUserOfAnOrganization => new()
+    {
+        { AssignmentScope.Deployment, true },
+        { AssignmentScope.Organization(Organization), true },
+        { AssignmentScope.User(Person), true },
+        { AssignmentScope.Organization(OtherOrganization), false },
+        { AssignmentScope.User(Colleague), false },
+    };
+
+    /// <summary>Nothing narrower than the deployment covers everything the deployment covers.</summary>
+    [Theory]
+    [MemberData(nameof(ScopesHeldAgainstTheDeployment))]
+    public async Task PermitsOverScopeAsync_TheDeploymentScope_IsCoveredOnlyByAPermissionHeldOverTheDeployment(
+        AssignmentScope held,
+        bool expected)
+    {
+        // Arrange
+        var authorization = this.AuthorizationFor(held);
+
+        // Act
+        var permitted = await authorization.PermitsOverScopeAsync(
+            MailFathomPermission.AdminAuditRead,
+            AssignmentScope.Deployment,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(expected, permitted);
+    }
+
+    [Theory]
+    [MemberData(nameof(ScopesHeldAgainstAnOrganization))]
+    public async Task PermitsOverScopeAsync_AnOrganizationScope_IsCoveredByTheDeploymentAndByThatOrganizationAlone(
+        AssignmentScope held,
+        bool expected)
+    {
+        // Arrange
+        var authorization = this.AuthorizationFor(held);
+
+        // Act
+        var permitted = await authorization.PermitsOverScopeAsync(
+            MailFathomPermission.AdminAuditRead,
+            AssignmentScope.Organization(Organization),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(expected, permitted);
+    }
+
+    /// <summary>A user scope is covered wherever the user it names is, which is why the user is placed rather than compared by identifier alone.</summary>
+    [Theory]
+    [MemberData(nameof(ScopesHeldAgainstAUserOfAnOrganization))]
+    public async Task PermitsOverScopeAsync_AUserScope_IsCoveredByTheDeploymentTheUsersOrganizationAndThatUserAlone(
+        AssignmentScope held,
+        bool expected)
+    {
+        // Arrange
+        this.targets.PlaceUserAsync(Person, Arg.Any<CancellationToken>())
+            .Returns(AdministrativeTarget.User(Person, Organization));
+        var authorization = this.AuthorizationFor(held);
+
+        // Act
+        var permitted = await authorization.PermitsOverScopeAsync(
+            MailFathomPermission.AdminAuditRead,
+            AssignmentScope.User(Person),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(expected, permitted);
+    }
+
+    [Fact]
+    public async Task PermitsOverScopeAsync_ACallerHoldingThePermissionNowhere_ReportsNothingWithoutPlacingTheUser()
+    {
+        // Arrange
+        var authorization = new AccessAuthorization(
+            StatedPrincipal(AuthorizedPrincipal.Caller(
+                "administrator",
+                ScopedGrant.Of([(MailFathomPermission.AdminRead, AssignmentScope.Deployment)]))),
+            this.targets);
+
+        // Act
+        var permitted = await authorization.PermitsOverScopeAsync(
+            MailFathomPermission.AdminAuditRead,
+            AssignmentScope.User(Person),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(permitted);
+        await this.targets.DidNotReceive().PlaceUserAsync(Arg.Any<UserId>(), Arg.Any<CancellationToken>());
+    }
+
     private static AuthorizedPrincipal ScopedAdministrator(AssignmentScope scope) =>
         AuthorizedPrincipal.Caller("administrator", ScopedGrant.Of([(MailFathomPermission.AdminAuditRead, scope)]));
 

@@ -172,7 +172,7 @@ public sealed class OutgoingEmailToolTests
     private static OutgoingMailReader ReaderOver(IOutgoingEmailStore store) => new(
         store,
         AccessAuthorizations.ForPrincipal(
-            AuthorizedPrincipal.Caller(CallerIdentity, [MailFathomPermission.MailSend])));
+            AuthorizedPrincipal.CallerActingFor(SyntheticUser.Deployment, CallerIdentity, [MailFathomPermission.MailSend])));
 
     private static OutgoingMailCancellation CancellationOver(
         IOutgoingEmailStore store,
@@ -180,7 +180,7 @@ public sealed class OutgoingEmailToolTests
         ReaderOver(store),
         outbox,
         AccessAuthorizations.ForPrincipal(
-            AuthorizedPrincipal.Caller(CallerIdentity, [MailFathomPermission.MailSend])));
+            AuthorizedPrincipal.CallerActingFor(SyntheticUser.Deployment, CallerIdentity, [MailFathomPermission.MailSend])));
 
     private static IOutgoingEmailStore StoreHolding(OutgoingEmailRecord record)
     {

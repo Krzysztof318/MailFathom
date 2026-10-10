@@ -247,7 +247,7 @@ public sealed class ClientMailAttachmentEndpointTests
         accountCatalog.ReadAssignedAccountsAsync(Arg.Any<CancellationToken>()).Returns([SyntheticServedAccount.Of(summary.Account)]);
 
         var principals = Substitute.For<IAuthorizedPrincipalSource>();
-        principals.Current.Returns(AuthorizedPrincipal.Caller("client-key", [MailFathomPermission.MailRead]));
+        principals.Current.Returns(AuthorizedPrincipal.CallerActingFor(SyntheticUser.Deployment, "client-key", [MailFathomPermission.MailRead]));
 
         var participation = StubMailFolderParticipation.Mapping(
             new MailFolderIdentity(summary.Account, summary.FolderAlias));

@@ -18,11 +18,16 @@ namespace MailFathom.Host.UnitTests.Configuration.UserSettings.Administration;
 
 public sealed class StoredSecretAdministrationTests
 {
-    [Fact]
-    public async Task StoreAsync_AnExistingUserAndConfiguredRing_CommitsAndReturnsTheStoreReference()
+    public static TheoryData<AssignmentScope> ScopesCoveringTheUser => [.. AccessAuthorizations.ScopesCoveringTheirTarget];
+
+    public static TheoryData<AssignmentScope> ScopesOutsideTheUser => [.. AccessAuthorizations.ScopesOutsideTheirTarget];
+
+    [Theory]
+    [MemberData(nameof(ScopesCoveringTheUser))]
+    public async Task StoreAsync_AnExistingUserTheCallersScopeCoversAndAConfiguredRing_CommitsAndReturnsTheStoreReference(AssignmentScope scope)
     {
         // Arrange
-        var user = SyntheticUser.Deployment;
+        var user = AccessAuthorizations.ScopedHolder;
         var storedReference = DatabaseSecretReference.Create(
             new Guid("019925df-96f4-7c6d-8f91-b9f6cf27f5b2"));
         var users = Substitute.For<IUserSettingsDocumentReader>();
@@ -38,7 +43,10 @@ public sealed class StoredSecretAdministrationTests
                 Arg.Any<ResolvedSecret>(),
                 Arg.Any<CancellationToken>())
             .Returns(storedReference);
-        var service = CreateService(users, store);
+        var service = CreateService(
+            users,
+            store,
+            AccessAuthorizations.ForAdministratorScopedAt(scope, MailFathomPermission.AdminConfigurationWrite));
         Assert.True(SecretName.TryCreate("primary-password", out var name));
         using var material = ResolvedSecret.FromText("not-a-real-mailbox-password");
 
@@ -83,13 +91,16 @@ public sealed class StoredSecretAdministrationTests
         Assert.True(SecretName.TryCreate("primary-password", out var name));
         using var material = ResolvedSecret.FromText("not-a-real-mailbox-password");
 
-        // Act & Assert
-        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
             () => service.StoreAsync(
                 SyntheticUser.Deployment,
                 name,
                 material,
                 TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.AdminConfigurationWrite, refusal.RequiredPermission);
         await store.DidNotReceiveWithAnyArgs().StoreAsync(
             default!,
             default,
@@ -128,22 +139,59 @@ public sealed class StoredSecretAdministrationTests
             TestContext.Current.CancellationToken);
     }
 
+    /// <summary>A user outside the caller's scope is answered exactly as one this deployment does not hold, and nothing is stored for them.</summary>
+    [Theory]
+    [MemberData(nameof(ScopesOutsideTheUser))]
+    public async Task StoreAsync_AUserOutsideTheCallersScope_IsAnsweredAsUnknownBeforeTheStoreIsReached(AssignmentScope scope)
+    {
+        // Arrange
+        var user = AccessAuthorizations.ScopedHolder;
+        var users = Substitute.For<IUserSettingsDocumentReader>();
+        users.ReadAsync(user, Arg.Any<CancellationToken>()).Returns(new UserSettingsDocument(user, "user", "{}", 1));
+        var store = Substitute.For<IStoredSecretStore>();
+        store.CanStore.Returns(true);
+        var service = CreateService(
+            users,
+            store,
+            AccessAuthorizations.ForAdministratorScopedAt(scope, MailFathomPermission.AdminConfigurationWrite));
+        Assert.True(SecretName.TryCreate("primary-password", out var name));
+        using var material = ResolvedSecret.FromText("not-a-real-mailbox-password");
+
+        // Act
+        var result = await service.StoreAsync(user, name, material, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(StoredSecretProvisioningOutcome.UnknownUser, result.Outcome);
+        await store.DidNotReceiveWithAnyArgs().StoreAsync(
+            default!,
+            default,
+            default,
+            default,
+            default!,
+            TestContext.Current.CancellationToken);
+    }
+
     private static StoredSecretAdministration CreateService(
         IUserSettingsDocumentReader users,
         IStoredSecretStore store,
-        IReadOnlyList<MailFathomPermission>? granted = null)
+        IReadOnlyList<MailFathomPermission>? granted = null) =>
+        CreateService(
+            users,
+            store,
+            AccessAuthorizations.ForAdministratorGranted([.. granted ?? [MailFathomPermission.AdminConfigurationWrite]]));
+
+    private static StoredSecretAdministration CreateService(
+        IUserSettingsDocumentReader users,
+        IStoredSecretStore store,
+        AccessAuthorization authorization)
     {
-        var principals = Substitute.For<IAuthorizedPrincipalSource>();
-        principals.Current.Returns(AuthorizedPrincipal.Caller(
-            "operations",
-            granted ?? [MailFathomPermission.AdminConfigurationWrite]));
         var session = Substitute.For<IPersistenceSession>();
         session.CommitAsync(Arg.Any<CancellationToken>()).Returns(PersistenceCommitResult.Committed);
         var sessions = Substitute.For<IPersistenceSessionFactory>();
         sessions.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(session);
 
         return new StoredSecretAdministration(
-            new AccessAuthorization(principals),
+            authorization,
             users,
             store,
             new OptimisticConcurrencyRetryPolicy(

@@ -51,6 +51,20 @@ public sealed record AdministrativeTarget
         return new AdministrativeTarget(NamedOrNone(organization), user);
     }
 
+    /// <summary>Places an organization itself, for an operation that names one rather than something inside it.</summary>
+    /// <param name="organization">The organization.</param>
+    /// <returns>The target, which no user scope covers: an organization is nobody's alone.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="organization" /> names no organization.</exception>
+    public static AdministrativeTarget OrganizationItself(Guid organization)
+    {
+        if (organization == Guid.Empty)
+        {
+            throw new ArgumentException("An organization target names an organization.", nameof(organization));
+        }
+
+        return new AdministrativeTarget(organization, soleUser: null);
+    }
+
     /// <summary>Places a mail account.</summary>
     /// <param name="organization">The organization the account belongs to, or <see langword="null" /> for none.</param>
     /// <param name="assignedUsers">Every user the account is assigned to.</param>

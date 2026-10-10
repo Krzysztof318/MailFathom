@@ -193,14 +193,18 @@ internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalS
             .NarrowedTo(MailFathomPermission.PublishedFor(ProtectedSurface.Mail))
             .NarrowedTo(narrowing);
 
-    /// <summary>Reports what a caller on the administrative surface holds: its user's grant, narrowed to the administrative half and to what admitted it.</summary>
+    /// <summary>Reports what a caller on the administrative surface holds: its user's grant, narrowed to what admitted it.</summary>
     /// <param name="userGrant">What the administrator holds, or <see langword="null" /> where it was never read for this request.</param>
     /// <param name="narrowing">The names the credential admitting the caller keeps, which a token's scopes narrow where the entry says so.</param>
     /// <returns>The grant the caller holds.</returns>
+    /// <remarks>
+    /// Both halves are kept, unlike on a mail-serving surface. The administrator acts for no user, so a mail name grants
+    /// nothing here — <see cref="AuthorizedPrincipal.Holds" /> reads none for a principal without a user — but it is
+    /// still the ceiling ADR 0012 bounds placing a credential by: whoever provisions a way in as somebody holds every mail
+    /// name that somebody holds, and a grant narrowed to the administrative half could not be asked that.
+    /// </remarks>
     internal static ScopedGrant HeldOnTheAdministrativeSurface(ScopedGrant? userGrant, IEnumerable<MailFathomPermission> narrowing) =>
-        (userGrant ?? ScopedGrant.None)
-            .NarrowedTo(MailFathomPermission.PublishedFor(ProtectedSurface.Administration))
-            .NarrowedTo(narrowing);
+        (userGrant ?? ScopedGrant.None).NarrowedTo(narrowing);
 
     private AuthorizedPrincipal? FromTransport()
     {
@@ -305,7 +309,7 @@ internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalS
                 userGrant,
                 authenticated
                     ? TransportGrant.PermissionsCarriedBy(context.User)
-                    : MailFathomPermission.PublishedFor(ProtectedSurface.Administration)));
+                    : MailFathomPermission.All));
     }
 
     /// <summary>Reports whether a surface answers one person about their own mail rather than answering for the deployment.</summary>

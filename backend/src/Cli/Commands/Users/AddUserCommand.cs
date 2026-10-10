@@ -39,15 +39,23 @@ internal static class AddUserCommand
             Required = true,
         };
 
+        Option<Guid?> organizationOption = new("--organization")
+        {
+            Description =
+                "The organization the user belongs to from the moment they are recorded, by the identifier 'organization list' reports. Left out, the user belongs to none, which only an administrator over the whole deployment may record.",
+        };
+
         Command command = new("add", "Record a user this deployment does not hold.")
         {
             displayNameOption,
+            organizationOption,
             endpointOption,
         };
 
         command.SetAction((result, cancellationToken) => RunAsync(
             context,
             result.GetValue(displayNameOption) ?? string.Empty,
+            result.GetValue(organizationOption),
             CliOptions.RequestedDeployment(result.GetValue(endpointOption), context.Variable(CliOptions.EndpointVariable)),
             cancellationToken));
 
@@ -57,6 +65,7 @@ internal static class AddUserCommand
     private static async Task<int> RunAsync(
         CliContext context,
         string displayName,
+        Guid? organizationId,
         string? requestedDeployment,
         CancellationToken cancellationToken)
     {
@@ -67,7 +76,7 @@ internal static class AddUserCommand
 
         var recorded = await deployment.ProvisionUserAsync(
             profile.Token,
-            new UserProvisioningRequest(displayName),
+            new UserProvisioningRequest(displayName, organizationId),
             cancellationToken);
 
         context.Console.WriteLine($"Recorded {displayName} as {recorded.Id:D}.");

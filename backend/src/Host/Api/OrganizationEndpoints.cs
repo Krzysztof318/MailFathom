@@ -22,7 +22,9 @@ namespace MailFathom.Host.Api;
 /// Reading is <see cref="MailFathomPermission.AdminRead" />, recording, renaming, and removing an organization and moving
 /// a mail account are <see cref="MailFathomPermission.AdminConfigurationWrite" />, and changing a short name and moving a
 /// user are <see cref="MailFathomPermission.AdminCredentialsWrite" />, for the reasons
-/// <see cref="OrganizationAdministration" /> gives.
+/// <see cref="OrganizationAdministration" /> gives. The listing, the display name, and the user's move name a target
+/// and are admitted at a scope covering it; recording, removing, and changing the short name of an organization are the
+/// deployment's alone.
 /// </para>
 /// </remarks>
 internal static class OrganizationEndpoints
@@ -57,7 +59,7 @@ internal static class OrganizationEndpoints
         ArgumentNullException.ThrowIfNull(api);
 
         api.MapGet(OrganizationsRoute, ListAsync)
-            .RequirePermission(MailFathomPermission.AdminRead);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminRead);
 
         api.MapPost(OrganizationsRoute, CreateAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxRequestBytes))
@@ -65,7 +67,7 @@ internal static class OrganizationEndpoints
 
         api.MapPut(OrganizationDisplayNameRoute, RenameAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxRequestBytes))
-            .RequirePermission(MailFathomPermission.AdminConfigurationWrite);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminConfigurationWrite);
 
         api.MapPut(OrganizationShortNameRoute, ChangeShortNameAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxRequestBytes))
@@ -76,7 +78,7 @@ internal static class OrganizationEndpoints
 
         api.MapPut(UserOrganizationRoute, SetUserOrganizationAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxRequestBytes))
-            .RequirePermission(MailFathomPermission.AdminCredentialsWrite);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminCredentialsWrite);
 
         api.MapPost(MailAccountOrganizationRoute, SetMailAccountOrganizationAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxRequestBytes))

@@ -66,7 +66,7 @@ public sealed class HeldBackRecordEndpointsTests
                     ["Correct the account."]),
             ]);
 
-        harness.Organizations.ReadUnreadableAsync(Arg.Any<CancellationToken>())
+        harness.Organizations.ReadUnreadableAsync(Arg.Any<IReadOnlySet<AssignmentScope>>(), Arg.Any<CancellationToken>())
             .Returns(new[] { new UnreadableOrganization(OrganizationId, "Acme", "Correct it.") });
 
         // Act
@@ -89,7 +89,7 @@ public sealed class HeldBackRecordEndpointsTests
         // Arrange
         var harness = new EndpointHarness();
 
-        harness.Organizations.ReadUnreadableAsync(Arg.Any<CancellationToken>())
+        harness.Organizations.ReadUnreadableAsync(Arg.Any<IReadOnlySet<AssignmentScope>>(), Arg.Any<CancellationToken>())
             .Returns(new[] { new UnreadableOrganization(OrganizationId, "Acme", "Correct it.") });
 
         // Act
@@ -112,7 +112,7 @@ public sealed class HeldBackRecordEndpointsTests
             principals.Current.Returns(AuthorizedPrincipal.Caller("operations", [MailFathomPermission.AdminRead]));
 
             this.Organizations = Substitute.For<IOrganizationStore>();
-            this.Organizations.ReadUnreadableAsync(Arg.Any<CancellationToken>())
+            this.Organizations.ReadUnreadableAsync(Arg.Any<IReadOnlySet<AssignmentScope>>(), Arg.Any<CancellationToken>())
                 .Returns(Array.Empty<UnreadableOrganization>());
 
             this.Administration = new OrganizationAdministration(

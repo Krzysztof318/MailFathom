@@ -267,9 +267,10 @@ internal static class AdminApiEndpoints
 /// <para>
 /// The scopes are reported beside the permissions because an administrator granted a role over one organization holds
 /// names that <see cref="Permissions" /> leaves out, and a grant somebody holds without being told of it reads as one
-/// the deployment lost. <see cref="Permissions" /> stays the answer to what this endpoint admits on every route naming
-/// no target, since it asks those routes' permissions at the deployment scope; the scopes say what the caller is
-/// granted, and only the audit reads naming a user or a mail account admit a name held at one of them.
+/// the deployment lost. <see cref="Permissions" /> stays the answer to what this endpoint admits for an operation
+/// naming no target, which is asked at the deployment scope; a narrower scope admits the routes that name something
+/// inside it and nothing else. The scopes carry administrative names alone: the mail names a caller here keeps are a
+/// ceiling on the credentials it may write rather than something this endpoint performs.
 /// </para>
 /// </remarks>
 internal sealed record AdminSessionResponse(
@@ -327,7 +328,7 @@ internal sealed record AdminSessionResponse(
 /// <summary>One scope an administrative caller holds anything at, and what it holds there.</summary>
 /// <param name="Scope">Which kind of scope it is: <c>deployment</c>, <c>organization</c>, or <c>user</c>.</param>
 /// <param name="Target">The organization or the user the scope names, and none for the deployment.</param>
-/// <param name="Permissions">The published names granted at this scope, other than those only the deployment scope grants, in the order this repository publishes them. At a narrower scope the audit read among them admits the reads naming a user or a mail account that scope covers, and none of the others admits an operation on this endpoint, which asks every other route's permission at the deployment scope.</param>
+/// <param name="Permissions">The published names granted at this scope, other than those only the deployment scope grants, in the order this repository publishes them. At a narrower scope each admits the routes checked at a scope covering what they name, for a target that scope covers, and no route naming no target.</param>
 /// <param name="ReachingNothing">The published names granted at this scope that only the deployment scope grants, so at a narrower scope they reach nothing anywhere; always empty for the deployment.</param>
 /// <remarks>
 /// A role is assigned whole, so a role carrying <c>mailfathom.admin.spend</c> may be assigned over an organization and
@@ -345,7 +346,7 @@ internal sealed record AdminSessionScope(
     /// <returns>One entry per scope, empty for a grant holding nothing.</returns>
     internal static IReadOnlyList<AdminSessionScope> Of(ScopedGrant grant)
     {
-        var held = MailFathomPermission.All
+        var held = MailFathomPermission.PublishedFor(ProtectedSurface.Administration)
             .SelectMany(permission => grant.ScopesOf(permission).Select(scope => (Permission: permission, Scope: scope)))
             .ToArray();
 

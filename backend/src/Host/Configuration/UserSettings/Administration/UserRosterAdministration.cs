@@ -35,6 +35,12 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// than what it does next, and removing somebody is <see cref="MailFathomPermission.AdminErase" /> because it disposes
 /// of every message this deployment holds for them.
 /// </para>
+/// <para>
+/// Each of those is held at a scope as well, as ADR 0012 places it. The roster answers with the users the caller's
+/// scopes cover, a relabel or an erasure of a user outside them is answered as one this deployment does not hold, and
+/// recording somebody is admitted into an organization the caller's scope covers — recording into none is the
+/// deployment's alone, since only its scope covers a user in none.
+/// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this service.")]
 internal sealed partial class UserRosterAdministration(
@@ -71,21 +77,23 @@ internal sealed partial class UserRosterAdministration(
     /// <summary>The version a freshly provisioned row stands at, which the record's first commit is composed over.</summary>
     private const long ProvisionedVersion = 1;
 
-    /// <summary>Reads one page of the users this deployment holds.</summary>
+    /// <summary>Reads one page of the users the caller's scope covers.</summary>
     /// <param name="query">The page asked for.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The page's users in identifier order, each annotated with what this process is doing about them, and where the following page continues.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="query" /> is <see langword="null" />.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminRead" /> at every scope.</exception>
     internal async Task<AdministrativeListingPage<UserRosterEntry>> ReadRosterAsync(
         AdministrativeListingQuery query,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(query);
+        authorization.RequirePermissionAtAnyScope(MailFathomPermission.AdminRead);
 
-        authorization.RequirePermission(MailFathomPermission.AdminRead);
-
-        var page = await directory.ReadUserPageAsync(query, cancellationToken);
+        var page = await directory.ReadUserPageAsync(
+            query,
+            authorization.ScopesOf(MailFathomPermission.AdminRead),
+            cancellationToken);
         var served = await this.ReadServedAmongAsync([.. page.Entries.Select(static record => record.User)], cancellationToken);
 
         return new AdministrativeListingPage<UserRosterEntry>(
@@ -101,9 +109,10 @@ internal sealed partial class UserRosterAdministration(
 
     /// <summary>Records a user this deployment did not hold, under an identifier it mints.</summary>
     /// <param name="displayName">The label the user is told apart by, which is unique across the deployment.</param>
+    /// <param name="organizationId">The organization the user is recorded into, or <see langword="null" /> to record them in none.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>The identifier the user was minted under, or the sentence naming what has to change first.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminConfigurationWrite" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminConfigurationWrite" /> at every scope, or the user is recorded into no organization by a caller not holding it over the whole deployment.</exception>
     /// <exception cref="UserSettingsUnwritableException">Thrown when the record's first commit did not complete, which leaves the envelope written and nothing published for it.</exception>
     /// <remarks>
     /// The identifier is minted here rather than supplied, and it is a version 7 value like every identifier MailFathom
@@ -112,9 +121,25 @@ internal sealed partial class UserRosterAdministration(
     /// </remarks>
     internal async Task<UserProvisioningOutcome> ProvisionAsync(
         string? displayName,
+        Guid? organizationId,
         CancellationToken cancellationToken)
     {
-        authorization.RequirePermission(MailFathomPermission.AdminConfigurationWrite);
+        if (organizationId is not { } organization)
+        {
+            authorization.RequirePermissionOverTheDeployment(MailFathomPermission.AdminConfigurationWrite);
+        }
+        else
+        {
+            authorization.RequirePermissionAtAnyScope(MailFathomPermission.AdminConfigurationWrite);
+
+            if (!await authorization.PermitsOverScopeAsync(
+                    MailFathomPermission.AdminConfigurationWrite,
+                    AssignmentScope.Organization(organization),
+                    cancellationToken))
+            {
+                return UserProvisioningOutcome.Refused(NoSuchOrganization(organization));
+            }
+        }
 
         if (FindLabelRefusal(displayName) is { } unusable)
         {
@@ -131,7 +156,11 @@ internal sealed partial class UserRosterAdministration(
             return UserProvisioningOutcome.Refused(admission.Refusal);
         }
 
-        var outcome = await this.RecordAndPublishAsync(UserId.Create(Guid.CreateVersion7()), label, cancellationToken);
+        var outcome = await this.RecordAndPublishAsync(
+            UserId.Create(Guid.CreateVersion7()),
+            label,
+            organizationId,
+            cancellationToken);
 
         if (outcome.IsProvisioned)
         {
@@ -145,13 +174,19 @@ internal sealed partial class UserRosterAdministration(
     private async Task<UserProvisioningOutcome> RecordAndPublishAsync(
         UserId user,
         string label,
+        Guid? organizationId,
         CancellationToken cancellationToken)
     {
-        if (!await provisioning.ProvisionAsync(user, label, cancellationToken))
+        // The label is unique in the table, so another user carrying it refuses the insert rather than anything read
+        // ahead of it, which no read could have done without racing a concurrent write. The organization is read by the
+        // insert for the same reason.
+        var recorded = await provisioning.ProvisionAsync(user, label, organizationId, cancellationToken);
+
+        if (recorded != UserProvisioningResult.Provisioned)
         {
-            // The label is unique in the table, so another user carrying it refuses the insert rather than anything read
-            // ahead of it, which no read could have done without racing a concurrent write.
-            return UserProvisioningOutcome.Refused(LabelTaken(label));
+            return UserProvisioningOutcome.Refused(recorded == UserProvisioningResult.UnknownOrganization
+                ? NoSuchOrganization(organizationId.GetValueOrDefault())
+                : LabelTaken(label));
         }
 
         // Committed rather than published from the insert alone, because the commit is what proves the row still
@@ -188,10 +223,11 @@ internal sealed partial class UserRosterAdministration(
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>What the relabel did: whether the deployment holds this user at all, and the sentence naming what has to change first where it holds them and refused.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminConfigurationWrite" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminConfigurationWrite" /> at every scope.</exception>
     /// <remarks>
     /// The label is what an administrator selects a user by and is keyed by nothing, so changing it moves no mail and
-    /// invalidates no identifier — which is why this is the configuration grant rather than the erasing one.
+    /// invalidates no identifier — which is why this is the configuration grant rather than the erasing one. A user
+    /// outside the caller's scope is answered as one this deployment does not hold.
     /// </remarks>
     internal async Task<UserRelabelOutcome> RelabelAsync(
         UserId user,
@@ -203,7 +239,7 @@ internal sealed partial class UserRosterAdministration(
             throw new ArgumentException("A user is relabelled for a named user.", nameof(user));
         }
 
-        authorization.RequirePermission(MailFathomPermission.AdminConfigurationWrite);
+        authorization.RequirePermissionAtAnyScope(MailFathomPermission.AdminConfigurationWrite);
 
         if (FindLabelRefusal(displayName) is { } unusable)
         {
@@ -212,7 +248,8 @@ internal sealed partial class UserRosterAdministration(
 
         var label = displayName!.Trim();
 
-        if (await directory.ReadUserAsync(user, cancellationToken) is null)
+        if (!await authorization.PermitsOverAsync(MailFathomPermission.AdminConfigurationWrite, user, cancellationToken)
+            || await directory.ReadUserAsync(user, cancellationToken) is null)
         {
             return UserRelabelOutcome.NoSuchUser;
         }
@@ -234,7 +271,7 @@ internal sealed partial class UserRosterAdministration(
     /// <param name="cancellationToken">Cancels the erasure before it commits.</param>
     /// <returns>What was removed and whether this process was serving the person it removed, or the sentence naming the work that would not stop.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminErase" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminErase" /> at every scope.</exception>
     /// <remarks>
     /// <para>
     /// The order here is the whole of what makes an erasure true afterwards, and none of it is bookkeeping. The user
@@ -259,6 +296,10 @@ internal sealed partial class UserRosterAdministration(
     /// Whether the user was served is read before any of that, because the answer must describe the deployment the
     /// caller asked about rather than the one the erasure left.
     /// </para>
+    /// <para>
+    /// A user outside the caller's scope is answered exactly as one this deployment does not hold: nothing erased and
+    /// nothing served.
+    /// </para>
     /// </remarks>
     internal async Task<UserRosterErasureOutcome> EraseAsync(UserId user, CancellationToken cancellationToken)
     {
@@ -267,7 +308,12 @@ internal sealed partial class UserRosterAdministration(
             throw new ArgumentException("A user is erased for a named user.", nameof(user));
         }
 
-        authorization.RequirePermission(MailFathomPermission.AdminErase);
+        authorization.RequirePermissionAtAnyScope(MailFathomPermission.AdminErase);
+
+        if (!await authorization.PermitsOverAsync(MailFathomPermission.AdminErase, user, cancellationToken))
+        {
+            return new UserRosterErasureOutcome(UserErased: false, WasServed: false);
+        }
 
         var solelyAssigned = await accounts.ReadSolelyAssignedAsync(user, cancellationToken);
         MailAccountId[] solelyAssignedAccounts = [.. solelyAssigned.Select(static account => MailAccountId.Create(account.ToString("D")))];
@@ -390,6 +436,11 @@ internal sealed partial class UserRosterAdministration(
             ? $"The label is {label.Length} characters, past the {UserRecord.MaximumDisplayNameLength} a user's label is stored as. Shorten it."
             : null;
     }
+
+    /// <summary>Says that the organization a user was to be recorded into is not one this deployment holds.</summary>
+    /// <remarks>Also what an organization outside the caller's scope is answered with, so a refusal never tells a scoped administrator which organizations exist beyond their own.</remarks>
+    private static string NoSuchOrganization(Guid organizationId) =>
+        $"This deployment holds no organization '{organizationId}'. List the organizations to read the identifiers it does hold.";
 
     private static string LabelTaken(string label) =>
         $"Another user of this deployment is already recorded as '{label}'. A label is what an administrator selects a user by, so two users carrying one would leave nothing to select on: choose another.";

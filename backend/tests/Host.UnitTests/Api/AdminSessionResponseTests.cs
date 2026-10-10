@@ -132,6 +132,29 @@ public sealed class AdminSessionResponseTests
         Assert.Equal([MailFathomPermission.AdminSpend.Name], narrower.ReachingNothing);
     }
 
+    /// <summary>
+    /// An administrator's grant keeps the mail names its user holds, as the ceiling a credential it writes is bounded
+    /// by. None of them is something this endpoint performs, so neither reading reports one.
+    /// </summary>
+    [Fact]
+    public void For_AnAdministratorWhoseGrantKeepsMailNames_ReportsTheAdministrativeNamesAlone()
+    {
+        // Arrange
+        var principal = AuthorizedPrincipal.Caller(
+            "administrator",
+            ScopedGrant.Of([
+                (MailFathomPermission.MailRead, AssignmentScope.Deployment),
+                (MailFathomPermission.AdminRead, AssignmentScope.Deployment),
+            ]));
+
+        // Act
+        var session = AdminSessionResponse.For(new ClaimsPrincipal(new ClaimsIdentity()), principal, user: null, roles: []);
+
+        // Assert
+        Assert.Equal([MailFathomPermission.AdminRead.Name], session.Permissions);
+        Assert.Equal([MailFathomPermission.AdminRead.Name], Assert.Single(session.Scopes).Permissions);
+    }
+
     /// <summary>A credential granted nothing reaches this route and nowhere else, and "nothing" is the accurate answer.</summary>
     [Fact]
     public void For_ACallerGrantedNothing_ReportsAnEmptyGrantRatherThanFailing()

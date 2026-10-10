@@ -21,18 +21,25 @@ namespace MailFathom.Application.Access.Organizations;
 /// </remarks>
 public interface IOrganizationStore
 {
-    /// <summary>Reads one page of the organizations this deployment holds, in identifier order.</summary>
+    /// <summary>Reads one page of the organizations some scopes cover, in identifier order.</summary>
     /// <param name="query">The page asked for.</param>
+    /// <param name="within">The scopes the listing answers within: every organization where the deployment scope is among them, and otherwise each organization named.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>At most <see cref="AdministrativeListingQuery.PageSize" /> rows, each readable one with how many members it has, each unreadable one named apart, and where the following page continues.</returns>
-    /// <remarks>A row this build will not read is reported beside the listing rather than raised through it: one organization nobody can repair must not be every organization nobody can list.</remarks>
-    Task<OrganizationListing> ReadAsync(AdministrativeListingQuery query, CancellationToken cancellationToken);
+    /// <remarks>A row this build will not read is reported beside the listing rather than raised through it: one organization nobody can repair must not be every organization nobody can list. A user scope covers no organization, so a listing within user scopes alone is empty.</remarks>
+    Task<OrganizationListing> ReadAsync(
+        AdministrativeListingQuery query,
+        IReadOnlySet<AssignmentScope> within,
+        CancellationToken cancellationToken);
 
-    /// <summary>Reads every organization row this build will not read as one, across the whole deployment.</summary>
+    /// <summary>Reads every organization row some scopes cover that this build will not read as one.</summary>
+    /// <param name="within">The scopes the read answers within, as <see cref="ReadAsync" /> reads them.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The unreadable rows, in identifier order.</returns>
     /// <remarks>Apart from the paged listing because a broken row is reported wherever it sits, not only when it falls on the page somebody asked for.</remarks>
-    Task<IReadOnlyList<UnreadableOrganization>> ReadUnreadableAsync(CancellationToken cancellationToken);
+    Task<IReadOnlyList<UnreadableOrganization>> ReadUnreadableAsync(
+        IReadOnlySet<AssignmentScope> within,
+        CancellationToken cancellationToken);
 
     /// <summary>Records an organization.</summary>
     /// <param name="organizationId">The identifier the organization is to carry.</param>

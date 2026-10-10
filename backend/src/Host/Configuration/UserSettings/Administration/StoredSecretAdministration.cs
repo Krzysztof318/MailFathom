@@ -29,7 +29,7 @@ internal sealed class StoredSecretAdministration(
     /// <param name="name">The declared secret name, which is the stable rotation identity within the user.</param>
     /// <param name="material">The caller-owned material, which is never retained.</param>
     /// <param name="cancellationToken">Cancels the user read, sealing, or commit.</param>
-    /// <returns>The outcome and the reference when material was stored.</returns>
+    /// <returns>The outcome and the reference when material was stored; a user outside the caller's scope is answered as one this deployment does not hold.</returns>
     internal async Task<StoredSecretProvisioning> StoreAsync(
         UserId user,
         SecretName name,
@@ -48,14 +48,15 @@ internal sealed class StoredSecretAdministration(
             throw new ArgumentException("A stored secret has a declared name.", nameof(name));
         }
 
-        authorization.RequirePermission(MailFathomPermission.AdminConfigurationWrite);
+        authorization.RequirePermissionAtAnyScope(MailFathomPermission.AdminConfigurationWrite);
 
         if (!secrets.CanStore)
         {
             return StoredSecretProvisioning.KeyRingUnavailable();
         }
 
-        if (await users.ReadAsync(user, cancellationToken) is null)
+        if (!await authorization.PermitsOverAsync(MailFathomPermission.AdminConfigurationWrite, user, cancellationToken)
+            || await users.ReadAsync(user, cancellationToken) is null)
         {
             return StoredSecretProvisioning.UnknownUser();
         }

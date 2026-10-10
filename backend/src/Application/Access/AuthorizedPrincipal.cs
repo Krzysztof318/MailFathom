@@ -215,14 +215,17 @@ public sealed class AuthorizedPrincipal
     /// </para>
     /// <para>
     /// A mail permission is held at whichever scope it was granted, because its scope is never read: it reaches its
-    /// holder's own mail and nothing else. An administrative permission is held for this question only over the whole
+    /// holder's own mail and nothing else — so a principal acting for no user holds none, having no mail of its own for
+    /// one to reach. That is what lets the administrator's grant carry the mail names their roles list, which a
+    /// credential written on the administrative surface is bounded by, without any of them becoming something the
+    /// administrative surface performs. An administrative permission is held for this question only over the whole
     /// deployment, because the question names no target and an operation naming none is the deployment's. A check that
-    /// does name a target asks <see cref="ScopedGrant.ScopesOf" /> of <see cref="Grant" /> instead, so a grant held over
+    /// does name a target asks <see cref="HoldsOver" /> instead, so a grant held over
     /// one organization admits nothing until an operation asks about something inside it.
     /// </para>
     /// </remarks>
     public bool Holds(MailFathomPermission permission) => permission.Surface == ProtectedSurface.Mail
-        ? this.Permissions.Contains(permission)
+        ? this.User is not null && this.Permissions.Contains(permission)
         : this.Grant.ScopesOf(permission).Contains(AssignmentScope.Deployment);
 
     /// <summary>Reports whether this principal holds one administrative capability only over part of the deployment — an organization or a user — and never over the whole of it.</summary>
@@ -250,7 +253,7 @@ public sealed class AuthorizedPrincipal
         ArgumentNullException.ThrowIfNull(target);
 
         return permission.Surface == ProtectedSurface.Mail
-            ? this.Permissions.Contains(permission)
+            ? this.Holds(permission)
             : this.Grant.Covers(permission, target);
     }
 

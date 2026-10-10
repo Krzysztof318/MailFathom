@@ -85,36 +85,36 @@ internal static class UserRecordEndpoints
         ArgumentNullException.ThrowIfNull(api);
 
         api.MapGet(UsersRoute, ReadRosterAsync)
-            .RequirePermission(MailFathomPermission.AdminRead);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminRead);
 
         // The attribute is reached for its metadata rather than as an MVC filter: it implements
         // IRequestSizeLimitMetadata, which the routing pipeline applies to the request body feature, so a body over the
         // bound is answered 413 before the handler is reached.
         api.MapPost(UsersRoute, ProvisionAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxWriteRequestBytes))
-            .RequirePermission(MailFathomPermission.AdminConfigurationWrite);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminConfigurationWrite);
 
         api.MapDelete(UserRoute, EraseAsync)
-            .RequirePermission(MailFathomPermission.AdminErase);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminErase);
 
         api.MapPut(UserDisplayNameRoute, RelabelAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxWriteRequestBytes))
-            .RequirePermission(MailFathomPermission.AdminConfigurationWrite);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminConfigurationWrite);
 
         api.MapPut(UserEndpointAccessRoute, SetEndpointAccessAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxWriteRequestBytes))
-            .RequirePermission(MailFathomPermission.AdminConfigurationWrite);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminConfigurationWrite);
 
         api.MapGet(UserRecordRoute, ReadRecordAsync)
-            .RequirePermission(MailFathomPermission.AdminRead);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminRead);
 
         api.MapPost(UserRecordRoute, SaveRecordAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxWriteRequestBytes))
-            .RequirePermission(MailFathomPermission.AdminConfigurationWrite);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminConfigurationWrite);
 
         api.MapPost(UserSecretsRoute, StoreSecretAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxStoredSecretWriteRequestBytes))
-            .RequirePermission(MailFathomPermission.AdminConfigurationWrite);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminConfigurationWrite);
     }
 
     /// <summary>Lists one page of the users this deployment holds.</summary>
@@ -145,7 +145,11 @@ internal static class UserRecordEndpoints
     /// <param name="request">The label the user is told apart by.</param>
     /// <param name="cancellationToken">Cancels the write when the client disconnects.</param>
     /// <returns><c>200</c> with the identifier the user was minted under, or <c>400</c> naming what has to change first.</returns>
-    /// <remarks>A refusal is a request the administrator corrects — an endpoint to narrow, a label already taken — so it names what to change rather than reporting that something failed.</remarks>
+    /// <remarks>
+    /// A refusal is a request the administrator corrects — an endpoint to narrow, a label already taken, an organization
+    /// this deployment does not hold — so it names what to change rather than reporting that something failed. An
+    /// organization outside the caller's scope is refused exactly as one this deployment does not hold.
+    /// </remarks>
     internal static async Task<Results<Ok<UserProvisionedResponse>, ProblemHttpResult>> ProvisionAsync(
         [FromServices] UserRosterAdministration roster,
         [FromBody] UserProvisioningRequest request,
@@ -154,7 +158,12 @@ internal static class UserRecordEndpoints
         ArgumentNullException.ThrowIfNull(roster);
         ArgumentNullException.ThrowIfNull(request);
 
-        var outcome = await roster.ProvisionAsync(request.DisplayName, cancellationToken);
+        if (request.OrganizationId == Guid.Empty)
+        {
+            return Refusal("An organization is named by the identifier this deployment recorded it under.");
+        }
+
+        var outcome = await roster.ProvisionAsync(request.DisplayName, request.OrganizationId, cancellationToken);
 
         return outcome.IsProvisioned
             ? TypedResults.Ok(new UserProvisionedResponse(outcome.User.Value))

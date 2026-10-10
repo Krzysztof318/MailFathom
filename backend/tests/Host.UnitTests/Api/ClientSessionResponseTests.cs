@@ -7,6 +7,7 @@ using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Api;
 using MailFathom.Host.Observability.ClientTelemetry;
+using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Api;
@@ -25,7 +26,8 @@ public sealed class ClientSessionResponseTests
     public void For_ACallerWithAGrant_ReportsEveryPermissionItHolds()
     {
         // Arrange
-        var principal = AuthorizedPrincipal.Caller(
+        var principal = AuthorizedPrincipal.CallerActingFor(
+            SyntheticUser.Deployment,
             "desktop-client",
             [MailFathomPermission.MailSend, MailFathomPermission.MailRead]);
 

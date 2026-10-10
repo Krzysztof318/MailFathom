@@ -20,12 +20,15 @@ public sealed class AccessAuthorizationTests
 {
     private const string ConfiguredCredentialName = "mcp-key";
 
+    private static readonly AssignmentScope OneOrganization =
+        AssignmentScope.Organization(new Guid("0198f0aa-0000-7000-8000-0000000000e1"));
+
     [Fact]
     public void RequirePermission_CallerGrantedIt_Permits()
     {
         // Arrange
         var authorization = AuthorizationOver(
-            AuthorizedPrincipal.Caller(ConfiguredCredentialName, [MailFathomPermission.MailRead]));
+            AuthorizedPrincipal.CallerActingFor(SyntheticUser.Deployment, ConfiguredCredentialName, [MailFathomPermission.MailRead]));
 
         // Act
         var refusal = Record.Exception(() => authorization.RequirePermission(MailFathomPermission.MailRead));
@@ -40,7 +43,7 @@ public sealed class AccessAuthorizationTests
     {
         // Arrange
         var authorization = AuthorizationOver(
-            AuthorizedPrincipal.Caller(ConfiguredCredentialName, [MailFathomPermission.MailRead]));
+            AuthorizedPrincipal.CallerActingFor(SyntheticUser.Deployment, ConfiguredCredentialName, [MailFathomPermission.MailRead]));
 
         // Act
         var refusal = Assert.Throws<PrincipalNotAuthorizedException>(() =>
@@ -62,7 +65,7 @@ public sealed class AccessAuthorizationTests
             ? MailFathomPermission.AdminOperate
             : MailFathomPermission.MailContactsWrite;
 
-        var authorization = AuthorizationOver(AuthorizedPrincipal.Caller(ConfiguredCredentialName, [held]));
+        var authorization = AuthorizationOver(AuthorizedPrincipal.CallerActingFor(SyntheticUser.Deployment, ConfiguredCredentialName, [held]));
 
         // Act
         var refusal = Record.Exception(() => authorization.RequireAnyPermission(
@@ -96,7 +99,7 @@ public sealed class AccessAuthorizationTests
     {
         // Arrange
         var authorization = AuthorizationOver(
-            AuthorizedPrincipal.Caller(ConfiguredCredentialName, [MailFathomPermission.MailContactsRead]));
+            AuthorizedPrincipal.CallerActingFor(SyntheticUser.Deployment, ConfiguredCredentialName, [MailFathomPermission.MailContactsRead]));
 
         // Act
         var refusal = Assert.Throws<PrincipalNotAuthorizedException>(() => authorization.RequireAnyPermission(
@@ -105,6 +108,39 @@ public sealed class AccessAuthorizationTests
 
         // Assert
         Assert.Equal(MailFathomPermission.MailContactsWrite, refusal.RequiredPermission);
+    }
+
+    /// <summary>A caller acting for no user has no mail for a mail name to reach, so holding one admits it to no mail use case.</summary>
+    [Fact]
+    public void RequirePermission_AMailNameHeldByACallerActingForNoUser_Refuses()
+    {
+        // Arrange
+        var authorization = AuthorizationOver(
+            AuthorizedPrincipal.Caller(ConfiguredCredentialName, [MailFathomPermission.MailRead]));
+
+        // Act
+        var refusal = Assert.Throws<PrincipalNotAuthorizedException>(() =>
+            authorization.RequirePermission(MailFathomPermission.MailRead));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.MailRead, refusal.RequiredPermission);
+    }
+
+    /// <summary>A mail name an administrator's grant carries is a ceiling rather than a surface they act on, so the refusal names the administrative alternative.</summary>
+    [Fact]
+    public void RequireAnyPermission_ACallerActingForNoUserHoldingOnlyAMailName_RefusesNamingTheAdministrativeAlternative()
+    {
+        // Arrange
+        var authorization = AuthorizationOver(
+            AuthorizedPrincipal.Caller(ConfiguredCredentialName, [MailFathomPermission.MailContactsRead]));
+
+        // Act
+        var refusal = Assert.Throws<PrincipalNotAuthorizedException>(() => authorization.RequireAnyPermission(
+            MailFathomPermission.AdminOperate,
+            MailFathomPermission.MailContactsWrite));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.AdminOperate, refusal.RequiredPermission);
     }
 
     /// <summary>A caller granted nothing has no surface to read, so the refusal names the alternative the use case listed first.</summary>
@@ -415,6 +451,173 @@ public sealed class AccessAuthorizationTests
 
         // Act, Assert
         Assert.False(authorization.Permits(default));
+    }
+
+    [Fact]
+    public void RequirePermissionAtAnyScope_ACallerHoldingItOverOneOrganization_Permits()
+    {
+        // Arrange
+        var authorization = AuthorizationOver(AuthorizedPrincipal.Caller(
+            ConfiguredCredentialName,
+            ScopedGrant.Of([(MailFathomPermission.AdminRead, OneOrganization)])));
+
+        // Act
+        var refusal = Record.Exception(() => authorization.RequirePermissionAtAnyScope(MailFathomPermission.AdminRead));
+
+        // Assert
+        Assert.Null(refusal);
+    }
+
+    /// <summary>A mail name is compared as a ceiling on the administrative surface, where the caller acts for no user and holds none for its own use.</summary>
+    [Fact]
+    public void RequirePermissionAtAnyScope_AMailNameListedForACallerActingForNoUser_Permits()
+    {
+        // Arrange
+        var authorization = AuthorizationOver(
+            AuthorizedPrincipal.Caller(ConfiguredCredentialName, [MailFathomPermission.MailRead]));
+
+        // Act
+        var refusal = Record.Exception(() => authorization.RequirePermissionAtAnyScope(MailFathomPermission.MailRead));
+
+        // Assert
+        Assert.Null(refusal);
+    }
+
+    [Fact]
+    public void RequirePermissionAtAnyScope_TheProcessIdentity_Refuses()
+    {
+        // Arrange
+        var authorization = AuthorizationOver(AuthorizedPrincipal.Process);
+
+        // Act & Assert
+        Assert.Throws<PrincipalNotAuthorizedException>(() =>
+            authorization.RequirePermissionAtAnyScope(MailFathomPermission.AdminRead));
+    }
+
+    [Fact]
+    public void RequirePermissionAtAnyScope_TheUnspecifiedPermission_IsRejectedAsAnArgument()
+    {
+        // Arrange
+        var authorization = AuthorizationOver(
+            AuthorizedPrincipal.Caller(ConfiguredCredentialName, MailFathomPermission.All));
+
+        // Act & Assert
+        Assert.Throws<ArgumentException>(() => authorization.RequirePermissionAtAnyScope(default));
+    }
+
+    [Fact]
+    public void PermitsAtAnyScope_TheGrantAndTheRefusal_AgreeOnEveryPublishedPermission()
+    {
+        // Arrange
+        var authorization = AuthorizationOver(AuthorizedPrincipal.Caller(
+            ConfiguredCredentialName,
+            ScopedGrant.Of([
+                (MailFathomPermission.AdminRead, OneOrganization),
+                (MailFathomPermission.MailRead, AssignmentScope.Deployment),
+            ])));
+
+        // Act
+        var reported = MailFathomPermission.All.Select(authorization.PermitsAtAnyScope).ToArray();
+        var permitted = MailFathomPermission.All
+            .Select(permission => Record.Exception(() => authorization.RequirePermissionAtAnyScope(permission)) is null)
+            .ToArray();
+
+        // Assert
+        Assert.Equal(permitted, reported);
+        Assert.Contains(true, reported);
+    }
+
+    [Fact]
+    public void PermitsAtAnyScope_APrincipalThatIsNotACaller_ReportsNothingHeld()
+    {
+        // Arrange
+        var authorization = AuthorizationOver(AuthorizedPrincipal.Process);
+
+        // Act & Assert
+        Assert.All(MailFathomPermission.All, permission => Assert.False(authorization.PermitsAtAnyScope(permission)));
+    }
+
+    [Fact]
+    public void RequirePermissionOverTheDeployment_ACallerHoldingItOverTheDeployment_Permits()
+    {
+        // Arrange
+        var authorization = AuthorizationOver(
+            AuthorizedPrincipal.Caller(ConfiguredCredentialName, [MailFathomPermission.AdminCredentialsWrite]));
+
+        // Act
+        var refusal = Record.Exception(() =>
+            authorization.RequirePermissionOverTheDeployment(MailFathomPermission.AdminCredentialsWrite));
+
+        // Assert
+        Assert.Null(refusal);
+    }
+
+    /// <summary>The mark is what lets a boundary say the permission is held only below the deployment, so it is set whoever is refused.</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void RequirePermissionOverTheDeployment_ACallerNotHoldingItOverTheDeployment_RefusesNamingItAndMarkedAsTheDeploymentsAlone(
+        bool heldOverAnOrganization)
+    {
+        // Arrange
+        var held = heldOverAnOrganization ? MailFathomPermission.AdminCredentialsWrite : MailFathomPermission.AdminRead;
+        var authorization = AuthorizationOver(AuthorizedPrincipal.Caller(
+            ConfiguredCredentialName,
+            ScopedGrant.Of([(held, OneOrganization)])));
+
+        // Act
+        var refusal = Assert.Throws<PrincipalNotAuthorizedException>(() =>
+            authorization.RequirePermissionOverTheDeployment(MailFathomPermission.AdminCredentialsWrite));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.AdminCredentialsWrite, refusal.RequiredPermission);
+        Assert.True(refusal.RefusedForTheDeploymentAlone);
+    }
+
+    /// <summary>An ordinary refusal carries no mark, so a boundary serving a route that names a target says nothing of scope for it.</summary>
+    [Fact]
+    public void RequirePermission_ACallerHoldingItOnlyOverAnOrganization_RefusesWithoutTheDeploymentMark()
+    {
+        // Arrange
+        var authorization = AuthorizationOver(AuthorizedPrincipal.Caller(
+            ConfiguredCredentialName,
+            ScopedGrant.Of([(MailFathomPermission.AdminCredentialsWrite, OneOrganization)])));
+
+        // Act
+        var refusal = Assert.Throws<PrincipalNotAuthorizedException>(() =>
+            authorization.RequirePermission(MailFathomPermission.AdminCredentialsWrite));
+
+        // Assert
+        Assert.False(refusal.RefusedForTheDeploymentAlone);
+    }
+
+    [Fact]
+    public void ScopesOf_ACallerHoldingThePermissionAtTwoScopes_ReportsBoth()
+    {
+        // Arrange
+        var oneUser = AssignmentScope.User(SyntheticUser.Deployment);
+        var authorization = AuthorizationOver(AuthorizedPrincipal.Caller(
+            ConfiguredCredentialName,
+            ScopedGrant.Of([
+                (MailFathomPermission.AdminRead, OneOrganization),
+                (MailFathomPermission.AdminRead, oneUser),
+            ])));
+
+        // Act
+        var scopes = authorization.ScopesOf(MailFathomPermission.AdminRead);
+
+        // Assert
+        Assert.Equal(new HashSet<AssignmentScope> { OneOrganization, oneUser }, scopes);
+    }
+
+    [Fact]
+    public void ScopesOf_APrincipalThatIsNotACaller_ReportsNoScope()
+    {
+        // Arrange
+        var authorization = AuthorizationOver(AuthorizedPrincipal.Process);
+
+        // Act & Assert
+        Assert.Empty(authorization.ScopesOf(MailFathomPermission.AdminRead));
     }
 
     /// <summary>A boundary recording a refusal has to name the credential, since the refusal itself may name nothing.</summary>

@@ -46,7 +46,7 @@ There are three kinds of principal, and none of them is a weaker version of anot
 
 | Kind | What it is | What it holds |
 | --- | --- | --- |
-| Caller | Somebody who presented a credential a configured entry admits, or — where the surface configures no entry at all — somebody who presented nothing | On a mail surface, what the user's roles grant kept to what the credential names, each permission at the scopes it was granted at; on the administrative surface, the administrative half of what the user's roles grant, kept to a token's own scopes on an entry that reads them — or, where the surface configures no entry, what the default administrator's roles grant on that half |
+| Caller | Somebody who presented a credential a configured entry admits, or — where the surface configures no entry at all — somebody who presented nothing | On a mail surface, what the user's roles grant kept to what the credential names, each permission at the scopes it was granted at; on the administrative surface, what the user's roles grant, kept to a token's own scopes on an entry that reads them — or, where the surface configures no entry, what the default administrator's roles grant — with its mail names held only as the ceiling a credential written there is bounded by, since that caller acts for no user |
 | Process identity | MailFathom itself, running work no caller requested | Nothing, by construction |
 | Signed capability | A ticket this deployment signed for one object | Nothing; the ticket is the authorization |
 
@@ -56,10 +56,15 @@ permission to — so a use case that may run without a caller admits it **by nam
 
 **An administrative permission is asked about *over what* as well as *what*.** `RequirePermission` asks for a name held
 over the whole deployment, and every administrative operation asks it — whether or not it names a target — except the
-reads published under `mailfathom.admin.audit.read`. Those ask `RequirePermissionOverAsync` with the user or the mail
-account they name, and `AccessAuthorization` places it through `IAdministrativeTargets` — the organization it belongs
-to, and the one user it is wholly the concern of — read from the records per question so a move between organizations
-reaches the next check on every replica. A name held over the deployment answers without placing anything, and a read
+reads published under `mailfathom.admin.audit.read` and the operations that administer a user, their record, their
+credentials, or an organization. Those ask over what they name: `RequirePermissionOverAsync` or `PermitsOverAsync`
+with the user or the mail account, and `PermitsOverScopeAsync` with an organization or with a scope another grant is
+held at. `AccessAuthorization` places a user or an account through `IAdministrativeTargets` — the organization it
+belongs to, and the one user it is wholly the concern of — read from the records per question so a move between
+organizations reaches the next check on every replica. A listing asks `ScopesOf` and answers within them rather than
+refusing, and an act only the deployment scope admits behind an operation that otherwise names a target asks
+`RequirePermissionOverTheDeployment`, whose refusal a boundary may answer as held only below the deployment because
+it was decided before anything the request names was read. A name held over the deployment answers without placing anything, and a read
 across several mail accounts asks `CoveredMailAccountsAsync`, which places them in one read. A read addressed by an
 identifier of its own, such as one queued message, learns its account only by reading the record: it asks
 `RequirePermissionAtAnyScope` before reading, then `PermitsOverAsync` over the account it found, and answers a record
@@ -121,8 +126,8 @@ The host composes one `IAuthorizedPrincipalSource` per scope, which for a served
   Those claims are a narrowing rather than the grant: a step after authorization reads the user's own grant through
   `UserGrantResolver`, which each replica remembers per user until a change to what users are granted makes it forget,
   and the caller holds that grant kept to the names the claims carry — on a mail-serving surface the credential's own
-  names, and on the administrative surface the whole administrative half, kept to a token's scopes where its entry reads
-  them. A request that step never reached holds nothing.
+  names, and on the administrative surface the whole grant, kept to a token's scopes where its entry reads them, whose
+  mail names that principal holds for comparison and never performs. A request that step never reached holds nothing.
 - **A scope with no request behind it** is the process's own identity. Work reached outside a request in this process is
   work no caller asked for.
 - **A route that verified a capability** states that principal onto its own scope before it reaches the use case. The
@@ -134,7 +139,7 @@ which is the posture ADR 0012 settled and the startup record already states, so 
 a use case refuse every call on a deployment whose own record says it serves somebody. On the MCP or client surface that
 caller acts for the user the deployment serves and holds what that user's roles grant on the mail half; on the
 administrative surface it acts for no user, is named `user <the default administrator> credential none`, and holds what
-the default administrator's roles grant on the administrative half — and where the default administrator was removed,
+the default administrator's roles grant — and where the default administrator was removed,
 it is no principal at all, so such an endpoint serves nobody. Where the
 surface does configure a credential, such a request is none of the three.
 

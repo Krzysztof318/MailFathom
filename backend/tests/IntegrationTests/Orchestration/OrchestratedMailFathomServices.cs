@@ -642,7 +642,7 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
 
         await scope.ServiceProvider
             .GetRequiredService<IUserProvisioning>()
-            .ProvisionAsync(UserId.Create(Guid.NewGuid()), SuiteUserDisplayName, cancellationToken);
+            .ProvisionAsync(UserId.Create(Guid.NewGuid()), SuiteUserDisplayName, organizationId: null, cancellationToken);
     }
 
     /// <summary>Records the account this suite's mail belongs to and assigns it to the suite's user, unless an earlier start did.</summary>

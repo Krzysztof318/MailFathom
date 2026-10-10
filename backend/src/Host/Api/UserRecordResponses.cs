@@ -68,10 +68,11 @@ internal sealed record UserEndpointAccessRequest(bool? McpEndpoint, bool? Client
 /// <remarks>Both, rather than an echo of what was sent, because a switch the request left out is part of what the caller acts on next.</remarks>
 internal sealed record UserEndpointAccessResponse(bool McpEndpoint, bool ClientEndpoint);
 
-/// <summary>The label a user is recorded under.</summary>
+/// <summary>The label a user is recorded under, and the organization they are recorded into.</summary>
 /// <param name="DisplayName">What an administrator tells this user apart by, unique across the deployment.</param>
+/// <param name="OrganizationId">The organization the user belongs to from the moment they are recorded, or <see langword="null" /> for none — which only the deployment's scope records.</param>
 /// <remarks>The identifier is not here and never is: this deployment mints one, so a caller supplying one would decide an identity it does not own.</remarks>
-internal sealed record UserProvisioningRequest(string? DisplayName);
+internal sealed record UserProvisioningRequest(string? DisplayName, Guid? OrganizationId = null);
 
 /// <summary>The label a user is relabelled to.</summary>
 /// <param name="DisplayName">What an administrator tells this user apart by from now on, unique across the deployment.</param>
