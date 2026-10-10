@@ -24,6 +24,12 @@ public sealed record MailAccountRecord(
     /// <remarks>An assignment past it is refused, so the reads that stop at it never leave one of the account's users out.</remarks>
     public const int MaximumUsersAssigned = 256;
 
+    /// <summary>Gets the greatest number of users an account is assigned to where it belongs, which is one for an account in no organization.</summary>
+    /// <param name="organizationId">The organization the account belongs to, or <see langword="null" /> for none.</param>
+    /// <returns>One for an account in no organization, and <see cref="MaximumUsersAssigned" /> for an account in one.</returns>
+    /// <remarks>Sharing a mailbox is something an organization does, so an account in none is one person's: two people who merely share a deployment are never handed the same mail.</remarks>
+    public static int MaximumUsersAssignedIn(Guid? organizationId) => organizationId is null ? 1 : MaximumUsersAssigned;
+
     /// <summary>The longest address an account holds, which is the longest RFC 5321 permits a path to carry.</summary>
     public const int MaximumEmailAddressLength = 320;
 

@@ -241,20 +241,23 @@ public sealed class MailAccountAdministrationTests
                 TestContext.Current.CancellationToken));
     }
 
-    /// <summary>A mailbox somebody already holds is served to a second person as well, which is what sharing one is.</summary>
+    /// <summary>A mailbox of an organization that one member already holds is served to a second member as well, which is what sharing one is.</summary>
     /// <remarks>
     /// One mailbox stays one record and one copy of the mail: the assignment is what is added, so both users read the
-    /// same account rather than a mailbox each. That is the whole of what ADR 0014 turned on, and the refusal that
-    /// used to stand here — an account is served to one user at a time — is what it replaced.
+    /// same account rather than a mailbox each. That is the whole of what ADR 0014 turned on, and it is an
+    /// organization's to do — the same assignment outside one is refused below.
     /// </remarks>
     [Fact]
-    public async Task AssignAsync_AnAccountAnotherUserIsAssigned_ServesItToBoth()
+    public async Task AssignAsync_AnAccountOfAnOrganizationAnotherMemberIsAssigned_ServesItToBoth()
     {
         // Arrange
         var shared = Mailbox("shared@example.test", "shared");
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
         deployment.Holding(Sam, EmptyRecord, version: 1, shared);
         deployment.Holding(Alex, EmptyRecord, version: 5);
+        deployment.MailAccountRecords.PlaceUser(Sam, Organization);
+        deployment.MailAccountRecords.PlaceUser(Alex, Organization);
+        deployment.MailAccountRecords.PlaceAccount(shared.Id, Organization);
 
         // Act
         var outcome = await deployment.MailAccounts.AssignAsync(shared.Id, Alex, TestContext.Current.CancellationToken);
@@ -264,6 +267,78 @@ public sealed class MailAccountAdministrationTests
         Assert.Equal([shared.Id], deployment.MailAccountRecords.DocumentOf(Alex)!.MailAccounts.Select(account => account.Id));
         Assert.Equal([shared.Id], deployment.MailAccountRecords.DocumentOf(Sam)!.MailAccounts.Select(account => account.Id));
         Assert.Equal(shared, Assert.Single(deployment.MailAccountRecords.Accounts));
+    }
+
+    /// <summary>
+    /// A mailbox in no organization is one person's, so two people who merely share a deployment are never handed the
+    /// same mail, and the refusal names the organization as the way to share it.
+    /// </summary>
+    [Fact]
+    public async Task AssignAsync_AnAccountInNoOrganizationAnotherUserIsAssigned_IsRefusedNamingHowToShareItAndAssignsNothing()
+    {
+        // Arrange
+        var mine = Mailbox("sam@example.test", "sam");
+        var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
+        deployment.Holding(Sam, EmptyRecord, version: 1, mine);
+        deployment.Holding(Alex, EmptyRecord, version: 5);
+
+        // Act
+        var outcome = await deployment.MailAccounts.AssignAsync(mine.Id, Alex, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
+        var refusal = Assert.Single(outcome.Messages);
+        Assert.Contains("An account in no organization is assigned to one person", refusal, StringComparison.Ordinal);
+        Assert.Contains("into an organization", refusal, StringComparison.Ordinal);
+        Assert.Empty(deployment.MailAccountRecords.DocumentOf(Alex)!.MailAccounts);
+        Assert.Equal([mine.Id], deployment.MailAccountRecords.DocumentOf(Sam)!.MailAccounts.Select(account => account.Id));
+    }
+
+    /// <summary>
+    /// Two assignments of one account in no organization landing at once cannot both go through: the one that reaches
+    /// the account second finds it assigned, whatever it read before, and is answered with the same refusal.
+    /// </summary>
+    [Fact]
+    public async Task AssignAsync_AnotherAssignmentOfAnAccountInNoOrganizationCommittedFirst_IsRefusedAndAssignsNothing()
+    {
+        // Arrange
+        var contested = Mailbox("contested@example.test", "contested");
+        var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
+        deployment.Holding(Sam, EmptyRecord, version: 1);
+        deployment.Holding(Alex, EmptyRecord, version: 5);
+        deployment.MailAccountRecords.HoldAccount(contested);
+        deployment.MailAccountRecords.BeforeAssigning =
+            () => deployment.MailAccountRecords.HoldUser(Sam, EmptyRecord, version: 2, contested);
+
+        // Act
+        var outcome = await deployment.MailAccounts.AssignAsync(contested.Id, Alex, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
+        Assert.Contains(
+            "An account in no organization is assigned to one person",
+            Assert.Single(outcome.Messages),
+            StringComparison.Ordinal);
+        Assert.Empty(deployment.MailAccountRecords.DocumentOf(Alex)!.MailAccounts);
+        Assert.Equal([contested.Id], deployment.MailAccountRecords.DocumentOf(Sam)!.MailAccounts.Select(account => account.Id));
+    }
+
+    /// <summary>The rule refuses a second person, never the one the account is already assigned to: assigning it to them again changes nothing and says so.</summary>
+    [Fact]
+    public async Task AssignAsync_AnAccountInNoOrganizationToTheUserItIsAssigned_ReportsNothingToChange()
+    {
+        // Arrange
+        var mine = Mailbox("alex@example.test", "alex");
+        var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
+        deployment.Holding(Alex, EmptyRecord, version: 5, mine);
+
+        // Act
+        var outcome = await deployment.MailAccounts.AssignAsync(mine.Id, Alex, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(outcome!.IsSettled);
+        Assert.False(outcome.IsCommitted);
+        Assert.Contains("already assigned to this user", Assert.Single(outcome.Messages), StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -277,6 +352,8 @@ public sealed class MailAccountAdministrationTests
         var shared = Mailbox("shared@example.test", "shared");
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
         deployment.Holding(Alex, EmptyRecord, version: 5);
+        deployment.MailAccountRecords.HoldAccount(shared);
+        deployment.MailAccountRecords.PlaceAccount(shared.Id, Organization);
 
         foreach (var assignee in Enumerable.Range(1, MailAccountRecord.MaximumUsersAssigned)
             .Select(index => UserId.Create(new Guid($"0197c0de-0000-4000-8000-{index:D12}"))))

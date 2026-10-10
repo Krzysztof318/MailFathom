@@ -287,7 +287,7 @@ internal static class OrganizationEndpoints
     /// <param name="request">The organization to move it into, or none.</param>
     /// <param name="organizations">The organization administration.</param>
     /// <param name="cancellationToken">Cancels the write when the client disconnects.</param>
-    /// <returns><c>204</c> once the move stands, <c>404</c> when no such mail account exists, <c>409</c> naming how many of its users it would leave outside, or <c>400</c> naming what was wrong with the request.</returns>
+    /// <returns><c>204</c> once the move stands, <c>404</c> when no such mail account exists, <c>409</c> naming how many of its users it would leave outside or how many it would leave sharing an account in no organization, or <c>400</c> naming what was wrong with the request.</returns>
     /// <remarks>A move of an account decides who it may be assigned to and nothing about how anybody signs in, so it takes the grant an assignment takes rather than the one a move of a user takes.</remarks>
     internal static async Task<Results<NoContent, NotFound<ProblemDetails>, ProblemHttpResult>> SetMailAccountOrganizationAsync(
         Guid accountId,
@@ -323,6 +323,12 @@ internal static class OrganizationEndpoints
                 $"The mail account is assigned to {result.StandingAssignments} user(s) outside the organization it would "
                 + "move into, and an account is assigned only to users of its own organization. Unassign them, or move "
                 + "each user to where the account is going first.",
+                statusCode: StatusCodes.Status409Conflict),
+            OrganizationWriteOutcome.SharedOnlyInOrganization => TypedResults.Problem(
+                $"The mail account is assigned to {result.StandingAssignments} users, and an account in no organization "
+                + "is assigned to one person, because a mailbox is shared only inside an organization. Nothing was "
+                + "changed and nobody was unassigned. Unassign all but one of them first, or leave the account in an "
+                + "organization.",
                 statusCode: StatusCodes.Status409Conflict),
             _ => UnknownTarget(target),
         };

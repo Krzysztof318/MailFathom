@@ -915,6 +915,11 @@ account you create with `mfctl account add` lands in the organization of the per
 [Organizations](../operations/admin-endpoint.md#organizations) holds the rules — what a short name may contain, what a
 move or an assignment is refused over, and when an organization cannot be removed.
 
+**Sharing a mailbox is something a company does.** An account in an organization can be assigned to any number of its
+members, and an account in none belongs to one person: `mfctl account assign` refuses a second person for it and tells
+you to move it into an organization to share it, and `mfctl account set-organization --none` is refused while the
+account is assigned to more than one person, saying how many.
+
 **What each person may do is a role you give them.** `mfctl role list` shows the roles, `mfctl assignment add` gives one
 to a person or to a group at the whole deployment, one organization, or one person, and `mfctl group add-member` gives a
 person everything a group holds. `mfctl user permissions --user <id>` answers why somebody can or cannot do something:

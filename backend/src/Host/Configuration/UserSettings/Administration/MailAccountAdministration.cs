@@ -26,9 +26,10 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// </para>
 /// <para>
 /// An administrator names the account by the identifier this deployment generated and names users by theirs, and is the
-/// only caller that assigns an account to a user. An account is served to as many users as an administrator assigns it
-/// to: the mail graph is keyed by the account alone, so one mailbox is synchronized once, holds one copy of its mail,
-/// and applies each rule and mutation once, whoever reads it. A user adds an account for themselves
+/// only caller that assigns an account to a user. An account of an organization is served to as many of its members
+/// as an administrator assigns it to: the mail graph is keyed by the account alone, so one mailbox is synchronized
+/// once, holds one copy of its mail, and applies each rule and mutation once, whoever reads it. An account in no
+/// organization is one person's, and a second assignment of it is refused. A user adds an account for themselves
 /// alone, withdraws one of their own, and changes the folders of one — and every one of those writes states the version
 /// of their own record, which is what every account write moves, so the version a client already holds is the one it
 /// composes against.
@@ -221,7 +222,7 @@ internal sealed class MailAccountAdministration(
         };
     }
 
-    /// <summary>Assigns an account to a user, beside whoever else is already assigned it.</summary>
+    /// <summary>Assigns an account to a user: beside the other members it is assigned to where it belongs to an organization, and to nobody else where it belongs to none.</summary>
     /// <param name="accountId">The account.</param>
     /// <param name="user">The user it is assigned to.</param>
     /// <param name="cancellationToken">Cancels the reads and the commit.</param>
@@ -229,8 +230,11 @@ internal sealed class MailAccountAdministration(
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminConfigurationWrite" /> at every scope.</exception>
     /// <remarks>
-    /// An account somebody else is already assigned is assigned again rather than refused, which is what serving one
-    /// mailbox to several people is. The account is judged against this user's own set, so an account whose display
+    /// An account of an organization that another member is already assigned is assigned again rather than refused,
+    /// which is what serving one mailbox to several people is. An account in no organization is one person's, so a
+    /// second assignment of it is refused naming the way to share it — here from what was read, and again by the store
+    /// under the account's lock, which is what answers the later of two assignments landing at once. The account is
+    /// judged against this user's own set, so an account whose display
     /// name one of their accounts already carries is refused rather than served under a name that no longer tells two
     /// apart — a judgement the other assignees' sets are unaffected by. An assignment across two organizations is
     /// refused naming both, counting none as one of them, and is decided by the store under both rows' locks rather
@@ -263,9 +267,11 @@ internal sealed class MailAccountAdministration(
                 "The account is already assigned to this user, so nothing was written.");
         }
 
-        if (holding.Users.Count >= MailAccountRecord.MaximumUsersAssigned)
+        if (holding.Users.Count >= MailAccountRecord.MaximumUsersAssignedIn(holding.OrganizationId))
         {
-            return AssignedToMostUsers(account.Version);
+            return holding.OrganizationId is null
+                ? SharedOnlyInOrganization(account.Version)
+                : AssignedToMostUsers(account.Version);
         }
 
         var judgement = await this.JudgeAsync(account, account.Document, [user], actingUser: null, cancellationToken);
@@ -288,6 +294,7 @@ internal sealed class MailAccountAdministration(
                 "The account is already assigned to this user, so nothing was written."),
             MailAccountWriteResult.OrganizationsDiffer => StraddlesOrganizations(account.Version, write.Straddled!),
             MailAccountWriteResult.AssignedToMostUsers => AssignedToMostUsers(account.Version),
+            MailAccountWriteResult.SharedOnlyInOrganization => SharedOnlyInOrganization(account.Version),
             _ => Superseded(record.Version, await this.VersionOfAsync(record, cancellationToken), "user record"),
         };
     }
@@ -678,6 +685,18 @@ internal sealed class MailAccountAdministration(
             MailFathomErrorCode.ConfigurationCandidateInvalid,
             version,
             [$"A mail account is assigned to at most {MailAccountRecord.MaximumUsersAssigned} users, and this one already is, so nothing was written."]);
+
+    /// <summary>The refusal an administrator receives for a second assignment of an account in no organization.</summary>
+    /// <remarks>It names the way to share the mailbox, because the rule refuses the sharing and never the mailbox: the same account takes any number of an organization's members once it belongs to one.</remarks>
+    private static UserRecordWriteOutcome SharedOnlyInOrganization(long version) =>
+        UserRecordWriteOutcome.Refused(
+            MailFathomErrorCode.ConfigurationCandidateInvalid,
+            version,
+            [
+                "The mail account belongs to no organization and is already assigned to a user. An account in no "
+                + "organization is assigned to one person, so nothing was written. To share it, move the account and "
+                + "the users it is shared between into an organization first.",
+            ]);
 
     private static string OrganizationNamed(Guid? organizationId) =>
         organizationId is { } named ? $"organization '{named:D}'" : "no organization";

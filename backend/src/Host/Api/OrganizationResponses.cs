@@ -32,7 +32,7 @@ internal sealed record UserOrganizationRequest(Guid? OrganizationId, bool? None)
 /// <summary>What moving a mail account between organizations carries.</summary>
 /// <param name="OrganizationId">The organization to move the account into.</param>
 /// <param name="None"><see langword="true" /> to take the account out of every organization.</param>
-/// <remarks>Leaving every organization is stated for the reason <see cref="UserOrganizationRequest" /> gives: an account in none is assigned only to users in none, so a body read as a move out would decide who may be assigned it.</remarks>
+/// <remarks>Leaving every organization is stated for the reason <see cref="UserOrganizationRequest" /> gives: an account in none is assigned to one user in none, so a body read as a move out would decide who may be assigned it.</remarks>
 internal sealed record MailAccountOrganizationRequest(Guid? OrganizationId, bool? None);
 
 /// <summary>One organization as a listing publishes it.</summary>

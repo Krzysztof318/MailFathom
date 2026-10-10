@@ -62,13 +62,18 @@ public interface IMailAccountRecordStore
         MailAccountQueryableSettings settings,
         CancellationToken cancellationToken);
 
-    /// <summary>Assigns an account to one more user, where the two belong to the same organization or both to none and the account is assigned to fewer than <see cref="MailAccountRecord.MaximumUsersAssigned" /> users.</summary>
+    /// <summary>Assigns an account to one more user, where the two belong to the same organization or both to none and the account is assigned to fewer users than <see cref="MailAccountRecord.MaximumUsersAssignedIn" /> admits where it belongs.</summary>
     /// <param name="accountId">The account.</param>
     /// <param name="user">The user it is assigned to.</param>
     /// <param name="expectedUserVersion">The version of that user's record the assignment was judged against.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>What the write did, carrying both organizations where they differ.</returns>
-    /// <remarks>The account's row is held for the rest of the transaction before its users are counted, so two assignments of one account count one after the other and neither takes it past the bound.</remarks>
+    /// <remarks>
+    /// The account's row is held for the rest of the transaction before its users are counted, so two assignments of one
+    /// account count one after the other and neither takes it past the bound. For an account in no organization that
+    /// bound is one, so of two assignments landing at once the second is answered
+    /// <see cref="MailAccountWriteResult.SharedOnlyInOrganization" />.
+    /// </remarks>
     Task<MailAccountWrite> AssignAsync(
         Guid accountId,
         UserId user,
@@ -184,6 +189,9 @@ public enum MailAccountWriteResult
 
     /// <summary>The account is already assigned to <see cref="MailAccountRecord.MaximumUsersAssigned" /> users, so the assignment was refused.</summary>
     AssignedToMostUsers = 6,
+
+    /// <summary>The account belongs to no organization and is already assigned to somebody else, and a mailbox is shared only inside an organization, so the assignment was refused.</summary>
+    SharedOnlyInOrganization = 7,
 }
 
 /// <summary>What ending one assignment did.</summary>

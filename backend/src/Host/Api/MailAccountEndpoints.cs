@@ -212,7 +212,7 @@ internal static class MailAccountEndpoints
         return TypedResults.Ok(new MailAccountErasureResponse(await administration.EraseAsync(accountId, cancellationToken)));
     }
 
-    /// <summary>Assigns an account to a user, beside whoever else is already assigned it.</summary>
+    /// <summary>Assigns an account to a user: beside the other members it is assigned to where it belongs to an organization, and to nobody else where it belongs to none.</summary>
     /// <param name="accountId">The account.</param>
     /// <param name="administration">The account administration.</param>
     /// <param name="request">The user.</param>

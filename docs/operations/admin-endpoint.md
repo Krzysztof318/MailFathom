@@ -663,8 +663,8 @@ and a request with none is refused as any other.
 | `GET /api/admin/mail-accounts/{accountId}` | `mailfathom.admin.read` | Hands over one account's declaration as the redacted JSON an editing session opens, with the version it was read at and the `organizationId` it belongs to, or `400` naming the row to correct when the stored declaration is not one of settings. |
 | `POST /api/admin/mail-accounts/{accountId}` | `mailfathom.admin.configuration.write` | Takes that declaration back edited and commits it against the version it was opened over, judged against every user the account is assigned to. |
 | `DELETE /api/admin/mail-accounts/{accountId}` | `mailfathom.admin.erase` | Erases the account, every assignment to it, and every message this deployment holds for it. **This cannot be undone.** |
-| `POST /api/admin/mail-accounts/{accountId}/assignments` | `mailfathom.admin.configuration.write` | Assigns the account to the user named by `userId`, beside whoever else is already assigned it. Assigning it to somebody who already holds it writes nothing. An account and a user of [different organizations](#organizations) — counting none as one of them — are refused, naming both, and so is an account already assigned to 256 users. |
-| `POST /api/admin/mail-accounts/{accountId}/organization` | `mailfathom.admin.configuration.write` | Moves the account into the organization the body's `organizationId` names, or out of every organization where the body says `"none": true`. A body stating neither, or both, is refused with `400` rather than read as a move out. This is what `mfctl account set-organization` sends. It answers `204`, `404` for an account this deployment does not hold, `400` for an organization it does not hold, and `409` naming how many of the users it is assigned to the target would not admit. |
+| `POST /api/admin/mail-accounts/{accountId}/assignments` | `mailfathom.admin.configuration.write` | Assigns the account to the user named by `userId`: beside the other members already assigned it where it belongs to an [organization](#organizations), and to nobody else where it belongs to none. Assigning it to somebody who already holds it writes nothing. An account and a user of different organizations — counting none as one of them — are refused, naming both; so is a second user of an account in no organization, which is one person's; and so is an account already assigned to 256 users. |
+| `POST /api/admin/mail-accounts/{accountId}/organization` | `mailfathom.admin.configuration.write` | Moves the account into the organization the body's `organizationId` names, or out of every organization where the body says `"none": true`. A body stating neither, or both, is refused with `400` rather than read as a move out. This is what `mfctl account set-organization` sends. It answers `204`, `404` for an account this deployment does not hold, `400` for an organization it does not hold, and `409` naming how many of the users it is assigned to the target would not admit — or, for a move out of every organization, how many users it is assigned to when that is more than one. |
 | `POST /api/admin/mail-accounts/{accountId}/assignments/removal` | `mailfathom.admin.erase` | Ends one user's assignment and erases what that user authored under the account, their drafts and their standing instructions; the mail itself stays whole while anybody else is assigned. **Ending the last one erases the account and every message this deployment holds for it.** |
 | `POST /api/admin/users/{userId}/secrets` | `mailfathom.admin.configuration.write` | Seals the material carried in the body under the active data-encryption key and answers only with its `database:<uuid>` reference. Sending the same declared name for that user rotates the existing row and returns the same reference. It refuses when the user does not exist or the deployment configures no data-encryption key ring. |
 | `GET /api/admin/organizations` | `mailfathom.admin.read` | Reads [one page](#reading-the-users-mail-accounts-and-organizations-a-page-at-a-time) of [the organizations](#organizations) this deployment holds, each with its display name, its short name, how many users belong to it, how many mail accounts belong to it as `mailAccounts`, and when it was recorded, and `nextCursor` naming where the following page continues. A row on the page whose stored short name is not one this build reads is reported beside them under `unreadable`, by identifier, display name, and a `correction` naming what a short name may contain, rather than refusing the listing. The stored short name itself is never echoed. This is what `mfctl organization list` asks. |
@@ -1988,7 +1988,7 @@ front of their username when they sign in with a password: a member of `TESTFIRM
 somebody in no organization as `jan`. That is what lets two companies served by one deployment each have a `jan`. A user
 and a mail account each belong to no organization or to exactly one, and each is in none until one of these routes moves
 it — so every credential provisioned before a deployment recorded an organization signs in exactly as it did, and every
-account stays assignable to everybody in none. How a presented login is read is [the password
+account in none stays with the person it is assigned to. How a presented login is read is [the password
 method's](mcp-endpoint.md#passwords) to state.
 
 | Command | What it does |
@@ -2026,6 +2026,28 @@ The mail account belongs to organization '0197c0de-0000-7000-8000-0000000000a1' 
 An account created for a user is created in that user's organization, so creating one never straddles two. What an
 organization narrows is who an account may be assigned to and nothing else: an assigned user reads and acts on the
 account exactly as anybody assigned it does, and an organization declares no setting its members or accounts inherit.
+
+**A mail account in no organization is one person's.** Sharing a mailbox is something an organization does: an account
+in an organization is assigned to any number of that organization's members, and an account in none to at most one
+user, so two people who merely share a deployment are never handed the same mail. An account created for a user starts
+with that one assignment, and a second one is refused:
+
+```
+The mail account belongs to no organization and is already assigned to a user. An account in no organization is assigned to one person, so nothing was written. To share it, move the account and the users it is shared between into an organization first.
+```
+
+The account's users are counted in the transaction that writes the assignment, under the lock an assignment takes on
+the account, so two assignments of one account landing at once cannot both go through: the later one is answered with
+that refusal. Moving an account out of every organization is refused with `409` for the same reason while it is
+assigned to more than one user, naming how many, and unassigns nobody:
+
+```
+The mail account is assigned to 3 users, and an account in no organization is assigned to one person, because a mailbox is shared only inside an organization. Nothing was changed and nobody was unassigned. Unassign all but one of them first, or leave the account in an organization.
+```
+
+An account in none that held several assignments before this rule keeps them. Nothing is unassigned on an operator's
+behalf, and every later assignment of it is held to the rule. One address is held by one account in the whole
+deployment whatever organization holds it, which this changes nothing about.
 
 **A move never leaves an assignment straddling two organizations, and never unassigns anything.** Moving a mail account
 is refused with `409` while it is assigned to any user the target would not admit, naming how many; moving a user is
@@ -2192,7 +2214,7 @@ over exactly that set.
 | `mfctl account show --account <id> [--format json\|yaml]` | Reads one account's declaration, secrets redacted, as JSON or as YAML, beneath the organization it belongs to |
 | `mfctl account add [--user <id>] --from-file <path>` | Creates an account from the declaration in the file — JSON, or YAML where the file is named `.yaml` or `.yml` — assigns it to that user, and reports the identifier it was generated under |
 | `mfctl account edit --account <id> [--format json\|yaml]` | Opens that declaration in your `$VISUAL` or `$EDITOR`, as JSON or as YAML, and commits what you saved as one change |
-| `mfctl account assign --account <id> --user <id>` | Assigns an account to that user, beside whoever else is already assigned it |
+| `mfctl account assign --account <id> --user <id>` | Assigns an account to that user: beside the other members assigned it where it belongs to an [organization](#organizations), and to nobody else where it belongs to none |
 | `mfctl account set-organization --account <id> (--organization <id> \| --none)` | Moves the account into an [organization](#organizations), or out of every one, which decides who it may be assigned to |
 | `mfctl account unassign --account <id> --user <id>` | Ends one user's assignment, erasing what they authored there, and erasing the account and its mail when it was the last one |
 | `mfctl account delete --account <id>` | Erases the account and every message this deployment holds for it |
@@ -2229,11 +2251,12 @@ naming the address:
 Another mail account already holds 'alex@example.test', and one address is held by one account in this deployment, so nothing was written.
 ```
 
-**A mailbox is served to every user it is assigned to.** `mfctl account assign` adds an assignment beside the ones
-already there, so one mailbox read by several people is one account with one copy of its mail rather than a mailbox
-each. The assignment is the row, and assigning an account to somebody who already holds it writes nothing rather than
-failing. An account is assigned only to users of [its own organization](#organizations), or only to users in none
-when it belongs to none. [ADR
+**A mailbox is served to every user it is assigned to.** For an account of an [organization](#organizations),
+`mfctl account assign` adds an assignment beside the ones already there, so one mailbox read by several of its members
+is one account with one copy of its mail rather than a mailbox each. The assignment is the row, and assigning an
+account to somebody who already holds it writes nothing rather than failing. An account is assigned only to users of
+its own organization, and an account in none to one user in none: [a second assignment of
+it](#organizations) is refused, because sharing a mailbox is something an organization does. [ADR
 0014](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md)
 is the decision, and what it costs a user is stated under the per-user ceilings there: a shared account counts in full
 against every assigned user's ceiling, and work on it proceeds only while every one of them is under theirs.

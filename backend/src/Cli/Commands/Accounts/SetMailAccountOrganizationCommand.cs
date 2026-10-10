@@ -11,9 +11,9 @@ namespace MailFathom.Cli.Commands.Accounts;
 /// <summary>Moves one mail account into an organization, or out of every organization.</summary>
 /// <remarks>
 /// <para>
-/// An account in an organization is assigned only to that organization's members, and an account in none only to users
-/// in none, so a move is refused while the account is assigned to anybody the target would not admit. Nothing is
-/// unassigned on the operator's behalf.
+/// An account in an organization is assigned only to that organization's members, and an account in none to one user
+/// in none, so a move is refused while the account is assigned to anybody the target would not admit, and a move out
+/// of every organization while it is assigned to more than one user. Nothing is unassigned on the operator's behalf.
 /// </para>
 /// <para>
 /// Leaving every organization takes a word of its own, <c>--none</c>, for the reason <c>user set-organization</c> gives:
@@ -40,7 +40,7 @@ internal static class SetMailAccountOrganizationCommand
 
         Option<bool> noneOption = new("--none")
         {
-            Description = "Take the account out of every organization, so it is assigned only to users in none. Refused beside '--organization'.",
+            Description = "Take the account out of every organization, so it is one user's alone. Refused while it is assigned to more than one user, and beside '--organization'.",
         };
 
         Command command = new("set-organization", "Move one mail account into an organization, or out of every organization.")
