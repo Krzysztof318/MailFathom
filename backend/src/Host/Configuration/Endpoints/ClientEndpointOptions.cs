@@ -106,13 +106,20 @@ internal sealed class ClientEndpointOptions
     /// <remarks>The one setting here that is about a page rather than about an API. It belongs to this section because the page is served on this surface's listeners and nowhere else: same origin is what lets the bundle carry no address at all, and it is what a deployment gives up by publishing the two apart.</remarks>
     public ClientApplicationOptions Application { get; set; } = new();
 
-    /// <summary>Gets or sets the least severe log record this deployment asks a client to write.</summary>
+    /// <summary>Gets or sets the least severe log record this deployment asks a client to write, or that it takes none.</summary>
     /// <remarks>
+    /// <para>
     /// The client's vocabulary reaches far below the default, and at the bottom of it there is a record per request —
     /// which is what an operator chasing one report wants and what a deployment serving many clients must not be given
     /// by default. So the floor is stated here and answered on the session route, and a client refuses anything below it
     /// before the record is written rather than exporting it for a collector to drop. It decides nothing about whether
     /// telemetry is forwarded at all: that is whether the deployment named a collector, and this section does not ask it.
+    /// </para>
+    /// <para>
+    /// <see cref="ClientTelemetryLevel.None" /> is the top of that floor rather than a second switch: no log record is
+    /// asked for and a batch of them is refused, while the spans and measurements a client writes beside its records
+    /// are forwarded exactly as under every other level.
+    /// </para>
     /// </remarks>
     public ClientTelemetryLevel TelemetryLevel { get; set; } = ClientTelemetryLevel.Info;
 
@@ -180,6 +187,7 @@ internal sealed class ClientEndpointOptions
     /// <param name="configuration">The application configuration.</param>
     /// <returns>The bound settings, with the defaults no binder can apply already applied.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="configuration" /> is <see langword="null" />.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the section states a key or a value this type does not take, <see cref="TelemetryLevel" /> naming no level among them.</exception>
     /// <remarks>Strict binding is part of the read rather than something a caller opts into: this section is security-sensitive throughout, and a misspelled key that bound quietly would leave a decision reading as one nobody made.</remarks>
     public static ClientEndpointOptions ReadFrom(IConfiguration configuration)
     {
@@ -195,6 +203,17 @@ internal sealed class ClientEndpointOptions
         if (retiredSettings.Count > 0)
         {
             return RefusingRetiredSettings(section, retiredSettings);
+        }
+
+        // Read before the strict bind for the reason a retired key is. The binder answers a level nobody publishes by
+        // naming the type it could not convert to, which tells an operator nothing about what the key takes, and it
+        // binds a number to a member that does not exist, which no client could then be answered.
+        if (section[nameof(TelemetryLevel)] is { } writtenLevel
+            && !string.IsNullOrWhiteSpace(writtenLevel)
+            && ClientTelemetryLevels.Read(writtenLevel) is null)
+        {
+            throw new InvalidOperationException(
+                $"{SectionName}:{nameof(TelemetryLevel)} states '{writtenLevel}', which is not a level a client can be asked to record at. It takes {ClientTelemetryLevels.WrittenNames}.");
         }
 
         var settings = section.Get<ClientEndpointOptions>(binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)

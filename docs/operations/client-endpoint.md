@@ -229,14 +229,20 @@ answering the port, which contract it speaks, and what the rest of the surface w
 sign-in be built and proven end to end before a screen exists — a client that reached here with a token it had just been
 issued knows the token works.
 
-**`telemetry` answers one of `trace`, `debug`, `info`, `warn`, `error`, `fatal`, and `off`.** The first six are the
-level this caller is asked for — whatever
+**`telemetry` answers one of `trace`, `debug`, `info`, `warn`, `error`, `fatal`, `none`, and `off`.** The first seven
+are the level this caller is asked for — whatever
 [`ClientEndpoint:TelemetryLevel`](configuration-endpoints.md#clientendpoint) states, unless this person's own record
 states a [`ClientTelemetryLevel`](configuration-sources.md#the-level-this-persons-client-records-at--clienttelemetrylevel)
 of its own — and `off` is what a deployment that named no collector answers whatever either of them says. Those two
 questions are one field deliberately: whether anything is forwarded is decided by whether there is anywhere to forward
 it to, which is the same condition that decides whether [the telemetry routes](#the-telemetry-routes) are served at
 all, and a second field could disagree with the first about it.
+
+**`none` and `off` both ask for no log record, and they are not one answer.** `none` is a level: this caller's client
+writes no log record whatever its severity, and goes on recording and exporting its traces and metrics, which the
+deployment forwards as under every other level. `off` has one cause — a deployment that named no collector — and stops
+all three signals, so it wins over every level, `none` included. A client that offers a person a switch over their own
+telemetry still offers it under `none`, because there is still something behind it.
 
 **It is not part of the grant, and it is the one field here that answers per person.** No permission decides it and no
 credential's grant changes it; what changes it is whose record the credential named, because a level worth turning up
@@ -247,7 +253,9 @@ state one.
 
 A client reads the field to decide what it records at all and whether its own switch is worth offering; the only other
 way to find out is to export a batch and read the `404`, which is finding out by doing the thing. A client reading an
-answer that omits the field, or one carrying a level this client does not know, treats it as `off` and sends nothing.
+answer that omits the field, or one carrying a level this client does not know, treats it as `off` and sends nothing —
+which is what a client built before `none` existed does with that answer, traces and metrics included, until it is
+updated.
 `info` is the deployment default, and
 [what each level costs a deployment](telemetry.md#what-the-client-publishes-about-itself) is on the telemetry page
 beside the records it decides.
@@ -3601,6 +3609,17 @@ deployment already exports [its own telemetry](telemetry.md#the-one-switch-otel_
 learns from the answer rather than from a setting it would have to be told about. That is the same shape the rest of
 this surface uses for an endpoint that is off, and it is what keeps the default a privacy default: a deployment that
 decided its own signals stay in the process does not become a relay for somebody else's.
+
+**The log route takes nothing from a caller asked for no log records.** Where a caller's level resolves to `None` —
+the deployment's [`ClientEndpoint:TelemetryLevel`](configuration-endpoints.md#clientendpoint), or their own record's
+[`ClientTelemetryLevel`](configuration-sources.md#the-level-this-persons-client-records-at--clienttelemetrylevel) in
+front of it — `POST /api/client/telemetry/v1/logs` answers `403` and forwards nothing, before the batch is read and
+without spending any of that person's export rate. It is the resolution [the session route](#the-session-route)
+answered them with, so the level a client is told and the level the deployment holds are one, and a client that sends
+a batch of log records regardless of what it was answered still reaches a collector with none. It is not what stops a
+client built before the value existed: that one treats `none` as `off` and sends nothing to any of the three routes.
+`403` is a status an OTLP exporter does not retry, so nothing is held for a batch that will not go. The traces and the
+metrics routes are unaffected by any level.
 
 **They authenticate exactly as every other route here does**, on this surface's own credentials, and they add no name to
 [the published permission set](permissions.md) — like the session route, and for a narrower reason: a permission would

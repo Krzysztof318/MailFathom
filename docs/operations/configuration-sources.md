@@ -261,7 +261,7 @@ deployment asks every client for. [The session route](client-endpoint.md#the-ses
 answer as `telemetry`, and the client refuses a record below it before it is written.
 
 It takes the values [`ClientEndpoint:TelemetryLevel`](configuration-endpoints.md#clientendpoint) takes — `Trace`,
-`Debug`, `Info`, `Warn`, `Error`, `Fatal` — read however they were capitalized:
+`Debug`, `Info`, `Warn`, `Error`, `Fatal`, `None` — read however they were capitalized:
 
 ```json
 {
@@ -276,15 +276,22 @@ it restarts the process and pays the collector for every client of the deploymen
 restart, and changes nothing about what anybody else is served. Removing the key puts them back on the deployment's
 level.
 
+**It wins over the deployment in both directions, `None` included.** `None` on a record silences that one person's
+client log records under a deployment that asks everybody else for some, and a level on a record turns that one
+person's on under a deployment set to `None`. Either way only log records move: their client's traces and metrics are
+forwarded as before, and [the log route](client-endpoint.md#the-telemetry-routes) refuses a batch from whoever resolves
+to `None`.
+
 One refusal, stated rather than quietly read as the deployment's level, because a raise that silently did not land is
 the case an operator is waiting on these records for:
 
 ```
 ClientTelemetryLevel states 'verbose', which is not a level a client can be asked to record at. It takes 'Trace',
-'Debug', 'Info', 'Warn', 'Error', 'Fatal', or none to be asked for whatever this deployment asks every client for.
+'Debug', 'Info', 'Warn', 'Error', 'Fatal', 'None', or no value at all to be asked for whatever this deployment asks
+every client for.
 ```
 
-**A record stating none is served the deployment's level**, which is what every record committed before this release
+**A record stating no level is served the deployment's level**, which is what every record committed before this release
 states and why no operator action follows an upgrade. Two things outrank the key in the other direction and neither is
 a level: a deployment that named no collector publishes `off` whatever any record says, and somebody who declined
 telemetry on their own device records nothing whatever they were raised to.

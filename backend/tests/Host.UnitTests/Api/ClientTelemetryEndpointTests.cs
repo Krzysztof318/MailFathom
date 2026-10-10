@@ -9,6 +9,7 @@ using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Api;
 using MailFathom.Host.Configuration.Endpoints;
+using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.Observability.ClientTelemetry;
 using MailFathom.Host.Security.Basic;
 using MailFathom.Host.UnitTests.TestDoubles;
@@ -33,6 +34,8 @@ namespace MailFathom.Host.UnitTests.Api;
 /// </remarks>
 public sealed class ClientTelemetryEndpointTests
 {
+    private const string RefusedInstrumentName = "mailfathom.client_telemetry.refused";
+
     private static readonly UserId AuthenticatedUser =
         UserId.Create(new Guid("9f2a1c64-0000-4000-8000-000000000001"));
 
@@ -46,7 +49,7 @@ public sealed class ClientTelemetryEndpointTests
         var endpoints = new TestEndpointRouteBuilder(services.BuildServiceProvider());
 
         // Act
-        endpoints.MapGroup(ClientEndpointOptions.RoutePrefix).MapClientTelemetry();
+        endpoints.MapGroup(ClientEndpointOptions.RoutePrefix).MapClientTelemetry(ClientTelemetryLevel.Info);
 
         // Assert
         Assert.Empty(endpoints.Materialize());
@@ -60,7 +63,7 @@ public sealed class ClientTelemetryEndpointTests
         var endpoints = BuildRouteBuilder();
 
         // Act
-        endpoints.MapGroup(ClientEndpointOptions.RoutePrefix).MapClientTelemetry();
+        endpoints.MapGroup(ClientEndpointOptions.RoutePrefix).MapClientTelemetry(ClientTelemetryLevel.Info);
 
         // Assert
         Assert.Equal(
@@ -88,7 +91,7 @@ public sealed class ClientTelemetryEndpointTests
         var endpoints = BuildRouteBuilder();
 
         // Act
-        endpoints.MapGroup(ClientEndpointOptions.RoutePrefix).MapClientTelemetry();
+        endpoints.MapGroup(ClientEndpointOptions.RoutePrefix).MapClientTelemetry(ClientTelemetryLevel.Info);
 
         // Assert
         var mapped = endpoints.Materialize();
@@ -315,6 +318,157 @@ public sealed class ClientTelemetryEndpointTests
         Assert.Equal(StatusCodes.Status503ServiceUnavailable, answered);
     }
 
+    /// <summary>
+    /// What makes <c>None</c> something the deployment holds rather than something it asks a client for: a batch of log
+    /// records is refused with a status no exporter retries, and nothing reaches the collector.
+    /// </summary>
+    [Fact]
+    public async Task AcceptAsync_ALogBatchFromACallerAskedForNoLogRecords_RefusesWithoutForwardingAnything()
+    {
+        // Arrange
+        using var collector = AcceptingCollector();
+        var request = Requesting(OtlpExportRequests.Batch([], records: 1));
+
+        // Act
+        var answered = await AcceptAsync(
+            request,
+            collector,
+            signal: ClientTelemetrySignal.Logs,
+            deploymentLevel: ClientTelemetryLevel.None);
+
+        // Assert
+        Assert.Equal(StatusCodes.Status403Forbidden, answered);
+        Assert.Empty(collector.RecordedRequests);
+    }
+
+    /// <summary>
+    /// The refusal comes before the rate is spent and is counted under a word of its own. A caller refused every time
+    /// would otherwise burn its own burst on batches nobody takes and then be told to hold them, and a dashboard could
+    /// not tell a deployment set to <c>None</c> from a client sending something this endpoint cannot read.
+    /// </summary>
+    [Fact]
+    public async Task AcceptAsync_ALogBatchFromACallerAskedForNoLogRecords_SpendsNoRateAndIsCountedAsLevelNone()
+    {
+        // Arrange
+        using var collector = AcceptingCollector();
+        using var quota = new ClientTelemetryQuota();
+        var telemetry = new ClientTelemetryProxyTelemetry(
+            new RecordingLogger<ClientTelemetryProxyTelemetry>(),
+            new FakeTimeProvider());
+        using var measurements = new RecordedMailFathomMeasurements(RefusedInstrumentName);
+        var request = Requesting(OtlpExportRequests.Batch([], records: 1));
+
+        // Act
+        var answered = await AcceptAsync(
+            request,
+            collector,
+            quota,
+            signal: ClientTelemetrySignal.Logs,
+            deploymentLevel: ClientTelemetryLevel.None,
+            telemetry: telemetry);
+
+        // Assert
+        Assert.Equal(StatusCodes.Status403Forbidden, answered);
+        Assert.All(
+            Enumerable.Range(0, ClientTelemetryQuota.BurstCapacity),
+            _ => Assert.True(quota.TryAdmit(AuthenticatedUser.ToString())));
+        Assert.Contains(
+            measurements.Read(RefusedInstrumentName),
+            refused => Equals(refused.Tags[ClientTelemetryProxyTelemetry.SignalTagName], "logs")
+                && Equals(refused.Tags[ClientTelemetryProxyTelemetry.RefusalTagName], "level_none"));
+    }
+
+    /// <summary>A caller past their rate is still told the batch will never be taken, rather than told to hold it for a minute and send it again.</summary>
+    [Fact]
+    public async Task AcceptAsync_ALogBatchFromACallerAskedForNoLogRecordsWhoIsPastTheirRate_AnswersForbiddenRatherThanTooManyRequests()
+    {
+        // Arrange
+        using var collector = AcceptingCollector();
+        using var quota = new ClientTelemetryQuota();
+
+        foreach (var _ in Enumerable.Range(0, ClientTelemetryQuota.BurstCapacity))
+        {
+            quota.TryAdmit(AuthenticatedUser.ToString());
+        }
+
+        var request = Requesting(OtlpExportRequests.Batch([], records: 1));
+
+        // Act
+        var answered = await AcceptAsync(
+            request,
+            collector,
+            quota,
+            signal: ClientTelemetrySignal.Logs,
+            deploymentLevel: ClientTelemetryLevel.None);
+
+        // Assert
+        Assert.Equal(StatusCodes.Status403Forbidden, answered);
+    }
+
+    /// <summary>Log records are the one signal a level governs, so a deployment set to <c>None</c> goes on taking a client's spans and measurements.</summary>
+    [Theory]
+    [InlineData("traces")]
+    [InlineData("metrics")]
+    public async Task AcceptAsync_ATraceOrMetricBatchFromACallerAskedForNoLogRecords_ForwardsItAsBefore(string signalName)
+    {
+        // Arrange
+        using var collector = AcceptingCollector();
+        var request = Requesting(OtlpExportRequests.Batch([], records: 1));
+        var signal = ClientTelemetrySignal.All.Single(candidate => candidate.Name == signalName);
+
+        // Act
+        var answered = await AcceptAsync(
+            request,
+            collector,
+            signal: signal,
+            deploymentLevel: ClientTelemetryLevel.None);
+
+        // Assert
+        Assert.Equal(StatusCodes.Status200OK, answered);
+        Assert.Single(collector.RecordedRequests);
+    }
+
+    /// <summary>A person's own record wins over the deployment here exactly as it does on the session route, so the level answered and the level held are one.</summary>
+    [Fact]
+    public async Task AcceptAsync_ALogBatchFromACallerWhoseRecordStatesNone_RefusesUnderADeploymentAskingForRecords()
+    {
+        // Arrange
+        using var collector = AcceptingCollector();
+        var request = Requesting(OtlpExportRequests.Batch([], records: 1));
+
+        // Act
+        var answered = await AcceptAsync(
+            request,
+            collector,
+            signal: ClientTelemetrySignal.Logs,
+            statedLevel: ClientTelemetryLevel.None);
+
+        // Assert
+        Assert.Equal(StatusCodes.Status403Forbidden, answered);
+        Assert.Empty(collector.RecordedRequests);
+    }
+
+    /// <summary>The case a record's level exists for under <c>None</c>: one person's log records arrive while their report is open, and nobody else's are turned on.</summary>
+    [Fact]
+    public async Task AcceptAsync_ALogBatchFromACallerWhoseRecordStatesALevel_ForwardsItUnderADeploymentSetToNone()
+    {
+        // Arrange
+        using var collector = AcceptingCollector();
+        var request = Requesting(OtlpExportRequests.Batch([], records: 1));
+
+        // Act
+        var answered = await AcceptAsync(
+            request,
+            collector,
+            signal: ClientTelemetrySignal.Logs,
+            deploymentLevel: ClientTelemetryLevel.None,
+            statedLevel: ClientTelemetryLevel.Debug);
+
+        // Assert
+        Assert.Equal(StatusCodes.Status200OK, answered);
+        Assert.Single(collector.RecordedRequests);
+    }
+
     /// <summary>Nobody exports on somebody's behalf without a person to attribute it to.</summary>
     [Fact]
     public async Task AcceptAsync_ACallerActingForNoUser_RefusesBeforeReadingTheBody()
@@ -339,17 +493,23 @@ public sealed class ClientTelemetryEndpointTests
         DefaultHttpContext request,
         FakeHttpMessageHandler collector,
         ClientTelemetryQuota? quota = null,
-        AccessAuthorization? authorization = null)
+        AccessAuthorization? authorization = null,
+        ClientTelemetrySignal? signal = null,
+        ClientTelemetryLevel deploymentLevel = ClientTelemetryLevel.Info,
+        ClientTelemetryLevel? statedLevel = null,
+        ClientTelemetryProxyTelemetry? telemetry = null)
     {
         using var owned = quota is null ? new ClientTelemetryQuota() : null;
 
         var answered = await ClientTelemetryEndpoint.AcceptAsync(
-            ClientTelemetrySignal.Traces,
+            signal ?? ClientTelemetrySignal.Traces,
             request,
             authorization ?? AccessAuthorizations.ForUserGranted(AuthenticatedUser),
+            ResolvedServedUsers.Serving(new ServedUser(AuthenticatedUser, "alex", []) { ClientTelemetryLevel = statedLevel }),
+            deploymentLevel,
             quota ?? owned!,
             ForwarderOver(collector),
-            new ClientTelemetryProxyTelemetry(
+            telemetry ?? new ClientTelemetryProxyTelemetry(
                 new RecordingLogger<ClientTelemetryProxyTelemetry>(),
                 new FakeTimeProvider()),
             TestContext.Current.CancellationToken);

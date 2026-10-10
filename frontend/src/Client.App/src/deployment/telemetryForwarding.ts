@@ -32,8 +32,9 @@ export function telemetryForwardedBy(
         return { answered: false };
     }
 
-    // A level of `off` is a deployment forwarding nothing, and every other level is one that does. How much it asks
-    // for is not this screen's question: what the person is being told is where their records go, and a deployment
-    // wanting more of them or less sends them to the same place.
+    // A level of `off` is a deployment forwarding nothing, and every other level is one that does — `none` among
+    // them, which takes no log record and still forwards the traces and the metrics. How much it asks for is not this
+    // screen's question: what the person is being told is where what is recorded about them goes, and a deployment
+    // wanting more of it or less sends it to the same place.
     return { answered: true, destination: session.telemetryLevel === 'off' ? null : baseAddress };
 }

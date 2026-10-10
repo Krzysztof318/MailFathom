@@ -278,6 +278,28 @@ public sealed class UserAccountDocumentBinderTests
         Assert.Equal(ClientTelemetryLevel.Debug, binding.User!.ReadingClientTelemetryLevel);
     }
 
+    /// <summary>
+    /// A record may ask for no log records at all, which is a level it states rather than the absence of one: it is
+    /// what silences this one person's client under a deployment that asks everybody else for some.
+    /// </summary>
+    [Theory]
+    [InlineData("None")]
+    [InlineData("none")]
+    public void Bind_ARecordNamingNoneAsItsClientTelemetryLevel_BindsThatLevelRatherThanStatingNoLevel(string written)
+    {
+        // Arrange
+        var binder = CreateBinder();
+
+        // Act
+        var binding = binder.Bind(
+            $$"""{"Language": "English", "ClientTelemetryLevel": "{{written}}"}""",
+            UserRecordArrival.BeingWritten);
+
+        // Assert
+        Assert.True(binding.IsBound);
+        Assert.Equal(ClientTelemetryLevel.None, binding.User!.ReadingClientTelemetryLevel);
+    }
+
     /// <summary>A record stating no level asked for nothing, which is an ordinary state rather than an unfinished one.</summary>
     [Fact]
     public void Bind_ARecordBeingWrittenNamingNoClientTelemetryLevel_BindsStatingNoLevel() =>
@@ -312,6 +334,7 @@ public sealed class UserAccountDocumentBinderTests
         Assert.Contains("ClientTelemetryLevel", refusal, StringComparison.Ordinal);
         Assert.Contains("is not a level a client can be asked to record at", refusal, StringComparison.Ordinal);
         Assert.Contains("'Debug'", refusal, StringComparison.Ordinal);
+        Assert.Contains("'None'", refusal, StringComparison.Ordinal);
     }
 
     /// <summary>The bound is the stored zone identifier's own, so a value past it is refused rather than truncated.</summary>

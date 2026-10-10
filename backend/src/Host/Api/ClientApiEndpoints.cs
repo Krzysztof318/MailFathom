@@ -223,7 +223,7 @@ internal static class ClientApiEndpoints
         api.MapClientCalendar();
         api.MapClientCalendarImport();
         api.MapClientSignalTicket();
-        api.MapClientTelemetry();
+        api.MapClientTelemetry(deploymentTelemetryLevel);
 
         return api;
     }
@@ -251,7 +251,7 @@ internal static class ClientApiEndpoints
 /// <param name="Service">The product this is, so a client can tell it reached MailFathom rather than something else answering the port.</param>
 /// <param name="Version">The running version, which is what tells a client which contract it is talking to.</param>
 /// <param name="Permissions">The published names of what this caller's grant carries, in the order this repository publishes them, and empty for a credential granted nothing.</param>
-/// <param name="Telemetry">The least severe log record this deployment asks this caller's client to write, or <c>off</c> where it forwards none at all — configuration rather than a grant, and the deployment's own answer unless this person's record raised or lowered it for them alone.</param>
+/// <param name="Telemetry">The least severe log record this deployment asks this caller's client to write, <c>none</c> where it asks for no log record and still takes the client's traces and metrics, or <c>off</c> where it forwards nothing at all — configuration rather than a grant, and the deployment's own answer unless this person's record raised or lowered it for them alone.</param>
 /// <remarks>
 /// <para>
 /// It names no credential, which is the one way it differs from what the administrative surface answers. That surface's
@@ -303,7 +303,9 @@ internal sealed record ClientSessionResponse(
     /// <remarks>
     /// The record's level wins over the deployment's and neither wins over the collector: a deployment forwarding
     /// nothing answers <c>off</c> however anybody's record was raised, because what is being answered there is that
-    /// there is nowhere for a record to go rather than how much to write. The person's own switch is the third
+    /// there is nowhere for a record to go rather than how much to write. <c>none</c> is a level like the six below it
+    /// and resolves the same way, so it is the other answer that stops log records and the only one that leaves the
+    /// rest of a client's telemetry arriving. The person's own switch is the third
     /// participant and is not resolved here at all — it is kept on their device and applied by the client, which is
     /// what lets somebody decline on one machine without deciding for the next one.
     /// </remarks>

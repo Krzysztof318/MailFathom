@@ -694,13 +694,13 @@ export function telemetryRecording(): {
     readonly telemetry: ClientTelemetry;
     readonly exportedFor: (ClientSession | null)[];
     readonly permitted: boolean[];
-    readonly levels: DeploymentTelemetryLevel[];
+    readonly levels: (DeploymentTelemetryLevel | null)[];
     readonly stopped: number[];
     readonly events: ClientEvent[];
 } {
     const exportedFor: (ClientSession | null)[] = [];
     const permitted: boolean[] = [];
-    const levels: DeploymentTelemetryLevel[] = [];
+    const levels: (DeploymentTelemetryLevel | null)[] = [];
     const stopped: number[] = [];
     const events: ClientEvent[] = [];
 

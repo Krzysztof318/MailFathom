@@ -31,8 +31,8 @@ const pipeline = vi.hoisted(() => {
     return {
         steps,
 
-        exportTo(session: { readonly authorization: string }) {
-            steps.push(`export ${session.authorization}`);
+        exportTo(session: { readonly authorization: string }, recordsTaken: boolean) {
+            steps.push(`export ${session.authorization}${recordsTaken ? '' : ' without records'}`);
 
             return Promise.resolve();
         },
@@ -45,6 +45,12 @@ const pipeline = vi.hoisted(() => {
 
         discard() {
             steps.push('discard');
+
+            return Promise.resolve();
+        },
+
+        discardRecords() {
+            steps.push('discard records');
 
             return Promise.resolve();
         },
@@ -323,6 +329,35 @@ describe('clientTelemetryForThisApplication', () => {
             });
         });
 
+        // What separates this level from `off`: the one signal a level governs stops, at every severity there is, and
+        // the span and the measurements written beside it are recorded exactly as under any other level.
+        it('writes no log record where a deployment takes none, and goes on recording the rest', async () => {
+            const telemetry = clientTelemetryForThisApplication();
+
+            telemetry.exportFor(session, true, 'none');
+            telemetry.happened('session_started');
+            telemetry.renderFailed('application', new TypeError('A client nobody can use.'));
+            telemetry.navigated('mail', performance.timeOrigin + performance.now());
+
+            const [moved] = await written(() => spans.getFinishedSpans());
+            const counted = await recordedMeasurements();
+
+            expect(moved?.name).toBe('navigate mail');
+            expect(counted.map((measurement) => measurement.descriptor.name)).toContain(
+                'mailfathom.client.navigations',
+            );
+            expect(records.getFinishedLogRecords()).toEqual([]);
+        });
+
+        it('writes at the level a collector keeps by default until a deployment has said', () => {
+            const telemetry = clientTelemetryForThisApplication();
+
+            telemetry.exportFor(session, true, null);
+
+            expect(worthRecording(SeverityNumber.INFO)).toBe(true);
+            expect(worthRecording(SeverityNumber.DEBUG)).toBe(false);
+        });
+
         // The switch is the stronger of the two, and this is what makes it so rather than a claim that it is: a
         // deployment asking for the whole stream gets none of it from somebody who declined, and the refusal reaches
         // the half of the client that holds no pipeline as well as the half that does.
@@ -582,6 +617,64 @@ describe('exportFor', () => {
 
         await vi.waitFor(() => {
             expect(pipeline.steps).toEqual(['discard', 'export Basic c2FtcGxl']);
+        });
+    });
+
+    // A cold start with a remembered session: the frame has a session and no answer about it yet. The spans and the
+    // measurements are exported at once, and the log records are held, because a deployment that turns out to take
+    // none refuses a batch of them — and the answer arriving is what points them, at whatever was held meanwhile.
+    it('holds the log records until the deployment has answered, and points them once it says it takes them', async () => {
+        const telemetry = clientTelemetryForThisApplication();
+
+        const stop = telemetry.exportFor(session, true, null);
+
+        stop();
+        telemetry.exportFor(session, true, 'debug');
+
+        await vi.waitFor(() => {
+            expect(pipeline.steps).toEqual(['export Basic c2FtcGxl without records', 'hold', 'export Basic c2FtcGxl']);
+        });
+    });
+
+    // The order React produces when that answer is `none`: the cleanup of the effect that ran while the deployment had
+    // said nothing, then the body stating the level. What was held is thrown away before anything else, holding still
+    // runs because the spans and the measurements of that same stretch are ones the deployment takes, and the log
+    // records are never pointed at all.
+    it('throws away the log records written before a deployment said it takes none, and never points them', async () => {
+        const telemetry = clientTelemetryForThisApplication();
+
+        const stop = telemetry.exportFor(session, true, null);
+
+        stop();
+        telemetry.exportFor(session, true, 'none');
+
+        await vi.waitFor(() => {
+            expect(pipeline.steps).toEqual([
+                'export Basic c2FtcGxl without records',
+                'discard records',
+                'hold',
+                'export Basic c2FtcGxl without records',
+            ]);
+        });
+    });
+
+    // A level withdrawn mid-session, which is an operator setting `None` on a record whose client is open: the records
+    // written under the level it had are thrown away rather than flushed at a route that now refuses them.
+    it('throws away rather than flushing the log records of a level a deployment has since withdrawn', async () => {
+        const telemetry = clientTelemetryForThisApplication();
+
+        const stop = telemetry.exportFor(session, true, 'debug');
+
+        stop();
+        telemetry.exportFor(session, true, 'none');
+
+        await vi.waitFor(() => {
+            expect(pipeline.steps).toEqual([
+                'export Basic c2FtcGxl',
+                'discard records',
+                'hold',
+                'export Basic c2FtcGxl without records',
+            ]);
         });
     });
 
