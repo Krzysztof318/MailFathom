@@ -76,6 +76,18 @@ public sealed class ScopedGrant
     public IReadOnlySet<AssignmentScope> ScopesOf(MailFathomPermission permission) =>
         this.scopesByPermission.TryGetValue(permission, out var scopes) ? scopes : new HashSet<AssignmentScope>();
 
+    /// <summary>Reports whether one permission is held at a scope covering a target.</summary>
+    /// <param name="permission">The permission.</param>
+    /// <param name="target">Where the thing the operation names sits in the deployment.</param>
+    /// <returns><see langword="true" /> when any scope the permission is held at covers the target.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="target" /> is <see langword="null" />.</exception>
+    public bool Covers(MailFathomPermission permission, AdministrativeTarget target)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+
+        return this.ScopesOf(permission).Any(target.IsCoveredBy);
+    }
+
     /// <summary>Keeps only the permissions a narrowing names, each at every scope it was held at.</summary>
     /// <param name="permissions">The names the narrowing keeps: a credential's list, a token's scopes, or a surface's half.</param>
     /// <returns>The narrowed grant.</returns>

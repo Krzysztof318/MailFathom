@@ -42,16 +42,19 @@ public sealed class MailRuleHistory
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The page, and the cursor the following one is asked with.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="query" /> is <see langword="null" />.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.AdminAuditRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.AdminAuditRead" /> at a scope covering the account.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels.</exception>
-    public Task<MailRuleExecutionPage> ReadPageAsync(
+    public async Task<MailRuleExecutionPage> ReadPageAsync(
         MailRuleExecutionQuery query,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(query);
 
-        this.authorization.RequirePermission(MailFathomPermission.AdminAuditRead);
+        await this.authorization.RequirePermissionOverAsync(
+            MailFathomPermission.AdminAuditRead,
+            query.Account,
+            cancellationToken);
 
-        return this.executions.ReadPageAsync(query, cancellationToken);
+        return await this.executions.ReadPageAsync(query, cancellationToken);
     }
 }

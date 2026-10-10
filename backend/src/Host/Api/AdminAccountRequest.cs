@@ -2,7 +2,9 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using Microsoft.AspNetCore.Http.HttpResults;
 
@@ -46,6 +48,34 @@ internal static class AdminAccountRequest
         var served = await accounts.ReadServedAccountsAsync([MailAccountId.Create(account)], cancellationToken);
 
         return served is [var named] ? named.Id : null;
+    }
+
+    /// <summary>Reads the account a request named, or nothing when this deployment does not serve it or the caller's scope does not cover it.</summary>
+    /// <param name="account">The account identifier the request carried, which may be absent or blank.</param>
+    /// <param name="permission">The capability the route is published under, which the caller has to hold over the account.</param>
+    /// <param name="accounts">Reports the accounts this deployment serves.</param>
+    /// <param name="authorization">Answers whether the caller's scope covers the account.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The served account, or <see langword="null" /> where <see cref="Refuse" /> is the answer.</returns>
+    /// <remarks>
+    /// It is asked before anything else about the account is answered, and an account outside the caller's scope comes
+    /// back as one the deployment does not serve: ADR 0012 answers the two identically, because a refusal naming the
+    /// scope, or any later refusal of the request's other parts, would tell an organization's administrator that the
+    /// account exists elsewhere in the deployment.
+    /// </remarks>
+    internal static async Task<MailAccountId?> ResolveCoveredAsync(
+        string? account,
+        MailFathomPermission permission,
+        IDeploymentMailAccountCatalog accounts,
+        AccessAuthorization authorization,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(authorization);
+
+        return await ResolveAsync(account, accounts, cancellationToken) is { } served
+            && await authorization.PermitsOverAsync(permission, served, cancellationToken)
+                ? served
+                : null;
     }
 
     /// <summary>States why the account a request named did not resolve, without echoing an empty one.</summary>

@@ -84,6 +84,26 @@ internal static class RouteAuthorization
         return route.WithMetadata(RoutePermission.Requiring(permission));
     }
 
+    /// <summary>States the one permission a route naming a user or a mail account is published under, at a scope covering what it names.</summary>
+    /// <param name="route">The route being mapped.</param>
+    /// <param name="permission">The capability a caller must hold over the target the request names.</param>
+    /// <returns>The route, so a mapping reads as one expression.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="route" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when the permission names nothing published.</exception>
+    /// <remarks>
+    /// The transport then refuses only a caller holding the permission at no scope at all. Whether the scope covers the
+    /// target is the handler's to decide before it answers anything else about it, and the use case's to enforce — a
+    /// route published this way without either of those would admit an organization's administrator to every target.
+    /// </remarks>
+    internal static RouteHandlerBuilder RequirePermissionOverTarget(
+        this RouteHandlerBuilder route,
+        MailFathomPermission permission)
+    {
+        ArgumentNullException.ThrowIfNull(route);
+
+        return route.WithMetadata(RoutePermission.RequiringOverTarget(permission));
+    }
+
     /// <summary>States that a route requires no permission, which on each surface is its session read and nothing else.</summary>
     /// <param name="route">The route being mapped.</param>
     /// <returns>The route, so a mapping reads as one expression.</returns>
@@ -146,11 +166,11 @@ internal static class RouteAuthorization
         }
 
         if (published.Permission.IsSpecified
-            && !context.HttpContext.RequestServices.GetRequiredService<AccessAuthorization>().Permits(published.Permission))
+            && !PermitsAtTheTransport(context.HttpContext.RequestServices.GetRequiredService<AccessAuthorization>(), published))
         {
             RecordRefusal(context.HttpContext, surface, published.Permission);
 
-            return Refused(context.HttpContext, published.Permission);
+            return Refused(context.HttpContext, published, published.Permission);
         }
 
         try
@@ -161,13 +181,18 @@ internal static class RouteAuthorization
         {
             RecordRefusal(context.HttpContext, surface, refusal.RequiredPermission);
 
-            return Refused(context.HttpContext, refusal.RequiredPermission);
+            return Refused(context.HttpContext, published, refusal.RequiredPermission);
         }
         catch (DeploymentUserUnresolvedException refusal)
         {
             return Unattributable(refusal);
         }
     }
+
+    private static bool PermitsAtTheTransport(AccessAuthorization authorization, RoutePermission published) =>
+        published.NamesTarget
+            ? authorization.PermitsAtAnyScope(published.Permission)
+            : authorization.Permits(published.Permission);
 
     /// <summary>Records the refusal beside the answer the caller receives, which is what makes a rate of them readable.</summary>
     /// <remarks>
@@ -210,9 +235,12 @@ internal static class RouteAuthorization
     /// one — a use case refusing over the kind of principal that reached it rather than over a grant — says that instead
     /// of naming something that would not have helped, and carries no <see cref="PermissionExtension" /> member either.
     /// A caller holding the permission only at an organization or a user is told that rather than that it lacks the
-    /// name, and the document carries <see cref="HeldBelowDeploymentExtension" /> beside it.
+    /// name, and the document carries <see cref="HeldBelowDeploymentExtension" /> beside it. That is said only on a route
+    /// naming no target, where it is true whatever the request names. A route naming its target is admitted below the
+    /// deployment, so a use case refusing behind one refused over the target — which the route answers as a target that
+    /// does not exist before the use case is reached — and the backstop names the permission and says nothing of scope.
     /// </remarks>
-    private static ProblemHttpResult Refused(HttpContext context, MailFathomPermission required)
+    private static ProblemHttpResult Refused(HttpContext context, RoutePermission published, MailFathomPermission required)
     {
         if (!required.IsSpecified)
         {
@@ -223,7 +251,8 @@ internal static class RouteAuthorization
 
         var extensions = new Dictionary<string, object?>(StringComparer.Ordinal) { [PermissionExtension] = required.Name };
 
-        if (!context.RequestServices.GetRequiredService<AccessAuthorization>().HoldsOnlyBelowDeployment(required))
+        if (published.NamesTarget
+            || !context.RequestServices.GetRequiredService<AccessAuthorization>().HoldsOnlyBelowDeployment(required))
         {
             return TypedResults.Problem(
                 $"The credential is not granted '{required.Name}'.",

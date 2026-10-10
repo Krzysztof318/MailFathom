@@ -27,7 +27,7 @@ internal sealed record AdminSession(
 /// <summary>One scope the caller holds anything at, as the session reports it.</summary>
 /// <param name="Scope">The kind of scope: <c>deployment</c>, <c>organization</c>, or <c>user</c>.</param>
 /// <param name="Target">The organization or user the scope names, absent for the deployment.</param>
-/// <param name="Permissions">The names granted there other than those only the deployment scope grants; at a narrower scope the endpoint admits no operation by them, since it asks every route's permission at the deployment scope.</param>
+/// <param name="Permissions">The names granted there other than those only the deployment scope grants; at a narrower scope the endpoint admits the audit read among them on the reads naming a user or a mail account that scope covers, and no operation by any other, since it asks every other route's permission at the deployment scope.</param>
 /// <param name="ReachingNothing">The names granted there that only the deployment scope grants, so at a narrower scope they reach nothing.</param>
 internal sealed record AdminSessionScope(
     [property: JsonPropertyName("scope")] string? Scope,

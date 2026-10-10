@@ -499,6 +499,7 @@ public sealed class SpamClassificationEndpointsTests
             cursor,
             CatalogServing(Account),
             new SpamClassificationHistory(this.classifications, AdministrativeGrant.WholeSurface),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
     private sealed class CommittingSession : IPersistenceSession

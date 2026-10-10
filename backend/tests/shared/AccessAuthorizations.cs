@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 
 namespace MailFathom.TestSupport;
 
@@ -43,11 +44,73 @@ internal static class AccessAuthorizations
     internal static AccessAuthorization ForAdministratorGranted(params MailFathomPermission[] grantedPermissions) =>
         ForPrincipal(AuthorizedPrincipal.Caller("test-administrator", grantedPermissions));
 
+    /// <summary>Gets the organization every target a scoped administrator is arranged over belongs to.</summary>
+    internal static Guid ScopedOrganization { get; } = new("0198f0aa-0000-7000-8000-00000000f001");
+
+    /// <summary>Gets the user every mail account a scoped administrator is arranged over is assigned to alone, and the user a user-targeted read names.</summary>
+    internal static UserId ScopedHolder { get; } = UserId.Create(new Guid("0198f0aa-0000-7000-8000-00000000f002"));
+
+    /// <summary>Gets the one mail account a scoped administrator is arranged over, which belongs to <see cref="ScopedOrganization" /> and is assigned to <see cref="ScopedHolder" /> alone.</summary>
+    internal static MailAccountId ScopedAccount { get; } = MailAccountId.Create("0198f0aa-0000-7000-8000-00000000f0aa");
+
+    /// <summary>Gets one scope of each kind that covers the targets <see cref="ForAdministratorScopedAt" /> places: the deployment, <see cref="ScopedOrganization" />, and <see cref="ScopedHolder" />.</summary>
+    internal static IReadOnlyList<AssignmentScope> ScopesCoveringTheirTarget { get; } =
+    [
+        AssignmentScope.Deployment,
+        AssignmentScope.Organization(ScopedOrganization),
+        AssignmentScope.User(ScopedHolder),
+    ];
+
+    /// <summary>Gets one narrower scope of each kind that covers none of those targets: another organization, and another user.</summary>
+    internal static IReadOnlyList<AssignmentScope> ScopesOutsideTheirTarget { get; } =
+    [
+        AssignmentScope.Organization(new Guid("0198f0aa-0000-7000-8000-00000000f003")),
+        AssignmentScope.User(UserId.Create(new Guid("0198f0aa-0000-7000-8000-00000000f004"))),
+    ];
+
+    /// <summary>Builds the authorization of an administrator holding some permissions at one scope, over targets placed in <see cref="ScopedOrganization" />.</summary>
+    /// <param name="scope">The scope the administrator's role was assigned at.</param>
+    /// <param name="grantedPermissions">The permissions that role carries.</param>
+    /// <returns>The authorization a use case reached by that administrator consults.</returns>
+    /// <remarks>
+    /// <see cref="ScopedAccount" /> and <see cref="ScopedHolder" /> are placed in <see cref="ScopedOrganization" />, the
+    /// account assigned to the holder alone, so each scope in <see cref="ScopesCoveringTheirTarget" /> reaches both while
+    /// each in <see cref="ScopesOutsideTheirTarget" /> reaches neither. Every other account and user is placed nowhere,
+    /// which only the deployment covers, so an operation that checked a target other than the one it was asked about
+    /// is refused at every narrower scope rather than served.
+    /// </remarks>
+    internal static AccessAuthorization ForAdministratorScopedAt(
+        AssignmentScope scope,
+        params MailFathomPermission[] grantedPermissions) =>
+        new(
+            new StatedPrincipalSource(AuthorizedPrincipal.Caller(
+                "test-administrator",
+                ScopedGrant.Of(grantedPermissions.Select(permission => (permission, scope))))),
+            new ScopedOrganizationTargets());
+
     /// <summary>Builds the authorization of work reached under a stated principal, or under none.</summary>
     /// <param name="principal">Whoever the work is running for, or <see langword="null" /> for an entrypoint that stated nothing.</param>
     /// <returns>The authorization a use case reached that way consults.</returns>
     internal static AccessAuthorization ForPrincipal(AuthorizedPrincipal? principal) =>
         new(new StatedPrincipalSource(principal));
+
+    /// <summary>Places <see cref="ScopedAccount" /> and <see cref="ScopedHolder" /> in <see cref="ScopedOrganization" />, and every other target nowhere.</summary>
+    private sealed class ScopedOrganizationTargets : IAdministrativeTargets
+    {
+        public Task<IReadOnlyDictionary<MailAccountId, AdministrativeTarget>> PlaceMailAccountsAsync(
+            IReadOnlyCollection<MailAccountId> accounts,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyDictionary<MailAccountId, AdministrativeTarget>>(accounts.Distinct().ToDictionary(
+                account => account,
+                account => account == ScopedAccount
+                    ? AdministrativeTarget.MailAccount(ScopedOrganization, [ScopedHolder])
+                    : AdministrativeTarget.Unplaced));
+
+        public Task<AdministrativeTarget> PlaceUserAsync(UserId user, CancellationToken cancellationToken) =>
+            Task.FromResult(user == ScopedHolder
+                ? AdministrativeTarget.User(user, ScopedOrganization)
+                : AdministrativeTarget.Unplaced);
+    }
 
     /// <summary>Reports the one principal a test stated, for the whole of that test's unit of work.</summary>
     private sealed class StatedPrincipalSource(AuthorizedPrincipal? principal) : IAuthorizedPrincipalSource

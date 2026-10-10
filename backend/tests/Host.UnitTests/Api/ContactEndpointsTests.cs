@@ -306,6 +306,7 @@ public sealed class ContactEndpointsTests
             User,
             this.Book(),
             this.Scopes(),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -323,6 +324,7 @@ public sealed class ContactEndpointsTests
             User,
             this.Book(),
             this.Scopes(),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -352,6 +354,7 @@ public sealed class ContactEndpointsTests
             address,
             this.Book(),
             this.Scopes(),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -378,6 +381,7 @@ public sealed class ContactEndpointsTests
             cursor: null,
             book: this.Book(),
             scopes: this.Scopes(),
+            authorization: AdministrativeGrant.WholeSurface,
             cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
@@ -402,6 +406,7 @@ public sealed class ContactEndpointsTests
             cursor: null,
             book: this.Book(),
             scopes: this.Scopes(),
+            authorization: AdministrativeGrant.WholeSurface,
             cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
@@ -431,6 +436,7 @@ public sealed class ContactEndpointsTests
             cursor,
             this.Book(),
             this.Scopes(),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -558,6 +564,7 @@ public sealed class ContactEndpointsTests
             this.Book(),
             this.Scopes(),
             this.Roster(),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         var promotion = await ContactEndpoints.PromoteAsync(
@@ -632,6 +639,7 @@ public sealed class ContactEndpointsTests
             this.Book(),
             this.Scopes(),
             this.Roster(),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -654,6 +662,7 @@ public sealed class ContactEndpointsTests
             this.Book(),
             this.Scopes(),
             this.Roster(),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -661,6 +670,167 @@ public sealed class ContactEndpointsTests
         Assert.Equal("Anna Kowalska", export.Value!.Contact!.DisplayName);
         Assert.Equal("Met at the conference.", export.Value.Contact.Note);
         Assert.Equal(this.clock.GetUtcNow(), export.Value.ProducedAt);
+    }
+
+    public static TheoryData<AssignmentScope> ScopesCoveringTheHolder => [.. AccessAuthorizations.ScopesCoveringTheirTarget];
+
+    /// <summary>A grant held at any scope covering the user is served their books by the listing, not only one held over the whole deployment.</summary>
+    [Theory]
+    [MemberData(nameof(ScopesCoveringTheHolder))]
+    public async Task ListAsync_ACallerScopedOverTheUser_IsServedTheirBooks(AssignmentScope scope)
+    {
+        // Arrange
+        var scoped = AccessAuthorizations.ForAdministratorScopedAt(scope, MailFathomPermission.AdminAuditRead);
+        this.directory.ReadPageAsync(Arg.Any<ContactBookScope>(), Arg.Any<ContactQuery>(), Arg.Any<CancellationToken>())
+            .Returns(new ContactPage([Asserted("Anna Kowalska", "anna@example.test")], NextCursor: null));
+
+        // Act
+        var result = await ContactEndpoints.ListAsync(
+            AccessAuthorizations.ScopedHolder.Value,
+            origin: null,
+            pageSize: null,
+            cursor: null,
+            book: this.Book(scoped),
+            scopes: this.Scopes(),
+            authorization: scoped,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        var page = Assert.IsType<Ok<ContactPageResponse>>(result.Result);
+        Assert.Equal("Anna Kowalska", Assert.Single(page.Value!.Contacts).DisplayName);
+    }
+
+    /// <summary>A grant held at any scope covering the user is answered the contact their books hold.</summary>
+    [Theory]
+    [MemberData(nameof(ScopesCoveringTheHolder))]
+    public async Task FindAsync_ACallerScopedOverTheUser_IsAnsweredTheContact(AssignmentScope scope)
+    {
+        // Arrange
+        var scoped = AccessAuthorizations.ForAdministratorScopedAt(scope, MailFathomPermission.AdminAuditRead);
+        this.directory.FindAsync(Arg.Any<ContactBookScope>(), Arg.Any<ContactId>(), Arg.Any<CancellationToken>())
+            .Returns(Asserted("Anna Kowalska", "anna@example.test"));
+
+        // Act
+        var result = await ContactEndpoints.FindAsync(
+            Identity,
+            AccessAuthorizations.ScopedHolder.Value,
+            this.Book(scoped),
+            this.Scopes(),
+            scoped,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var lookup = Assert.IsType<Ok<ContactLookupResponse>>(result.Result);
+        Assert.Equal("Anna Kowalska", lookup.Value!.Contact!.DisplayName);
+    }
+
+    /// <summary>A user outside the caller's scope is answered exactly as one the books hold nothing for, and the books are never read.</summary>
+    [Fact]
+    public async Task ListAsync_AUserOutsideTheCallersScope_AnswersAnEmptyPageWithoutReadingTheBooks()
+    {
+        // Arrange
+        var elsewhere = AccessAuthorizations.ForAdministratorScopedAt(
+            AccessAuthorizations.ScopesOutsideTheirTarget[0],
+            MailFathomPermission.AdminAuditRead);
+
+        // Act
+        var result = await ContactEndpoints.ListAsync(
+            User,
+            origin: null,
+            pageSize: null,
+            cursor: null,
+            book: this.Book(),
+            scopes: this.Scopes(),
+            authorization: elsewhere,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        var page = Assert.IsType<Ok<ContactPageResponse>>(result.Result);
+        Assert.Empty(page.Value!.Contacts);
+        Assert.Null(page.Value.NextCursor);
+        Assert.Empty(this.directory.ReceivedCalls());
+    }
+
+    /// <summary>A contact in the books of a user outside the caller's scope is answered as one those books do not hold, and the books are never read.</summary>
+    [Fact]
+    public async Task FindAsync_AUserOutsideTheCallersScope_AnswersNoContact()
+    {
+        // Arrange
+        var elsewhere = AccessAuthorizations.ForAdministratorScopedAt(
+            AccessAuthorizations.ScopesOutsideTheirTarget[0],
+            MailFathomPermission.AdminAuditRead);
+
+        // Act
+        var result = await ContactEndpoints.FindAsync(
+            Identity,
+            AccessAuthorizations.ScopedHolder.Value,
+            this.Book(),
+            this.Scopes(),
+            elsewhere,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var lookup = Assert.IsType<Ok<ContactLookupResponse>>(result.Result);
+        Assert.Null(lookup.Value!.Contact);
+        Assert.Empty(this.directory.ReceivedCalls());
+    }
+
+    /// <summary>An address in the books of a user outside the caller's scope is answered as one nobody holds, and the books are never read.</summary>
+    [Fact]
+    public async Task FindByAddressAsync_AUserOutsideTheCallersScope_AnswersNoContact()
+    {
+        // Arrange
+        var elsewhere = AccessAuthorizations.ForAdministratorScopedAt(
+            AccessAuthorizations.ScopesOutsideTheirTarget[1],
+            MailFathomPermission.AdminAuditRead);
+
+        // Act
+        var result = await ContactEndpoints.FindByAddressAsync(
+            AccessAuthorizations.ScopedHolder.Value,
+            "anna@example.test",
+            this.Book(),
+            this.Scopes(),
+            elsewhere,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var lookup = Assert.IsType<Ok<ContactLookupResponse>>(result.Result);
+        Assert.Null(lookup.Value!.Contact);
+        Assert.Empty(this.directory.ReceivedCalls());
+    }
+
+    /// <summary>Exporting from the books of a user outside the caller's scope is refused as a user this deployment holds no record for.</summary>
+    [Fact]
+    public async Task ExportAsync_AUserOutsideTheCallersScope_IsRefusedAsAnUnknownUser()
+    {
+        // Arrange
+        var elsewhere = AccessAuthorizations.ForAdministratorScopedAt(
+            AccessAuthorizations.ScopesOutsideTheirTarget[1],
+            MailFathomPermission.AdminAuditRead);
+        var unknown = await ContactEndpoints.ExportAsync(
+            Identity,
+            Guid.Parse("0198f0aa-0000-7000-8000-00000000f0dd"),
+            this.Book(),
+            this.Scopes(),
+            this.Roster(),
+            AdministrativeGrant.WholeSurface,
+            TestContext.Current.CancellationToken);
+
+        // Act
+        var result = await ContactEndpoints.ExportAsync(
+            Identity,
+            User,
+            this.Book(),
+            this.Scopes(),
+            this.Roster(),
+            elsewhere,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(result.Result);
+        var unknownRefusal = Assert.IsType<ProblemHttpResult>(unknown.Result);
+        Assert.Equal(unknownRefusal.StatusCode, refusal.StatusCode);
+        Assert.Empty(this.directory.ReceivedCalls());
     }
 
     private static Contact Asserted(string displayName, string address, string? note = null) =>
@@ -761,7 +931,8 @@ public sealed class ContactEndpointsTests
     private ContactBookScopes Scopes() => new(new StubMailAccountAssignments());
 
     /// <summary>Builds the book the handlers write through, over substituted ports and a session that commits.</summary>
-    private ContactBook Book()
+    /// <param name="authorization">What the book asks about the caller, defaulting to a grant over the whole surface.</param>
+    private ContactBook Book(AccessAuthorization? authorization = null)
     {
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ => new CommittingSession());
@@ -771,7 +942,7 @@ public sealed class ContactEndpointsTests
             this.directory,
             new OptimisticConcurrencyRetryPolicy(sessionFactory, new PersistenceConcurrencyOptions(), this.clock),
             this.clock,
-            AdministrativeGrant.WholeSurface);
+            authorization ?? AdministrativeGrant.WholeSurface);
     }
 
     /// <summary>A session that commits whatever was staged in it, which is what a write's ordinary path needs.</summary>

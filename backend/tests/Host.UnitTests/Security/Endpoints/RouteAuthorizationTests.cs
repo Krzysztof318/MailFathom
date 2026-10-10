@@ -96,6 +96,78 @@ public sealed class RouteAuthorizationTests
         Assert.False(reached);
     }
 
+    /// <summary>A route naming its target admits a grant held below the deployment, and the operation decides whether that scope covers the target.</summary>
+    [Fact]
+    public async Task RefuseUnpermittedAsync_AGrantBelowTheDeploymentOnARouteNamingItsTarget_ReachesTheHandler()
+    {
+        // Arrange
+        var context = ContextFor(
+            RoutePermission.RequiringOverTarget(MailFathomPermission.AdminAuditRead),
+            AccessAuthorizations.ForAdministratorScopedAt(
+                AssignmentScope.Organization(AccessAuthorizations.ScopedOrganization),
+                MailFathomPermission.AdminAuditRead));
+
+        // Act
+        var answer = await RouteAuthorization.RefuseUnpermittedAsync(context, Served, Surface);
+
+        // Assert
+        Assert.Equal("served", answer);
+    }
+
+    /// <summary>
+    /// A route naming its target still refuses a caller holding the permission at no scope at all, by name: the operation
+    /// behind it answers an uncovered target as an empty or unknown one, which a caller granted nothing must not receive
+    /// in place of the refusal.
+    /// </summary>
+    [Fact]
+    public async Task RefuseUnpermittedAsync_ACallerWithoutItOnARouteNamingItsTarget_RefusesNamingThatPermission()
+    {
+        // Arrange
+        var reached = false;
+        var context = ContextFor(
+            RoutePermission.RequiringOverTarget(MailFathomPermission.AdminAuditRead),
+            AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminRead));
+
+        // Act
+        var answer = await RouteAuthorization.RefuseUnpermittedAsync(context, Reaching(() => reached = true), Surface);
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(answer);
+        Assert.Equal(StatusCodes.Status403Forbidden, refusal.StatusCode);
+        Assert.Contains(MailFathomPermission.AdminAuditRead.Name, refusal.ProblemDetails.Detail, StringComparison.Ordinal);
+        Assert.False(reached);
+    }
+
+    /// <summary>
+    /// A use case refusing behind a route naming its target refused over the target, so the answer names the permission
+    /// and does not say the operation is the deployment's alone — which, on a route admitted below the deployment, it
+    /// is not.
+    /// </summary>
+    [Fact]
+    public async Task RefuseUnpermittedAsync_AUseCaseRefusingBehindARouteNamingItsTarget_SaysNothingOfTheDeploymentScope()
+    {
+        // Arrange
+        var authorization = AccessAuthorizations.ForAdministratorScopedAt(
+            AssignmentScope.Organization(AccessAuthorizations.ScopedOrganization),
+            MailFathomPermission.AdminAuditRead);
+        var context = ContextFor(RoutePermission.RequiringOverTarget(MailFathomPermission.AdminAuditRead), authorization);
+
+        // Act
+        var answer = await RouteAuthorization.RefuseUnpermittedAsync(
+            context,
+            Refusing(authorization, MailFathomPermission.AdminAuditRead),
+            Surface);
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(answer);
+        Assert.Equal(StatusCodes.Status403Forbidden, refusal.StatusCode);
+        Assert.Equal(
+            MailFathomPermission.AdminAuditRead.Name,
+            Assert.Contains(RouteAuthorization.PermissionExtension, refusal.ProblemDetails.Extensions));
+        Assert.DoesNotContain(RouteAuthorization.HeldBelowDeploymentExtension, refusal.ProblemDetails.Extensions.Keys);
+        Assert.DoesNotContain("deployment scope", refusal.ProblemDetails.Detail, StringComparison.Ordinal);
+    }
+
     /// <summary>
     /// The client surface answers the same way, and that is the decision rather than an inheritance: its caller is a
     /// page holding this person's own credential, and the session route already tells that caller its whole grant — so

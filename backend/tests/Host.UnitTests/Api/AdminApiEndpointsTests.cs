@@ -310,11 +310,11 @@ public sealed class AdminApiEndpointsTests
                 $"POST {prefix}{MailboxMaintenanceEndpoints.RewindRoute} -> {MailFathomPermission.AdminOperate.Name}",
                 $"POST {prefix}{MailboxMaintenanceEndpoints.RederivationRoute} -> {MailFathomPermission.AdminOperate.Name}",
                 $"GET {prefix}{MailboxMaintenanceEndpoints.RederivationRoute} -> {MailFathomPermission.AdminRead.Name}",
-                $"GET {prefix}{MailboxMutationAuditEndpoint.Route} -> {MailFathomPermission.AdminAuditRead.Name}",
+                $"GET {prefix}{MailboxMutationAuditEndpoint.Route} -> {MailFathomPermission.AdminAuditRead.Name} over its target",
                 $"GET {prefix}{MailAccountCustodyEndpoints.CustodyRoute} -> {MailFathomPermission.AdminRead.Name}",
                 $"POST {prefix}{MailAccountCustodyEndpoints.CustodyAppendSettlementRoute} -> {MailFathomPermission.AdminCustodyWrite.Name}",
                 $"POST {prefix}{MailAccountCustodyEndpoints.CustodySwitchRoute} -> {MailFathomPermission.AdminCustodyWrite.Name}",
-                $"GET {prefix}{MailAnsweringAuditEndpoint.Route} -> {MailFathomPermission.AdminAuditRead.Name}",
+                $"GET {prefix}{MailAnsweringAuditEndpoint.Route} -> {MailFathomPermission.AdminAuditRead.Name} over its target",
                 $"GET {prefix}{EmbeddingProfileEndpoints.StatusRoute} -> {MailFathomPermission.AdminRead.Name}",
                 $"GET {prefix}{EmbeddingProfileEndpoints.ActivationRoute} -> {MailFathomPermission.AdminRead.Name}",
                 $"POST {prefix}{EmbeddingProfileEndpoints.ActivationRoute} -> {MailFathomPermission.AdminSpend.Name}",
@@ -323,27 +323,27 @@ public sealed class AdminApiEndpointsTests
                 $"GET {prefix}{MailRuleEndpoints.RulesRoute} -> {MailFathomPermission.AdminRead.Name}",
                 $"GET {prefix}{MailRuleEndpoints.RunsRoute} -> {MailFathomPermission.AdminRead.Name}",
                 $"POST {prefix}{MailRuleEndpoints.RunsRoute} -> {MailFathomPermission.AdminOperate.Name}",
-                $"GET {prefix}{MailRuleEndpoints.HistoryRoute} -> {MailFathomPermission.AdminAuditRead.Name}",
+                $"GET {prefix}{MailRuleEndpoints.HistoryRoute} -> {MailFathomPermission.AdminAuditRead.Name} over its target",
                 $"GET {prefix}{SpamClassificationEndpoints.RunsRoute} -> {MailFathomPermission.AdminRead.Name}",
                 $"POST {prefix}{SpamClassificationEndpoints.RunsRoute} -> {MailFathomPermission.AdminOperate.Name}",
-                $"GET {prefix}{SpamClassificationEndpoints.ClassificationsRoute} -> {MailFathomPermission.AdminAuditRead.Name}",
+                $"GET {prefix}{SpamClassificationEndpoints.ClassificationsRoute} -> {MailFathomPermission.AdminAuditRead.Name} over its target",
                 $"GET {prefix}{JobDeadLetterEndpoints.DeadLettersRoute} -> {MailFathomPermission.AdminRead.Name}",
                 $"POST {prefix}{JobDeadLetterEndpoints.RetryRoute} -> {MailFathomPermission.AdminOperate.Name}",
                 $"POST {prefix}{JobDeadLetterEndpoints.DropRoute} -> {MailFathomPermission.AdminOperate.Name}",
                 $"GET {prefix}{OutboxEndpoints.SummaryRoute} -> {MailFathomPermission.AdminRead.Name}",
                 $"GET {prefix}{OutboxEndpoints.OutboxRoute} -> {MailFathomPermission.AdminRead.Name}",
-                $"GET {prefix}{OutboxEndpoints.SendRoute} -> {MailFathomPermission.AdminAuditRead.Name}",
+                $"GET {prefix}{OutboxEndpoints.SendRoute} -> {MailFathomPermission.AdminAuditRead.Name} over its target",
                 $"POST {prefix}{OutboxEndpoints.CancellationRoute} -> {MailFathomPermission.AdminOperate.Name}",
                 $"POST {prefix}{OutboxEndpoints.RequeueRoute} -> {MailFathomPermission.AdminOperate.Name}",
                 $"POST {prefix}{MailFolderErasureEndpoint.ErasureRoute} -> {MailFathomPermission.AdminErase.Name}",
-                $"GET {prefix}{ContactEndpoints.ContactsRoute} -> {MailFathomPermission.AdminAuditRead.Name}",
+                $"GET {prefix}{ContactEndpoints.ContactsRoute} -> {MailFathomPermission.AdminAuditRead.Name} over its target",
                 $"POST {prefix}{ContactEndpoints.ContactsRoute} -> {MailFathomPermission.AdminOperate.Name}",
-                $"GET {prefix}{ContactEndpoints.ContactByAddressRoute} -> {MailFathomPermission.AdminAuditRead.Name}",
-                $"GET {prefix}{ContactEndpoints.ContactRoute} -> {MailFathomPermission.AdminAuditRead.Name}",
+                $"GET {prefix}{ContactEndpoints.ContactByAddressRoute} -> {MailFathomPermission.AdminAuditRead.Name} over its target",
+                $"GET {prefix}{ContactEndpoints.ContactRoute} -> {MailFathomPermission.AdminAuditRead.Name} over its target",
                 $"PUT {prefix}{ContactEndpoints.ContactRoute} -> {MailFathomPermission.AdminOperate.Name}",
                 $"DELETE {prefix}{ContactEndpoints.ContactRoute} -> {MailFathomPermission.AdminErase.Name}",
                 $"DELETE {prefix}{ContactEndpoints.CollectedContactsRoute} -> {MailFathomPermission.AdminErase.Name}",
-                $"GET {prefix}{ContactEndpoints.ContactExportRoute} -> {MailFathomPermission.AdminAuditRead.Name}",
+                $"GET {prefix}{ContactEndpoints.ContactExportRoute} -> {MailFathomPermission.AdminAuditRead.Name} over its target",
                 $"POST {prefix}{ContactEndpoints.ContactPromotionRoute} -> {MailFathomPermission.AdminOperate.Name}",
                 $"GET {prefix}{ContentMoveEndpoints.MoveRoute} -> {MailFathomPermission.AdminRead.Name}",
                 $"POST {prefix}{ContentMoveEndpoints.MoveRoute} -> {MailFathomPermission.AdminOperate.Name}",
@@ -537,12 +537,15 @@ public sealed class AdminApiEndpointsTests
     }
 
     /// <summary>
-    /// Every route family the endpoint maps asks its permission at the deployment scope, so an organization's
-    /// administrator holding the whole administrative half over their organization alone is refused on each of them —
-    /// and told, on each, that the scope is what is missing. A route added later is covered by this without being named.
+    /// Every route the endpoint maps asks its permission at the deployment scope unless it states that it names its
+    /// target, so an organization's administrator holding the whole administrative half over their organization alone is
+    /// refused on each of the first kind — and told, on each, that the scope is what is missing — and reaches the
+    /// operation on each of the second, which decides whether that organization covers what the request named. A route
+    /// added later is covered by this without being named, and one that should be the deployment's alone cannot become
+    /// reachable below it without stating so in its own mapping.
     /// </summary>
     [Fact]
-    public async Task MapAdminApi_EveryPublishedRoute_RefusesACallerHoldingItsPermissionOnlyOverOneOrganization()
+    public async Task MapAdminApi_EveryPublishedRoute_RefusesACallerHoldingItsPermissionOnlyOverOneOrganizationUnlessItNamesItsTarget()
     {
         // Arrange
         var organization = AssignmentScope.Organization(new Guid("0198f0aa-0000-7000-8000-0000000000a1"));
@@ -568,18 +571,25 @@ public sealed class AdminApiEndpointsTests
                 static _ => ValueTask.FromResult<object?>("served"),
                 ProtectedSurface.Administration);
 
-            return (Route: $"{endpoint.RoutePattern.RawText} -> {Describe(endpoint)}", Answer: answer);
+            return (
+                Route: $"{endpoint.RoutePattern.RawText} -> {Describe(endpoint)}",
+                endpoint.Metadata.GetMetadata<RoutePermission>()!.NamesTarget,
+                Answer: answer);
         }));
 
         // Assert
-        Assert.NotEmpty(answers);
+        var namingNoTarget = answers.Where(answer => !answer.NamesTarget).ToArray();
+        var namingTheirTarget = answers.Where(answer => answer.NamesTarget).ToArray();
+        Assert.NotEmpty(namingNoTarget);
+        Assert.NotEmpty(namingTheirTarget);
         Assert.All(
-            answers,
+            namingNoTarget,
             answer => Assert.True(
                 answer.Answer is ProblemHttpResult { StatusCode: StatusCodes.Status403Forbidden } refusal
                     && refusal.ProblemDetails.Extensions.TryGetValue(RouteAuthorization.HeldBelowDeploymentExtension, out var held)
                     && held is true,
                 answer.Route));
+        Assert.All(namingTheirTarget, answer => Assert.True(answer.Answer is "served", answer.Route));
     }
 
     /// <summary>Reads back what each mapped route decided, as one line per verb and path.</summary>
@@ -594,11 +604,14 @@ public sealed class AdminApiEndpointsTests
             endpoint => endpoint.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods,
             (endpoint, method) => $"{method} /{endpoint.RoutePattern.RawText?.TrimStart('/')} -> {Describe(endpoint)}");
 
-    /// <summary>Names what a route decided, with the route that decided on none saying so.</summary>
+    /// <summary>Names what a route decided, with the route that decided on none saying so and a route naming its target saying that.</summary>
     private static string Describe(Endpoint endpoint) =>
-        endpoint.Metadata.GetMetadata<RoutePermission>() is { Permission.IsSpecified: true } published
-            ? published.Permission.Name
-            : "none";
+        endpoint.Metadata.GetMetadata<RoutePermission>() switch
+        {
+            { Permission.IsSpecified: true, NamesTarget: true } published => $"{published.Permission.Name} over its target",
+            { Permission.IsSpecified: true } published => published.Permission.Name,
+            _ => "none",
+        };
 
     /// <summary>Builds the routing seam the mapping extends, with the routing services the group needs and nothing else.</summary>
     /// <param name="authorization">What the group's filter asks about the caller, defaulting to the one no test issues a request under.</param>

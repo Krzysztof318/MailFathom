@@ -111,7 +111,7 @@ internal static class ContactEndpoints
         ArgumentNullException.ThrowIfNull(api);
 
         api.MapGet(ContactsRoute, ListAsync)
-            .RequirePermission(MailFathomPermission.AdminAuditRead);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminAuditRead);
 
         // The attribute is reached for its metadata rather than as an MVC filter: it implements
         // IRequestSizeLimitMetadata, which the routing pipeline applies to the request body feature, so a body over the
@@ -121,10 +121,10 @@ internal static class ContactEndpoints
             .RequirePermission(MailFathomPermission.AdminOperate);
 
         api.MapGet(ContactByAddressRoute, FindByAddressAsync)
-            .RequirePermission(MailFathomPermission.AdminAuditRead);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminAuditRead);
 
         api.MapGet(ContactRoute, FindAsync)
-            .RequirePermission(MailFathomPermission.AdminAuditRead);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminAuditRead);
 
         api.MapPut(ContactRoute, AmendAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxRecordRequestBytes))
@@ -140,7 +140,7 @@ internal static class ContactEndpoints
             .RequirePermission(MailFathomPermission.AdminOperate);
 
         api.MapGet(ContactExportRoute, ExportAsync)
-            .RequirePermission(MailFathomPermission.AdminAuditRead);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminAuditRead);
     }
 
     /// <summary>Serves one bounded page of the book, or reports what was wrong with the request.</summary>
@@ -150,6 +150,7 @@ internal static class ContactEndpoints
     /// <param name="cursor">The cursor the previous page returned, or <see langword="null" /> for the first page.</param>
     /// <param name="book">Reads the page, for a caller the book's own grant admits.</param>
     /// <param name="scopes">Composes the books that user reads.</param>
+    /// <param name="authorization">Answers whether the caller's scope covers the named user, who is otherwise answered as one the books hold nothing for.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
     /// <returns><c>200</c> with the page, or <c>400</c> naming what was wrong with the request.</returns>
     /// <remarks>
@@ -164,6 +165,7 @@ internal static class ContactEndpoints
         [FromQuery] string? cursor,
         [FromServices] ContactBook book,
         [FromServices] ContactBookScopes scopes,
+        [FromServices] AccessAuthorization authorization,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(book);
@@ -195,6 +197,11 @@ internal static class ContactEndpoints
         catch (ArgumentOutOfRangeException)
         {
             return Refused($"A contact page holds between 1 and {ContactQuery.MaximumPageSize} contacts.");
+        }
+
+        if (!await authorization.PermitsOverAsync(MailFathomPermission.AdminAuditRead, reader, cancellationToken))
+        {
+            return TypedResults.Ok(new ContactPageResponse([], NextCursor: null));
         }
 
         var bookScope = await scopes.ReadScopeAsync(reader, cancellationToken);
@@ -268,6 +275,7 @@ internal static class ContactEndpoints
     /// <param name="user">The user whose books are read.</param>
     /// <param name="book">Answers what the book holds, for a caller the book's own grant admits.</param>
     /// <param name="scopes">Composes the books that user reads.</param>
+    /// <param name="authorization">Answers whether the caller's scope covers the named user, who is otherwise answered as one the books hold nothing for.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
     /// <returns><c>200</c> with the contact, or <c>200</c> with none where those books hold no such person.</returns>
     internal static async Task<Results<Ok<ContactLookupResponse>, ProblemHttpResult>> FindAsync(
@@ -275,6 +283,7 @@ internal static class ContactEndpoints
         [FromQuery] Guid user,
         [FromServices] ContactBook book,
         [FromServices] ContactBookScopes scopes,
+        [FromServices] AccessAuthorization authorization,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(book);
@@ -290,6 +299,11 @@ internal static class ContactEndpoints
             return EmptyIdentity();
         }
 
+        if (!await authorization.PermitsOverAsync(MailFathomPermission.AdminAuditRead, reader, cancellationToken))
+        {
+            return TypedResults.Ok(new ContactLookupResponse(Contact: null));
+        }
+
         var bookScope = await scopes.ReadScopeAsync(reader, cancellationToken);
 
         var held = await book.FindAsync(bookScope, identity, cancellationToken);
@@ -302,6 +316,7 @@ internal static class ContactEndpoints
     /// <param name="address">The address to resolve.</param>
     /// <param name="book">Answers what the book holds, for a caller the book's own grant admits.</param>
     /// <param name="scopes">Composes the books that user reads.</param>
+    /// <param name="authorization">Answers whether the caller's scope covers the named user, who is otherwise answered as one the books hold nothing for.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
     /// <returns><c>200</c> with the contact, <c>200</c> with none where nobody holds it, or <c>400</c> where the address is not one.</returns>
     /// <remarks>
@@ -314,6 +329,7 @@ internal static class ContactEndpoints
         [FromQuery] string? address,
         [FromServices] ContactBook book,
         [FromServices] ContactBookScopes scopes,
+        [FromServices] AccessAuthorization authorization,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(book);
@@ -327,6 +343,11 @@ internal static class ContactEndpoints
         if (!TryReadAddress(address, out var resolved))
         {
             return Refused("The lookup names no usable address.");
+        }
+
+        if (!await authorization.PermitsOverAsync(MailFathomPermission.AdminAuditRead, reader, cancellationToken))
+        {
+            return TypedResults.Ok(new ContactLookupResponse(Contact: null));
         }
 
         var bookScope = await scopes.ReadScopeAsync(reader, cancellationToken);
@@ -545,6 +566,7 @@ internal static class ContactEndpoints
     /// <param name="book">Produces the export.</param>
     /// <param name="scopes">Composes the books that user reads.</param>
     /// <param name="users">Answers whether this deployment holds a record for the named user.</param>
+    /// <param name="authorization">Answers whether the caller's scope covers the named user, who is otherwise refused as one this deployment holds no record for.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
     /// <returns><c>200</c> with the export, or <c>200</c> with none where the book holds no such person.</returns>
     internal static async Task<Results<Ok<ContactExportResponse>, ProblemHttpResult>> ExportAsync(
@@ -553,6 +575,7 @@ internal static class ContactEndpoints
         [FromServices] ContactBook book,
         [FromServices] ContactBookScopes scopes,
         [FromServices] IUserDirectory users,
+        [FromServices] AccessAuthorization authorization,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(book);
@@ -564,7 +587,8 @@ internal static class ContactEndpoints
             return EmptyUser();
         }
 
-        if (await users.ReadUserAsync(reader, cancellationToken) is null)
+        if (!await authorization.PermitsOverAsync(MailFathomPermission.AdminAuditRead, reader, cancellationToken)
+            || await users.ReadUserAsync(reader, cancellationToken) is null)
         {
             return UnknownUser(reader);
         }

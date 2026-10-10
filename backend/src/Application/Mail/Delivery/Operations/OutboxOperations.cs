@@ -88,8 +88,8 @@ public sealed class OutboxOperations
     /// <summary>Reads one send by the identifier every decision names it by, with what each recipient was told.</summary>
     /// <param name="outgoingEmailId">The send to read.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The record, or <see langword="null" /> when this deployment holds no send with that identifier.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.AdminAuditRead" />.</exception>
+    /// <returns>The record, or <see langword="null" /> when this deployment holds no send with that identifier or the caller's scope does not cover the account it was queued from.</returns>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.AdminAuditRead" /> at some scope.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels.</exception>
     /// <remarks>
     /// This is the one reading that names addresses, and it is bounded to one record for that reason: a caller that
@@ -98,13 +98,18 @@ public sealed class OutboxOperations
     /// also why the grant is the one every other reading of identified third parties is published under rather than
     /// the one its two neighbours share.
     /// </remarks>
-    public Task<OutgoingEmailRecord?> FindAsync(
+    public async Task<OutgoingEmailRecord?> FindAsync(
         OutgoingEmailId outgoingEmailId,
         CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.AdminAuditRead);
+        this.authorization.RequirePermissionAtAnyScope(MailFathomPermission.AdminAuditRead);
 
-        return this.outgoingEmails.FindAsync(outgoingEmailId, cancellationToken);
+        var record = await this.outgoingEmails.FindAsync(outgoingEmailId, cancellationToken);
+
+        return record is not null
+            && await this.authorization.PermitsOverAsync(MailFathomPermission.AdminAuditRead, record.AccountId, cancellationToken)
+                ? record
+                : null;
     }
 
     /// <summary>Withdraws one send that has not begun transmitting.</summary>

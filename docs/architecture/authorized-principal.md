@@ -54,6 +54,20 @@ The process identity is a kind of its own rather than a caller holding everythin
 it. A principal that could be admitted by holding a permission would be reachable by whoever an operator granted that
 permission to — so a use case that may run without a caller admits it **by name**, and never by a permission check.
 
+**An administrative permission is asked about *over what* as well as *what*.** `RequirePermission` asks for a name held
+over the whole deployment, and every administrative operation asks it — whether or not it names a target — except the
+reads published under `mailfathom.admin.audit.read`. Those ask `RequirePermissionOverAsync` with the user or the mail
+account they name, and `AccessAuthorization` places it through `IAdministrativeTargets` — the organization it belongs
+to, and the one user it is wholly the concern of — read from the records per question so a move between organizations
+reaches the next check on every replica. A name held over the deployment answers without placing anything, and a read
+across several mail accounts asks `CoveredMailAccountsAsync`, which places them in one read. A read addressed by an
+identifier of its own, such as one queued message, learns its account only by reading the record: it asks
+`RequirePermissionAtAnyScope` before reading, then `PermitsOverAsync` over the account it found, and answers a record
+outside the caller's scope as one it did not find. A boundary that has to
+answer a target outside the caller's scope exactly as one that does not exist asks `PermitsOverAsync` first and takes
+the not-found path itself, which is how a refusal stops disclosing that the target exists elsewhere;
+`PermitsAtAnyScope` is the cheap question the transport asks of such a route, since it cannot place the target.
+
 **The user is a second axis, and it is not a permission.** A permission says which operations a caller may perform;
 the user says whose mail those operations run against, and no grant an operator writes can make one caller act for
 another. So a principal carries a user or carries none, and the two questions are asked separately: `RequirePermission`
