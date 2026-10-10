@@ -215,7 +215,8 @@ internal static class AdminApiEndpoints
 /// <param name="Service">The product this is, so a client can tell it reached MailFathom rather than something else answering the port.</param>
 /// <param name="Version">The running version, which is what an operator checks before reporting behavior.</param>
 /// <param name="Credential">The administrator and the credential that admitted them, by identifier — the default administrator and none where the endpoint requires no credential — or <c>anonymous</c> where no administrator was admitted.</param>
-/// <param name="Permissions">The published names of what this caller's grant carries, in the order this repository publishes them, and empty for a credential granted nothing.</param>
+/// <param name="Permissions">The published names this caller holds over the whole deployment, which is every operation naming no target, in the order this repository publishes them, and empty for a credential granted nothing there.</param>
+/// <param name="Scopes">Each scope the caller holds anything at — the deployment first, then each organization, then each user — with what it holds there, and empty for a credential granted nothing.</param>
 /// <remarks>
 /// <para>
 /// The caller is named by identifiers this deployment assigned — the user and the credential record — never by the
@@ -228,12 +229,19 @@ internal static class AdminApiEndpoints
 /// configuration file — a grant nobody narrowed reaches the whole surface, and reading that back is how they meet the
 /// posture rather than infer it from what a credential turned out to be able to do.
 /// </para>
+/// <para>
+/// The scopes are reported beside the permissions because an administrator granted a role over one organization holds
+/// names that <see cref="Permissions" /> leaves out, and a grant somebody holds without being told of it reads as one
+/// the deployment lost. <see cref="Permissions" /> stays the answer to what this endpoint admits, since it asks every
+/// route's permission at the deployment scope; the scopes say what the caller is granted, not what it may do here.
+/// </para>
 /// </remarks>
 internal sealed record AdminSessionResponse(
     string Service,
     string Version,
     string Credential,
-    IReadOnlyList<string> Permissions)
+    IReadOnlyList<string> Permissions,
+    IReadOnlyList<AdminSessionScope> Scopes)
 {
     /// <summary>Describes the caller a validated credential produced, and what it was granted.</summary>
     /// <param name="caller">The principal the authentication scheme produced.</param>
@@ -253,7 +261,8 @@ internal sealed record AdminSessionResponse(
             "MailFathom",
             StampedAssemblyVersion.ReadFrom(typeof(AdminSessionResponse).Assembly).Version,
             principal?.Identity ?? NameOf(caller),
-            GrantOf(principal));
+            GrantOf(principal),
+            AdminSessionScope.Of(principal?.Grant ?? ScopedGrant.None));
     }
 
     /// <summary>Names what the caller holds, in the order this repository publishes the set.</summary>
@@ -266,4 +275,55 @@ internal sealed record AdminSessionResponse(
     /// <remarks>A principal's own identity is preferred above, because it is what every administrative act and audit record carries — the user and the credential — so this response and a record of a refusal cannot call one caller two things.</remarks>
     private static string NameOf(ClaimsPrincipal caller) =>
         TransportCallerIdentity.NameOf(caller) ?? TransportCallerIdentity.AnonymousCaller;
+}
+
+/// <summary>One scope an administrative caller holds anything at, and what it holds there.</summary>
+/// <param name="Scope">Which kind of scope it is: <c>deployment</c>, <c>organization</c>, or <c>user</c>.</param>
+/// <param name="Target">The organization or the user the scope names, and none for the deployment.</param>
+/// <param name="Permissions">The published names granted at this scope, other than those only the deployment scope grants, in the order this repository publishes them. At a narrower scope none of them admits an operation on this endpoint, which asks every route's permission at the deployment scope.</param>
+/// <param name="ReachingNothing">The published names granted at this scope that only the deployment scope grants, so at a narrower scope they reach nothing anywhere; always empty for the deployment.</param>
+/// <remarks>
+/// A role is assigned whole, so a role carrying <c>mailfathom.admin.spend</c> may be assigned over an organization and
+/// grant its other names there. That name is reported apart rather than among the rest, because no operation below the
+/// deployment takes it, where the rest name operations that do name a target.
+/// </remarks>
+internal sealed record AdminSessionScope(
+    string Scope,
+    Guid? Target,
+    IReadOnlyList<string> Permissions,
+    IReadOnlyList<string> ReachingNothing)
+{
+    /// <summary>Lists every scope a grant holds anything at, the deployment first and the rest ordered by kind and then by target.</summary>
+    /// <param name="grant">What the caller holds.</param>
+    /// <returns>One entry per scope, empty for a grant holding nothing.</returns>
+    internal static IReadOnlyList<AdminSessionScope> Of(ScopedGrant grant)
+    {
+        var held = MailFathomPermission.All
+            .SelectMany(permission => grant.ScopesOf(permission).Select(scope => (Permission: permission, Scope: scope)))
+            .ToArray();
+
+        return
+        [
+            .. held
+                .GroupBy(pair => pair.Scope, pair => pair.Permission)
+                .OrderBy(scope => scope.Key.Kind)
+                .ThenBy(scope => scope.Key.Target)
+                .Select(scope => new AdminSessionScope(
+                    NameOf(scope.Key.Kind),
+                    scope.Key.Kind == AssignmentScopeKind.Deployment ? null : scope.Key.Target,
+                    [.. scope.Where(permission => !IsInertAt(permission, scope.Key)).Select(permission => permission.Name)],
+                    [.. scope.Where(permission => IsInertAt(permission, scope.Key)).Select(permission => permission.Name)])),
+        ];
+    }
+
+    private static bool IsInertAt(MailFathomPermission permission, AssignmentScope scope) =>
+        scope.Kind != AssignmentScopeKind.Deployment && permission.IsDeploymentScopeOnly;
+
+    private static string NameOf(AssignmentScopeKind kind) => kind switch
+    {
+        AssignmentScopeKind.Deployment => "deployment",
+        AssignmentScopeKind.Organization => "organization",
+        AssignmentScopeKind.User => "user",
+        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "The value names no scope."),
+    };
 }

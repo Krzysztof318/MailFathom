@@ -30,10 +30,11 @@ namespace MailFathom.Application.Access;
 /// and a grant however broad still reaches the mail of the one user the work was admitted for.
 /// </para>
 /// <para>
-/// One member reports instead of refusing, for a boundary composing an answer per caller rather than performing an
-/// operation for one. It decides nothing of its own: <see cref="Permits" /> answers exactly what
+/// Two members report instead of refusing, for a boundary composing an answer per caller rather than performing an
+/// operation for one, and neither decides anything of its own. <see cref="Permits" /> answers exactly what
 /// <see cref="RequirePermission" /> would have refused, so the transport and the use case cannot come to disagree about
-/// what holding a permission means.
+/// what holding a permission means. <see cref="HoldsOnlyBelowDeployment" /> answers what such a refusal says on top of
+/// naming the permission: that the caller holds it, but only over an organization or a user.
 /// </para>
 /// </remarks>
 public sealed class AccessAuthorization
@@ -162,6 +163,14 @@ public sealed class AccessAuthorization
         permission.IsSpecified
         && this.principals.Current is { Kind: AuthorizedPrincipalKind.Caller } caller
         && caller.Holds(permission);
+
+    /// <summary>Reports whether the caller reaching this work holds one administrative capability only below the deployment, which a refusal of an operation admitted only at the deployment scope says on top of naming the permission.</summary>
+    /// <param name="permission">The capability the refused operation required.</param>
+    /// <returns><see langword="true" /> when an admitted caller holds it at an organization or a user and not over the whole deployment.</returns>
+    public bool HoldsOnlyBelowDeployment(MailFathomPermission permission) =>
+        permission.IsSpecified
+        && this.principals.Current is { Kind: AuthorizedPrincipalKind.Caller } caller
+        && caller.HoldsOnlyBelowDeployment(permission);
 
     /// <summary>Requires that the work in hand is being done for one user, and answers which.</summary>
     /// <returns>The user whose mail this unit of work may act on.</returns>

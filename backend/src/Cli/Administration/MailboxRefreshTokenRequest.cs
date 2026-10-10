@@ -26,13 +26,15 @@ internal sealed record MailboxRefreshTokenRequest(
 /// <summary>What a deployment says when it refuses a request, read from the problem document it answers with.</summary>
 /// <param name="Detail">The sentence written for the operator, which is the whole of what the command reports back.</param>
 /// <param name="Permission">The one permission that would have sufficed, which a refusal for want of a grant carries and no other refusal does.</param>
+/// <param name="HeldBelowDeployment">Whether the credential holds that permission, but only over an organization or a user, for an operation that is the deployment's alone.</param>
 /// <remarks>
-/// Two fields of RFC 9457, because two are what the command uses. The rest of the document — the type, the title, the
-/// status — restates either the status line the command already read or a URI it would have nothing to do with, and a
-/// contract that named them would have to keep agreeing with a service that never sends anything else. The permission
-/// is read as its own member rather than out of the sentence, so what the command tells an operator to grant does not
-/// depend on how the deployment happened to word the refusal.
+/// Two fields of RFC 9457 and one extension member, because those are what the command uses. The rest of the document —
+/// the type, the title, the status — restates either the status line the command already read or a URI it would have
+/// nothing to do with, and a contract that named them would have to keep agreeing with a service that never sends
+/// anything else. The permission is read as its own member rather than out of the sentence, so what the command tells
+/// an operator to grant does not depend on how the deployment happened to word the refusal.
 /// </remarks>
 internal sealed record AdminProblem(
     [property: JsonPropertyName("detail")] string? Detail,
-    [property: JsonPropertyName("permission")] string? Permission);
+    [property: JsonPropertyName("permission")] string? Permission,
+    [property: JsonPropertyName("heldBelowDeployment")] bool? HeldBelowDeployment);

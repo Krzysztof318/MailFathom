@@ -327,6 +327,16 @@ public readonly record struct MailFathomPermission
     /// <remarks>The struct default reports <see cref="ProtectedSurface.Mail" /> like any other unset enum field, so ask <see cref="IsSpecified" /> before reading it.</remarks>
     public ProtectedSurface Surface { get; }
 
+    /// <summary>Gets whether every operation this permission covers is the deployment's alone, so holding it at a narrower scope reaches nothing.</summary>
+    /// <remarks>
+    /// <see cref="AdminSpend" /> is the one such name: activating the embedding model names no target and starts a bill
+    /// every organization pays. A role carrying it may still be assigned at an organization or a user, and the other
+    /// names it lists act there, so the assignment is accepted and this name is reported as inert at that scope rather
+    /// than refused — see
+    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0012-authorization-model-named-permissions-and-where-they-are-enforced.md">ADR 0012</see>.
+    /// </remarks>
+    public bool IsDeploymentScopeOnly => this == AdminSpend;
+
     /// <summary>Gets the published name, which is what an operator writes and what a token carries as a scope.</summary>
     /// <exception cref="InvalidOperationException">Thrown when the value is the struct default rather than a permission.</exception>
     public string Name => this.name

@@ -50,6 +50,15 @@ internal static class RouteAuthorization
     /// </remarks>
     internal const string PermissionExtension = "permission";
 
+    /// <summary>The member a refusal carries, set to <see langword="true" />, when the caller holds the permission it names only over part of the deployment.</summary>
+    /// <remarks>
+    /// A route that admits its permission only at the deployment scope refuses an organization's or a user's
+    /// administrator holding that permission all the same. Saying so keeps the operator from granting a name the caller
+    /// already holds: what is missing is the scope. Naming it discloses nothing about the deployment, because the answer
+    /// is the same whatever target the request names, so it says nothing about whether that target exists.
+    /// </remarks>
+    internal const string HeldBelowDeploymentExtension = "heldBelowDeployment";
+
     /// <summary>The member of the problem document that carries the failure's own code, beside the sentence.</summary>
     /// <remarks>
     /// Written for the same reason the permission above is: a caller matches a code it can act on, and reading the
@@ -141,7 +150,7 @@ internal static class RouteAuthorization
         {
             RecordRefusal(context.HttpContext, surface, published.Permission);
 
-            return Refused(published.Permission);
+            return Refused(context.HttpContext, published.Permission);
         }
 
         try
@@ -152,7 +161,7 @@ internal static class RouteAuthorization
         {
             RecordRefusal(context.HttpContext, surface, refusal.RequiredPermission);
 
-            return Refused(refusal.RequiredPermission);
+            return Refused(context.HttpContext, refusal.RequiredPermission);
         }
         catch (DeploymentUserUnresolvedException refusal)
         {
@@ -195,20 +204,40 @@ internal static class RouteAuthorization
             ? pattern
             : UnroutedOperationName;
 
-    /// <summary>Writes the refusal a caller reads, which names the permission and nothing beside it.</summary>
+    /// <summary>Writes the refusal a caller reads, which names the permission and nothing beside it but whether the caller holds it below the deployment.</summary>
     /// <remarks>
     /// A refusal that named no permission would leave a caller with nothing to act on, so the one case that produces
     /// one — a use case refusing over the kind of principal that reached it rather than over a grant — says that instead
     /// of naming something that would not have helped, and carries no <see cref="PermissionExtension" /> member either.
+    /// A caller holding the permission only at an organization or a user is told that rather than that it lacks the
+    /// name, and the document carries <see cref="HeldBelowDeploymentExtension" /> beside it.
     /// </remarks>
-    private static ProblemHttpResult Refused(MailFathomPermission required) => TypedResults.Problem(
-        required.IsSpecified
-            ? $"The credential is not granted '{required.Name}'."
-            : "The credential was not admitted to this operation.",
-        statusCode: StatusCodes.Status403Forbidden,
-        extensions: required.IsSpecified
-            ? new Dictionary<string, object?>(StringComparer.Ordinal) { [PermissionExtension] = required.Name }
-            : null);
+    private static ProblemHttpResult Refused(HttpContext context, MailFathomPermission required)
+    {
+        if (!required.IsSpecified)
+        {
+            return TypedResults.Problem(
+                "The credential was not admitted to this operation.",
+                statusCode: StatusCodes.Status403Forbidden);
+        }
+
+        var extensions = new Dictionary<string, object?>(StringComparer.Ordinal) { [PermissionExtension] = required.Name };
+
+        if (!context.RequestServices.GetRequiredService<AccessAuthorization>().HoldsOnlyBelowDeployment(required))
+        {
+            return TypedResults.Problem(
+                $"The credential is not granted '{required.Name}'.",
+                statusCode: StatusCodes.Status403Forbidden,
+                extensions: extensions);
+        }
+
+        extensions[HeldBelowDeploymentExtension] = true;
+
+        return TypedResults.Problem(
+            $"The credential holds '{required.Name}' only over an organization or a user, and this operation is admitted only at the deployment scope.",
+            statusCode: StatusCodes.Status403Forbidden,
+            extensions: extensions);
+    }
 
     /// <summary>Writes the answer an act reached by a credential naming no user receives where the deployment serves several.</summary>
     /// <remarks>

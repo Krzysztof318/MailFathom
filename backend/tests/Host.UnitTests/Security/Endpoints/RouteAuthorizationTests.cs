@@ -139,6 +139,54 @@ public sealed class RouteAuthorizationTests
             Assert.Contains(RouteAuthorization.PermissionExtension, refusal.ProblemDetails.Extensions));
     }
 
+    /// <summary>
+    /// An operation naming no target is the deployment's alone, so a caller holding its permission over one organization
+    /// is refused — and told that the scope is what is missing, since granting the name again would change nothing.
+    /// </summary>
+    [Fact]
+    public async Task RefuseUnpermittedAsync_ACallerHoldingItOnlyOverOneOrganization_RefusesSayingItIsHeldBelowTheDeployment()
+    {
+        // Arrange
+        var reached = false;
+        var context = ContextFor(
+            RoutePermission.Requiring(MailFathomPermission.AdminRead),
+            AccessAuthorizations.ForPrincipal(AuthorizedPrincipal.Caller(
+                CallerIdentity,
+                ScopedGrant.Of([
+                    (MailFathomPermission.AdminRead, AssignmentScope.Organization(new Guid("0198f0aa-0000-7000-8000-0000000000f1"))),
+                ]))));
+
+        // Act
+        var answer = await RouteAuthorization.RefuseUnpermittedAsync(context, Reaching(() => reached = true), Surface);
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(answer);
+        Assert.Equal(StatusCodes.Status403Forbidden, refusal.StatusCode);
+        Assert.Equal(
+            MailFathomPermission.AdminRead.Name,
+            Assert.Contains(RouteAuthorization.PermissionExtension, refusal.ProblemDetails.Extensions));
+        Assert.Equal(true, Assert.Contains(RouteAuthorization.HeldBelowDeploymentExtension, refusal.ProblemDetails.Extensions));
+        Assert.Contains("only over an organization or a user", refusal.ProblemDetails.Detail, StringComparison.Ordinal);
+        Assert.False(reached);
+    }
+
+    /// <summary>The control for the case above: a caller lacking the name at every scope is told it lacks the name, and nothing about scope.</summary>
+    [Fact]
+    public async Task RefuseUnpermittedAsync_ACallerWithoutItAtAnyScope_CarriesNoScopeMember()
+    {
+        // Arrange
+        var context = ContextFor(
+            RoutePermission.Requiring(MailFathomPermission.AdminRead),
+            AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminOperate));
+
+        // Act
+        var answer = await RouteAuthorization.RefuseUnpermittedAsync(context, Served, Surface);
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(answer);
+        Assert.DoesNotContain(RouteAuthorization.HeldBelowDeploymentExtension, refusal.ProblemDetails.Extensions.Keys);
+    }
+
     /// <summary>The session route's case: a credential granted nothing still reaches a route published under no permission.</summary>
     [Fact]
     public async Task RefuseUnpermittedAsync_ARouteRequiringNoPermission_ServesACallerGrantedNothing()

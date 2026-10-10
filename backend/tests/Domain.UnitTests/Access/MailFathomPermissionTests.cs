@@ -242,6 +242,13 @@ public sealed class MailFathomPermissionTests
     public void JsonWrite_UnspecifiedPermission_IsRejected() =>
         Assert.Throws<JsonException>(() => JsonSerializer.Serialize(default(MailFathomPermission)));
 
+    /// <summary>Starting a provider bill is the one act with no operation below the deployment, so it is the one name inert at a narrower scope.</summary>
+    [Fact]
+    public void IsDeploymentScopeOnly_EveryPublishedPermission_IsTrueForTheSpendingOneAlone() =>
+        Assert.Equal(
+            [MailFathomPermission.AdminSpend],
+            MailFathomPermission.All.Where(permission => permission.IsDeploymentScopeOnly));
+
     private static ProtectedSurface ExpectedSurfaceOf(string name) => name.StartsWith("mailfathom.mail.", StringComparison.Ordinal)
         ? ProtectedSurface.Mail
         : ProtectedSurface.Administration;
