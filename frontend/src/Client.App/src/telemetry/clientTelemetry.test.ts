@@ -349,9 +349,6 @@ describe('clientTelemetryForThisApplication', () => {
             expect(records.getFinishedLogRecords()).toEqual([]);
         });
 
-        // The switch is the stronger of the two, and this is what makes it so rather than a claim that it is: a
-        // deployment asking for the whole stream gets none of it from somebody who declined, and the refusal reaches
-        // the half of the client that holds no pipeline as well as the half that does.
         it('writes at the level a collector keeps by default until a deployment has said', () => {
             const telemetry = clientTelemetryForThisApplication();
 
@@ -361,6 +358,9 @@ describe('clientTelemetryForThisApplication', () => {
             expect(worthRecording(SeverityNumber.DEBUG)).toBe(false);
         });
 
+        // The switch is the stronger of the two, and this is what makes it so rather than a claim that it is: a
+        // deployment asking for the whole stream gets none of it from somebody who declined, and the refusal reaches
+        // the half of the client that holds no pipeline as well as the half that does.
         it('is off for somebody who declined, whatever the deployment asked for', () => {
             const telemetry = clientTelemetryForThisApplication();
 
