@@ -2117,7 +2117,8 @@ record and `MailAccounts` for a mail account; every part is optional, and a poli
 
 A property is named by the record's own key names, exactly as `mfctl user edit` and `mfctl account edit` show them,
 compared without regard to case. Inside `Defaults` and `Forced` the name is the nesting of the object; in
-`Editing:Properties` it is written out with colons, as `EndpointAccess:McpEndpoint` or `Delivery:Host`. A path naming
+`Editing:Properties` it is written out with colons, as `EndpointAccess:McpEndpoint` or `Delivery:Host`. A key joined
+that way inside `Defaults` or `Forced` is refused, so one property has one spelling in a stored policy. A path naming
 a block covers everything beneath it. **A list is one value**: `Folders` is stated whole, and no path reaches an entry
 of one.
 
@@ -2141,7 +2142,7 @@ What a save is refused for, each under `12007` unless the row says otherwise:
 | Refused | Why |
 | --- | --- |
 | A path that names no property of the record | A mistyped path would otherwise be a rule that silently governs nothing. A name that is not a section, a statement, or part of an editing restriction is refused the same way, and so is a name stated twice in different casing |
-| A value the record itself would refuse | A stated value is bound by the binder a record is bound by and held to the record's own rules for that property, so a value of the wrong type, an unknown setting inside a list entry, a number outside the range the setting takes, a name that is no member of the setting's enumeration, and a language, time zone, or telemetry level MailFathom does not know are each refused naming the path. A property named with no value, a single value where a list or a block belongs, and an object where a single value belongs are refused too |
+| A value its property would refuse in a record | Each stated value is bound on its own by the binder a record is bound by, as the property it is stated for, and held to what that property declares: a value of the wrong type, an unknown setting inside a list entry, a name or number that is no member of the setting's enumeration, a value outside a range the setting declares, and a language, time zone, or telemetry level MailFathom does not know are each refused naming the path. A list is stated whole, so each entry of one is held to that entry's own rules as well — a folder mapping with no alias, or one naming neither a remote path nor a special-use role. A property named with no value, a single value where a list or a block belongs, and an object where a single value belongs are refused too |
 | A default or a forced value for an identity property | It says who or which rather than how, so one statement for many records could only be wrong. In `Users` these are `DisplayName` and `Portrait`; in `MailAccounts`, `EmailAddress`, `DisplayName`, `UserName`, `Delivery:UserName`, `Delivery:FromAddress`, and `Delivery:FromDisplayName`. Each may still be listed under `Editing` |
 | A default or a forced value for a secret block | A secret reference is admissible for one user, and a policy speaks for every record in its scope. These are `Secrets:Password`, `OAuth:ClientSecret`, `OAuth:RefreshToken`, `TransportSecurity:TrustedCertificateAuthority`, and `Delivery:Secrets:Password` in `MailAccounts`. Each may still be listed under `Editing`, and the settings beside one in its block are ordinary |
 | An administrator-only property listed as the person's to change | `EndpointAccess` and `ClientTelemetryLevel` in `Users` are written by an administrator alone. They take a default and a forced value and may be listed as locked, and a `NoneExcept` list naming one — or a block holding one — is refused, because no editing mode makes it the person's |
@@ -2150,9 +2151,12 @@ What a save is refused for, each under `12007` unless the row says otherwise:
 | A policy composed over a version no longer in force, under `12008` | Another writer committed first. The refusal names both versions, `mfctl policy edit` reports which settings differ between them, and nothing of the session is merged on top of what is in force |
 | A document that is not one JSON object, or is past the size above | A request carrying no document at all is answered `400` rather than taken as a decision to empty the policy |
 
-**A rule about a whole record is not asked of a policy.** A statement is a sparse record rather than a record, so a
-rule that reads several of a record's properties together — delivery enabled with no submission host, say — has
-nothing to be asked of: forcing `Delivery:Enabled` leaves the host each account states to that account.
+**What a record's validator asks of the record as a whole is not asked of a policy.** A statement is a sparse record
+rather than a record, so a rule that reads several of a record's properties together — delivery enabled with no
+submission host, say — has nothing to be asked of: forcing `Delivery:Enabled` leaves the host each account states to
+that account. The same holds for a bound that validator checks on one property in the course of reading the record,
+rather than the property declaring it: a submission port, an audit trail's retention window, and the thresholds of
+contact collection are held to their bounds when a record is written, and not when a policy states them.
 
 **Reading is `mailfathom.admin.read` and saving is `mailfathom.admin.configuration.write`.** The deployment's policy
 takes the permission held at the deployment, and a caller holding it only below that is

@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Collections;
 using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 using System.Reflection;
@@ -29,15 +30,17 @@ namespace MailFathom.Host.Configuration.Policies;
 /// A value is bound by the configuration binder a record is bound by, strictly, as the type the governed record binds
 /// as — so a statement is a sparse record, and a wrong type inside it is the refusal a record would get. What the
 /// binder cannot refuse is asked of each stated value beside it: a number no member of an enumeration carries, a rule
-/// the property declares for itself, and a written name the record's own rule does not know. A rule about a record as
-/// a whole — that delivery which is enabled names a host — is not asked here, because a statement is not a record:
+/// the property declares for itself, a written name the record's own rule does not know, and, of each entry of a
+/// stated list, the rules that entry declares for itself. A rule the record's validator asks of the record as a whole
+/// is not asked here — that delivery which is enabled names a host, and equally a bound that validator checks on one
+/// property beside the rest — because a statement is not a record and that validator has nothing whole to read:
 /// forcing one property of a block says nothing about its siblings, which each record states for itself.
 /// </para>
 /// <para>
 /// Every fault is reported rather than the first, for the reason a record's binder reports them all: whoever is
 /// correcting a policy one sentence at a time learns about the next only by saving it again. A value is repeated
-/// only where the record's own rule quotes it — a language, a zone, a recording level somebody misspelled — and
-/// never otherwise, because a forced list of trusted senders is somebody's addresses; a key somebody wrote is
+/// only where the record's own rule quotes it — a language, a zone, a recording level somebody misspelled, the alias
+/// a folder was given — and never otherwise, because a forced list of trusted senders is somebody's addresses; a key somebody wrote is
 /// repeated only where it is shaped like a setting's name, so a refusal is MailFathom's own words rather than the
 /// document's.
 /// </para>
@@ -110,7 +113,11 @@ internal sealed class SettingsPolicyCandidate
             return candidate.Refuse(NotAPolicy);
         }
 
-        if (RootSettingsCommitRules.PersistedOctetsOf(documentJson) > SettingsPolicyDocument.MaximumOctets)
+        // Measured on the rendering that is committed rather than on what was typed, because the two differ in
+        // length: the rendering escapes what the typed form may carry literally, and the store refuses by the first.
+        var rendered = policy.ToJsonString();
+
+        if (RootSettingsCommitRules.PersistedOctetsOf(rendered) > SettingsPolicyDocument.MaximumOctets)
         {
             return candidate.Refuse(PastTheCeiling);
         }
@@ -130,7 +137,7 @@ internal sealed class SettingsPolicyCandidate
 
         if (candidate.refusals.Count == 0)
         {
-            candidate.Json = policy.ToJsonString();
+            candidate.Json = rendered;
         }
 
         return candidate;
@@ -187,15 +194,20 @@ internal sealed class SettingsPolicyCandidate
             return;
         }
 
-        var bindable = new JsonObject();
-        var values = new List<GovernableProperty>();
+        var values = new List<(GovernableProperty Property, JsonNode Value)>();
 
-        this.Walk(section, statement, document, prefix: string.Empty, bindable, values);
+        this.Walk(section, statement, document, prefix: string.Empty, values);
 
-        if (values.Count > 0 && this.Bind(section, where, bindable) is { } record)
+        // Each stated value is bound on its own, as the one property it is stated for. The binder stops at the first
+        // value it cannot convert, so a statement bound whole would report one fault of several and leave the rest to
+        // be found a save at a time.
+        foreach (var (property, value) in values)
         {
-            this.refusals.AddRange(values.SelectMany(property => FindValueRefusals(where, property, record)));
-            this.refusals.AddRange(section.FindUnknownWrittenNames(record).Select(refusal => $"{where}: {refusal}"));
+            if (this.Bind(section, where, property, value) is { } record)
+            {
+                this.refusals.AddRange(FindValueRefusals(where, property, record));
+                this.refusals.AddRange(section.FindUnknownWrittenNames(record).Select(refusal => $"{where}: {refusal}"));
+            }
         }
     }
 
@@ -209,8 +221,7 @@ internal sealed class SettingsPolicyCandidate
         string statement,
         JsonObject document,
         string prefix,
-        JsonObject bindable,
-        List<GovernableProperty> values)
+        List<(GovernableProperty Property, JsonNode Value)> values)
     {
         var where = $"{section.Name}:{statement}";
 
@@ -219,6 +230,16 @@ internal sealed class SettingsPolicyCandidate
             if (!StrictBindingFailure.IsSettingPath(name))
             {
                 this.refusals.Add($"{where} names {Repeatable(name)}, which names nothing a policy governs. Remove it.");
+
+                continue;
+            }
+
+            // A joined key binds exactly as the nested one does, so accepting it would store one property under two
+            // spellings, and whatever reads a policy afterwards would have to know both.
+            if (name.Contains(':', StringComparison.Ordinal))
+            {
+                this.refusals.Add(
+                    $"{where} names '{name}' as one key, and inside {statement} a property beneath a block is stated inside that block rather than joined to it by a colon. Nest it.");
 
                 continue;
             }
@@ -252,10 +273,7 @@ internal sealed class SettingsPolicyCandidate
             {
                 if (value is JsonObject block)
                 {
-                    var nested = new JsonObject();
-
-                    this.Walk(section, statement, block, $"{property.Path}:", nested, values);
-                    bindable[name] = nested;
+                    this.Walk(section, statement, block, $"{property.Path}:", values);
                 }
                 else
                 {
@@ -269,8 +287,7 @@ internal sealed class SettingsPolicyCandidate
             }
             else
             {
-                bindable[name] = value!.DeepClone();
-                values.Add(property);
+                values.Add((property, value!));
             }
         }
     }
@@ -299,9 +316,19 @@ internal sealed class SettingsPolicyCandidate
         };
     }
 
-    /// <summary>Binds a sparse statement as the record it governs, strictly, or refuses it in a sentence about the policy.</summary>
-    private object? Bind(SettingsPolicySection section, string where, JsonObject bindable)
+    /// <summary>Binds one stated value as the record it governs, strictly, or refuses it in a sentence about the policy.</summary>
+    /// <returns>A record holding that one value and nothing else, or <see langword="null" /> where the value does not bind.</returns>
+    private object? Bind(
+        SettingsPolicySection section,
+        string where,
+        GovernableProperty property,
+        JsonNode value)
     {
+        var bindable = property.Path
+            .Split(':')
+            .Reverse()
+            .Aggregate(value.DeepClone(), (JsonNode stated, string name) => new JsonObject { [name] = stated });
+
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(bindable.ToJsonString()), writable: false);
 
         // Built from the provider and released in a finally for the reasons the record's own binder gives: a
@@ -324,15 +351,14 @@ internal sealed class SettingsPolicyCandidate
                     $"{where} names {names} inside a list, which is not a setting an entry of that list carries. Remove it, or correct the spelling of the setting it was meant to be.",
                 { UnconvertiblePath: { } path } =>
                     $"The value {where} gives {path} is not of the type that setting takes. Correct it to the type the setting is declared as.",
-                _ => $"{where} does not bind to the settings of {section.Governs}. Check it against the settings such a record carries.",
+                _ => DoesNotBind(where, property),
             });
 
             return null;
         }
         catch (Exception refusal) when (refusal is FormatException or JsonException)
         {
-            this.refusals.Add(
-                $"{where} does not bind to the settings of {section.Governs}. Check it against the settings such a record carries.");
+            this.refusals.Add(DoesNotBind(where, property));
 
             return null;
         }
@@ -369,7 +395,29 @@ internal sealed class SettingsPolicyCandidate
                 yield return $"{where} gives {property.Path} a value that setting refuses: {message}";
             }
         }
+
+        // A list is stated whole, so each entry of one is a whole value and is asked the rules it declares for
+        // itself — which is the one place a rule the record writes in code rather than as an attribute can be asked of
+        // a statement, because an entry has no siblings the record states elsewhere.
+        if (property.Shape == GovernablePropertyShape.List && value is IEnumerable entries)
+        {
+            foreach (var refusal in entries
+                .OfType<IValidatableObject>()
+                .SelectMany(entry => entry.Validate(new ValidationContext(entry)))
+                .Select(result => result.ErrorMessage)
+                .OfType<string>()
+                .Distinct(StringComparer.Ordinal))
+            {
+                // An entry's rule quotes the name the entry was given, which is text whoever wrote the policy chose.
+                yield return refusal.Any(char.IsControl)
+                    ? $"{where} gives {property.Path} an entry that list refuses."
+                    : $"{where} gives {property.Path} an entry that list refuses: {refusal}";
+            }
+        }
     }
+
+    private static string DoesNotBind(string where, GovernableProperty property) =>
+        $"{where} gives {property.Path} a value that does not bind as that setting. Check it against what the setting takes in a record.";
 
     /// <summary>Reports whether an enumeration's value is one of its members, or for a set of flags a combination of them.</summary>
     private static bool IsCarriedByAMember(Type enumeration, object value)
@@ -435,19 +483,19 @@ internal sealed class SettingsPolicyCandidate
         SettingsPolicyEditingMode? mode = null;
         JsonNode? listed = null;
         var statesAList = false;
+        var statesAMode = false;
 
         foreach (var (name, value) in this.MembersOf(editing, where))
         {
             if (Names(name, EditingModeKey))
             {
                 mode = ReadMode(value);
+                statesAMode = true;
 
                 if (mode is null)
                 {
                     this.refusals.Add(
                         $"{where}:{EditingModeKey} takes '{nameof(SettingsPolicyEditingMode.AllExcept)}' or '{nameof(SettingsPolicyEditingMode.NoneExcept)}'.");
-
-                    return;
                 }
             }
             else if (Names(name, EditingPropertiesKey))
@@ -467,12 +515,10 @@ internal sealed class SettingsPolicyCandidate
             return;
         }
 
-        if (mode is not { } chosen)
+        if (!statesAMode)
         {
             this.refusals.Add(
                 $"{where} lists {EditingPropertiesKey} and states no {EditingModeKey}, so the list says neither which properties are locked nor which are open. State {EditingModeKey} as '{nameof(SettingsPolicyEditingMode.AllExcept)}' or '{nameof(SettingsPolicyEditingMode.NoneExcept)}'.");
-
-            return;
         }
 
         if (listed is not JsonArray paths
@@ -483,6 +529,10 @@ internal sealed class SettingsPolicyCandidate
 
             return;
         }
+
+        // A list under a mode that is missing or unreadable is still held to what every mode asks of a path, so a
+        // mistyped one is not first reported once the mode has been corrected.
+        var chosen = mode ?? SettingsPolicyEditingMode.AllExcept;
 
         this.refusals.AddRange(paths
             .Select(path => FindListedPathRefusal(section, chosen, path!.GetValue<string>()))

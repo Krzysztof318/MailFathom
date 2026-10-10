@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Text;
 using System.Text.Json.Nodes;
 using MailFathom.Host.Configuration.Policies;
 using MailFathom.Infrastructure.Persistence.Policies;
@@ -91,7 +92,7 @@ public sealed class SettingsPolicyCandidateTests
     }
 
     [Fact]
-    public void Judge_ADocumentPastTheCeiling_IsRefusedBeforeItIsParsed()
+    public void Judge_ADocumentPastTheCeiling_IsRefused()
     {
         // Arrange
         var saved = $$$$"""{"Users":{"Defaults":{"Language":"{{{{new string('a', SettingsPolicyDocument.MaximumOctets)}}}}"}}}""";
@@ -100,6 +101,30 @@ public sealed class SettingsPolicyCandidateTests
         var candidate = SettingsPolicyCandidate.Judge(saved);
 
         // Assert
+        Assert.Null(candidate.Json);
+        Assert.Contains(
+            $"past the {SettingsPolicyDocument.MaximumOctets} octets",
+            Assert.Single(candidate.Refusals),
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The ceiling is held against what is committed rather than against what was typed. The committed rendering
+    /// escapes a letter the typed form carries in two octets, so a policy well under the ceiling as typed can be past
+    /// it as stored — and the store would refuse that one as a fault of the caller rather than of the policy.
+    /// </summary>
+    [Fact]
+    public void Judge_ADocumentUnderTheCeilingAsTypedAndPastItAsCommitted_IsRefused()
+    {
+        // Arrange
+        var saved = $$$$"""{"Users":{"Defaults":{"Language":"{{{{new string('ą', SettingsPolicyDocument.MaximumOctets / 4)}}}}"}}}""";
+
+        // Act
+        var candidate = SettingsPolicyCandidate.Judge(saved);
+
+        // Assert
+        Assert.True(Encoding.UTF8.GetByteCount(saved) < SettingsPolicyDocument.MaximumOctets);
+        Assert.Null(candidate.Json);
         Assert.Contains(
             $"past the {SettingsPolicyDocument.MaximumOctets} octets",
             Assert.Single(candidate.Refusals),
@@ -142,6 +167,23 @@ public sealed class SettingsPolicyCandidateTests
         // Assert
         Assert.Null(candidate.Json);
         Assert.Contains(candidate.Refusals, refusal => refusal.Contains(expected, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A key joined by colons binds exactly as the nested one does, so accepting it would store one property under two
+    /// spellings. Inside a statement a property is named by nesting, and by a joined path only in an editing list.
+    /// </summary>
+    [Theory]
+    [InlineData("""{"Users":{"Forced":{"EndpointAccess:McpEndpoint":false}}}""", "Users:Forced names 'EndpointAccess:McpEndpoint' as one key")]
+    [InlineData("""{"MailAccounts":{"Defaults":{"Delivery":{"Secrets:Password":{}}}}}""", "MailAccounts:Defaults names 'Secrets:Password' as one key")]
+    public void Judge_APropertyNamedByAJoinedKeyInsideAStatement_IsRefusedAskingForItNested(string saved, string expected)
+    {
+        // Act
+        var candidate = SettingsPolicyCandidate.Judge(saved);
+
+        // Assert
+        Assert.Null(candidate.Json);
+        Assert.Contains(expected, Assert.Single(candidate.Refusals), StringComparison.Ordinal);
     }
 
     /// <summary>A policy governs the properties of a record and never which records exist or how one is identified.</summary>
@@ -262,6 +304,63 @@ public sealed class SettingsPolicyCandidateTests
         Assert.Contains(candidate.Refusals, refusal => refusal.Contains(expected, StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// A list is stated whole, so each entry of one is a whole value and is held to the rules the entry declares for
+    /// itself — the one place a rule a record writes in code can be asked of a statement.
+    /// </summary>
+    [Theory]
+    [InlineData("""[{"Alias":""}]""", "MailAccounts:Forced gives Folders an entry that list refuses: Configured folder aliases must be non-empty.")]
+    [InlineData("""[{"Alias":"inbox"}]""", "MailAccounts:Forced gives Folders an entry that list refuses: Folder alias 'inbox' must name at least one of RemotePath and SpecialUse.")]
+    public void Judge_AListEntryItsOwnRulesRefuse_IsRefusedByThatRule(string folders, string expected)
+    {
+        // Arrange
+        var saved = $$$$"""{"MailAccounts":{"Forced":{"Folders":{{{{folders}}}}}}}""";
+
+        // Act
+        var candidate = SettingsPolicyCandidate.Judge(saved);
+
+        // Assert
+        Assert.Null(candidate.Json);
+        Assert.Contains(candidate.Refusals, refusal => refusal.Contains(expected, StringComparison.Ordinal));
+    }
+
+    /// <summary>A name an entry was given is text whoever wrote the policy chose, so one carrying a line break is not repeated back.</summary>
+    [Fact]
+    public void Judge_AListEntryNamedWithAControlCharacter_IsRefusedWithoutRepeatingTheName()
+    {
+        // Arrange
+        const string saved = """{"MailAccounts":{"Forced":{"Folders":[{"Alias":"inbox\nDatabase error: reached"}]}}}""";
+
+        // Act
+        var candidate = SettingsPolicyCandidate.Judge(saved);
+
+        // Assert
+        Assert.Null(candidate.Json);
+        Assert.NotEmpty(candidate.Refusals);
+        Assert.All(candidate.Refusals, refusal => Assert.DoesNotContain("Database error", refusal, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Each stated value is bound on its own, so a value the binder cannot convert does not hide the faults beside it:
+    /// whoever corrects a statement learns of all three here rather than one a save.
+    /// </summary>
+    [Fact]
+    public void Judge_AStatementWithSeveralFaultyValues_ReportsEveryOneOfThem()
+    {
+        // Arrange
+        const string saved = """{"MailAccounts":{"Forced":{"Port":"many","Mode":7,"Language":"Klingon"}}}""";
+
+        // Act
+        var candidate = SettingsPolicyCandidate.Judge(saved);
+
+        // Assert
+        Assert.Null(candidate.Json);
+        Assert.Equal(3, candidate.Refusals.Count);
+        Assert.Contains(candidate.Refusals, refusal => refusal.Contains("gives Port is not of the type", StringComparison.Ordinal));
+        Assert.Contains(candidate.Refusals, refusal => refusal.Contains("gives Mode a value that names none of", StringComparison.Ordinal));
+        Assert.Contains(candidate.Refusals, refusal => refusal.Contains("Language states 'Klingon'", StringComparison.Ordinal));
+    }
+
     /// <summary>A value shaped as its property is not would bind as something else, or as nothing, rather than be refused.</summary>
     [Theory]
     [InlineData("""{"Users":{"Defaults":{"Language":null}}}""", "Users:Defaults names Language and states no value for it.")]
@@ -336,6 +435,24 @@ public sealed class SettingsPolicyCandidateTests
         // Assert
         Assert.Null(candidate.Json);
         Assert.Contains(candidate.Refusals, refusal => refusal.Contains(expected, StringComparison.Ordinal));
+    }
+
+    /// <summary>A mode that cannot be read does not hide a path beside it that names nothing.</summary>
+    [Theory]
+    [InlineData("""{"Mode":"Open","Properties":["Languagee"]}""", "Users:Editing:Mode takes")]
+    [InlineData("""{"Properties":["Languagee"]}""", "states no Mode")]
+    public void Judge_AnEditingRestrictionWithAFaultyModeAndAFaultyPath_ReportsBoth(string editing, string expectedOfTheMode)
+    {
+        // Arrange
+        var saved = $$$"""{"Users":{"Editing":{{{editing}}}}}""";
+
+        // Act
+        var candidate = SettingsPolicyCandidate.Judge(saved);
+
+        // Assert
+        Assert.Equal(2, candidate.Refusals.Count);
+        Assert.Contains(candidate.Refusals, refusal => refusal.Contains(expectedOfTheMode, StringComparison.Ordinal));
+        Assert.Contains(candidate.Refusals, refusal => refusal.Contains("lists Languagee, which is not a property", StringComparison.Ordinal));
     }
 
     [Theory]

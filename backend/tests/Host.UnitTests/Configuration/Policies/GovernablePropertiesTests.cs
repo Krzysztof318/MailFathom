@@ -14,20 +14,115 @@ namespace MailFathom.Host.UnitTests.Configuration.Policies;
 public sealed class GovernablePropertiesTests
 {
     /// <summary>
-    /// Describing a record refuses a setting no policy statement could govern, so this is the test that fails when a
-    /// property added to a user's record or to a mail account's declaration is neither governable nor classed.
+    /// Every property a policy may name, of both records, with the shape it is governed as. The whole of it is pinned
+    /// so that a property added to a user's record or to a mail account's declaration fails here until somebody has
+    /// decided what it is: one a policy governs as it stands, one of a class, or one outside every policy. A setting
+    /// of a shape no statement could govern does not get this far, because describing its record refuses it.
     /// </summary>
     [Fact]
-    public void All_BothGovernedRecords_AreDescribedWithEveryPropertyGovernableOrClassed()
+    public void All_BothGovernedRecords_DescribeExactlyThePropertiesSomebodyDecidedAbout()
     {
         // Arrange
-        var sections = SettingsPolicySection.All;
+        string[] users =
+        [
+                "ClientTelemetryLevel Value",
+                "DisplayName Value",
+                "EndpointAccess Block",
+                "EndpointAccess:ClientEndpoint Value",
+                "EndpointAccess:McpEndpoint Value",
+                "Language Value",
+                "Portrait Value",
+                "TimeZone Value",
+        ];
+        string[] mailAccounts =
+        [
+                "AnsweringAuditTrail Block",
+                "AnsweringAuditTrail:Enabled Value",
+                "AnsweringAuditTrail:Retention Value",
+                "AuditTrail Block",
+                "AuditTrail:Enabled Value",
+                "AuditTrail:Retention Value",
+                "AuthoredDeleteEmailDisposition Value",
+                "AuthoredDeleteServerDisposition Value",
+                "AuthoredFolderDeleteDisposition Value",
+                "ContactCollection Block",
+                "ContactCollection:Enabled Value",
+                "ContactCollection:Exclusions List",
+                "ContactCollection:MaxContactsPerRun Value",
+                "ContactCollection:MinimumMessagesFromSender Value",
+                "Delivery Block",
+                "Delivery:ConnectionSecurity Value",
+                "Delivery:Enabled Value",
+                "Delivery:FileSentCopy Value",
+                "Delivery:FromAddress Value",
+                "Delivery:FromDisplayName Value",
+                "Delivery:Host Value",
+                "Delivery:Port Value",
+                "Delivery:Secrets Block",
+                "Delivery:Secrets:Password Secret",
+                "Delivery:UserName Value",
+                "Delivery:WithdrawDuplicateSentCopy Value",
+                "DisplayName Value",
+                "EarliestEmailReceivedDate Value",
+                "EmailAddress Value",
+                "Folders List",
+                "Host Value",
+                "Language Value",
+                "Mode Value",
+                "OAuth Block",
+                "OAuth:ClientId Value",
+                "OAuth:ClientSecret Secret",
+                "OAuth:Grant Value",
+                "OAuth:PublicClient Value",
+                "OAuth:RefreshToken Secret",
+                "OAuth:Scope Value",
+                "OAuth:TokenEndpoint Value",
+                "Port Value",
+                "RemotelyDeletedEmailDisposition Value",
+                "RuleActions Block",
+                "RuleActions:Copy Value",
+                "RuleActions:Delete Value",
+                "RuleActions:MarkAsFlagged Value",
+                "RuleActions:MarkAsRead Value",
+                "RuleActions:Move Value",
+                "RuleActions:WriteKeywords Value",
+                "Secrets Block",
+                "Secrets:Password Secret",
+                "SensitiveContent Block",
+                "SensitiveContent:Pii Block",
+                "SensitiveContent:Pii:Enabled Value",
+                "SensitiveContent:ScreenOutgoingMailFor List",
+                "SensitiveContent:Secrets Block",
+                "SensitiveContent:Secrets:Enabled Value",
+                "SpamClassification Block",
+                "SpamClassification:Actions Block",
+                "SpamClassification:Actions:JunkFolder Value",
+                "SpamClassification:Actions:MarkAsRead Value",
+                "SpamClassification:Actions:MoveToJunkFolder Value",
+                "SpamClassification:Actions:Threshold Value",
+                "SpamClassification:Enabled Value",
+                "SpamClassification:ScannedFolders List",
+                "SpamClassification:ScannerThreshold Value",
+                "SpamClassification:UseScanner Value",
+                "TransportSecurity Block",
+                "TransportSecurity:AllowClearTextAuthenticationOverUnencryptedConnection Value",
+                "TransportSecurity:AllowInsecureConnection Value",
+                "TransportSecurity:CertificateTrust Value",
+                "TransportSecurity:ConnectionSecurity Value",
+                "TransportSecurity:PermittedAuthenticationMechanisms List",
+                "TransportSecurity:TrustedCertificateAuthority Secret",
+                "TrustedAuthenticationServiceIdentifier Value",
+                "TrustedSenders List",
+                "UserName Value",
+        ];
 
         // Act
-        var described = sections.Select(section => section.Properties.All.Count);
+        var describedUsers = DescribedIn(SettingsPolicySection.Users.Properties);
+        var describedMailAccounts = DescribedIn(SettingsPolicySection.MailAccounts.Properties);
 
         // Assert
-        Assert.All(described, count => Assert.True(count > 0));
+        Assert.Equal(users, describedUsers);
+        Assert.Equal(mailAccounts, describedMailAccounts);
     }
 
     /// <summary>The classes are a decision per property, so the whole of it is pinned: a property joining or leaving one is a change somebody made on purpose.</summary>
@@ -265,6 +360,11 @@ public sealed class GovernablePropertiesTests
         Assert.Equal(7, value);
         Assert.Equal(typeof(int), level.ValueType);
     }
+
+    private static IEnumerable<string> DescribedIn(GovernableProperties properties) =>
+        properties.All
+            .OrderBy(property => property.Path, StringComparer.Ordinal)
+            .Select(property => $"{property.Path} {property.Shape}");
 
     private static IEnumerable<string> ClassedIn(GovernableProperties properties) =>
         properties.All
