@@ -11,9 +11,9 @@ namespace MailFathom.Cli.Commands.Users;
 /// <summary>Records a person this deployment did not hold.</summary>
 /// <remarks>
 /// <para>
-/// The identifier is the deployment's to mint, so this states a label and nothing else. What comes back is the handle
-/// every later act names the user by, which is worth capturing: it is the one thing a script cannot reconstruct from
-/// what it typed.
+/// The identifier is the deployment's to mint, so this states a label and, optionally, the organization the user
+/// enters. What comes back is the handle every later act names the user by, which is worth capturing: it is the one
+/// thing a script cannot reconstruct from what it typed.
 /// </para>
 /// <para>
 /// A new user is served no mailbox until one is created or assigned to them, and nothing about it is in a

@@ -252,8 +252,8 @@ line.
 A caller of an endpoint naming no method is named `user <the default administrator> credential none`.
 
 The route reports the grant twice over, beside the `user` and the `roles` those two lines are printed from.
-`permissions` names what the caller holds over the whole deployment, which is what every operation naming no target
-asks for. `scopes` names each scope the caller holds anything at — the deployment first, then each organization, then
+`permissions` names what the caller holds over the whole deployment, which is what an operation naming no target asks
+for — the two listings apart, which answer with what any scope covers. `scopes` names each scope the caller holds anything at — the deployment first, then each organization, then
 each user, by identifier — with the administrative names held there, and with any name held there that
 [only the deployment scope grants](permissions.md#what-only-the-deployment-scope-grants) listed apart under
 `reachingNothing`. Neither reports a mail name: this endpoint performs none, whatever the caller's roles list:
@@ -280,11 +280,12 @@ each user, by identifier — with the administrative names held there, and with 
 `mfctl status` prints each scope narrower than the deployment on a line of its own. Those lines report what the caller
 is granted at each scope, and how far it acts: **a name held only over an organization or a user reaches what that
 scope covers and nothing else**. It admits [the routes a grant below the deployment
-reaches](#a-grant-held-below-the-deployment) for a target inside that scope and no route that names no target, and
-each scope's line says so whatever the first line holds:
+reaches](#a-grant-held-below-the-deployment) for a target inside that scope, and the listings of users and of
+organizations, which answer with what that scope covers; it admits no other route that names no target, and each
+scope's line says so whatever the first line holds:
 
 ```text
-It holds no administrative permission over the whole deployment, so every operation is refused but this one and those naming something a scope below covers.
+It holds no administrative permission over the whole deployment, so every operation is refused but this one, those naming something a scope below covers, and the listings, which answer with what such a scope covers.
 Over organization 0198f0aa-… it is granted mailfathom.admin.read, mailfathom.admin.operate, which reaches only what that scope covers. mailfathom.admin.spend reaches nothing there, because only the deployment scope grants it.
 ```
 
@@ -407,16 +408,16 @@ These routes accept a grant held at any of the three, and check it against the t
 | `GET /api/admin/contacts`, `GET /api/admin/contacts/by-address`, `GET /api/admin/contacts/{id}`, `GET /api/admin/contacts/{id}/export` | The user `user` names, and each mail account whose collected book that user reads |
 | `GET /api/admin/users` | — lists the users the caller's scopes for `mailfathom.admin.read` cover |
 | `POST /api/admin/users` | The organization the body's `organizationId` names; recording a user into none is the deployment's alone |
-| `DELETE /api/admin/users/{userId}` | The user |
+| `DELETE /api/admin/users/{userId}` | The user, and every mail account assigned to them alone, which the erasure deletes with them |
 | `PUT /api/admin/users/{userId}/display-name` | The user |
 | `PUT /api/admin/users/{userId}/endpoint-access` | The user |
 | `GET /api/admin/users/{userId}/record` | The user |
 | `POST /api/admin/users/{userId}/record` | The user |
 | `POST /api/admin/users/{userId}/secrets` | The user |
 | `GET /api/admin/users/{userId}/credentials` | The user |
-| `POST /api/admin/users/{userId}/credentials` | The user, and each scope the user holds each of their [names](#user-credentials) at |
-| `PUT /api/admin/users/{userId}/credentials/{credentialId}/material` | The user, and each scope the user holds each of their names at |
-| `PUT /api/admin/users/{userId}/credentials/{credentialId}/enablement` | The user, and — to enable — each scope the user holds each of their names at |
+| `POST /api/admin/users/{userId}/credentials` | The user, each scope the user holds each of their administrative [names](#user-credentials) at, and every mail name the user holds, held at any scope |
+| `PUT /api/admin/users/{userId}/credentials/{credentialId}/material` | The user, each scope the user holds each of their administrative names at, and every mail name the user holds, held at any scope |
+| `PUT /api/admin/users/{userId}/credentials/{credentialId}/enablement` | The user, and — to enable — each scope the user holds each of their administrative names at, and every mail name the user holds, held at any scope |
 | `DELETE /api/admin/users/{userId}/credentials/{credentialId}` | The user |
 | `PUT /api/admin/users/{userId}/organization` | The user where they stand, and the organization the body moves them into; a move out of every organization is the deployment's alone |
 | `GET /api/admin/organizations` | — lists the organizations the caller's scopes for `mailfathom.admin.read` cover; a user scope covers none |
@@ -440,6 +441,11 @@ it does cover, and leaves that one out rather than refusing the user.
 **A listing never refuses over a scope.** It answers with what the caller's scopes cover, a page at a time, so an
 organization's administrator lists that organization's people and nobody else's, and a caller holding
 `mailfathom.admin.read` over one user alone lists that user and no organization.
+
+**One refusal does reach past a scope: a label already taken.** A user's label is unique across the deployment rather
+than within an organization, so an organization's administrator recording or relabelling one of their own people with a
+label somebody outside that organization carries is refused with `400` saying another user is already recorded under it.
+That tells them such a label exists somewhere in the deployment and nothing else about who carries it.
 
 **Two acts behind these routes are the deployment's alone**: recording a user into no organization, and moving a user
 out of every organization, because only the deployment scope covers somebody in none. A caller holding the permission
@@ -563,7 +569,7 @@ and a request with none is refused as any other.
 | `POST /api/admin/users` | `mailfathom.admin.configuration.write` | Records a user this deployment did not hold, from the display name the body carries, into the organization its `organizationId` names or into none where it names none, and answers with the identifier they were minted under. It refuses, naming what to change, a second user while a user-facing endpoint admits a caller who names nobody, a label another user already carries, and an organization this deployment does not hold. |
 | `PUT /api/admin/users/{userId}/display-name` | `mailfathom.admin.configuration.write` | Replaces the label the user is told apart by. It answers with no body — the label the request carried is the whole of what changed — refuses a label another user carries, naming what to change, and answers `404` for a user this deployment holds no record for, as every other user-scoped route does. |
 | `PUT /api/admin/users/{userId}/endpoint-access` | `mailfathom.admin.configuration.write` | Keeps the user off [the MCP endpoint, the client endpoint, or both](#users-and-their-records), or lets them back on, from `mcpEndpoint` and `clientEndpoint` in the body; a switch the body leaves out stays where it is and a body naming neither is refused. It writes them into the user's record, answers both switches as the record now states them, and answers `404` for a user this deployment holds no record for and `409` where another write moved the record first. |
-| `DELETE /api/admin/users/{userId}` | `mailfathom.admin.erase` | Erases the user and every message, folder, attachment, and derived index this deployment holds for them, once [the work bound to their own mailboxes has stopped](#users-and-their-records). **This is the one route here that destroys mail, and it cannot be undone.** A user this deployment does not hold is reported as nothing erased rather than as a refusal, and work that will not stop within its bound is answered `409` naming it, with nothing erased. |
+| `DELETE /api/admin/users/{userId}` | `mailfathom.admin.erase` | Erases the user and every message, folder, attachment, and derived index this deployment holds for them, once [the work bound to their own mailboxes has stopped](#users-and-their-records). **This is the one route here that destroys mail, and it cannot be undone.** A user this deployment does not hold is reported as nothing erased rather than as a refusal, and work that will not stop within its bound is answered `409` naming it, with nothing erased. So is a user who alone is assigned a mail account the caller's scope does not cover — one in no organization, which only the deployment scope covers, under a scope naming the user. |
 | `GET /api/admin/users/{userId}/record` | `mailfathom.admin.read` | Hands over one user's record as the redacted JSON an editing session opens, with the version it was read at. The record carries no mail accounts: [those are read on their own routes](#mail-accounts-and-who-they-are-assigned-to), under `/api/admin/mail-accounts`. |
 | `POST /api/admin/users/{userId}/record` | `mailfathom.admin.configuration.write` | Takes that record back edited and commits it as one change against the version it was opened over. It is what `mfctl user edit` sends when the editor exits, and a record another writer moved past is refused as superseded rather than merged. |
 | `GET /api/admin/mail-accounts` | `mailfathom.admin.read` | Reads [one page](#reading-the-users-mail-accounts-and-organizations-a-page-at-a-time) of [the mail accounts this deployment holds](#mail-accounts-and-who-they-are-assigned-to), each with its identifier, its version, the users it is assigned to, its address, its display name, and the `organizationId` it belongs to or `null` for none, and `nextCursor` naming where the following page continues. The declaration itself is read one account at a time. |

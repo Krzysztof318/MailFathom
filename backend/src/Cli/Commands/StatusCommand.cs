@@ -108,7 +108,7 @@ internal static class StatusCommand
     private static string DescribeGrant(IReadOnlyList<string>? permissions, bool holdsNarrowerScopes) => permissions switch
     {
         null => "The deployment did not state what the credential may do.",
-        { Count: 0 } when holdsNarrowerScopes => "It holds no administrative permission over the whole deployment, so every operation is refused but this one and those naming something a scope below covers.",
+        { Count: 0 } when holdsNarrowerScopes => "It holds no administrative permission over the whole deployment, so every operation is refused but this one, those naming something a scope below covers, and the listings, which answer with what such a scope covers.",
         { Count: 0 } => "It holds no administrative permission, so every operation but this one is refused.",
         _ => $"It holds {string.Join(", ", permissions)}.",
     };

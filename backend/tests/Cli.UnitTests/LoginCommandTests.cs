@@ -477,7 +477,7 @@ public sealed class LoginCommandTests : IDisposable
                 && line.Contains("mailfathom.admin.spend reaches nothing there", StringComparison.Ordinal));
         Assert.Contains(
             this.console.Lines,
-            line => line == "It holds no administrative permission over the whole deployment, so every operation is refused but this one and those naming something a scope below covers.");
+            line => line == "It holds no administrative permission over the whole deployment, so every operation is refused but this one, those naming something a scope below covers, and the listings, which answer with what such a scope covers.");
     }
 
     /// <summary>
@@ -530,7 +530,7 @@ public sealed class LoginCommandTests : IDisposable
         Assert.Equal(0, exitCode);
         Assert.Contains(
             this.console.Lines,
-            line => line == "It holds no administrative permission over the whole deployment, so every operation is refused but this one and those naming something a scope below covers.");
+            line => line == "It holds no administrative permission over the whole deployment, so every operation is refused but this one, those naming something a scope below covers, and the listings, which answer with what such a scope covers.");
         Assert.Contains(
             this.console.Lines,
             line => line == "Over organization 0198f0c4-0000-7000-8000-000000000003 it is granted mailfathom.admin.read, mailfathom.admin.audit.read, which reaches only what that scope covers.");

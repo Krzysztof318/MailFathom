@@ -85,7 +85,7 @@ internal static class OrganizationEndpoints
             .RequirePermission(MailFathomPermission.AdminConfigurationWrite);
     }
 
-    /// <summary>Lists one page of the organizations this deployment holds.</summary>
+    /// <summary>Lists one page of the organizations the caller's scopes cover.</summary>
     /// <param name="pageSize">How many organizations the page may hold, or <see langword="null" /> for the default.</param>
     /// <param name="cursor">The cursor the previous page returned, or <see langword="null" /> for the first page.</param>
     /// <param name="organizations">The organization administration.</param>

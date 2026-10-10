@@ -286,6 +286,36 @@ public sealed class OrganizationAdministrationTests
         Assert.Empty(harness.Organizations.ReceivedCalls());
     }
 
+    /// <summary>
+    /// Recording an organization, deleting one, and changing its short name are the deployment's alone: an organization's
+    /// own scope renames it and does none of these, and neither does a scope naming one of its members.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(ScopesBelowTheDeployment))]
+    public async Task EveryDeploymentAct_ACallerHoldingBothWritesOnlyBelowTheDeployment_IsRefusedWithoutTouchingTheStore(AssignmentScope scope)
+    {
+        // Arrange
+        var harness = new AdministrationHarness(AccessAuthorizations.ForAdministratorScopedAt(
+            scope,
+            MailFathomPermission.AdminConfigurationWrite,
+            MailFathomPermission.AdminCredentialsWrite));
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        // Act
+        var creation = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            harness.Administration.CreateAsync("Acme", OrganizationShortName.Create("ACME"), cancellationToken));
+        var deletion = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            harness.Administration.DeleteAsync(OrganizationId, cancellationToken));
+        var shortNameChange = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            harness.Administration.ChangeShortNameAsync(OrganizationId, OrganizationShortName.Create("ACME"), cancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.AdminConfigurationWrite, creation.RequiredPermission);
+        Assert.Equal(MailFathomPermission.AdminConfigurationWrite, deletion.RequiredPermission);
+        Assert.Equal(MailFathomPermission.AdminCredentialsWrite, shortNameChange.RequiredPermission);
+        Assert.Empty(harness.Organizations.ReceivedCalls());
+    }
+
     /// <summary>A move names a user and a destination, and reaches the store only where the caller's scope covers both.</summary>
     [Theory]
     [MemberData(nameof(ScopesCoveringTheOrganization))]

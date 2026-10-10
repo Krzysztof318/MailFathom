@@ -298,7 +298,8 @@ internal sealed partial class UserRosterAdministration(
     /// </para>
     /// <para>
     /// A user outside the caller's scope is answered exactly as one this deployment does not hold: nothing erased and
-    /// nothing served.
+    /// nothing served. A user inside it who is the only one assigned a mail account outside it is refused instead,
+    /// because the erasure deletes that account with its mail and covering a user is not covering what goes with them.
     /// </para>
     /// </remarks>
     internal async Task<UserRosterErasureOutcome> EraseAsync(UserId user, CancellationToken cancellationToken)
@@ -317,6 +318,22 @@ internal sealed partial class UserRosterAdministration(
 
         var solelyAssigned = await accounts.ReadSolelyAssignedAsync(user, cancellationToken);
         MailAccountId[] solelyAssignedAccounts = [.. solelyAssigned.Select(static account => MailAccountId.Create(account.ToString("D")))];
+
+        // Covering the user is not covering what goes with them. A mail account in no organization is the deployment's
+        // alone whoever it is assigned to, so a scope naming a user in none covers the user and not that account.
+        var coveredAccounts = await authorization.CoveredMailAccountsAsync(
+            MailFathomPermission.AdminErase,
+            solelyAssignedAccounts,
+            cancellationToken);
+
+        if (coveredAccounts.Count != solelyAssignedAccounts.Length)
+        {
+            this.LogUserErasureRefused();
+
+            return UserRosterErasureOutcome.Refused(
+                $"Erasing this user would delete a mail account assigned to nobody else that the caller's grant of '{MailFathomPermission.AdminErase.Name}' does not cover, so nothing was erased. An administrator whose scope covers that account erases them.");
+        }
+
         var served = await this.IsServedAsync(user, cancellationToken);
         var erased = false;
         Guid? unquiesced = null;
@@ -442,6 +459,14 @@ internal sealed partial class UserRosterAdministration(
     private static string NoSuchOrganization(Guid organizationId) =>
         $"This deployment holds no organization '{organizationId}'. List the organizations to read the identifiers it does hold.";
 
+    /// <summary>Says that the label a user was to carry is one somebody else already does.</summary>
+    /// <remarks>
+    /// A label is unique across the deployment rather than within an organization, so this is the one answer here that
+    /// reaches past a caller's scope: an organization's administrator recording or relabelling one of their own people
+    /// learns from it that somebody, somewhere in the deployment, already carries that label — and nothing else about
+    /// them. Withholding it would need labels unique per organization, which is a change to the schema and to how a
+    /// user is selected by label rather than to this sentence.
+    /// </remarks>
     private static string LabelTaken(string label) =>
         $"Another user of this deployment is already recorded as '{label}'. A label is what an administrator selects a user by, so two users carrying one would leave nothing to select on: choose another.";
 

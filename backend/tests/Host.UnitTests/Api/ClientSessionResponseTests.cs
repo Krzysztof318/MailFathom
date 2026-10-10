@@ -49,13 +49,14 @@ public sealed class ClientSessionResponseTests
     {
         // Act
         var first = ClientSessionResponse.For(
-            AuthorizedPrincipal.Caller("one", [MailFathomPermission.MailRead, MailFathomPermission.MailSend]),
+            AuthorizedPrincipal.CallerActingFor(SyntheticUser.Deployment, "one", [MailFathomPermission.MailRead, MailFathomPermission.MailSend]),
             forwardsTelemetry: true, ClientTelemetryLevel.Info);
         var second = ClientSessionResponse.For(
-            AuthorizedPrincipal.Caller("two", [MailFathomPermission.MailSend, MailFathomPermission.MailRead]),
+            AuthorizedPrincipal.CallerActingFor(SyntheticUser.Deployment, "two", [MailFathomPermission.MailSend, MailFathomPermission.MailRead]),
             forwardsTelemetry: true, ClientTelemetryLevel.Info);
 
         // Assert
+        Assert.Equal([MailFathomPermission.MailRead.Name, MailFathomPermission.MailSend.Name], first.Permissions);
         Assert.Equal(first.Permissions, second.Permissions);
     }
 

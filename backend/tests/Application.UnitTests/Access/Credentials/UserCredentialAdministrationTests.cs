@@ -464,6 +464,9 @@ public sealed class UserCredentialAdministrationTests
         // Arrange
         var harness = new AdministrationHarness(
             AccessAuthorizations.ForAdministratorScopedAt(scope, MailFathomPermission.AdminRead));
+        harness.Grants.ReadGrantOfAsync(User, Arg.Any<CancellationToken>())
+            .Returns(ScopedGrant.AtDeployment([MailFathomPermission.MailRead]));
+        harness.Grants.ClearReceivedCalls();
 
         // Act
         var listing = await harness.Administration.ReadCredentialsAsync(User, TestContext.Current.CancellationToken);
@@ -472,6 +475,7 @@ public sealed class UserCredentialAdministrationTests
         Assert.Empty(listing.Credentials);
         Assert.Empty(listing.UserGrant.Permissions);
         Assert.Empty(harness.Credentials.ReceivedCalls());
+        Assert.Empty(harness.Grants.ReceivedCalls());
     }
 
     [Theory]
@@ -964,7 +968,7 @@ public sealed class UserCredentialAdministrationTests
     private static async Task<PrincipalNotAuthorizedException> RefusalOf(Func<Task> act) =>
         await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(act);
 
-    /// <summary>Asks for one write of each kind that names a user: placing a credential, rotating one, enabling, disabling, and deleting.</summary>
+    /// <summary>Asks for one write of each kind that names a user: placing a credential, rotating each kind of material, enabling, disabling, and deleting.</summary>
     private static async Task<UserCredentialWriteOutcome[]> EveryWriteAsync(
         UserCredentialAdministration administration,
         CancellationToken cancellationToken) =>
@@ -982,6 +986,8 @@ public sealed class UserCredentialAdministrationTests
             UserCredentialUsername.Create("user"),
             AcceptablePassword.AsMemory(),
             cancellationToken)).Outcome,
+        (await administration.RotateApiKeyAsync(User, CredentialId, cancellationToken)).Outcome,
+        (await administration.ReplacePublicKeyAsync(User, CredentialId, WrittenPublicKey, cancellationToken)).Outcome,
         await administration.SetEnabledAsync(User, CredentialId, enabled: true, cancellationToken),
         await administration.SetEnabledAsync(User, CredentialId, enabled: false, cancellationToken),
         await administration.DeleteAsync(User, CredentialId, cancellationToken),

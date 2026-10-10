@@ -624,6 +624,50 @@ public sealed class UserRosterAdministrationTests
     }
 
     /// <summary>
+    /// An erasure deletes the mail accounts assigned to the user alone, and covering the user is not covering those: an
+    /// account the caller's scope does not cover refuses the whole erasure, while one it does cover goes with the user.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task EraseAsync_AUserAloneAssignedAnAccountOutsideTheCallersScope_IsRefusedBeforeAnythingIsErased(bool scopedOverTheOrganization)
+    {
+        // Arrange
+        var scope = scopedOverTheOrganization
+            ? AssignmentScope.Organization(AccessAuthorizations.ScopedOrganization)
+            : AssignmentScope.User(AccessAuthorizations.ScopedHolder);
+        var coveredAccount = Guid.Parse(AccessAuthorizations.ScopedAccount.Value);
+        var uncoveredAccount = new Guid("63f9d402-1e57-4c8a-a134-5d8f7a9c1e26");
+
+        var covering = HarnessScopedAt(scope, MailFathomPermission.AdminErase);
+        covering.Erasing(AccessAuthorizations.ScopedHolder);
+        covering.MailAccountRecords.HoldUser(
+            AccessAuthorizations.ScopedHolder,
+            "{}",
+            1,
+            new MailAccountRecord(coveredAccount, "covered@roster.test", "covered", "{}", 1));
+
+        var reachingPast = HarnessScopedAt(scope, MailFathomPermission.AdminErase);
+        reachingPast.Erasing(AccessAuthorizations.ScopedHolder);
+        reachingPast.MailAccountRecords.HoldUser(
+            AccessAuthorizations.ScopedHolder,
+            "{}",
+            1,
+            new MailAccountRecord(coveredAccount, "covered@roster.test", "covered", "{}", 1),
+            new MailAccountRecord(uncoveredAccount, "uncovered@roster.test", "uncovered", "{}", 1));
+
+        // Act
+        var erased = await covering.Roster.EraseAsync(AccessAuthorizations.ScopedHolder, TestContext.Current.CancellationToken);
+        var refused = await reachingPast.Roster.EraseAsync(AccessAuthorizations.ScopedHolder, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(erased.UserErased);
+        Assert.False(refused.UserErased);
+        Assert.Contains(MailFathomPermission.AdminErase.Name, refused.RefusalMessage!, StringComparison.Ordinal);
+        Assert.Empty(reachingPast.Erasure.ReceivedCalls());
+    }
+
+    /// <summary>
     /// Whether the user was served is read before the erasure rather than after, because the answer must describe the
     /// deployment the caller asked about rather than the one the erasure left.
     /// </summary>

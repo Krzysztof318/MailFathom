@@ -274,7 +274,8 @@ in that grant performs nothing there; it is read only as the ceiling
 from the credential rather than from the grant — [what a permission does not decide](#what-a-permission-does-not-decide).
 **An administrative permission answers a question naming no target only at deployment scope**, so a caller granted
 `mailfathom.admin.read` or `mailfathom.admin.operate` over one organization alone is refused every route that names
-none. **A route naming a user, a mail account, or an organization may be answered at any scope covering it** — the
+none — except the listings of users and of organizations, which never refuse over a scope and answer with what the
+caller's scopes cover. **A route naming a user, a mail account, or an organization may be answered at any scope covering it** — the
 deployment, the organization it belongs to, or the one user it is wholly the concern of — and [a grant held below the
 deployment](admin-endpoint.md#a-grant-held-below-the-deployment) names the routes that are and how a target outside the
 scope is answered.
@@ -390,7 +391,9 @@ administrative name at any scope is not an administrator, and every credential t
 
 **`PermissionsFromTokenScopes` narrows once more, by the token.** Written on an `AdminEndpoint:Authentication` entry
 accepting `oauth-subject`, a token holds the administrative names its scopes carry *and* its user's roles grant, so a
-token minted to read the deployment cannot change it. A scope naming anything else is ignored.
+token minted to read the deployment cannot change it. A scope naming a mail permission is kept as well, as the same
+ceiling and nothing more: a token without the mail names a user holds cannot provision, rotate, or enable a credential
+for that user, although the endpoint advertises only its administrative names. A scope naming anything else is ignored.
 
 **A permission name written into `RequiredScopes` or `AdvertisedScopes` is refused**, on this endpoint's entries as on
 every other: requiring a permission at the door would close it on a caller the deployment meant to serve less, the grant

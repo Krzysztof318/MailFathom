@@ -212,8 +212,8 @@ is to widen the user's roles rather than to replace the key. A role assigned ove
 the whole deployment is printed on a line of its own. Such a role reaches the users, the mail accounts, and the
 organization its scope covers on the routes that name one —
 [a grant held below the deployment](../operations/admin-endpoint.md#a-grant-held-below-the-deployment) lists them — and
-nothing else, so a command naming no target run under it is refused with a sentence saying the scope rather than the
-permission is what is missing.
+nothing else. `mfctl user list` and `mfctl organization list` run under it show what that scope covers, and any other
+command naming no target is refused with a sentence saying the scope rather than the permission is what is missing.
 [What a credential may do](../operations/permissions.md) lists the names, what each covers, and which twelve commands need
 a second one; [what the endpoint serves](../operations/admin-endpoint.md#what-the-endpoint-serves) names the permission
 every route is published under.
