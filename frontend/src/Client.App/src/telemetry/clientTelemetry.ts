@@ -6,6 +6,7 @@ import { createContext, useContext } from 'react';
 import { metrics, trace } from '@opentelemetry/api';
 import { SeverityNumber } from '@opentelemetry/api-logs';
 import {
+    defaultTelemetryLevel,
     recordDownTo,
     severityOf,
     telemetryName,
@@ -81,17 +82,19 @@ export interface ClientTelemetry {
      * from one effect, and two ways of saying "stop" would be two orderings to reason about. `false` records nothing
      * from the moment it is stated and discards what was held before it, which is the difference between a switch and
      * a filter on the way out.
-     * @param level How much the deployment asks this client to record. It arrives here for the reason `permitted` does
-     * — one effect reads the session answer and the person's own switch together — and it answers a different
-     * question: `permitted` is whether this person is reported on at all, and this is how much a deployment wants from
-     * whoever is. A person who declined is `off` whatever the deployment asked, which is what keeps the switch the
-     * stronger of the two. `none` is a level rather than a refusal: no log record is written under it, and the spans
-     * and the measurements go on being recorded and exported.
+     * @param level How much the deployment asks this client to record, or `null` until it has said. It arrives here
+     * for the reason `permitted` does — one effect reads the session answer and the person's own switch together — and
+     * it answers a different question: `permitted` is whether this person is reported on at all, and this is how much
+     * a deployment wants from whoever is. A person who declined is `off` whatever the deployment asked, which is what
+     * keeps the switch the stronger of the two. `none` is a level rather than a refusal: no log record is written
+     * under it, and the spans and the measurements go on being recorded and exported. `null` is not a level at all:
+     * records are written down to the default floor and held rather than exported, because whether the deployment
+     * takes a log record is exactly what it has not said yet.
      */
     readonly exportFor: (
         session: ClientSession | null,
         permitted: boolean,
-        level: DeploymentTelemetryLevel,
+        level: DeploymentTelemetryLevel | null,
     ) => () => void;
 
     /**
@@ -161,10 +164,9 @@ export function clientTelemetryForThisApplication(): ClientTelemetry {
     // makes a restart honour a decision rather than record until it is confirmed.
     let permitted = true;
 
-    // Whether the deployment takes a log record from this client at all, which every level but `none` says it does. It
-    // is the one thing the floor cannot carry: a floor stops a record being written, and what this decides is what
-    // becomes of the ones written while the deployment had said nothing.
-    let recordsTaken = true;
+    // Whether the deployment has said it takes no log record from this client, which is the one thing the floor cannot
+    // carry: a floor stops a record being written, and what this decides is what becomes of the ones already written.
+    let recordsRefused = false;
 
     // Everything this module does is put in a queue rather than run where it was asked for, and that is a correctness
     // rule rather than tidiness. A registry answers whoever is registered at the instant it is asked, and a record
@@ -223,13 +225,14 @@ export function clientTelemetryForThisApplication(): ClientTelemetry {
     return {
         exportFor(session, allowed, level) {
             permitted = allowed;
-            recordsTaken = level !== 'none';
+            recordsRefused = level === 'none';
 
             // Both halves of the client are held to it, which is why it is stated on the package that owns the
             // vocabulary rather than kept here: the wire package writes a record per request from wherever a screen
             // asked, and it holds none of this pipeline. A person who declined reads as `off`, so their decision stops
-            // the wire package writing exactly as it stops the queue below.
-            recordDownTo(allowed ? level : 'off');
+            // the wire package writing exactly as it stops the queue below. A deployment that has not answered is
+            // written for at the level a collector keeps by default, which is what the buffer holds meanwhile.
+            recordDownTo(allowed ? (level ?? defaultTelemetryLevel) : 'off');
 
             if (!allowed) {
                 // Read rather than exported, and read before anything else this queue holds: what was recorded while
@@ -251,7 +254,9 @@ export function clientTelemetryForThisApplication(): ClientTelemetry {
                     arrivalReported = reportArrival(session);
                 }
 
-                await pipeline?.exportTo(session);
+                // The log records are pointed only once the deployment has said it takes them. Until it answers they
+                // are held with whatever a cold start recorded, and under `none` they are never pointed at all.
+                await pipeline?.exportTo(session, level !== null && level !== 'none');
             });
 
             return () => {
@@ -264,14 +269,15 @@ export function clientTelemetryForThisApplication(): ClientTelemetry {
                 // answer: reading it here is reading the decision rather than guessing what follows.
                 //
                 // The same reading settles a deployment that has just answered `none`. The log records written while
-                // it had said nothing would be flushed at a route that now refuses them, so they are thrown away first
-                // and holding then flushes the two signals the deployment still takes.
+                // it had said nothing are still held, and the ones written under a level it has since withdrawn would
+                // be flushed at a route that now refuses them — so both are thrown away first, and holding then
+                // flushes the two signals the deployment still takes.
                 next(async (pipeline) => {
                     if (!permitted) {
                         return;
                     }
 
-                    if (!recordsTaken) {
+                    if (recordsRefused) {
                         await pipeline?.discardRecords();
                     }
 

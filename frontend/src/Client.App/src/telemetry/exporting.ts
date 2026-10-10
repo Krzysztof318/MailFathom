@@ -30,12 +30,18 @@ const clientServiceName = 'mailfathom-client';
 /** The one pipeline this client records into, and the two things a session does to it. */
 export interface ClientPipeline {
     /**
-     * Points the three signals at the deployment this session is signed in to, and flushes what was held.
+     * Points the signals at the deployment this session is signed in to, and flushes what they held.
      *
      * Everything a signal has been holding leaves in one export, attributed to that session by the credential the
      * export presents. It resolves once those exports have been answered, so a caller can sequence against it.
+     *
+     * @param session Who is signed in and where their telemetry goes.
+     * @param recordsTaken Whether the deployment has said it takes this client's log records. The spans and the
+     * measurements are pointed either way; the log records go on being held while this is `false`, which is what a
+     * deployment that has not answered yet and one that answered `none` both are. A level governs that one signal and
+     * the deployment refuses a batch of it under `none`, so nothing is addressed there before it is known to be taken.
      */
-    readonly exportTo: (session: ClientSession) => Promise<void>;
+    readonly exportTo: (session: ClientSession, recordsTaken: boolean) => Promise<void>;
 
     /**
      * Returns to holding, which is what signing out and being pointed at another deployment both do.
@@ -58,8 +64,8 @@ export interface ClientPipeline {
      * Throws away the log records this run is holding, addressing none of them, and leaves the spans and the
      * measurements as they are.
      *
-     * This is what a deployment answering that it takes no log record does to the ones written before it had said so.
-     * It refuses a batch of them, so flushing would spend a request on being told that and report the records as lost.
+     * This is what a deployment answering that it takes no log record does to the ones written before it had said so,
+     * which were held rather than exported for exactly this answer.
      */
     readonly discardRecords: () => Promise<void>;
 
@@ -112,7 +118,7 @@ export function startRecording(): ClientPipeline {
     }
 
     return {
-        async exportTo(session) {
+        async exportTo(session, recordsTaken) {
             // Anything still queued in the two processors joins what is already held, so the flush below is one export
             // rather than one for the buffer and another for whatever had not reached it yet.
             await Promise.all([traces.forceFlush(), loggers.forceFlush()]);
@@ -126,15 +132,24 @@ export function startRecording(): ClientPipeline {
 
             const exportSpansTo = new OTLPTraceExporter({ url: endpoints.traces, headers });
             const exportMeasurementsTo = new OTLPMetricExporter({ url: endpoints.metrics, headers });
-            const exportRecordsTo = new OTLPLogExporter({ url: endpoints.logs, headers });
 
-            destinations = [exportSpansTo, exportMeasurementsTo, exportRecordsTo];
+            // No exporter is built for a signal that is not being pointed, so there is nothing that could address the
+            // log route by accident: the records stay in the buffer that addresses nothing.
+            const exportRecordsTo = recordsTaken ? new OTLPLogExporter({ url: endpoints.logs, headers }) : null;
+
+            const pointed = [exportSpansTo, exportMeasurementsTo];
+
+            destinations = exportRecordsTo === null ? pointed : [...pointed, exportRecordsTo];
 
             // The measurements are pointed first and flushed with the rest, because what carries them is the reader's
             // own collection rather than a buffer: the instruments hold cumulative totals, and forcing that collection
             // now is what puts everything recorded since the client opened into the same first export.
             await measurements.exportTo(exportMeasurementsTo);
-            await Promise.all([spans.exportTo(exportSpansTo), records.exportTo(exportRecordsTo), meters.forceFlush()]);
+            await Promise.all([
+                spans.exportTo(exportSpansTo),
+                exportRecordsTo === null ? Promise.resolve() : records.exportTo(exportRecordsTo),
+                meters.forceFlush(),
+            ]);
         },
 
         async hold() {

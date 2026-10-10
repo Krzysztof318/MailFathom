@@ -191,7 +191,7 @@ describe('startRecording', () => {
 
         record();
 
-        await running.exportTo(session);
+        await running.exportTo(session, true);
 
         expect(destinations.built).toEqual([
             { url: 'https://mail.example/api/client/telemetry/v1/traces', authorization: 'Basic c2FtcGxl' },
@@ -203,7 +203,7 @@ describe('startRecording', () => {
     it('lets the destination go when the session ends, so nothing stays addressed to it', async () => {
         running = startRecording();
 
-        await running.exportTo(session);
+        await running.exportTo(session, true);
         await running.hold();
 
         expect(destinations.shutDown).toHaveLength(3);
@@ -211,7 +211,7 @@ describe('startRecording', () => {
         record();
 
         // Signing in again names a destination of its own rather than reviving the one that was let go.
-        await running.exportTo({ ...session, authorization: 'Basic c29tZWJvZHkgZWxzZQ==' });
+        await running.exportTo({ ...session, authorization: 'Basic c29tZWJvZHkgZWxzZQ==' }, true);
 
         expect(destinations.built).toHaveLength(6);
     });
@@ -225,7 +225,7 @@ describe('startRecording', () => {
 
         // Signing in afterwards is what makes the absence provable: a buffer that had merely gone back to holding
         // would empty into this destination, and this destination is the first one that has ever existed.
-        await running.exportTo(session);
+        await running.exportTo(session, true);
 
         // The measurements are the one signal with nothing to throw away — cumulative totals in the instruments rather
         // than a buffer — which is the ceiling the `ponytail:` note beside `hold` names against #1227. What a person
@@ -233,6 +233,30 @@ describe('startRecording', () => {
         // that carry that are empty.
         expect(destinations.built).toHaveLength(3);
         expect(destinations.exported.filter((batch) => !batch.url.endsWith('/metrics'))).toEqual([]);
+    });
+
+    // A level governs log records alone and the deployment refuses a batch of them under `none`, so until it has said
+    // it takes them they are held: no exporter for that route exists, and the spans leave without them.
+    it('holds the log records while the deployment has not said it takes them, and exports the rest', async () => {
+        running = startRecording();
+
+        record();
+
+        await running.exportTo(session, false);
+
+        expect(destinations.built.map((destination) => destination.url)).toEqual([
+            'https://mail.example/api/client/telemetry/v1/traces',
+            'https://mail.example/api/client/telemetry/v1/metrics',
+        ]);
+        expect(destinations.exported.filter((batch) => batch.url.endsWith('/logs'))).toEqual([]);
+
+        // The answer arriving is what lets them go, and what leaves is the record written before it.
+        await running.hold();
+        await running.exportTo(session, true);
+
+        expect(destinations.exported.filter((batch) => batch.url.endsWith('/logs'))).toEqual([
+            { url: 'https://mail.example/api/client/telemetry/v1/logs', records: 1 },
+        ]);
     });
 
     it('throws away the log records it held and keeps the spans, once a deployment takes no log record', async () => {
@@ -244,7 +268,7 @@ describe('startRecording', () => {
 
         // Signing in afterwards is what makes both halves provable, as it is above: the span recorded beside the log
         // record leaves in this first export, and the log record is not there to leave.
-        await running.exportTo(session);
+        await running.exportTo(session, true);
 
         expect(destinations.exported.map((batch) => batch.url)).toContain(
             'https://mail.example/api/client/telemetry/v1/traces',

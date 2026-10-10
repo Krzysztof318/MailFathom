@@ -56,8 +56,9 @@ namespace MailFathom.Host.Api;
 /// <b>The level a caller is asked for is held here as well as answered to them.</b> A caller whose level resolves to
 /// <see cref="ClientTelemetryLevel.None" /> is refused on the log route and on that route alone, because log records
 /// are the one signal a level governs. So what an operator set is something this deployment keeps rather than
-/// something it asks a client for, and a client built before the value existed, or one that wrote a record before it
-/// had read its answer, reaches a collector with none.
+/// something it asks a client for: a client that sends a batch of log records regardless of what it was answered
+/// reaches a collector with none. It is not what stops a client built before the value existed — that one reads
+/// <c>none</c> as a level it does not know, treats it as <c>off</c>, and sends nothing to any of these routes.
 /// </para>
 /// </remarks>
 internal static class ClientTelemetryEndpoint

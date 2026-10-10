@@ -4,7 +4,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
-    defaultTelemetryLevel,
     endSession,
     reportingRefusedCredential,
     revokeRefreshToken,
@@ -497,10 +496,11 @@ export function App({
     // `none` does not: it is a level, under which no log record is written and the rest is recorded as before.
     //
     // The same answer carries how much this deployment asks for, which is the floor every record either half of the
-    // client writes is held to. Until it has said, that is the level a collector keeps by default — so a cold start
-    // holds what an ordinary deployment would want and no more, and lowering the floor is what an operator does to one
-    // deployment rather than what a client decides for itself.
-    const telemetryLevel = deploymentSession?.telemetryLevel ?? defaultTelemetryLevel;
+    // client writes is held to. Until it has said there is no level, and that is stated rather than stood in for: the
+    // pipeline then writes at the level a collector keeps by default — so a cold start holds what an ordinary
+    // deployment would want and no more — and holds its log records instead of exporting them, because a deployment
+    // that turns out to take none refuses a batch of them.
+    const telemetryLevel = deploymentSession?.telemetryLevel ?? null;
     const telemetryPermitted = preferences.telemetryEnabled && telemetryLevel !== 'off';
 
     // Which session has already been reported as having begun, so that it is reported once however many times this

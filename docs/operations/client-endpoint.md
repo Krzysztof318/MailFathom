@@ -3615,8 +3615,9 @@ the deployment's [`ClientEndpoint:TelemetryLevel`](configuration-endpoints.md#cl
 [`ClientTelemetryLevel`](configuration-sources.md#the-level-this-persons-client-records-at--clienttelemetrylevel) in
 front of it — `POST /api/client/telemetry/v1/logs` answers `403` and forwards nothing, before the batch is read and
 without spending any of that person's export rate. It is the resolution [the session route](#the-session-route)
-answered them with, so the level a client is told and the level the deployment holds are one, and a client that wrote
-a record before it had read its answer, or was built before the value existed, still reaches a collector with none.
+answered them with, so the level a client is told and the level the deployment holds are one, and a client that sends
+a batch of log records regardless of what it was answered still reaches a collector with none. It is not what stops a
+client built before the value existed: that one treats `none` as `off` and sends nothing to any of the three routes.
 `403` is a status an OTLP exporter does not retry, so nothing is held for a batch that will not go. The traces and the
 metrics routes are unaffected by any level.
 

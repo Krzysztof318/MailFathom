@@ -34,6 +34,8 @@ namespace MailFathom.Host.UnitTests.Api;
 /// </remarks>
 public sealed class ClientTelemetryEndpointTests
 {
+    private const string RefusedInstrumentName = "mailfathom.client_telemetry.refused";
+
     private static readonly UserId AuthenticatedUser =
         UserId.Create(new Guid("9f2a1c64-0000-4000-8000-000000000001"));
 
@@ -339,6 +341,70 @@ public sealed class ClientTelemetryEndpointTests
         Assert.Empty(collector.RecordedRequests);
     }
 
+    /// <summary>
+    /// The refusal comes before the rate is spent and is counted under a word of its own. A caller refused every time
+    /// would otherwise burn its own burst on batches nobody takes and then be told to hold them, and a dashboard could
+    /// not tell a deployment set to <c>None</c> from a client sending something this endpoint cannot read.
+    /// </summary>
+    [Fact]
+    public async Task AcceptAsync_ALogBatchFromACallerAskedForNoLogRecords_SpendsNoRateAndIsCountedAsLevelNone()
+    {
+        // Arrange
+        using var collector = AcceptingCollector();
+        using var quota = new ClientTelemetryQuota();
+        var telemetry = new ClientTelemetryProxyTelemetry(
+            new RecordingLogger<ClientTelemetryProxyTelemetry>(),
+            new FakeTimeProvider());
+        using var measurements = new RecordedMailFathomMeasurements(RefusedInstrumentName);
+        var request = Requesting(OtlpExportRequests.Batch([], records: 1));
+
+        // Act
+        var answered = await AcceptAsync(
+            request,
+            collector,
+            quota,
+            signal: ClientTelemetrySignal.Logs,
+            deploymentLevel: ClientTelemetryLevel.None,
+            telemetry: telemetry);
+
+        // Assert
+        Assert.Equal(StatusCodes.Status403Forbidden, answered);
+        Assert.All(
+            Enumerable.Range(0, ClientTelemetryQuota.BurstCapacity),
+            _ => Assert.True(quota.TryAdmit(AuthenticatedUser.ToString())));
+        Assert.Contains(
+            measurements.Read(RefusedInstrumentName),
+            refused => Equals(refused.Tags[ClientTelemetryProxyTelemetry.SignalTagName], "logs")
+                && Equals(refused.Tags[ClientTelemetryProxyTelemetry.RefusalTagName], "level_none"));
+    }
+
+    /// <summary>A caller past their rate is still told the batch will never be taken, rather than told to hold it for a minute and send it again.</summary>
+    [Fact]
+    public async Task AcceptAsync_ALogBatchFromACallerAskedForNoLogRecordsWhoIsPastTheirRate_AnswersForbiddenRatherThanTooManyRequests()
+    {
+        // Arrange
+        using var collector = AcceptingCollector();
+        using var quota = new ClientTelemetryQuota();
+
+        foreach (var _ in Enumerable.Range(0, ClientTelemetryQuota.BurstCapacity))
+        {
+            quota.TryAdmit(AuthenticatedUser.ToString());
+        }
+
+        var request = Requesting(OtlpExportRequests.Batch([], records: 1));
+
+        // Act
+        var answered = await AcceptAsync(
+            request,
+            collector,
+            quota,
+            signal: ClientTelemetrySignal.Logs,
+            deploymentLevel: ClientTelemetryLevel.None);
+
+        // Assert
+        Assert.Equal(StatusCodes.Status403Forbidden, answered);
+    }
+
     /// <summary>Log records are the one signal a level governs, so a deployment set to <c>None</c> goes on taking a client's spans and measurements.</summary>
     [Theory]
     [InlineData("traces")]
@@ -430,7 +496,8 @@ public sealed class ClientTelemetryEndpointTests
         AccessAuthorization? authorization = null,
         ClientTelemetrySignal? signal = null,
         ClientTelemetryLevel deploymentLevel = ClientTelemetryLevel.Info,
-        ClientTelemetryLevel? statedLevel = null)
+        ClientTelemetryLevel? statedLevel = null,
+        ClientTelemetryProxyTelemetry? telemetry = null)
     {
         using var owned = quota is null ? new ClientTelemetryQuota() : null;
 
@@ -442,7 +509,7 @@ public sealed class ClientTelemetryEndpointTests
             deploymentLevel,
             quota ?? owned!,
             ForwarderOver(collector),
-            new ClientTelemetryProxyTelemetry(
+            telemetry ?? new ClientTelemetryProxyTelemetry(
                 new RecordingLogger<ClientTelemetryProxyTelemetry>(),
                 new FakeTimeProvider()),
             TestContext.Current.CancellationToken);

@@ -1438,6 +1438,12 @@ away. Measurements are held by their own instruments rather than in a buffer, th
 first export after a sign-in carries every total recorded since the client opened. A client closed without ever signing
 in keeps none of it: nothing reaches storage, and a restart begins empty.
 
+**The log records are held a moment longer than the rest, until the deployment has said it takes them.** The spans
+and the measurements leave as soon as somebody is signed in. The log records leave once
+[the session route](client-endpoint.md#the-session-route) has answered with a level that takes them, because the level
+governs that one signal and a deployment that answers `none` refuses a batch of it. A session whose answer never
+arrives exports no log record, and holds them under the bound above.
+
 **Signing in flushes the whole of it in one export, attributed to that session.** Signing out, and being pointed at
 another deployment, each flush what the session recorded under that session's own credential and return the client to
 holding — so a client that signs in again exports whatever accumulated meanwhile, and nothing is ever left queued for a
@@ -1571,9 +1577,10 @@ measurements below exactly as under every other level — one span and two measu
 deployment set to `None` receives no client log record and still receives its clients' traces and metrics. That is
 what separates it from `off`, which is a deployment that named no collector and stops all three. The deployment holds
 `None` rather than merely asking for it: a batch of log records from a caller it applies to is
-[refused](client-endpoint.md#the-telemetry-routes), which reaches a client that wrote one before it had read its
-answer. A client throws those away when it reads `none` instead of flushing them; one that had already left is refused,
-and is counted once in `mailfathom.client.telemetry.dropped` as `export_failed`.
+[refused](client-endpoint.md#the-telemetry-routes), so a client that sends one regardless reaches a collector with
+none. MailFathom's own client never sends one. It holds its log records until the session route has answered, and
+throws away what it held when the answer is `none` — the records of a cold start, and the records of a level an
+operator has since withdrawn from a client that was open.
 
 **Ask for it on the one person reporting the defect, not on the deployment.** Their own record carries a
 [`ClientTelemetryLevel`](configuration-sources.md#the-level-this-persons-client-records-at--clienttelemetrylevel),

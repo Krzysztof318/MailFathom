@@ -129,7 +129,8 @@ describe('App telemetry', () => {
     });
 
     // The level is the deployment's alone, so what proves it arrived is that the pipeline was started with the one the
-    // session route answered rather than with the one the client stands on until it has been told.
+    // session route answered — and that until then it was told there was none, rather than handed a level the client
+    // made up for it, which is what keeps a log record from being exported before the deployment has said it takes one.
     it('starts the pipeline at the level the deployment asked for', async () => {
         const recording = telemetryRecording();
 
@@ -145,7 +146,7 @@ describe('App telemetry', () => {
         await waitFor(() => {
             expect(recording.levels.at(-1)).toBe('trace');
         });
-        expect(recording.levels[0]).toBe('info');
+        expect(recording.levels[0]).toBeNull();
     });
 
     // What a restart owes somebody who turned it off on this machine: the decision is honoured from the first effect
