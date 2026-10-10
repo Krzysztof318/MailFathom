@@ -11,7 +11,11 @@ namespace MailFathom.Application.Access.Grants;
 /// <param name="Name">The name an operator reads the role by.</param>
 /// <param name="Permissions">What the role grants wherever it is assigned, and any stored entry that grants nothing in this build.</param>
 /// <param name="CreatedAt">When the role was recorded.</param>
-/// <remarks>Nothing checks a role: a use case checks the permission a role's list contains, so a role is one decision about many people written once.</remarks>
+/// <remarks>
+/// No use case asks whether a caller holds a role: it checks a permission the role grants, so a role is one decision
+/// about many people written once. The one thing read off the role itself is whether its list widens on upgrade,
+/// which decides who may give it.
+/// </remarks>
 public sealed record Role(Guid Id, string Name, RolePermissions Permissions, DateTimeOffset CreatedAt)
 {
     /// <summary>The longest name a role is recorded under.</summary>

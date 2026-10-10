@@ -136,7 +136,7 @@ public sealed class UserCredentialAdministration
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>What the act did, or why it did nothing.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody, <paramref name="username" /> is the unspecified struct default, the password breaks <see cref="UserPasswordPolicy" />, or the grant names something a user-facing credential cannot hold.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller holds <see cref="MailFathomPermission.AdminCredentialsWrite" /> at no scope, or does not hold a name the user holds widely enough.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller holds <see cref="MailFathomPermission.AdminCredentialsWrite" /> at no scope, does not hold a name the user holds widely enough, or is not the root while the user holds a role listing a pattern.</exception>
     public Task<UserCredentialProvisioning> ProvisionPasswordAsync(
         UserId user,
         UserCredentialUsername username,
@@ -168,7 +168,7 @@ public sealed class UserCredentialAdministration
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>What the act did, and the key to report where it was performed.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody or the grant names something a user-facing credential cannot hold.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller holds <see cref="MailFathomPermission.AdminCredentialsWrite" /> at no scope, or does not hold a name the user holds widely enough.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller holds <see cref="MailFathomPermission.AdminCredentialsWrite" /> at no scope, does not hold a name the user holds widely enough, or is not the root while the user holds a role listing a pattern.</exception>
     /// <remarks>The key is drawn here rather than accepted from the request, so nothing outside this deployment decides how much entropy a credential carries, and it is reported back because this is the one moment it exists.</remarks>
     public Task<UserCredentialProvisioning> ProvisionApiKeyAsync(
         UserId user,
@@ -200,7 +200,7 @@ public sealed class UserCredentialAdministration
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>What the act did, and the fingerprint the client's assertions must name.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody, the written key is not one this deployment accepts, or the grant names something a user-facing credential cannot hold.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller holds <see cref="MailFathomPermission.AdminCredentialsWrite" /> at no scope, or does not hold a name the user holds widely enough.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller holds <see cref="MailFathomPermission.AdminCredentialsWrite" /> at no scope, does not hold a name the user holds widely enough, or is not the root while the user holds a role listing a pattern.</exception>
     public Task<UserCredentialProvisioning> ProvisionPublicKeyAsync(
         UserId user,
         string? writtenPublicKey,
@@ -233,7 +233,7 @@ public sealed class UserCredentialAdministration
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>What the act did, or why it did nothing.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody, the pair cannot compose a lookup, or the grant names something a user-facing credential cannot hold.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller holds <see cref="MailFathomPermission.AdminCredentialsWrite" /> at no scope, or does not hold a name the user holds widely enough.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller holds <see cref="MailFathomPermission.AdminCredentialsWrite" /> at no scope, does not hold a name the user holds widely enough, or is not the root while the user holds a role listing a pattern.</exception>
     /// <remarks>Where the endpoint reads a token's own scopes, they narrow what this leaves of the user's grant further. The user comes from here either way, because a token cannot carry one.</remarks>
     public Task<UserCredentialProvisioning> ProvisionOAuthSubjectAsync(
         UserId user,
@@ -274,7 +274,7 @@ public sealed class UserCredentialAdministration
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>What the act did, or why it did nothing.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody, <paramref name="credentialId" /> is the empty identifier, <paramref name="username" /> is the unspecified struct default, or the password breaks <see cref="UserPasswordPolicy" />.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller holds <see cref="MailFathomPermission.AdminCredentialsWrite" /> at no scope, or does not hold a name the user holds widely enough.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller holds <see cref="MailFathomPermission.AdminCredentialsWrite" /> at no scope, does not hold a name the user holds widely enough, or is not the root while the user holds a role listing a pattern.</exception>
     /// <remarks>The username is stated rather than read back first, because the write names the lookup a credential carries from now on and a password rotation is the one case where that is the value it already had; a mistyped one answers that no such credential exists rather than renaming somebody's sign-in.</remarks>
     public async Task<UserCredentialRotation> RotatePasswordAsync(
         UserId user,
@@ -325,7 +325,7 @@ public sealed class UserCredentialAdministration
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>What the act did, and the key to report where it was performed.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody or <paramref name="credentialId" /> is the empty identifier.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller holds <see cref="MailFathomPermission.AdminCredentialsWrite" /> at no scope, or does not hold a name the user holds widely enough.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller holds <see cref="MailFathomPermission.AdminCredentialsWrite" /> at no scope, does not hold a name the user holds widely enough, or is not the root while the user holds a role listing a pattern.</exception>
     /// <remarks>The lookup moves with the key, because it is the key's own digest — which is what makes rotating one a single write rather than a second credential the operator then has to remember to delete.</remarks>
     public async Task<UserCredentialRotation> RotateApiKeyAsync(
         UserId user,
@@ -370,7 +370,7 @@ public sealed class UserCredentialAdministration
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>What the act did, and the fingerprint the client's assertions must name from now on.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody, <paramref name="credentialId" /> is the empty identifier, or the written key is not one this deployment accepts.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller holds <see cref="MailFathomPermission.AdminCredentialsWrite" /> at no scope, or does not hold a name the user holds widely enough.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller holds <see cref="MailFathomPermission.AdminCredentialsWrite" /> at no scope, does not hold a name the user holds widely enough, or is not the root while the user holds a role listing a pattern.</exception>
     public async Task<UserCredentialRotation> ReplacePublicKeyAsync(
         UserId user,
         Guid credentialId,
@@ -412,7 +412,7 @@ public sealed class UserCredentialAdministration
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>What the act did, or why it did nothing.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody or <paramref name="credentialId" /> is the empty identifier.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller holds <see cref="MailFathomPermission.AdminCredentialsWrite" /> at no scope, or does not hold a name the user holds widely enough.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller holds <see cref="MailFathomPermission.AdminCredentialsWrite" /> at no scope, does not hold a name the user holds widely enough, or is not the root while the user holds a role listing a pattern.</exception>
     /// <remarks>Disabling is the reversible half of revoking: the credential stops working immediately and its lookup stays claimed, so nothing else can be provisioned under the name somebody is still using.</remarks>
     public async Task<UserCredentialWriteOutcome> SetEnabledAsync(
         UserId user,
@@ -556,7 +556,7 @@ public sealed class UserCredentialAdministration
         this.authorization.PermitsOverAsync(MailFathomPermission.AdminCredentialsWrite, user, cancellationToken);
 
     /// <summary>Reports whether the caller may place a way in as the user: whether its scope covers them, and, where it does, requires every name the user holds.</summary>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown naming the first name the user holds that the caller does not hold widely enough.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown naming the first name the user holds that the caller does not hold widely enough, or naming the root where the user holds a role listing a pattern and the caller is not the root.</exception>
     /// <remarks>
     /// <para>
     /// Placing a credential is the power to sign in as its user, so ADR 0012 bounds provisioning, rotating, and enabling

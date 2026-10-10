@@ -2,12 +2,20 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Reflection;
 using MailFathom.Application.Access.Grants;
 using MailFathom.Application.Access.Organizations;
 using MailFathom.Application.Paging;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Access;
+using MailFathom.Infrastructure.Persistence;
+using MailFathom.Infrastructure.Persistence.Migrations;
+using MailFathom.Infrastructure.Persistence.Users;
 using MailFathom.IntegrationTests.Orchestration;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Migrations.Operations;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -29,6 +37,12 @@ namespace MailFathom.IntegrationTests.Persistence;
 [Collection(OrchestratedInfrastructureCollectionDefinition.Name)]
 public sealed class OrchestratedGrantStoreTests(MailFathomOrchestrationFixture orchestration)
 {
+    /// <summary>A well-formed pattern over a prefix no build publishes anything beneath.</summary>
+    private const string DormantPattern = "mailfathom.retired.*";
+
+    /// <summary>How many names the seeding migration wrote into <c>Administrator</c>, which is what its rewrite restores on the way down.</summary>
+    private const int SeededAdministratorNames = 21;
+
     private static readonly DateTimeOffset RecordedAt = new(2026, 10, 9, 8, 0, 0, TimeSpan.Zero);
 
     private static readonly RolePermissions ReadMail = RolePermissions.Of([MailFathomPermission.MailRead]);
@@ -76,6 +90,145 @@ public sealed class OrchestratedGrantStoreTests(MailFathomOrchestrationFixture o
         Assert.Equal(["*"], administrator.Written);
         Assert.Equal(MailFathomPermission.All, administrator.Granted);
         Assert.Empty(administrator.Unpublished);
+    }
+
+    /// <summary>
+    /// The rewrite of the seeded <c>Administrator</c> list is run here as the migration states it, against the list in
+    /// each shape an operator may have left it, because a guard that let one through would hand every holder of a
+    /// deliberately narrowed role every permission on upgrade — and would do it without a failure anywhere. The first
+    /// step is the control: the list exactly as seeded is rewritten, so the lists left alone are left alone by the guard
+    /// rather than by a statement that does nothing. Everything runs in one transaction that is rolled back, since the
+    /// row is the one the default administrator holds.
+    /// </summary>
+    [Fact]
+    public async Task RewriteAdministratorRoleAsAPattern_AListSomebodyChanged_IsLeftAsItStandsWhileTheSeededOneIsRewritten()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+
+        // Act
+        var lists = await services.InScopeAsync(
+            async (scope, token) =>
+            {
+                var dbContext = scope.GetRequiredService<MailFathomDbContext>();
+                var administrator = PersistedDefaultAdministrator.AdministratorRoleId;
+                var rewrite = dbContext.GetService<IMigrationsAssembly>().CreateMigration(
+                    typeof(RewriteAdministratorRoleAsAPattern).GetTypeInfo(),
+                    dbContext.Database.ProviderName!);
+                var up = Assert.Single(rewrite.UpOperations.OfType<SqlOperation>()).Sql;
+                var down = Assert.Single(rewrite.DownOperations.OfType<SqlOperation>()).Sql;
+
+                Task<string[]> ListAsync() => dbContext.RolePermissions
+                    .AsNoTracking()
+                    .Where(listed => listed.RoleId == administrator)
+                    .Select(listed => listed.Permission)
+                    .ToArrayAsync(token);
+
+                await using var transaction = await dbContext.Database.BeginTransactionAsync(token);
+
+                await dbContext.Database.ExecuteSqlRawAsync(down, token);
+                var seeded = await ListAsync();
+                await dbContext.Database.ExecuteSqlRawAsync(up, token);
+                var rewritten = await ListAsync();
+
+                await dbContext.Database.ExecuteSqlRawAsync(down, token);
+                await dbContext.Database.ExecuteSqlAsync(
+                    $"""DELETE FROM role_permissions WHERE "RoleId" = {administrator} AND "Permission" = 'mailfathom.admin.spend'""",
+                    token);
+                await dbContext.Database.ExecuteSqlRawAsync(up, token);
+                var narrowed = await ListAsync();
+
+                await dbContext.Database.ExecuteSqlAsync(
+                    $"""INSERT INTO role_permissions ("RoleId", "Permission") VALUES ({administrator}, 'mailfathom.mail.*')""",
+                    token);
+                await dbContext.Database.ExecuteSqlRawAsync(up, token);
+                var exchanged = await ListAsync();
+
+                await dbContext.Database.ExecuteSqlAsync(
+                    $"""DELETE FROM role_permissions WHERE "RoleId" = {administrator}""",
+                    token);
+                await dbContext.Database.ExecuteSqlRawAsync(up, token);
+                var emptied = await ListAsync();
+
+                await transaction.RollbackAsync(CancellationToken.None);
+
+                return (Seeded: seeded, Rewritten: rewritten, Narrowed: narrowed, Exchanged: exchanged, Emptied: emptied);
+            },
+            cancellationToken);
+
+        // Assert
+        Assert.Equal(SeededAdministratorNames, lists.Seeded.Length);
+        Assert.DoesNotContain("*", lists.Seeded);
+        Assert.Equal(["*"], lists.Rewritten);
+        Assert.Equal(lists.Seeded.Length - 1, lists.Narrowed.Length);
+        Assert.DoesNotContain("*", lists.Narrowed);
+        Assert.DoesNotContain("mailfathom.admin.spend", lists.Narrowed);
+        Assert.Equal(lists.Seeded.Length, lists.Exchanged.Length);
+        Assert.DoesNotContain("*", lists.Exchanged);
+        Assert.Contains("mailfathom.mail.*", lists.Exchanged);
+        Assert.Empty(lists.Emptied);
+    }
+
+    /// <summary>
+    /// A stored pattern reaching nothing in this build still makes its role one a release can widen, which is decided
+    /// after the statement rather than in it: the entry is told from a name by its wildcard and from a malformed entry
+    /// by its syntax, never by what it grants today. A decision made on today's reach would let an organization's
+    /// administrator add members to a group whose role a later release then activates.
+    /// </summary>
+    [Fact]
+    public async Task HoldsWideningRoleAsync_ARoleWhoseOnlyPatternReachesNothingInThisBuild_StillCountsForEveryPrincipalHoldingIt()
+    {
+        // Arrange
+        var dormantPattern = DormantPattern;
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var user = Guid.CreateVersion7();
+        var member = Guid.CreateVersion7();
+        var role = Guid.CreateVersion7();
+        var group = Guid.CreateVersion7();
+        await ProvisionUserAsync(services, user, cancellationToken);
+        await ProvisionUserAsync(services, member, cancellationToken);
+
+        try
+        {
+            await CreateRoleAsync(services, role, $"role-{role:N}", cancellationToken);
+            await services.InScopeAsync(
+                (scope, token) => scope.GetRequiredService<MailFathomDbContext>().Database.ExecuteSqlAsync(
+                    $"""INSERT INTO role_permissions ("RoleId", "Permission") VALUES ({role}, {dormantPattern})""",
+                    token),
+                cancellationToken);
+            await services.InScopeAsync(
+                (scope, token) => Store(scope).CreateGroupAsync(group, $"group-{group:N}", organizationId: null, RecordedAt, token),
+                cancellationToken);
+            await services.InScopeAsync(
+                (scope, token) => Store(scope).AddGroupMemberAsync(group, UserId.Create(member), RecordedAt, token),
+                cancellationToken);
+            await AssignAsync(services, role, AssignmentPrincipal.User(UserId.Create(user)), AssignmentScope.User(UserId.Create(user)), cancellationToken);
+            await AssignAsync(services, role, AssignmentPrincipal.Group(group), AssignmentScope.Deployment, cancellationToken);
+
+            // Act
+            var stored = Assert.Single(await ReadEveryRoleAsync(services, cancellationToken), candidate => candidate.Id == role);
+            var held = await services.InScopeAsync((scope, token) => Store(scope).ReadGrantOfAsync(UserId.Create(user), token), cancellationToken);
+            var directly = await HoldsWideningRoleAsync(services, AssignmentPrincipal.User(UserId.Create(user)), cancellationToken);
+            var throughTheGroup = await HoldsWideningRoleAsync(services, AssignmentPrincipal.User(UserId.Create(member)), cancellationToken);
+            var theGroup = await HoldsWideningRoleAsync(services, AssignmentPrincipal.Group(group), cancellationToken);
+
+            // Assert
+            Assert.Equal([DormantPattern], stored.Permissions.Unpublished);
+            Assert.Equal(MailFathomPermission.MailRead, Assert.Single(held.Permissions));
+            Assert.True(directly);
+            Assert.True(throughTheGroup);
+            Assert.True(theGroup);
+        }
+        finally
+        {
+            await OrchestratedForeignUser.EraseAsync(services, user);
+            await OrchestratedForeignUser.EraseAsync(services, member);
+            await RevokeEveryAssignmentOfRoleAsync(services, role);
+            await services.InScopeAsync((scope, token) => Store(scope).DeleteGroupAsync(group, token), CancellationToken.None);
+            await DeleteRoleAsync(services, role);
+        }
     }
 
     /// <summary>

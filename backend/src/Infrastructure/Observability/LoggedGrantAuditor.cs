@@ -13,8 +13,9 @@ namespace MailFathom.Infrastructure.Observability;
 /// <para>
 /// One line per act, carrying the identifiers an operator follows from a surprising permission back to the act that gave
 /// it: the role, the group, the user, the assignment's principal and scope, and the administrator the request was
-/// admitted as. A role's list is written as the published names, which are this repository's vocabulary rather than
-/// anything about a person. A durable audit store replaces this implementation without any caller changing.
+/// admitted as. A role's list is written as it was entered, published names and patterns over them, all of which are
+/// this repository's vocabulary rather than anything about a person. A durable audit store replaces this
+/// implementation without any caller changing.
 /// </para>
 /// <para>
 /// No line carries a role's or a group's name: those are labels an operator wrote, and the identifier is what stays the
@@ -62,8 +63,8 @@ internal sealed partial class LoggedGrantAuditor(ILogger<LoggedGrantAuditor> log
 
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "Role or group {RecordId} was {GrantAct} by {ActingAdministrator} at {OccurredAt}; the permissions it "
-            + "grants from now on, where the act set them: {Permissions}.")]
+        Message = "Role or group {RecordId} was {GrantAct} by {ActingAdministrator} at {OccurredAt}; the list it "
+            + "was written with, where the act set one: {Permissions}.")]
     private partial void LogRecordChanged(
         GrantAct grantAct,
         Guid recordId,
