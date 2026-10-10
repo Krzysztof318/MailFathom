@@ -26,10 +26,41 @@ namespace MailFathom.Infrastructure.Persistence.Grants;
 /// which waits on that lock, so the number a refusal names is the number that refused it and a deletion that goes
 /// ahead leaves the concurrent write to meet a missing row rather than to dangle.
 /// </para>
+/// <para>
+/// A write that can take the root away — revoking an assignment, ending a membership, replacing a role's list — locks
+/// every role listing <see cref="MailFathomPermission.AdminRolesWrite" />, in identifier order, before it reads whether
+/// a root is held, and reads it again after its own change and before it commits. Two such writes therefore commit one
+/// after the other, and the second reads what the first left, so removing two roots at once leaves the second refused
+/// rather than the deployment with none. Only a write that found a root and would leave none is refused, so a
+/// deployment that already has no root — its database edited by hand — is not frozen by the rule.
+/// </para>
 /// </remarks>
 [RequiresIntegrationCoverage]
 internal sealed class PersistedGrants(MailFathomDbContext dbContext, IGrantChangeAnnouncer changes) : IGrantStore
 {
+    /// <inheritdoc />
+    public async Task<Role?> ReadRoleAsync(Guid roleId, CancellationToken cancellationToken)
+    {
+        var role = await dbContext.Roles
+            .AsNoTracking()
+            .Where(candidate => candidate.Id == roleId)
+            .Select(candidate => new { candidate.Id, candidate.Name, candidate.CreatedAt })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (role is null)
+        {
+            return null;
+        }
+
+        var listed = await dbContext.RolePermissions
+            .AsNoTracking()
+            .Where(permission => permission.RoleId == roleId)
+            .Select(permission => permission.Permission)
+            .ToArrayAsync(cancellationToken);
+
+        return new Role(role.Id, role.Name, RolePermissions.Read(listed), role.CreatedAt);
+    }
+
     /// <inheritdoc />
     public async Task<AdministrativeListingPage<Role>> ReadRolesAsync(
         AdministrativeListingQuery query,
@@ -120,7 +151,7 @@ internal sealed class PersistedGrants(MailFathomDbContext dbContext, IGrantChang
     }
 
     /// <inheritdoc />
-    /// <remarks>The role row is locked first, so two replacements of one list commit one after the other and the list is always exactly one writer's.</remarks>
+    /// <remarks>The role row is locked first, together with every role giving the root, so two replacements of one list commit one after the other and the list is always exactly one writer's.</remarks>
     public async Task<GrantWriteResult> ReplaceRolePermissionsAsync(
         Guid roleId,
         RolePermissions permissions,
@@ -130,20 +161,25 @@ internal sealed class PersistedGrants(MailFathomDbContext dbContext, IGrantChang
 
         await using var replacement = await dbContext.Database.BeginTransactionAsync(cancellationToken);
 
-        await dbContext.Database.ExecuteSqlAsync(
-            $"""SELECT 1 FROM roles WHERE "Id" = {roleId} FOR UPDATE""",
-            cancellationToken);
+        await this.LockRootRolesAsync(roleId, cancellationToken);
 
         if (!await dbContext.Roles.AnyAsync(role => role.Id == roleId, cancellationToken))
         {
             return GrantWriteResult.Of(GrantWriteOutcome.UnknownRole);
         }
 
+        var rootHeld = await this.IsRootHeldAsync(cancellationToken);
+
         await dbContext.RolePermissions
             .Where(permission => permission.RoleId == roleId)
             .ExecuteDeleteAsync(cancellationToken);
 
         await this.InsertPermissionsAsync(roleId, permissions, cancellationToken);
+
+        if (rootHeld && !await this.IsRootHeldAsync(cancellationToken))
+        {
+            return GrantWriteResult.Of(GrantWriteOutcome.LastRoot);
+        }
 
         await replacement.CommitAsync(cancellationToken);
 
@@ -180,13 +216,37 @@ internal sealed class PersistedGrants(MailFathomDbContext dbContext, IGrantChang
     }
 
     /// <inheritdoc />
+    public Task<UserGroup?> ReadGroupAsync(Guid groupId, CancellationToken cancellationToken) =>
+        dbContext.UserGroups
+            .AsNoTracking()
+            .Where(group => group.Id == groupId)
+            .Select(group => new UserGroup(
+                group.Id,
+                group.Name,
+                group.OrganizationId,
+                dbContext.UserGroupMembers.Count(member => member.GroupId == group.Id),
+                group.CreatedAt))
+            .FirstOrDefaultAsync(cancellationToken);
+
+    /// <inheritdoc />
+    /// <remarks>A user scope covers no group, so a reach built from organizations and users answers with the organizations' groups alone.</remarks>
     public async Task<AdministrativeListingPage<UserGroup>> ReadGroupsAsync(
         AdministrativeListingQuery query,
+        GrantListingReach reach,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(query);
+        ArgumentNullException.ThrowIfNull(reach);
 
         var groups = dbContext.UserGroups.AsNoTracking();
+
+        if (!reach.WholeDeployment)
+        {
+            Guid[] organizations = [.. reach.Organizations];
+
+            groups = groups.Where(group =>
+                group.OrganizationId != null && organizations.Contains(group.OrganizationId.Value));
+        }
 
         if (query.After is { } after)
         {
@@ -362,7 +422,7 @@ internal sealed class PersistedGrants(MailFathomDbContext dbContext, IGrantChang
             return GrantWriteResult.Of(GrantWriteOutcome.OutsideGroupOrganization);
         }
 
-        await dbContext.Database.ExecuteSqlAsync(
+        var joined = await dbContext.Database.ExecuteSqlAsync(
             $"""
              INSERT INTO user_group_members ("GroupId", "UserId", "AddedAt")
              VALUES ({groupId}, {userId}, {addedAt})
@@ -372,7 +432,9 @@ internal sealed class PersistedGrants(MailFathomDbContext dbContext, IGrantChang
 
         await joining.CommitAsync(cancellationToken);
 
-        return await this.AnnouncedAsync(GrantWriteResult.Of(GrantWriteOutcome.Written));
+        return joined == 1
+            ? await this.AnnouncedAsync(GrantWriteResult.Of(GrantWriteOutcome.Written))
+            : GrantWriteResult.Of(GrantWriteOutcome.Unchanged);
     }
 
     /// <inheritdoc />
@@ -383,21 +445,68 @@ internal sealed class PersistedGrants(MailFathomDbContext dbContext, IGrantChang
     {
         var userId = RequireUser(user);
 
-        await dbContext.UserGroupMembers
+        await using var leaving = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+        await this.LockRootRolesAsync(alsoRoleId: null, cancellationToken);
+
+        var rootHeld = await this.IsRootHeldAsync(cancellationToken);
+
+        var left = await dbContext.UserGroupMembers
             .Where(member => member.GroupId == groupId && member.UserId == userId)
             .ExecuteDeleteAsync(cancellationToken);
+
+        if (left == 0)
+        {
+            return GrantWriteResult.Of(GrantWriteOutcome.Unchanged);
+        }
+
+        if (rootHeld && !await this.IsRootHeldAsync(cancellationToken))
+        {
+            return GrantWriteResult.Of(GrantWriteOutcome.LastRoot);
+        }
+
+        await leaving.CommitAsync(cancellationToken);
 
         return await this.AnnouncedAsync(GrantWriteResult.Of(GrantWriteOutcome.Written));
     }
 
     /// <inheritdoc />
+    public async Task<ScopedGrant> ReadGrantOfGroupAsync(Guid groupId, CancellationToken cancellationToken)
+    {
+        var given = await dbContext.RoleAssignments
+            .AsNoTracking()
+            .Where(assignment => assignment.PrincipalGroupId == groupId)
+            .Join(
+                dbContext.RolePermissions,
+                assignment => assignment.RoleId,
+                listed => listed.RoleId,
+                (assignment, listed) => new { listed.Permission, assignment.ScopeOrganizationId, assignment.ScopeUserId })
+            .Distinct()
+            .ToArrayAsync(cancellationToken);
+
+        return ScopedGrant.Of(given.Select(row => (
+            MailFathomPermission.TryParse(row.Permission, out var permission) ? permission : default,
+            ScopeOf(row.ScopeOrganizationId, row.ScopeUserId))));
+    }
+
+    /// <inheritdoc />
+    public async Task<RoleAssignment?> ReadAssignmentAsync(Guid assignmentId, CancellationToken cancellationToken) =>
+        await dbContext.RoleAssignments
+            .AsNoTracking()
+            .FirstOrDefaultAsync(assignment => assignment.Id == assignmentId, cancellationToken) is { } stored
+            ? AssignmentOf(stored)
+            : null;
+
+    /// <inheritdoc />
     public async Task<AdministrativeListingPage<RoleAssignment>> ReadAssignmentsAsync(
         AdministrativeListingQuery query,
+        GrantListingReach reach,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(query);
+        ArgumentNullException.ThrowIfNull(reach);
 
-        var assignments = dbContext.RoleAssignments.AsNoTracking();
+        var assignments = this.Within(dbContext.RoleAssignments.AsNoTracking(), reach);
 
         if (query.After is { } after)
         {
@@ -472,12 +581,29 @@ internal sealed class PersistedGrants(MailFathomDbContext dbContext, IGrantChang
     /// <inheritdoc />
     public async Task<GrantWriteResult> RevokeAsync(Guid assignmentId, CancellationToken cancellationToken)
     {
+        await using var revocation = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+        await this.LockRootRolesAsync(alsoRoleId: null, cancellationToken);
+
+        var rootHeld = await this.IsRootHeldAsync(cancellationToken);
+
         var removed = await dbContext.RoleAssignments
             .Where(assignment => assignment.Id == assignmentId)
             .ExecuteDeleteAsync(cancellationToken);
 
-        return await this.AnnouncedAsync(
-            GrantWriteResult.Of(removed == 1 ? GrantWriteOutcome.Written : GrantWriteOutcome.UnknownAssignment));
+        if (removed != 1)
+        {
+            return GrantWriteResult.Of(GrantWriteOutcome.UnknownAssignment);
+        }
+
+        if (rootHeld && !await this.IsRootHeldAsync(cancellationToken))
+        {
+            return GrantWriteResult.Of(GrantWriteOutcome.LastRoot);
+        }
+
+        await revocation.CommitAsync(cancellationToken);
+
+        return await this.AnnouncedAsync(GrantWriteResult.Of(GrantWriteOutcome.Written));
     }
 
     /// <inheritdoc />
@@ -521,6 +647,80 @@ internal sealed class PersistedGrants(MailFathomDbContext dbContext, IGrantChang
             .ToArrayAsync(cancellationToken);
 
         return [.. held.Select(row => new HeldRole(row.Name, ScopeOf(row.ScopeOrganizationId, row.ScopeUserId)))];
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// One statement over the assignments <see cref="ReadGrantOfAsync" /> reads, narrowed by the reach
+    /// <see cref="ReadAssignmentsAsync" /> lists within, so the membership rule and the reach are each the one rule
+    /// rather than a second copy of it. A stored name this build does not publish is left out by the statement rather
+    /// than after it, so the limit counts rows that explain something.
+    /// </remarks>
+    public async Task<IReadOnlyList<GrantSource>> ReadGrantSourcesOfAsync(
+        UserId user,
+        GrantListingReach reach,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(reach);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
+
+        string[] published = [.. MailFathomPermission.All.Select(permission => permission.Name)];
+
+        var rows = await (
+                from assignment in this.Within(this.AssignmentsHeldBy(RequireUser(user)), reach)
+                join role in dbContext.Roles on assignment.RoleId equals role.Id
+                join listed in dbContext.RolePermissions on assignment.RoleId equals listed.RoleId
+                where published.Contains(listed.Permission)
+                join userGroup in dbContext.UserGroups on assignment.PrincipalGroupId equals (Guid?)userGroup.Id into named
+                from userGroup in named.DefaultIfEmpty()
+                orderby assignment.Id, listed.Permission
+                select new GrantSourceRow(
+                    listed.Permission,
+                    role.Id,
+                    role.Name,
+                    assignment.Id,
+                    assignment.PrincipalGroupId,
+                    userGroup == null ? null : userGroup.Name,
+                    assignment.ScopeOrganizationId,
+                    assignment.ScopeUserId))
+            .Take(limit)
+            .ToArrayAsync(cancellationToken);
+
+        return [.. rows.Select(SourceOf).OfType<GrantSource>()];
+    }
+
+    /// <inheritdoc />
+    public async Task<UserPlacement?> ReadUserPlacementAsync(UserId user, CancellationToken cancellationToken)
+    {
+        var userId = RequireUser(user);
+
+        var account = await dbContext.UserAccounts
+            .AsNoTracking()
+            .Where(candidate => candidate.Id == userId)
+            .Select(candidate => new { candidate.OrganizationId })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return account is null ? null : new UserPlacement(user, account.OrganizationId);
+    }
+
+    /// <summary>Reads one stored row of a grant's explanation as the source it names.</summary>
+    /// <param name="row">The stored row.</param>
+    /// <returns>The source, or <see langword="null" /> for a stored name this build does not publish, which grants nothing and so explains nothing.</returns>
+    internal static GrantSource? SourceOf(GrantSourceRow row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+
+        return MailFathomPermission.TryParse(row.Permission, out var permission)
+            ? new GrantSource(
+                permission,
+                row.RoleId,
+                row.RoleName,
+                row.AssignmentId,
+                row.GroupId,
+                row.GroupName,
+                ScopeOf(row.ScopeOrganizationId, row.ScopeUserId))
+            : null;
     }
 
     /// <summary>Names what an assignment named that does not exist, from the foreign key that refused it.</summary>
@@ -597,9 +797,89 @@ internal sealed class PersistedGrants(MailFathomDbContext dbContext, IGrantChang
                 || (assignment.PrincipalGroupId != null && groupsOfUser.Contains(assignment.PrincipalGroupId.Value)));
     }
 
+    /// <summary>Narrows assignments to the ones inside a reach.</summary>
+    /// <remarks>
+    /// An assignment is inside a reach when both its principal and its scope are: a user the reach names or one belonging
+    /// to one of its organizations, a group of one of its organizations, and a scope naming one of those organizations or
+    /// one of those users. The deployment scope is inside the whole deployment's reach alone.
+    /// </remarks>
+    private IQueryable<RoleAssignmentEntity> Within(IQueryable<RoleAssignmentEntity> assignments, GrantListingReach reach)
+    {
+        if (reach.WholeDeployment)
+        {
+            return assignments;
+        }
+
+        Guid[] organizations = [.. reach.Organizations];
+        Guid[] users = [.. reach.Users];
+
+        var members = dbContext.UserAccounts
+            .Where(account => account.OrganizationId != null && organizations.Contains(account.OrganizationId.Value))
+            .Select(account => account.Id);
+
+        var groups = dbContext.UserGroups
+            .Where(group => group.OrganizationId != null && organizations.Contains(group.OrganizationId.Value))
+            .Select(group => group.Id);
+
+        return assignments.Where(assignment =>
+            ((assignment.PrincipalUserId != null
+                    && (users.Contains(assignment.PrincipalUserId.Value)
+                        || members.Contains(assignment.PrincipalUserId.Value)))
+                || (assignment.PrincipalGroupId != null && groups.Contains(assignment.PrincipalGroupId.Value)))
+            && ((assignment.ScopeOrganizationId != null
+                    && organizations.Contains(assignment.ScopeOrganizationId.Value))
+                || (assignment.ScopeUserId != null
+                    && (users.Contains(assignment.ScopeUserId.Value)
+                        || members.Contains(assignment.ScopeUserId.Value)))));
+    }
+
     private static Guid RequireUser(UserId user) => user.IsSpecified
         ? user.Value
         : throw new ArgumentException("A membership names a user.", nameof(user));
+
+    /// <summary>Locks every role giving the root, and one more role where a write is about to change it, in identifier order.</summary>
+    /// <param name="alsoRoleId">A role the write changes whether or not it gives the root, or <see langword="null" /> for none.</param>
+    /// <param name="cancellationToken">Cancels the lock.</param>
+    /// <remarks>One statement taking every lock in one order, so two writes taking them cannot wait on each other in a cycle.</remarks>
+    private async Task LockRootRolesAsync(Guid? alsoRoleId, CancellationToken cancellationToken)
+    {
+        var root = MailFathomPermission.AdminRolesWrite.Name;
+        var also = alsoRoleId ?? Guid.Empty;
+
+        await dbContext.Database.ExecuteSqlAsync(
+            $"""
+             SELECT 1 FROM roles
+             WHERE "Id" = {also} OR "Id" IN (SELECT "RoleId" FROM role_permissions WHERE "Permission" = {root})
+             ORDER BY "Id"
+             FOR UPDATE
+             """,
+            cancellationToken);
+    }
+
+    /// <summary>Reads whether anybody holds the root: a role listing it assigned at the deployment scope to a user, or to a group with a member it still admits.</summary>
+    private Task<bool> IsRootHeldAsync(CancellationToken cancellationToken)
+    {
+        var root = MailFathomPermission.AdminRolesWrite.Name;
+
+        var rootRoles = dbContext.RolePermissions
+            .Where(listed => listed.Permission == root)
+            .Select(listed => listed.RoleId);
+
+        var admittingGroups =
+            from member in dbContext.UserGroupMembers
+            join userGroup in dbContext.UserGroups on member.GroupId equals userGroup.Id
+            join account in dbContext.UserAccounts on member.UserId equals account.Id
+            where userGroup.OrganizationId == null || userGroup.OrganizationId == account.OrganizationId
+            select userGroup.Id;
+
+        return dbContext.RoleAssignments.AnyAsync(
+            assignment => assignment.ScopeOrganizationId == null
+                && assignment.ScopeUserId == null
+                && rootRoles.Contains(assignment.RoleId)
+                && (assignment.PrincipalUserId != null
+                    || (assignment.PrincipalGroupId != null && admittingGroups.Contains(assignment.PrincipalGroupId.Value))),
+            cancellationToken);
+    }
 
     /// <summary>Announces a write that may have changed somebody's grant, once it committed.</summary>
     /// <remarks>Only a write that went through is announced: a refused one changed nothing for anybody to forget.</remarks>

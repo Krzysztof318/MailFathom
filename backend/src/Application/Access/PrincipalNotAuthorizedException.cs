@@ -55,6 +55,9 @@ public sealed class PrincipalNotAuthorizedException : MailFathomException
     /// same whatever the request names, so the boundary may say the permission is held only below the deployment.
     /// </remarks>
     public bool RefusedForTheDeploymentAlone { get; }
+    /// <summary>Gets whether the caller holds <see cref="RequiredPermission" />, only at no scope covering the one the act is bounded by.</summary>
+    /// <remarks>A boundary that names the permission reads this to say so, because telling a caller it was not granted a name it holds sends an operator to look for an assignment that is already there.</remarks>
+    public bool IsHeldTooNarrowly { get; private init; }
 
     /// <inheritdoc />
     public override MailFathomErrorCode ErrorCode => MailFathomErrorCode.PrincipalNotAuthorized;
@@ -79,7 +82,10 @@ public sealed class PrincipalNotAuthorizedException : MailFathomException
     /// <returns>The failure to raise.</returns>
     /// <remarks>It names the permission like <see cref="MissingPermission" />, because widening the grant is the remedy either way; the message tells an operator reading a log that the name is held, only not widely enough.</remarks>
     internal static PrincipalNotAuthorizedException HeldTooNarrowly(MailFathomPermission requiredPermission) =>
-        new($"The caller holds '{requiredPermission.Name}' only at a scope narrower than the one the act is bounded by.", requiredPermission);
+        new($"The caller holds '{requiredPermission.Name}' only at a scope narrower than the one the act is bounded by.", requiredPermission)
+        {
+            IsHeldTooNarrowly = true,
+        };
 
     /// <summary>Reports an operation reached under a kind of principal it does not admit.</summary>
     /// <param name="admittedKind">The one kind the operation admits.</param>

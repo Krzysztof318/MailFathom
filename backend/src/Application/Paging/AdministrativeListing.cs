@@ -19,4 +19,16 @@ public enum AdministrativeListing
 
     /// <summary>The users a deployment holds records for.</summary>
     Users = 2,
+
+    /// <summary>The roles a deployment holds.</summary>
+    Roles = 3,
+
+    /// <summary>The groups of users a deployment holds.</summary>
+    Groups = 4,
+
+    /// <summary>The members of one group.</summary>
+    GroupMembers = 5,
+
+    /// <summary>The role assignments a deployment holds.</summary>
+    RoleAssignments = 6,
 }

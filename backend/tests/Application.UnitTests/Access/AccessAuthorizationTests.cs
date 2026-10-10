@@ -23,6 +23,8 @@ public sealed class AccessAuthorizationTests
     private static readonly AssignmentScope OneOrganization =
         AssignmentScope.Organization(new Guid("0198f0aa-0000-7000-8000-0000000000e1"));
 
+    private static readonly Guid AnotherOrganizationId = new("0198f0aa-0000-7000-8000-0000000000e2");
+
     [Fact]
     public void RequirePermission_CallerGrantedIt_Permits()
     {
@@ -589,6 +591,35 @@ public sealed class AccessAuthorizationTests
 
         // Assert
         Assert.False(refusal.RefusedForTheDeploymentAlone);
+    }
+
+    [Fact]
+    public void Covers_ACallerHoldingThePermissionOverAnOrganization_CoversItsMemberAndNotAnotherOrganizations()
+    {
+        // Arrange
+        var authorization = AuthorizationOver(AuthorizedPrincipal.Caller(
+            ConfiguredCredentialName,
+            ScopedGrant.Of([(MailFathomPermission.AdminRead, OneOrganization)])));
+
+        // Act
+        bool[] covered =
+        [
+            authorization.Covers(MailFathomPermission.AdminRead, AdministrativeTarget.User(SyntheticUser.Deployment, OneOrganization.Target)),
+            authorization.Covers(MailFathomPermission.AdminRead, AdministrativeTarget.User(SyntheticUser.Deployment, AnotherOrganizationId)),
+        ];
+
+        // Assert
+        Assert.Equal([true, false], covered);
+    }
+
+    [Fact]
+    public void Covers_APrincipalThatIsNotACaller_CoversNothing()
+    {
+        // Arrange
+        var authorization = AuthorizationOver(AuthorizedPrincipal.Process);
+
+        // Act & Assert
+        Assert.False(authorization.Covers(MailFathomPermission.AdminRead, AdministrativeTarget.Unplaced));
     }
 
     [Fact]

@@ -62,6 +62,22 @@ public sealed class AuthorizedPrincipalTests
         Assert.Contains(MailFathomPermission.MailRead, caller.Permissions);
     }
 
+    /// <summary>A mail name reads no scope, so naming a target changes nothing about who holds it: the user's caller does, and the caller acting for nobody does not.</summary>
+    [Fact]
+    public void HoldsOver_AMailPermission_IsAnsweredAsHoldsAnswersItWhateverTheTarget()
+    {
+        // Arrange
+        var actingForNobody = AuthorizedPrincipal.Caller("administrator", [MailFathomPermission.MailRead]);
+        var actingForAUser = AuthorizedPrincipal.CallerActingFor(
+            SyntheticUser.Deployment,
+            "user-key",
+            [MailFathomPermission.MailRead]);
+
+        // Act & Assert
+        Assert.False(actingForNobody.HoldsOver(MailFathomPermission.MailRead, AdministrativeTarget.Unplaced));
+        Assert.True(actingForAUser.HoldsOver(MailFathomPermission.MailRead, AdministrativeTarget.Unplaced));
+    }
+
     /// <summary>
     /// A question naming no target is the deployment's, so an administrative permission held only over one organization
     /// answers it no — and is still carried, with its scope, for a check that does name a target inside it.

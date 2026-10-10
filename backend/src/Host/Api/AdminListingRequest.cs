@@ -23,13 +23,15 @@ internal static class AdminListingRequest
     /// <param name="cursor">The cursor the previous page returned, or <see langword="null" /> for the first page.</param>
     /// <param name="query">The page to read, when the request names one.</param>
     /// <param name="refusal">What the caller is told when it does not.</param>
+    /// <param name="within">The record whose rows the listing walks, or <see langword="null" /> for a listing of the deployment's own.</param>
     /// <returns><see langword="true" /> when the reading may go ahead.</returns>
     internal static bool TryResolve(
         AdministrativeListing listing,
         int? pageSize,
         string? cursor,
         [NotNullWhen(true)] out AdministrativeListingQuery? query,
-        [NotNullWhen(false)] out ProblemHttpResult? refusal)
+        [NotNullWhen(false)] out ProblemHttpResult? refusal,
+        Guid? within = null)
     {
         query = null;
         refusal = null;
@@ -38,7 +40,7 @@ internal static class AdminListingRequest
 
         if (cursor is not null)
         {
-            if (!AdministrativeListingCursor.TryDecode(cursor, listing, out var continuesAfter))
+            if (!AdministrativeListingCursor.TryDecode(cursor, listing, out var continuesAfter, within))
             {
                 refusal = TypedResults.Problem(
                     "The continuation cursor is not one this listing issued.",
@@ -67,7 +69,8 @@ internal static class AdminListingRequest
     /// <summary>Writes the cursor the page after one continues from.</summary>
     /// <param name="listing">The listing the page was read from.</param>
     /// <param name="continuesAfter">The identifier the following page continues after, or <see langword="null" /> at the end.</param>
+    /// <param name="within">The record whose rows the listing walks, or <see langword="null" /> for a listing of the deployment's own.</param>
     /// <returns>The cursor, or <see langword="null" /> when the page was the last.</returns>
-    internal static string? NextCursor(AdministrativeListing listing, Guid? continuesAfter) =>
-        continuesAfter is { } after ? AdministrativeListingCursor.Encode(listing, after) : null;
+    internal static string? NextCursor(AdministrativeListing listing, Guid? continuesAfter, Guid? within = null) =>
+        continuesAfter is { } after ? AdministrativeListingCursor.Encode(listing, after, within) : null;
 }

@@ -40,7 +40,7 @@ internal sealed class RoutePermission
     /// <summary>Gets the permission a caller must hold, unspecified where the route requires none.</summary>
     internal MailFathomPermission Permission { get; }
 
-    /// <summary>Gets whether the route names a user or a mail account, so the permission may be held at any scope covering it rather than over the whole deployment.</summary>
+    /// <summary>Gets whether the route names something a scope narrower than the deployment can cover — a user, a mail account, a group, or a role assignment — so the permission may be held at any scope covering it rather than over the whole deployment.</summary>
     /// <remarks>
     /// The transport cannot place the target, so for such a route it refuses only a caller holding the permission at no
     /// scope at all, and the operation decides whether the scope it is held at covers what the request named.

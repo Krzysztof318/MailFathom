@@ -210,12 +210,13 @@ administrative permission at all is not an administrator, and every credential t
 command is refused for want of one, it names the permission and says to give your user a role holding it, so the answer
 is to widen the user's roles rather than to replace the key. A role assigned over one organization or one user rather than
 the whole deployment is printed on a line of its own. Such a role reaches the users, the mail accounts with their
-mailboxes and contact books, and the organization its scope covers on the routes that name one —
+mailboxes and contact books, the groups, the role assignments, and the organization its scope covers on the routes that
+name one —
 [a grant held below the deployment](../operations/admin-endpoint.md#a-grant-held-below-the-deployment) lists them — and
 nothing else, and a user or a mail account outside it is answered as one the deployment does not hold. `mfctl user
-list`, `mfctl organization list`, `mfctl account list`, and `mfctl mailbox status` run under it show what that scope
-covers, and any other command naming no target is refused with a sentence saying the scope rather than the permission
-is what is missing.
+list`, `mfctl organization list`, `mfctl account list`, `mfctl mailbox status`, `mfctl group list`, and `mfctl
+assignment list` run under it show what that scope covers, `mfctl role list` shows every role, and any other command
+naming no target is refused with a sentence saying the scope rather than the permission is what is missing.
 [What a credential may do](../operations/permissions.md) lists the names, what each covers, and which twelve commands need
 a second one; [what the endpoint serves](../operations/admin-endpoint.md#what-the-endpoint-serves) names the permission
 every route is published under.
@@ -913,6 +914,17 @@ account you create with `mfctl account add` lands in the organization of the per
 `mfctl account list` and `mfctl organization list` show where each account and how many accounts each company holds.
 [Organizations](../operations/admin-endpoint.md#organizations) holds the rules — what a short name may contain, what a
 move or an assignment is refused over, and when an organization cannot be removed.
+
+**What each person may do is a role you give them.** `mfctl role list` shows the roles, `mfctl assignment add` gives one
+to a person or to a group at the whole deployment, one organization, or one person, and `mfctl group add-member` gives a
+person everything a group holds. `mfctl user permissions --user <id>` answers why somebody can or cannot do something:
+each permission they hold within what you administer, the role and group it came from, and the scope. You can give only
+what you hold yourself, at a scope you hold it over, and the deployment refuses to revoke, narrow, or remove from a group
+the last grant that lets anybody change roles. Erasing a person, or moving them to another organization, is not refused
+that way, so make sure somebody else can change roles before you erase or move an administrator.
+[Roles, groups, and assignments](../operations/admin-endpoint.md#roles-groups-and-assignments) lists the commands, and
+[administering roles, groups, and assignments](../operations/permissions.md#administering-roles-groups-and-assignments)
+holds the rules.
 
 **A row the deployment will not read is named rather than hidden.** A user record, a mail account declaration, or an
 organization row written by an older build, edited in the database, or restored from a backup may stop reading as one —

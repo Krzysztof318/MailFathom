@@ -16,6 +16,10 @@ public sealed class AdministrativeListingCursorTests
     [InlineData(AdministrativeListing.Organizations)]
     [InlineData(AdministrativeListing.MailAccounts)]
     [InlineData(AdministrativeListing.Users)]
+    [InlineData(AdministrativeListing.Roles)]
+    [InlineData(AdministrativeListing.Groups)]
+    [InlineData(AdministrativeListing.GroupMembers)]
+    [InlineData(AdministrativeListing.RoleAssignments)]
     public void TryDecode_ACursorTheSameListingIssued_ReadsBackTheRowItContinuesAfter(AdministrativeListing listing)
     {
         // Arrange
@@ -42,6 +46,27 @@ public sealed class AdministrativeListingCursorTests
         // Assert
         Assert.False(read);
         Assert.Equal(Guid.Empty, after);
+    }
+
+    /// <summary>A group's members are a different set per group, so a cursor is a position among one group's and no other's.</summary>
+    [Fact]
+    public void TryDecode_ACursorIssuedForAnotherRecordsRows_IsRefused()
+    {
+        // Arrange
+        var issuedFor = new Guid("0198f0aa-0000-7000-8000-0000000005b1");
+        var presentedTo = new Guid("0198f0aa-0000-7000-8000-0000000005b2");
+        var cursor = AdministrativeListingCursor.Encode(AdministrativeListing.GroupMembers, LastRow, issuedFor);
+
+        // Act
+        var sameRecord = AdministrativeListingCursor.TryDecode(cursor, AdministrativeListing.GroupMembers, out var after, issuedFor);
+        var anotherRecord = AdministrativeListingCursor.TryDecode(cursor, AdministrativeListing.GroupMembers, out _, presentedTo);
+        var noRecord = AdministrativeListingCursor.TryDecode(cursor, AdministrativeListing.GroupMembers, out _);
+
+        // Assert
+        Assert.True(sameRecord);
+        Assert.Equal(LastRow, after);
+        Assert.False(anotherRecord);
+        Assert.False(noRecord);
     }
 
     /// <summary>A cursor naming an instant was issued by a dated reading, which these listings are not.</summary>

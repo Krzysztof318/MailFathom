@@ -60,7 +60,8 @@ public sealed class MailFathomPermissionTests
     /// surface began serving folder moves, and the deleting permission when it began letting somebody empty their
     /// own trash. The export permission was allocated when the archive of a drained mailbox became something an operator
     /// could ask this deployment for, and the custody permission when switching one account into holding its own
-    /// mailbox became an act that empties a mail server of somebody's mail.
+    /// mailbox became an act that empties a mail server of somebody's mail. The roles permission was allocated when
+    /// roles, groups, and role assignments became records an administrator writes over the administrative endpoint.
     /// </remarks>
     [Fact]
     public void All_CarriesThePublishedNames() =>
@@ -86,6 +87,7 @@ public sealed class MailFathomPermissionTests
                 "mailfathom.admin.export",
                 "mailfathom.admin.configuration.write",
                 "mailfathom.admin.custody.write",
+                "mailfathom.admin.roles.write",
             ],
             MailFathomPermission.All.Select(permission => permission.Name));
 

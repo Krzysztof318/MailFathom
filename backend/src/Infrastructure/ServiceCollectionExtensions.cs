@@ -666,6 +666,9 @@ public static class ServiceCollectionExtensions
         // it and a port registered here stay in one place.
         services.AddScoped<UserCredentialAdministration>();
         services.AddScoped<OrganizationAdministration>();
+        // Where a change to a role, a group, or an assignment is written down, and what an administrator does to them.
+        services.AddScoped<IGrantAuditor, LoggedGrantAuditor>();
+        services.AddScoped<GrantAdministration>();
         // The default administrator, recorded and given its password once per deployment by the start that wins its row.
         services.AddScoped<IDefaultAdministratorStore, PersistedDefaultAdministrator>();
         services.AddScoped<DefaultAdministratorBootstrap>();

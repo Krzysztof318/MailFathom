@@ -354,6 +354,62 @@ internal static class AdminEndpointRoutes
     internal static string OrganizationShortNamePath(Guid organizationId) =>
         $"{OrganizationPath(organizationId)}/short-name";
 
+    /// <summary>Where the roles a deployment defines are listed, and where one is defined.</summary>
+    internal const string RolesPath = $"{Prefix}/roles";
+
+    /// <summary>Where one role is removed.</summary>
+    /// <param name="roleId">The role the path names.</param>
+    /// <returns>The path.</returns>
+    internal static string RolePath(Guid roleId) => $"{RolesPath}/{roleId:D}";
+
+    /// <summary>Where the name one role is read by is replaced.</summary>
+    /// <param name="roleId">The role the path names.</param>
+    /// <returns>The path.</returns>
+    internal static string RoleNamePath(Guid roleId) => $"{RolePath(roleId)}/name";
+
+    /// <summary>Where the whole list of permissions one role grants is replaced.</summary>
+    /// <param name="roleId">The role the path names.</param>
+    /// <returns>The path.</returns>
+    internal static string RolePermissionsPath(Guid roleId) => $"{RolePath(roleId)}/permissions";
+
+    /// <summary>Where the groups a caller's scope covers are listed, and where one is recorded.</summary>
+    internal const string GroupsPath = $"{Prefix}/groups";
+
+    /// <summary>Where one group is removed.</summary>
+    /// <param name="groupId">The group the path names.</param>
+    /// <returns>The path.</returns>
+    internal static string GroupPath(Guid groupId) => $"{GroupsPath}/{groupId:D}";
+
+    /// <summary>Where the name one group is read by is replaced.</summary>
+    /// <param name="groupId">The group the path names.</param>
+    /// <returns>The path.</returns>
+    internal static string GroupNamePath(Guid groupId) => $"{GroupPath(groupId)}/name";
+
+    /// <summary>Where one group's members are listed.</summary>
+    /// <param name="groupId">The group the path names.</param>
+    /// <returns>The path.</returns>
+    internal static string GroupMembersPath(Guid groupId) => $"{GroupPath(groupId)}/members";
+
+    /// <summary>Where one user joins and leaves one group, by <c>PUT</c> and <c>DELETE</c>.</summary>
+    /// <param name="groupId">The group the path names.</param>
+    /// <param name="userId">The user the path names.</param>
+    /// <returns>The path.</returns>
+    internal static string GroupMemberPath(Guid groupId, Guid userId) => $"{GroupMembersPath(groupId)}/{userId:D}";
+
+    /// <summary>Where the role assignments a caller's scope covers are listed, and where one is made.</summary>
+    /// <remarks>Named apart from a mail account's assignments to users, which are a different record answering a different question.</remarks>
+    internal const string RoleAssignmentsPath = $"{Prefix}/role-assignments";
+
+    /// <summary>Where one role assignment is revoked.</summary>
+    /// <param name="assignmentId">The assignment the path names.</param>
+    /// <returns>The path.</returns>
+    internal static string RoleAssignmentPath(Guid assignmentId) => $"{RoleAssignmentsPath}/{assignmentId:D}";
+
+    /// <summary>Where why one user holds each permission they hold is explained.</summary>
+    /// <param name="userId">The user the path names.</param>
+    /// <returns>The path.</returns>
+    internal static string UserPermissionsPath(Guid userId) => $"{UserPath(userId)}/permissions";
+
     /// <summary>Where a deployment publishes the document naming its authorization servers, resource, and required scopes.</summary>
     /// <remarks>
     /// Composed rather than discovered from a challenge, because a client that knows which routes it is about to call

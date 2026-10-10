@@ -36,4 +36,11 @@ public enum GrantWriteOutcome
 
     /// <summary>The user belongs to a different organization from the group, which holds only its own organization's members.</summary>
     OutsideGroupOrganization = 9,
+
+    /// <summary>The write would leave nobody holding <c>mailfathom.admin.roles.write</c> over the deployment, which nobody could then administer without the database.</summary>
+    LastRoot = 10,
+
+    /// <summary>A membership write asked for what already held — the user was already a member, or was never one — so no row moved and nobody's grant changed.</summary>
+    /// <remarks>It is answered as a success, because the state the caller asked for is the state there is, and it is told apart from <see cref="Written" /> so that no record says a membership changed when none did.</remarks>
+    Unchanged = 11,
 }

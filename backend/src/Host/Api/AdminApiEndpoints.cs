@@ -206,6 +206,7 @@ internal static class AdminApiEndpoints
         api.MapMailAccountCustody();
         api.MapUserCredentials();
         api.MapOrganizations();
+        api.MapGrants();
         api.MapHeldBackRecords();
         api.MapConfiguration();
 
@@ -269,7 +270,7 @@ internal static class AdminApiEndpoints
 /// names that <see cref="Permissions" /> leaves out, and a grant somebody holds without being told of it reads as one
 /// the deployment lost. <see cref="Permissions" /> stays the answer to what this endpoint admits for an operation
 /// naming no target, which is asked at the deployment scope; a narrower scope admits the routes that name something
-/// inside it, and the listings of users, of organizations, of mail accounts, and of their synchronization status, which answer with what it covers, and nothing else. The
+/// inside it, and the listings of users, of organizations, of mail accounts, of their synchronization status, of groups, and of role assignments, which answer with what it covers, beside the list of roles, and nothing else. The
 /// scopes carry administrative names alone: the mail names a caller here keeps are a
 /// ceiling on the credentials it may write rather than something this endpoint performs.
 /// </para>
@@ -329,7 +330,7 @@ internal sealed record AdminSessionResponse(
 /// <summary>One scope an administrative caller holds anything at, and what it holds there.</summary>
 /// <param name="Scope">Which kind of scope it is: <c>deployment</c>, <c>organization</c>, or <c>user</c>.</param>
 /// <param name="Target">The organization or the user the scope names, and none for the deployment.</param>
-/// <param name="Permissions">The published names granted at this scope, other than those only the deployment scope grants, in the order this repository publishes them. At a narrower scope each admits the routes checked at a scope covering what they name, for a target that scope covers, and the listings of users, of organizations, of mail accounts, and of their synchronization status, which answer with what that scope covers; it admits no other route naming no target.</param>
+/// <param name="Permissions">The published names granted at this scope, other than those only the deployment scope grants, in the order this repository publishes them. At a narrower scope each admits the routes checked at a scope covering what they name, for a target that scope covers, and the listings of users, of organizations, of mail accounts, of their synchronization status, of groups, and of role assignments, which answer with what that scope covers, beside the list of roles; it admits no other route naming no target.</param>
 /// <param name="ReachingNothing">The published names granted at this scope that only the deployment scope grants, so at a narrower scope they reach nothing anywhere; always empty for the deployment.</param>
 /// <remarks>
 /// A role is assigned whole, so a role carrying <c>mailfathom.admin.spend</c> may be assigned over an organization and

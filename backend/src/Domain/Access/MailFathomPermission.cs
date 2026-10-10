@@ -292,6 +292,26 @@ public readonly record struct MailFathomPermission
     public static MailFathomPermission AdminCustodyWrite { get; } =
         new("mailfathom.admin.custody.write", ProtectedSurface.Administration);
 
+    /// <summary>Gets the permission covering roles, groups, and role assignments: defining a role, keeping a group and its members, and assigning or revoking a role at a scope.</summary>
+    /// <remarks>
+    /// <para>
+    /// Held at the deployment scope it is the root: its holder may write any published name into any role, their own
+    /// included, so granting it there is granting everything. Held at an organization it reaches that organization's
+    /// groups and the assignments inside it, and never a role's definition. Every write it performs that could widen
+    /// somebody is bounded by what its writer already holds, and none of the three writes it performs that could take
+    /// it from its last holder at the deployment scope — revoking the assignment, narrowing the role, removing the
+    /// member — is admitted; erasing that holder, or moving them out of the organization whose group gives it to them,
+    /// is another permission's act and is not refused over it — see
+    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0012-authorization-model-named-permissions-and-where-they-are-enforced.md">ADR 0012</see>.
+    /// </para>
+    /// <para>
+    /// The built-in <c>Organization administrator</c> and <c>Administrator</c> roles were seeded listing it before any
+    /// build published it, so a stored name that read back as unpublished until now grants it from this build on.
+    /// </para>
+    /// </remarks>
+    public static MailFathomPermission AdminRolesWrite { get; } =
+        new("mailfathom.admin.roles.write", ProtectedSurface.Administration);
+
     #endregion
 
     /// <summary>Gets every published permission.</summary>
@@ -318,6 +338,7 @@ public readonly record struct MailFathomPermission
         AdminExport,
         AdminConfigurationWrite,
         AdminCustodyWrite,
+        AdminRolesWrite,
     ];
 
     /// <summary>Gets whether this value names a published permission rather than the unusable struct default.</summary>

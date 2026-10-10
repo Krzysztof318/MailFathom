@@ -280,22 +280,17 @@ several says which of them — `mfctl user add` records each further person — 
 are several is refused rather than guessed at.
 
 **What the person may do is a role, and recording them assigns none.** A user no role is assigned to reaches no tool,
-whichever credential they later present, so give the person the seeded `Mail user` role at their own scope.
-This build has no `mfctl` command that assigns a role — [#2314](https://github.com/Krzysztof318/MailFathom/issues/2314)
-owns that — so the assignment is one statement against the deployment's database, here for every user it holds and
-safe to run again after recording another:
+whichever credential they later present, so give the person the seeded `Mail user` role at their own scope, taking
+the role's identifier from `mfctl role list` and theirs from `mfctl user list`:
 
-```sql
-INSERT INTO role_assignments ("Id", "RoleId", "PrincipalUserId", "ScopeUserId", "AssignedAt")
-SELECT uuidv7(), r."Id", u."Id", u."Id", now()
-FROM settings_accounts u
-CROSS JOIN roles r
-WHERE r."Name" = 'Mail user'
-ON CONFLICT DO NOTHING;
+```console
+$ mfctl role list
+$ mfctl assignment add --role <the Mail user role's identifier> --user <their identifier> --scope-user <their identifier>
 ```
 
 [How a caller's grant is computed](../operations/permissions.md#how-a-callers-grant-is-computed) is what that role
-does, and every replica reads the assignment within thirty seconds.
+does, and [roles, groups, and assignments](../operations/admin-endpoint.md#roles-groups-and-assignments) the rest of
+the commands. Every replica reads the assignment within thirty seconds.
 
 The mailbox file written in [step 2](#2-write-down-the-mailbox) names the language MailFathom writes about that
 mailbox's mail in — the reading on a message row, the statement about a conversation. `mfctl account edit` is where it

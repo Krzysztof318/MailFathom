@@ -181,11 +181,13 @@ internal static class RouteAuthorization
         {
             RecordRefusal(context.HttpContext, surface, refusal.RequiredPermission);
 
-            return Refused(
-                context.HttpContext,
-                published,
-                refusal.RequiredPermission,
-                refusal.RefusedForTheDeploymentAlone);
+            return refusal.IsHeldTooNarrowly
+                ? HeldTooNarrowly(refusal.RequiredPermission)
+                : Refused(
+                    context.HttpContext,
+                    published,
+                    refusal.RequiredPermission,
+                    refusal.RefusedForTheDeploymentAlone);
         }
         catch (DeploymentUserUnresolvedException refusal)
         {
@@ -277,6 +279,18 @@ internal static class RouteAuthorization
             statusCode: StatusCodes.Status403Forbidden,
             extensions: extensions);
     }
+
+    /// <summary>Writes the refusal of a write that would give somebody a permission wider than the caller holds it.</summary>
+    /// <remarks>
+    /// The caller holds the name, so saying it was not granted would be false, and the scope it falls short of is wherever
+    /// the write gives the name — an organization as readily as the deployment — so
+    /// <see cref="HeldBelowDeploymentExtension" /> is not carried: that member says an operation is the deployment's alone,
+    /// which this one is not.
+    /// </remarks>
+    private static ProblemHttpResult HeldTooNarrowly(MailFathomPermission required) => TypedResults.Problem(
+        $"The credential holds '{required.Name}' only at a scope narrower than the one this write would give it at, and nobody gives more than they hold.",
+        statusCode: StatusCodes.Status403Forbidden,
+        extensions: new Dictionary<string, object?>(StringComparer.Ordinal) { [PermissionExtension] = required.Name });
 
     /// <summary>Writes the answer an act reached by a credential naming no user receives where the deployment serves several.</summary>
     /// <remarks>
