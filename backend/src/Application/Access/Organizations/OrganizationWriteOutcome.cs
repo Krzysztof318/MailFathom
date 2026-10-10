@@ -33,4 +33,7 @@ public enum OrganizationWriteOutcome
 
     /// <summary>No mail account carries the identifier the act named.</summary>
     UnknownMailAccount = 8,
+
+    /// <summary>A move out of every organization would have left a mail account in none assigned to more than one user, and a mailbox is shared only inside an organization, so it was refused.</summary>
+    SharedOnlyInOrganization = 9,
 }

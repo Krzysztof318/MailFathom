@@ -248,10 +248,26 @@ internal sealed class PersistedMailAccountRecordStore(
             {
                 var context = await EfCorePersistenceSessionAccessor.JoinAsync(session, token);
 
-                if (await StraddledOrganizationsAsync(context, accountId, userId, token) is { } straddled)
+                // The account is held against a move of its own and the user against a move of theirs until this
+                // transaction commits, so the organizations compared here are the ones the assignment is written
+                // under: a move that commits first is read here, and a move that comes after waits and then counts
+                // this assignment. The account is taken first, which is the order a save takes it in, and exclusively
+                // against another assignment, so two assignments of one account count its users one after the other
+                // and neither takes it past the bound its organization sets.
+                var accountOrganization = await LockAccountAsync(context, accountId, token);
+                var userOrganization = await LockUserAsync(context, userId, token);
+
+                if (accountOrganization is [var ofAccount] && userOrganization is [var ofUser] && ofAccount != ofUser)
                 {
-                    return new MailAccountWrite(MailAccountWriteResult.OrganizationsDiffer, 0, straddled);
+                    return new MailAccountWrite(
+                        MailAccountWriteResult.OrganizationsDiffer,
+                        0,
+                        new StraddledOrganizations(ofAccount, ofUser));
                 }
+
+                // An account that is gone reads as one in no organization here, and the insert below settles it.
+                var organization = accountOrganization.FirstOrDefault();
+                var mostUsers = MailAccountRecord.MaximumUsersAssignedIn(organization);
 
                 var assigned = await context.Database.ExecuteSqlAsync(
                     $"""
@@ -259,18 +275,18 @@ internal sealed class PersistedMailAccountRecordStore(
                      SELECT {userId}, {accountId}, {now}
                      WHERE EXISTS (SELECT 1 FROM settings_mail_accounts WHERE "Id" = {accountId})
                        AND EXISTS (SELECT 1 FROM settings_accounts WHERE "Id" = {userId})
-                       AND (SELECT count(*) FROM mail_account_assignments WHERE "MailAccountId" = {accountId}) < {MailAccountRecord.MaximumUsersAssigned}
+                       AND (SELECT count(*) FROM mail_account_assignments WHERE "MailAccountId" = {accountId}) < {mostUsers}
                      ON CONFLICT DO NOTHING
                      """,
                     token);
 
                 // Nothing inserted: the account or the user is gone, the conflict clause met this user's own
-                // assignment already standing, or the account is assigned to as many users as it may be. Somebody
-                // else's assignment is not a conflict — the key is the pair — so an account several people are
-                // assigned takes each of them without the others being consulted.
+                // assignment already standing, or the account is assigned to as many users as it may be where it
+                // belongs. Inside an organization somebody else's assignment is not a conflict — the key is the pair —
+                // so an account several members are assigned takes each of them without the others being consulted.
                 if (assigned == 0)
                 {
-                    return new MailAccountWrite(await WhyNotAssignedAsync(context, accountId, userId, token), 0);
+                    return new MailAccountWrite(await WhyNotAssignedAsync(context, accountId, userId, organization, token), 0);
                 }
 
                 if (!await StepUserVersionAsync(context, userId, expectedUserVersion, now, token))
@@ -409,11 +425,12 @@ internal sealed class PersistedMailAccountRecordStore(
             cancellationToken);
     }
 
-    /// <summary>Tells why an assignment inserted nothing: the user already holds it, the account is assigned to as many users as it may be, or a row is gone.</summary>
+    /// <summary>Tells why an assignment inserted nothing: the user already holds it, the account is assigned to as many users as it may be where it belongs, or a row is gone.</summary>
     private static async Task<MailAccountWriteResult> WhyNotAssignedAsync(
         MailFathomDbContext context,
         Guid accountId,
         Guid userId,
+        Guid? accountOrganization,
         CancellationToken cancellationToken)
     {
         if (await context.MailAccountAssignments.AnyAsync(row => row.MailAccountId == accountId && row.UserId == userId, cancellationToken))
@@ -423,37 +440,26 @@ internal sealed class PersistedMailAccountRecordStore(
 
         var assignedUsers = await context.MailAccountAssignments.CountAsync(row => row.MailAccountId == accountId, cancellationToken);
 
-        return assignedUsers >= MailAccountRecord.MaximumUsersAssigned
-            ? MailAccountWriteResult.AssignedToMostUsers
-            : MailAccountWriteResult.NotFound;
+        if (assignedUsers < MailAccountRecord.MaximumUsersAssignedIn(accountOrganization))
+        {
+            return MailAccountWriteResult.NotFound;
+        }
+
+        return accountOrganization is null
+            ? MailAccountWriteResult.SharedOnlyInOrganization
+            : MailAccountWriteResult.AssignedToMostUsers;
     }
 
-    /// <summary>Reads the organizations of an account and a user under their locks, and reports them where the two differ.</summary>
-    /// <returns>The two organizations where an assignment between them would straddle both, or <see langword="null" /> where they agree or either row is gone — which the insert after this settles.</returns>
-    /// <remarks>
-    /// The account is held against a move of its own and the user against a move of theirs until this transaction
-    /// commits, so the organizations compared here are the ones the assignment is written under: a move that commits
-    /// first is read here, and a move that comes after waits and then counts this assignment. The account is taken
-    /// first, which is the order a save takes it in, and exclusively against another assignment, so two assignments of
-    /// one account count its users one after the other and neither takes it past
-    /// <see cref="MailAccountRecord.MaximumUsersAssigned" />.
-    /// </remarks>
-    private static async Task<StraddledOrganizations?> StraddledOrganizationsAsync(
+    /// <summary>Locks one account's row for the rest of the transaction and reads the organization it names.</summary>
+    /// <returns>The organization, as a one-element list, or an empty list where the account is gone.</returns>
+    /// <remarks>Exclusive against another assignment of the account and against a move of it, and shared with nothing an ordinary read takes.</remarks>
+    private static Task<List<Guid?>> LockAccountAsync(
         MailFathomDbContext context,
         Guid accountId,
-        Guid userId,
-        CancellationToken cancellationToken)
-    {
-        var accountOrganization = await context.Database
+        CancellationToken cancellationToken) =>
+        context.Database
             .SqlQuery<Guid?>($"""SELECT "OrganizationId" AS "Value" FROM settings_mail_accounts WHERE "Id" = {accountId} FOR NO KEY UPDATE""")
             .ToListAsync(cancellationToken);
-
-        var userOrganization = await LockUserAsync(context, userId, cancellationToken);
-
-        return accountOrganization is [var account] && userOrganization is [var user] && account != user
-            ? new StraddledOrganizations(account, user)
-            : null;
-    }
 
     /// <summary>Locks one user's row for the rest of the transaction and reads the organization it names.</summary>
     /// <returns>The organization, as a one-element list, or an empty list where the user is gone.</returns>

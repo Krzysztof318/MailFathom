@@ -2137,7 +2137,7 @@ internal sealed class AdminApiClient
     /// <param name="cancellationToken">Cancels the request.</param>
     /// <returns>A task that completes once the move stands.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> or <paramref name="request" /> is <see langword="null" />.</exception>
-    /// <exception cref="CliFailure">Thrown when the deployment holds no such mail account or organization, the account is assigned to a user the target would not admit, the credential was refused, or the deployment could not be reached.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment holds no such mail account or organization, the account is assigned to a user the target would not admit or to more than one user while leaving every organization, the credential was refused, or the deployment could not be reached.</exception>
     internal Task SetMailAccountOrganizationAsync(
         string token,
         Guid accountId,

@@ -31,6 +31,10 @@ internal sealed class InMemoryMailAccountRecordStore : IMailAccountRecordStore
     /// <summary>Gets the queryable settings the last write of each account carried, by account.</summary>
     internal Dictionary<Guid, MailAccountQueryableSettings> Settings { get; } = [];
 
+    /// <summary>Gets or sets what another writer commits between a caller's read of an account and its assignment of it.</summary>
+    /// <remarks>Run as an assignment begins, so a test states the write a competing replica landed first and reads what the later one is answered with.</remarks>
+    internal Action? BeforeAssigning { get; set; }
+
     /// <summary>States one user's record and the accounts assigned to them.</summary>
     /// <param name="user">The user.</param>
     /// <param name="json">The record, as the row holds it.</param>
@@ -185,6 +189,8 @@ internal sealed class InMemoryMailAccountRecordStore : IMailAccountRecordStore
         long expectedUserVersion,
         CancellationToken cancellationToken)
     {
+        this.BeforeAssigning?.Invoke();
+
         if (this.Find(accountId) is not { } account || !this.users.TryGetValue(user, out var held))
         {
             return Written(MailAccountWriteResult.NotFound, 0);
@@ -203,9 +209,13 @@ internal sealed class InMemoryMailAccountRecordStore : IMailAccountRecordStore
             return Written(MailAccountWriteResult.NothingToChange, account.Version);
         }
 
-        if (this.assignments[accountId].Count >= MailAccountRecord.MaximumUsersAssigned)
+        if (this.assignments[accountId].Count >= MailAccountRecord.MaximumUsersAssignedIn(this.OrganizationOf(accountId)))
         {
-            return Written(MailAccountWriteResult.AssignedToMostUsers, account.Version);
+            return Written(
+                this.OrganizationOf(accountId) is null
+                    ? MailAccountWriteResult.SharedOnlyInOrganization
+                    : MailAccountWriteResult.AssignedToMostUsers,
+                account.Version);
         }
 
         if (held.Version != expectedUserVersion)

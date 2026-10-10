@@ -194,6 +194,31 @@ public sealed class OrganizationEndpointsTests
         Assert.Contains("3 user", problem.ProblemDetails.Detail, StringComparison.Ordinal);
     }
 
+    /// <summary>A shared account is not taken out of every organization, because an account in none is one person's, and the refusal says how many it is assigned to and that nobody was unassigned.</summary>
+    [Fact]
+    public async Task SetMailAccountOrganizationAsync_ASharedAccountLeavingEveryOrganization_IsAConflictNamingHowManyItIsAssignedTo()
+    {
+        // Arrange
+        var harness = new EndpointHarness(MailFathomPermission.AdminConfigurationWrite);
+        var mailAccount = Guid.CreateVersion7();
+        harness.Organizations.SetMailAccountOrganizationAsync(mailAccount, null, Arg.Any<CancellationToken>())
+            .Returns(new OrganizationWriteResult(OrganizationWriteOutcome.SharedOnlyInOrganization, StandingAssignments: 3));
+
+        // Act
+        var result = await OrganizationEndpoints.SetMailAccountOrganizationAsync(
+            mailAccount,
+            new MailAccountOrganizationRequest(null, None: true),
+            harness.Administration,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var problem = Assert.IsType<ProblemHttpResult>(result.Result);
+        Assert.Equal(StatusCodes.Status409Conflict, problem.StatusCode);
+        Assert.Contains("assigned to 3 users", problem.ProblemDetails.Detail, StringComparison.Ordinal);
+        Assert.Contains("assigned to one person", problem.ProblemDetails.Detail, StringComparison.Ordinal);
+        Assert.Contains("nobody was unassigned", problem.ProblemDetails.Detail, StringComparison.Ordinal);
+    }
+
     /// <summary>A body naming no decision is refused rather than read as a move out of every organization, which would decide who the account may be assigned to.</summary>
     [Theory]
     [InlineData(false)]

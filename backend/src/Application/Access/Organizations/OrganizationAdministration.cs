@@ -221,7 +221,7 @@ public sealed class OrganizationAdministration
     /// <param name="mailAccountId">The mail account being moved.</param>
     /// <param name="organizationId">The organization to move it into, or <see langword="null" /> to leave it in none.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
-    /// <returns>What the act did, carrying how many of its users stand outside the target where that refused it; an account or an organization outside the caller's scope is answered as one the deployment does not hold.</returns>
+    /// <returns>What the act did, carrying how many of its users stand outside the target where that refused it, or how many it is assigned to where leaving every organization would have left it shared; an account or an organization outside the caller's scope is answered as one the deployment does not hold.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller holds <see cref="MailFathomPermission.AdminConfigurationWrite" /> at no scope, or moves an account out of every organization without holding it over the whole deployment.</exception>
     /// <remarks>
     /// Both sides have to be covered, as for <see cref="SetUserOrganizationAsync" />: the account where it sits now, and

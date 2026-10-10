@@ -95,8 +95,12 @@ public interface IOrganizationStore
     /// <param name="mailAccountId">The mail account being moved.</param>
     /// <param name="organizationId">The organization to move it into, or <see langword="null" /> to leave it in none.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
-    /// <returns><see cref="OrganizationWriteOutcome.Written" />, <see cref="OrganizationWriteOutcome.UnknownMailAccount" />, <see cref="OrganizationWriteOutcome.UnknownOrganization" />, or <see cref="OrganizationWriteOutcome.AssignmentsOutsideOrganization" /> carrying how many of its users stand outside the target.</returns>
-    /// <remarks>Nothing is unassigned on the administrator's behalf: an account assigned to a user the target would not admit stays where it is.</remarks>
+    /// <returns><see cref="OrganizationWriteOutcome.Written" />, <see cref="OrganizationWriteOutcome.UnknownMailAccount" />, <see cref="OrganizationWriteOutcome.UnknownOrganization" />, <see cref="OrganizationWriteOutcome.AssignmentsOutsideOrganization" /> carrying how many of its users stand outside the target, or <see cref="OrganizationWriteOutcome.SharedOnlyInOrganization" /> carrying how many users an account leaving every organization is assigned to.</returns>
+    /// <remarks>
+    /// Nothing is unassigned on the administrator's behalf: an account assigned to a user the target would not admit
+    /// stays where it is, and so does an account assigned to more than one user that was asked to leave every
+    /// organization, because an account in none is one person's.
+    /// </remarks>
     Task<OrganizationWriteResult> SetMailAccountOrganizationAsync(
         Guid mailAccountId,
         Guid? organizationId,

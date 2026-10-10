@@ -15,9 +15,9 @@ namespace MailFathom.Application.Access.Organizations;
 /// <param name="CreatedAt">When it was recorded.</param>
 /// <remarks>
 /// An organization groups users and mail accounts, scopes a Basic username, and keeps an assignment inside itself: an
-/// account in it is assigned only to its members, and an account in none only to users in none. No setting is declared
-/// on it and nothing a request is served by changes because of it, so what it carries is what an operator needs to tell
-/// companies apart.
+/// account in it is assigned only to its members, and an account in none to one user in none — sharing a mailbox is
+/// something an organization does. No setting is declared on it and nothing a request is served by changes because of
+/// it, so what it carries is what an operator needs to tell companies apart.
 /// </remarks>
 public sealed record Organization(
     Guid Id,

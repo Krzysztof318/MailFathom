@@ -10,7 +10,7 @@ namespace MailFathom.Application.Access.Organizations;
 /// <param name="RemainingMembers">How many members stood in the way of a deletion; zero for every other outcome.</param>
 /// <param name="CollidingUsername">The username the target scope already holds, where a move was refused for one and the collision could be read.</param>
 /// <param name="RemainingMailAccounts">How many mail accounts stood in the way of a deletion; zero for every other outcome.</param>
-/// <param name="StandingAssignments">How many assignments a move would have left straddling two organizations: a moved user's accounts, or a moved account's users; zero for every other outcome.</param>
+/// <param name="StandingAssignments">How many assignments a move would have left straddling two organizations: a moved user's accounts, or a moved account's users — or, for <see cref="OrganizationWriteOutcome.SharedOnlyInOrganization" />, how many users the account leaving every organization is assigned to; zero for every other outcome.</param>
 public sealed record OrganizationWriteResult(
     OrganizationWriteOutcome Outcome,
     Guid OrganizationId = default,

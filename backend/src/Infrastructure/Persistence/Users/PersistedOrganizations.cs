@@ -371,7 +371,8 @@ internal sealed class PersistedOrganizations(MailFathomDbContext dbContext, IGra
     /// <remarks>
     /// The account row is locked before its users are counted, against the lock an assignment of it takes, so
     /// an assignment either committed first and is counted or waits for this move and then reads the account's new
-    /// organization. A move of one of its users concurrently with this one cannot let both through: each compares the
+    /// organization — which is also what keeps an account leaving every organization from gaining a second user while
+    /// its one is being counted. A move of one of its users concurrently with this one cannot let both through: each compares the
     /// other's side as it stood, and while the two agree before either move, a move of one side alone always leaves them
     /// differing. The organization's restricting foreign key waits on a deletion that locked it first, and is answered as
     /// the organization being gone.
@@ -396,6 +397,21 @@ internal sealed class PersistedOrganizations(MailFathomDbContext dbContext, IGra
             && !await dbContext.Organizations.AnyAsync(organization => organization.Id == target, cancellationToken))
         {
             return OrganizationWriteResult.Of(OrganizationWriteOutcome.UnknownOrganization);
+        }
+
+        // Asked before where its users are, because moving them as well would not help: an account several people are
+        // assigned stays shared wherever they stand, and outside every organization nothing is.
+        if (organizationId is null)
+        {
+            var assignedUsers = await dbContext.MailAccountAssignments
+                .CountAsync(assignment => assignment.MailAccountId == mailAccountId, cancellationToken);
+
+            if (assignedUsers > MailAccountRecord.MaximumUsersAssignedIn(organizationId))
+            {
+                return new OrganizationWriteResult(
+                    OrganizationWriteOutcome.SharedOnlyInOrganization,
+                    StandingAssignments: assignedUsers);
+            }
         }
 
         var straddling = await UsersAssignedOutside(dbContext, mailAccountId, organizationId).CountAsync(cancellationToken);
