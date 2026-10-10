@@ -40,8 +40,7 @@ namespace MailFathom.Application.Access;
 /// transport and the use case cannot come to disagree about what holding a permission means.
 /// <see cref="HoldsOnlyBelowDeployment" /> answers what a refusal of an operation admitted only at the deployment
 /// scope says on top of naming the permission: that the caller holds it, but only over an organization or a user.
-/// <see cref="ScopesOf" /> is what a listing answers within, since a listing never refuses over a scope, and
-/// <see cref="Covers" /> reports the grant to a use case that placed its own target.
+/// <see cref="ScopesOf" /> is what a listing answers within, since a listing never refuses over a scope.
 /// </para>
 /// </remarks>
 public sealed class AccessAuthorization
@@ -342,25 +341,6 @@ public sealed class AccessAuthorization
         ArgumentNullException.ThrowIfNull(scope);
 
         return this.PermitsOverAsync(permission, token => this.PlaceScopeAsync(scope, token), cancellationToken);
-    }
-
-    /// <summary>Reports whether the caller holds one permission at a scope covering a target the use case placed itself.</summary>
-    /// <param name="permission">The capability the operation is published under.</param>
-    /// <param name="target">Where the thing the operation names sits in the deployment.</param>
-    /// <returns><see langword="true" /> when an admitted caller holds the permission at a scope covering the target.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="target" /> is <see langword="null" />.</exception>
-    /// <remarks>
-    /// For a use case whose target is neither a user nor a mail account — a group, or the scope an assignment names —
-    /// and which therefore read where it sits as part of its own work. It reports rather than refusing, because such a
-    /// use case answers a target outside the caller's scope exactly as it answers one that does not exist. Every
-    /// principal that is not a caller is answered <see langword="false" />.
-    /// </remarks>
-    public bool Covers(MailFathomPermission permission, AdministrativeTarget target)
-    {
-        ArgumentNullException.ThrowIfNull(target);
-
-        return this.principals.Current is { Kind: AuthorizedPrincipalKind.Caller } caller
-            && caller.Grant.Covers(permission, target);
     }
 
     /// <summary>Reports the scopes the caller holds one capability at, which is what a listing answers within.</summary>

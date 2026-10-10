@@ -240,7 +240,7 @@ public sealed class GrantAdministration
         {
             this.authorization.RequirePermissionAtAnyScope(MailFathomPermission.AdminRolesWrite);
 
-            if (!this.authorization.Covers(
+            if (!this.authorization.PermitsOver(
                     MailFathomPermission.AdminRolesWrite,
                     AdministrativeTarget.OrganizationItself(organization)))
             {
@@ -493,7 +493,7 @@ public sealed class GrantAdministration
         RequireNamedUser(user);
 
         if (await this.grants.ReadUserPlacementAsync(user, cancellationToken) is not { } placement
-            || !this.authorization.Covers(MailFathomPermission.AdminRead, placement.Target))
+            || !this.authorization.PermitsOver(MailFathomPermission.AdminRead, placement.Target))
         {
             return null;
         }
@@ -563,13 +563,13 @@ public sealed class GrantAdministration
         Guid groupId,
         CancellationToken cancellationToken) =>
         await this.grants.ReadGroupAsync(groupId, cancellationToken) is { } group
-        && this.authorization.Covers(permission, TargetOf(group))
+        && this.authorization.PermitsOver(permission, TargetOf(group))
             ? group
             : null;
 
     private async Task<UserPlacement?> CoveredUserAsync(UserId user, CancellationToken cancellationToken) =>
         await this.grants.ReadUserPlacementAsync(user, cancellationToken) is { } placement
-        && this.authorization.Covers(MailFathomPermission.AdminRolesWrite, placement.Target)
+        && this.authorization.PermitsOver(MailFathomPermission.AdminRolesWrite, placement.Target)
             ? placement
             : null;
 
@@ -595,11 +595,11 @@ public sealed class GrantAdministration
         scope.Kind switch
         {
             AssignmentScopeKind.Deployment =>
-                this.authorization.Covers(MailFathomPermission.AdminRolesWrite, AdministrativeTarget.Unplaced)
+                this.authorization.PermitsOver(MailFathomPermission.AdminRolesWrite, AdministrativeTarget.Unplaced)
                     ? null
                     : GrantWriteOutcome.UnknownAssignment,
             AssignmentScopeKind.Organization =>
-                this.authorization.Covers(MailFathomPermission.AdminRolesWrite, AdministrativeTarget.OrganizationItself(scope.Target))
+                this.authorization.PermitsOver(MailFathomPermission.AdminRolesWrite, AdministrativeTarget.OrganizationItself(scope.Target))
                     ? null
                     : GrantWriteOutcome.UnknownOrganization,
             _ => await this.CoveredUserAsync(UserId.Create(scope.Target), cancellationToken) is null
@@ -630,7 +630,7 @@ public sealed class GrantAdministration
             }
 
             if (permission.Surface != ProtectedSurface.Mail
-                && !this.authorization.Covers(permission, await this.TargetOfAsync(scope, cancellationToken)))
+                && !this.authorization.PermitsOver(permission, await this.TargetOfAsync(scope, cancellationToken)))
             {
                 throw PrincipalNotAuthorizedException.HeldTooNarrowly(permission);
             }
