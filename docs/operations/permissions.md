@@ -300,7 +300,7 @@ endpoint and to its session route, and is refused on every other route in that s
 **`mailfathom.admin.spend` held below the deployment reaches nothing.** A role is assigned whole, so a role carrying it —
 the seeded `Administrator` among them — may be assigned over an organization or a user and grants its other names there.
 The spending name is not refused there, and it is not counted either: `GET /api/admin/session` and `mfctl status` report
-it apart from what that scope reaches, so nobody reads it as a grant the deployment fails to enforce.
+it apart from the rest of what that scope grants, so nobody reads it as a grant the deployment fails to enforce.
 
 **The grant is computed per request and remembered per user by each replica.** A change to an assignment, a role's
 permissions, a group's membership, or a user's organization forgets what every replica remembered: the replica writing it

@@ -268,11 +268,11 @@ that [only the deployment scope grants](permissions.md#what-only-the-deployment-
 `mfctl status` prints each scope narrower than the deployment on a line of its own. Those lines report what the caller
 is granted at each scope, not what it may do here: **this endpoint asks every route's permission at deployment scope**,
 the routes naming a target included, so a name held only over an organization or a user admits no operation on it, and
-the first line says so:
+each scope's line says so whatever the first line holds:
 
 ```text
 It holds no administrative permission over the whole deployment, so every operation but this one is refused.
-Over organization 0198f0aa-… it holds mailfathom.admin.read, mailfathom.admin.operate. mailfathom.admin.spend reaches nothing there, because only the deployment scope grants it.
+Over organization 0198f0aa-… it is granted mailfathom.admin.read, mailfathom.admin.operate, which this endpoint admits only at the deployment scope. mailfathom.admin.spend reaches nothing there, because only the deployment scope grants it.
 ```
 
 **Some operations are the deployment's alone**, and a grant below the deployment never reaches them whatever else does:

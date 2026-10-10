@@ -94,16 +94,18 @@ internal static class StatusCommand
         _ => $"It holds {string.Join(", ", permissions)}.",
     };
 
-    /// <summary>States what the credential is granted over one organization or one user, which is what it holds there rather than what the endpoint admits.</summary>
+    /// <summary>States what the credential is granted over one organization or one user, and that the endpoint admits none of it there.</summary>
     /// <remarks>
-    /// A name held there that no operation below the deployment covers is named apart, so an operator granted a role
-    /// carrying it over one organization is not left to believe it acts there.
+    /// The caveat sits on the scope's own line rather than on the first one, because the first line names what is held
+    /// over the whole deployment and says nothing about a narrower grant once that list is not empty. A name only the
+    /// deployment scope grants is named apart, so an operator granted a role carrying it over one organization is not
+    /// left to believe it acts there.
     /// </remarks>
     private static string DescribeScope(AdminSessionScope scope)
     {
         var held = scope.Permissions is { Count: > 0 } permissions
-            ? $"Over {scope.Scope} {scope.Target} it holds {string.Join(", ", permissions)}."
-            : $"Over {scope.Scope} {scope.Target} it holds nothing that reaches an operation.";
+            ? $"Over {scope.Scope} {scope.Target} it is granted {string.Join(", ", permissions)}, which this endpoint admits only at the deployment scope."
+            : $"Over {scope.Scope} {scope.Target} it is granted only names the deployment scope alone grants.";
 
         return scope.ReachingNothing is { Count: > 0 } inert
             ? $"{held} {string.Join(", ", inert)} reaches nothing there, because only the deployment scope grants it."

@@ -59,7 +59,7 @@ public sealed class AdminSessionResponseTests
 
     /// <summary>
     /// An organization's administrator holds nothing over the whole deployment, so the permissions read empty and the
-    /// scopes are where they learn what they may administer — the deployment first, then each organization.
+    /// scopes are where they read what they are granted at each scope — the deployment first, then each organization.
     /// </summary>
     [Fact]
     public void For_ACallerHoldingNamesAtSeveralScopes_ReportsEachScopeWithWhatItHoldsThere()

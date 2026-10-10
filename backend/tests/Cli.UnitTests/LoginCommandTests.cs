@@ -427,8 +427,9 @@ public sealed class LoginCommandTests : IDisposable
     }
 
     /// <summary>
-    /// An organization's administrator holds nothing over the whole deployment, so the scopes are what tell them what
-    /// they may administer — and a name their role carries that acts nowhere below the deployment is named as such.
+    /// An organization's administrator holds nothing over the whole deployment, so the scopes report what they are
+    /// granted at each scope, each saying the endpoint admits none of it there — and a name only the deployment scope
+    /// grants is named apart as reaching nothing.
     /// </summary>
     [Fact]
     public async Task Status_ADeploymentReportingANarrowerScope_NamesItWithWhatItHoldsAndWhatReachesNothing()
@@ -449,11 +450,38 @@ public sealed class LoginCommandTests : IDisposable
         Assert.Equal(0, exitCode);
         Assert.Contains(
             this.console.Lines,
-            line => line.Contains("Over organization 0198f0c4-0000-7000-8000-000000000001 it holds mailfathom.admin.read.", StringComparison.Ordinal)
+            line => line.Contains("Over organization 0198f0c4-0000-7000-8000-000000000001 it is granted mailfathom.admin.read, which this endpoint admits only at the deployment scope.", StringComparison.Ordinal)
                 && line.Contains("mailfathom.admin.spend reaches nothing there", StringComparison.Ordinal));
         Assert.Contains(
             this.console.Lines,
             line => line == "It holds no administrative permission over the whole deployment, so every operation but this one is refused.");
+    }
+
+    /// <summary>
+    /// With something held over the whole deployment the first line names it and says nothing about a narrower grant, so
+    /// the scope's own line is what says the endpoint admits none of that grant there.
+    /// </summary>
+    [Fact]
+    public async Task Status_ADeploymentGrantBesideANarrowerScope_SaysOnTheScopeLineThatItIsAdmittedOnlyAtTheDeployment()
+    {
+        // Arrange
+        var store = this.CreateStore();
+        store.Save("production", EndpointAddress, "not-a-real-key", "workstation");
+        using var handler = FakeAdminEndpoint.AnsweringBody(
+            HttpStatusCode.OK,
+            $$"""
+            {"service":"MailFathom","version":"{{FakeAdminEndpoint.CommandVersion}}","credential":"workstation","permissions":["mailfathom.admin.audit.read"],"scopes":[{"scope":"deployment","target":null,"permissions":["mailfathom.admin.audit.read"],"reachingNothing":[]},{"scope":"organization","target":"0198f0c4-0000-7000-8000-000000000002","permissions":["mailfathom.admin.read","mailfathom.admin.operate"],"reachingNothing":[]}]}
+            """);
+
+        // Act
+        var exitCode = await RunAsync(this.Context(store, handler), "status");
+
+        // Assert
+        Assert.Equal(0, exitCode);
+        Assert.Contains(this.console.Lines, line => line == "It holds mailfathom.admin.audit.read.");
+        Assert.Contains(
+            this.console.Lines,
+            line => line == "Over organization 0198f0c4-0000-7000-8000-000000000002 it is granted mailfathom.admin.read, mailfathom.admin.operate, which this endpoint admits only at the deployment scope.");
     }
 
     /// <summary>

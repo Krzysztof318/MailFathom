@@ -280,12 +280,12 @@ internal sealed record AdminSessionResponse(
 /// <summary>One scope an administrative caller holds anything at, and what it holds there.</summary>
 /// <param name="Scope">Which kind of scope it is: <c>deployment</c>, <c>organization</c>, or <c>user</c>.</param>
 /// <param name="Target">The organization or the user the scope names, and none for the deployment.</param>
-/// <param name="Permissions">The published names held at this scope that reach an operation there, in the order this repository publishes them.</param>
-/// <param name="ReachingNothing">The published names held at this scope that no operation below the deployment covers, so holding them here reaches nothing.</param>
+/// <param name="Permissions">The published names granted at this scope, other than those only the deployment scope grants, in the order this repository publishes them. At a narrower scope none of them admits an operation on this endpoint, which asks every route's permission at the deployment scope.</param>
+/// <param name="ReachingNothing">The published names granted at this scope that only the deployment scope grants, so at a narrower scope they reach nothing anywhere; always empty for the deployment.</param>
 /// <remarks>
 /// A role is assigned whole, so a role carrying <c>mailfathom.admin.spend</c> may be assigned over an organization and
-/// grant its other names there. That name is reported apart rather than among the rest, because a grant nobody is told
-/// is inert reads as one the deployment fails to enforce.
+/// grant its other names there. That name is reported apart rather than among the rest, because no operation below the
+/// deployment takes it, where the rest name operations that do name a target.
 /// </remarks>
 internal sealed record AdminSessionScope(
     string Scope,
@@ -311,13 +311,13 @@ internal sealed record AdminSessionScope(
                 .Select(scope => new AdminSessionScope(
                     NameOf(scope.Key.Kind),
                     scope.Key.Kind == AssignmentScopeKind.Deployment ? null : scope.Key.Target,
-                    [.. scope.Where(permission => ReachesAt(permission, scope.Key)).Select(permission => permission.Name)],
-                    [.. scope.Where(permission => !ReachesAt(permission, scope.Key)).Select(permission => permission.Name)])),
+                    [.. scope.Where(permission => !IsInertAt(permission, scope.Key)).Select(permission => permission.Name)],
+                    [.. scope.Where(permission => IsInertAt(permission, scope.Key)).Select(permission => permission.Name)])),
         ];
     }
 
-    private static bool ReachesAt(MailFathomPermission permission, AssignmentScope scope) =>
-        scope.Kind == AssignmentScopeKind.Deployment || !permission.IsDeploymentScopeOnly;
+    private static bool IsInertAt(MailFathomPermission permission, AssignmentScope scope) =>
+        scope.Kind != AssignmentScopeKind.Deployment && permission.IsDeploymentScopeOnly;
 
     private static string NameOf(AssignmentScopeKind kind) => kind switch
     {
