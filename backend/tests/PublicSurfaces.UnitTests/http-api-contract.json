@@ -10266,6 +10266,94 @@
         ],
         "type": "object"
       },
+      "SettingsPolicyResponse": {
+        "properties": {
+          "document": {
+            "type": "string"
+          },
+          "organizationId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "version": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "organizationId",
+          "version",
+          "document"
+        ],
+        "type": "object"
+      },
+      "SettingsPolicySaveRequest": {
+        "properties": {
+          "document": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "version": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "version",
+          "document"
+        ],
+        "type": "object"
+      },
+      "SettingsPolicyWriteResponse": {
+        "properties": {
+          "code": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          },
+          "committed": {
+            "type": "boolean"
+          },
+          "messages": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "version": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "committed",
+          "version",
+          "code",
+          "messages"
+        ],
+        "type": "object"
+      },
       "SpamClassificationPageResponse": {
         "properties": {
           "classifications": {
@@ -14054,6 +14142,104 @@
         ]
       }
     },
+    "/api/admin/organizations/{organizationId}/policy": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsPolicyResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      },
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsPolicySaveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsPolicyWriteResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
     "/api/admin/organizations/{organizationId}/short-name": {
       "put": {
         "parameters": [
@@ -14306,6 +14492,62 @@
           },
           "404": {
             "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/policy": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsPolicyResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      },
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsPolicySaveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsPolicyWriteResponse"
+                }
+              }
+            },
+            "description": "OK"
           }
         },
         "security": [

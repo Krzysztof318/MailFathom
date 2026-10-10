@@ -136,87 +136,19 @@ internal sealed class UserAccountDocumentBinder(
 
     /// <summary>Says what the strict binding refused, in a sentence about the record rather than about the binder.</summary>
     /// <remarks>
-    /// <para>
-    /// Neither sentence the framework raises can be handed on. The one naming unknown properties names MailFathom's
-    /// own type and the binder option that was set, neither of which is a thing whoever wrote the record can act on;
-    /// the one about a value that will not convert says nothing at all at the top and puts the setting's path in an
-    /// inner failure that quotes <em>the value beside it</em> — which for a mailbox password is the material this
-    /// binder refuses everywhere else. So the two shapes are recognized and re-stated, and the framework's own text
-    /// is carried in neither arm nor in the fallback.
-    /// </para>
-    /// <para>
-    /// The path is taken from the last marker rather than the first, because a value quoted before it may contain
-    /// anything, including the marker itself. Neither fragment goes back unexamined: the path has to be a
-    /// configuration path — segments separated by colons and nothing else — and the property names have to be the
-    /// quoted list the framework writes, carrying no control character. What fails either test falls back to the
-    /// general sentence, which is also what a message shaped differently by a later runtime gets.
-    /// </para>
-    /// <para>
-    /// Both sentences are looked for on the failure and on the one inside it, because where the unknown property sits
-    /// decides which carries it: one written at the top of the record names the type the record binds as and arrives
-    /// on the failure itself, while one written inside a mail account is met while that element is bound and arrives
-    /// as an inner failure under a sentence saying only that binding failed. A mailbox's classification and scanning
-    /// settings are that second shape, so reading the failure alone would answer every mistyped key in either block
-    /// with the general sentence.
-    /// </para>
+    /// <see cref="StrictBindingFailure" /> holds which fragments of the framework's failure may be repeated and why
+    /// the rest may not. A mistyped key in a mailbox's classification or scanning block is the shape it reads from
+    /// the inner failure, without which every one of those would be answered with the general sentence.
     /// </remarks>
-    private static string BindingRefusalFor(InvalidOperationException refusal)
-    {
-        const string unknownProperties = "were not found on the instance of";
-        const string pathOpening = " at '";
-        const string pathClosing = "' to type '";
-
-        var unknown = new[] { refusal.Message, refusal.InnerException?.Message }
-            .OfType<string>()
-            .FirstOrDefault(message => message.Contains(unknownProperties, StringComparison.Ordinal));
-
-        if (unknown is not null
-            && unknown.LastIndexOf(": ", StringComparison.Ordinal) is var named and > 0
-            && QuotedNamesIn(unknown[(named + 2)..]) is { } names)
+    private static string BindingRefusalFor(InvalidOperationException refusal) =>
+        StrictBindingFailure.Read(refusal) switch
         {
-            return $"The user record names {names}, which is not a setting a user's record carries. Remove it, or correct the spelling of the setting it was meant to be.";
-        }
-
-        var conversion = refusal.InnerException?.Message ?? string.Empty;
-        var closing = conversion.LastIndexOf(pathClosing, StringComparison.Ordinal);
-        var opening = closing > 0 ? conversion.LastIndexOf(pathOpening, closing, StringComparison.Ordinal) : -1;
-
-        if (opening > 0)
-        {
-            var path = conversion[(opening + pathOpening.Length)..closing];
-
-            if (IsSettingPath(path))
-            {
-                return $"The value the user record gives {path} is not of the type that setting takes. Correct it to the type the setting is declared as.";
-            }
-        }
-
-        return "The user record does not bind to a user's settings. Check it against the settings a user's record carries.";
-    }
-
-    /// <summary>Gets the named properties back when they are safe to repeat, and nothing when they are not.</summary>
-    /// <remarks>
-    /// What sits in this fragment is the JSON property names of a <c>settings_accounts</c> row, which is text whoever
-    /// wrote the row chose. A name carrying a newline would put a line of its own choosing into the refusal an
-    /// administrator reads and into any log of it, and a name carrying the marker this fragment was cut at would leave
-    /// the cut inside the name, so what came back would be a fragment the record does not hold. The framework quotes
-    /// each name, which is what makes the second detectable: a fragment cut inside a name no longer opens with the
-    /// quotation mark. Anything that fails either test goes back as nothing and the general sentence answers instead,
-    /// and the bound is on the whole fragment rather than on each name because a page of names is as unreadable as one
-    /// long one.
-    /// </remarks>
-    private static string? QuotedNamesIn(string candidate) =>
-        candidate.Length is > 1 and <= 512
-        && candidate.StartsWith('\'')
-        && candidate.EndsWith('\'')
-        && !candidate.Any(char.IsControl)
-            ? candidate
-            : null;
-
-    /// <summary>Gets whether a fragment is a configuration path and therefore safe to repeat back.</summary>
-    private static bool IsSettingPath(string candidate) =>
-        candidate.Length > 0
-        && candidate.Split(':').All(segment => segment.Length > 0 && segment.All(char.IsLetterOrDigit));
+            { UnknownProperties: { } names } =>
+                $"The user record names {names}, which is not a setting a user's record carries. Remove it, or correct the spelling of the setting it was meant to be.",
+            { UnconvertiblePath: { } path } =>
+                $"The value the user record gives {path} is not of the type that setting takes. Correct it to the type the setting is declared as.",
+            _ => "The user record does not bind to a user's settings. Check it against the settings a user's record carries.",
+        };
 
     /// <summary>Reads the document into flattened configuration keys.</summary>
     /// <remarks>
@@ -293,7 +225,7 @@ internal sealed class UserAccountDocumentBinder(
         .. document.AsEnumerable()
             .Where(setting =>
                 !string.IsNullOrWhiteSpace(setting.Key) && secretMaterial.IsCarriedBy(setting.Key, setting.Value))
-            .Select(setting => IsSettingPath(setting.Key)
+            .Select(setting => StrictBindingFailure.IsSettingPath(setting.Key)
                 ? $"MailFathom does not persist secret material: {setting.Key} carries the value itself rather than a <scheme>:<target> reference this deployment resolves. Provision the secret and persist the reference to it."
                 : "MailFathom does not persist secret material: a setting of the user record carries the value itself rather than a <scheme>:<target> reference this deployment resolves. Provision the secret and persist the reference to it."),
     ];

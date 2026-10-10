@@ -682,6 +682,13 @@ internal static class PersistenceConstraintNames
     /// <remarks>Stated because the store reads it: a write that violates it is a short name another organization signs in under, which an operator acts on rather than a provider failure.</remarks>
     internal const string OrganizationShortNameUniqueIndexName = "ix_organizations_short_name";
 
+    /// <summary>The index that keeps one settings policy to one scope: the deployment, or one organization.</summary>
+    /// <remarks>Nulls are not distinct in it, so the deployment's own row is as unique as an organization's, and it is what the write storing a scope's first policy loses to when another stored one first.</remarks>
+    internal const string SettingsPolicyScopeUniqueIndexName = "ix_settings_policies_scope";
+
+    /// <summary>The foreign key that refuses a settings policy for an organization that does not exist, and removes it with the organization.</summary>
+    internal const string SettingsPolicyOrganizationForeignKeyName = "fk_settings_policies_organization";
+
     /// <summary>The index that keeps one name to one role across the deployment.</summary>
     /// <remarks>Stated because the store reads it: a write that violates it is a name another role carries, which an operator acts on rather than a provider failure.</remarks>
     internal const string RoleNameUniqueIndexName = "ix_roles_name";

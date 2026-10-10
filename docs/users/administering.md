@@ -915,6 +915,15 @@ account you create with `mfctl account add` lands in the organization of the per
 [Organizations](../operations/admin-endpoint.md#organizations) holds the rules — what a short name may contain, what a
 move or an assignment is refused over, and when an organization cannot be removed.
 
+**What the deployment or a company states once for its people is a settings policy.** `mfctl policy edit` opens the
+deployment's in your editor and `mfctl policy edit --organization <id>` a company's, and `mfctl policy show` reads
+either: the defaults a person's record and a mail account start from, the values they are held to, and which of the
+rest the person may change. A save is checked whole and committed whole or not at all, naming every path to correct.
+A stored policy governs nothing until a record is read through it, and none is, so saving one changes what the scope
+states and nothing about what anybody is served. [Settings
+policies](../operations/admin-endpoint.md#settings-policies) holds what a policy may state and what a save is refused
+over.
+
 **Sharing a mailbox is something a company does.** An account in an organization can be assigned to any number of its
 members, and an account in none belongs to one person: `mfctl account assign` refuses a second person for it and tells
 you to move it into an organization to share it, and `mfctl account set-organization --none` is refused while the

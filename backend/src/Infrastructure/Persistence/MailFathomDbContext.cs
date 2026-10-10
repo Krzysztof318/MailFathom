@@ -26,6 +26,7 @@ using MailFathom.Infrastructure.Persistence.Grants.Configurations;
 using MailFathom.Infrastructure.Persistence.Jobs.Configurations;
 using MailFathom.Infrastructure.Persistence.Mutations.Configurations;
 using MailFathom.Infrastructure.Persistence.Notifications.Configurations;
+using MailFathom.Infrastructure.Persistence.Policies.Configurations;
 using MailFathom.Infrastructure.Persistence.Preferences.Configurations;
 using MailFathom.Infrastructure.Persistence.Rules.Configurations;
 using MailFathom.Infrastructure.Persistence.Secrets.Configurations;
@@ -76,6 +77,8 @@ internal sealed class MailFathomDbContext : DbContext
     internal DbSet<RootSettingsEntity> RootSettings => this.Set<RootSettingsEntity>();
 
     internal DbSet<OrganizationEntity> Organizations => this.Set<OrganizationEntity>();
+
+    internal DbSet<SettingsPolicyEntity> SettingsPolicies => this.Set<SettingsPolicyEntity>();
 
     internal DbSet<UserAccountEntity> UserAccounts => this.Set<UserAccountEntity>();
 
@@ -278,6 +281,7 @@ internal sealed class MailFathomDbContext : DbContext
 
         modelBuilder.ApplyConfiguration(new RootSettingsConfiguration());
         modelBuilder.ApplyConfiguration(new OrganizationConfiguration());
+        modelBuilder.ApplyConfiguration(new SettingsPolicyConfiguration());
         modelBuilder.ApplyConfiguration(new UserAccountConfiguration());
         modelBuilder.ApplyConfiguration(new MailAccountRecordConfiguration());
         modelBuilder.ApplyConfiguration(new MailAccountAssignmentConfiguration());

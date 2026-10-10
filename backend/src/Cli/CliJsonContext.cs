@@ -16,6 +16,7 @@ using MailFathom.Cli.Administration.Jobs;
 using MailFathom.Cli.Administration.Mailboxes;
 using MailFathom.Cli.Administration.Organizations;
 using MailFathom.Cli.Administration.Outbox;
+using MailFathom.Cli.Administration.Policies;
 using MailFathom.Cli.Administration.Rules;
 using MailFathom.Cli.Administration.Spam;
 using MailFathom.Cli.Administration.Users;
@@ -133,6 +134,9 @@ namespace MailFathom.Cli;
 [JsonSerializable(typeof(OrganizationDisplayNameRequest))]
 [JsonSerializable(typeof(OrganizationShortNameRequest))]
 [JsonSerializable(typeof(UserOrganizationRequest))]
+[JsonSerializable(typeof(SettingsPolicy))]
+[JsonSerializable(typeof(SettingsPolicySaveRequest))]
+[JsonSerializable(typeof(SettingsPolicyWriteAnswer))]
 [JsonSerializable(typeof(RoleList))]
 [JsonSerializable(typeof(RoleProvisioningRequest))]
 [JsonSerializable(typeof(GrantRecordNameRequest))]

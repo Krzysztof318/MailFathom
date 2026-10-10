@@ -19,6 +19,7 @@ using MailFathom.Cli.Administration.Jobs;
 using MailFathom.Cli.Administration.Mailboxes;
 using MailFathom.Cli.Administration.Organizations;
 using MailFathom.Cli.Administration.Outbox;
+using MailFathom.Cli.Administration.Policies;
 using MailFathom.Cli.Administration.Rules;
 using MailFathom.Cli.Administration.Spam;
 using MailFathom.Cli.Administration.Users;
@@ -2154,6 +2155,60 @@ internal sealed class AdminApiClient
             JsonContent.Create(request, CliJsonContext.Default.MailAccountOrganizationRequest),
             NoSuchMailAccount);
     }
+
+    /// <summary>Reads one scope's settings policy whole, as the document an editing session opens.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="organizationId">The organization whose policy is asked about, or <see langword="null" /> for the deployment's own.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The policy and the version it was read at, which is an empty document at version zero where the scope stores none.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment holds no such organization, refused the request or the credential, could not be reached, or answered with something that is not a policy.</exception>
+    internal Task<SettingsPolicy> ReadSettingsPolicyAsync(
+        string token,
+        Guid? organizationId,
+        CancellationToken cancellationToken) =>
+        this.RequestAsync(
+            HttpMethod.Get,
+            AdminEndpointRoutes.SettingsPolicyPath(organizationId),
+            token,
+            CliJsonContext.Default.SettingsPolicy,
+            cancellationToken,
+            absenceMessage: SettingsPolicyAbsence(organizationId));
+
+    /// <summary>Commits one scope's settings policy as an editing session saved it.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="organizationId">The organization whose policy is written, or <see langword="null" /> for the deployment's own.</param>
+    /// <param name="request">The policy and the version the buffer was opened over.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>What the write did.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> or <paramref name="request" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment holds no such organization, refused the request or the credential, could not be reached, or answered with something that is not an outcome.</exception>
+    internal Task<SettingsPolicyWriteAnswer> SaveSettingsPolicyAsync(
+        string token,
+        Guid? organizationId,
+        SettingsPolicySaveRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        return this.RequestAsync(
+            HttpMethod.Post,
+            AdminEndpointRoutes.SettingsPolicyPath(organizationId),
+            token,
+            CliJsonContext.Default.SettingsPolicyWriteAnswer,
+            cancellationToken,
+            JsonContent.Create(request, CliJsonContext.Default.SettingsPolicySaveRequest),
+            SettingsPolicyAbsence(organizationId));
+    }
+
+    /// <summary>The sentence a policy route's <c>404</c> is read as, which depends on the scope it named.</summary>
+    /// <remarks>
+    /// An organization's policy route answers <c>404</c> for an organization the deployment does not hold, so it means
+    /// the organization. The deployment's own names nothing that could be absent, so there it keeps the reading every
+    /// other route gives it: the port serves no administrative endpoint.
+    /// </remarks>
+    private static string? SettingsPolicyAbsence(Guid? organizationId) =>
+        organizationId is null ? null : NoSuchOrganization;
 
     /// <summary>The sentence a role route answers with when the deployment defines no such role.</summary>
     private const string NoSuchRole =

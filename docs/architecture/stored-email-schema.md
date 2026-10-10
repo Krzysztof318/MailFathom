@@ -221,6 +221,24 @@ records it, from the moment it records it; `DisplayName`, at most 128 characters
 stored upper-cased and unique across the deployment under its own index, because it is half of a login and what a
 sign-in resolves the organization by; and when it was recorded.
 
+`settings_policies` holds [the settings policy](../operations/admin-endpoint.md#settings-policies) each scope states:
+at most one row for the deployment and one per organization. A scope that has stored none has no row, and reads as a
+policy stating nothing at version `0`.
+
+| Column of `settings_policies` | What it records |
+| --- | --- |
+| `Id` | A version 7 identifier minted when the scope's first policy is written |
+| `OrganizationId` | The organization whose policy this is, or null for the deployment's own, as a foreign key onto `organizations` (`fk_settings_policies_organization`) with `ON DELETE CASCADE`, so an organization that is removed takes its policy with it |
+| `Document` | The policy as `jsonb`: a `Users` section, a `MailAccounts` section, or both, each stating defaults, forced values, and an editing restriction. It carries no secret and no identity of anybody it governs |
+| `Version` | The version a write is accepted against, a concurrency token the writer states. A first policy is written as version `1` |
+| `CreatedAt`, `UpdatedAt` | When the scope's first policy was written, and when it last changed |
+
+**One scope holds one policy, and the index is the guarantee**: `ix_settings_policies_scope` is unique over
+`OrganizationId` with nulls not distinct, so the deployment's row — the one naming no organization — is one row
+rather than as many as were inserted. A first policy is an insert that does nothing on a conflict and every later
+one an update matching the version it was composed over, each a single statement, so of two writers on any two
+replicas the one that commits second writes nothing.
+
 **The document has a typed record to bind to, and the envelope beside it never depends on reading one.** What the
 column holds is one user's configurable record — the settings that are their own rather than the deployment's. A
 replica composes it with every mail account assigned to that user, as a `MailAccounts` collection each entry of which

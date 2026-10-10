@@ -545,6 +545,29 @@ public sealed class UserAccountDocumentBinderTests
         Assert.Contains("does not bind to a user's settings", refusal, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A value of the wrong type is refused naming the setting, whether it sits in a block of the record or in an
+    /// entry of a list, and never repeating the value: the framework quotes it beside the path, and for another
+    /// setting that value is a credential.
+    /// </summary>
+    [Theory]
+    [InlineData("""{ "EndpointAccess": { "McpEndpoint": "sometimes" } }""", "EndpointAccess:McpEndpoint")]
+    [InlineData("""{ "MailAccounts": [ { "Port": "sometimes" } ] }""", "MailAccounts:0:Port")]
+    public void Bind_AValueOfTheWrongType_IsRefusedNamingTheSettingAndNotTheValue(string record, string setting)
+    {
+        // Arrange
+        var binder = CreateBinder();
+
+        // Act
+        var binding = binder.Bind(record, UserRecordArrival.BeingWritten);
+
+        // Assert
+        Assert.False(binding.IsBound);
+        var refusal = Assert.Single(binding.Refusals);
+        Assert.Contains($"The value the user record gives {setting} is not of the type", refusal, StringComparison.Ordinal);
+        Assert.DoesNotContain("sometimes", refusal, StringComparison.Ordinal);
+    }
+
     /// <summary>A property naming nothing is a record refused like any other rather than a failure thrown at a caller.</summary>
     /// <remarks>
     /// JSON admits an empty property name and the configuration parser carries it through verbatim, so a row written

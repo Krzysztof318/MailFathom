@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Domain.Transport;
+using MailFathom.Infrastructure.Policies;
 
 namespace MailFathom.Infrastructure.Mail;
 
@@ -67,6 +68,7 @@ public sealed class MailAccountDeliveryOptions
     /// It exists for the deployments where the two differ, which is usually a relay in front of the provider rather
     /// than the provider itself.
     /// </remarks>
+    [SettingsPolicyClass(SettingsPolicyPropertyClass.Identity)]
     public string? UserName { get; set; }
 
     /// <summary>Gets or sets the address this account's mail is written from, or nothing to send from its own user name.</summary>
@@ -76,6 +78,7 @@ public sealed class MailAccountDeliveryOptions
     /// that sends under an address it is not reached at — a shared or aliased sender, which is a configuration decision
     /// rather than anything a request may make.
     /// </remarks>
+    [SettingsPolicyClass(SettingsPolicyPropertyClass.Identity)]
     public string? FromAddress { get; set; }
 
     /// <summary>Gets or sets the name written beside the sending address, or nothing to write the address alone.</summary>
@@ -85,6 +88,7 @@ public sealed class MailAccountDeliveryOptions
     /// would put an internal name in front of every recipient, so writing the address alone is the honest default and
     /// the name a mailbox signs itself with is stated on purpose.
     /// </remarks>
+    [SettingsPolicyClass(SettingsPolicyPropertyClass.Identity)]
     public string? FromDisplayName { get; set; }
 
     /// <summary>Gets or sets whether a copy of each delivered message is put into this account's sent folder.</summary>

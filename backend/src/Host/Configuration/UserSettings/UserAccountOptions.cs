@@ -11,6 +11,7 @@ using MailFathom.Domain.Scheduling;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.SensitiveContent;
 using MailFathom.Host.Observability.ClientTelemetry;
+using MailFathom.Infrastructure.Policies;
 
 namespace MailFathom.Host.Configuration.UserSettings;
 
@@ -125,6 +126,7 @@ internal sealed class UserAccountOptions : IValidatableObject
     /// mistake with the configuration binder's own sentence.
     /// </para>
     /// </remarks>
+    [SettingsPolicyClass(SettingsPolicyPropertyClass.AdministratorOnly)]
     public string? ClientTelemetryLevel { get; set; }
 
     /// <summary>Gets or sets the mail accounts this user is assigned, which may be none.</summary>
@@ -134,6 +136,7 @@ internal sealed class UserAccountOptions : IValidatableObject
     /// for the row it hangs off, so a path within the record reads <c>MailAccounts:0</c> and says what each segment is
     /// without borrowing the word the deployment's own mail section carries.
     /// </remarks>
+    [OutsideSettingsPolicy("the list of a user's mail accounts rather than a setting of theirs: a policy governs a mail account through its MailAccounts section, and never which accounts a user has")]
     public List<MailSynchronizationAccountOptions> MailAccounts { get; set; } = [];
 
     /// <summary>Gets or sets the stored file this user is drawn by, or <see langword="null" /> for none.</summary>
@@ -141,6 +144,7 @@ internal sealed class UserAccountOptions : IValidatableObject
     /// A link rather than the picture: the octets are a stored file of this user's, and a write naming a file that is
     /// not theirs is refused where the record is committed, because only the database can say whose a file is.
     /// </remarks>
+    [SettingsPolicyClass(SettingsPolicyPropertyClass.Identity)]
     public Guid? Portrait { get; set; }
 
     /// <summary>Gets which of the two mail-serving endpoints this user is served on.</summary>
@@ -148,6 +152,7 @@ internal sealed class UserAccountOptions : IValidatableObject
     /// Always present and on in both switches, so a record written before this block existed serves its user where it
     /// always did. The commit writes what it states onto the user's row as well, which is where a request reads it.
     /// </remarks>
+    [SettingsPolicyClass(SettingsPolicyPropertyClass.AdministratorOnly)]
     public UserEndpointAccessOptions EndpointAccess { get; } = new();
 
     /// <summary>Gets the language this record states, or <see langword="null" /> where it states none this build writes in.</summary>
