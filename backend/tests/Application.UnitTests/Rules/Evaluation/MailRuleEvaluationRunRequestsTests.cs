@@ -208,6 +208,42 @@ public sealed class MailRuleEvaluationRunRequestsTests
         Assert.Null(this.runStore.Find(Account));
     }
 
+    /// <summary>An organization's administrator naming a mailbox in another organization is refused by the use case itself, and no run is put in front of it.</summary>
+    [Fact]
+    public async Task SubmitAsync_AnAccountOutsideTheCallersOrganization_IsRefusedAndRecordsNothing()
+    {
+        // Arrange
+        var requests = this.CreateRequests(OrganizationAdministrators.Holding(
+            MailFathomPermission.AdminOperate,
+            Account,
+            OrganizationAdministrators.OtherOrganization));
+
+        // Act
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            requests.SubmitAsync(Account, TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Null(this.runStore.Find(Account));
+        Assert.Empty(this.runStore.Saves);
+    }
+
+    [Fact]
+    public async Task SubmitAsync_AnAccountInTheCallersOrganization_RecordsTheRun()
+    {
+        // Arrange
+        var requests = this.CreateRequests(OrganizationAdministrators.Holding(
+            MailFathomPermission.AdminOperate,
+            Account,
+            OrganizationAdministrators.AdministeredOrganization));
+
+        // Act
+        var request = await requests.SubmitAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(request.Accepted);
+        Assert.Equal(Account, this.runStore.Find(Account)?.Account);
+    }
+
     /// <summary>The scheduled path is the process's own dispatch rather than a caller's request, so it asks for no grant and holds none.</summary>
     [Fact]
     public async Task SubmitScheduledAsync_TheProcessItself_RecordsARunWithoutHoldingAnyPermission()

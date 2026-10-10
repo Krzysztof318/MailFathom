@@ -38,14 +38,14 @@ public sealed class StoredMailRederivationRunReader
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The run, or <see langword="null" /> where the scope has never been asked for one.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="scope" /> is <see langword="null" />.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.AdminRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.AdminRead" /> at a scope covering the account.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels.</exception>
-    public Task<StoredMailRederivationRun?> FindAsync(StoredMailScope scope, CancellationToken cancellationToken)
+    public async Task<StoredMailRederivationRun?> FindAsync(StoredMailScope scope, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(scope);
 
-        this.authorization.RequirePermission(MailFathomPermission.AdminRead);
+        await this.authorization.RequirePermissionOverAsync(MailFathomPermission.AdminRead, scope.Account, cancellationToken);
 
-        return this.runs.FindAsync(scope, cancellationToken);
+        return await this.runs.FindAsync(scope, cancellationToken);
     }
 }

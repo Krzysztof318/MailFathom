@@ -35,7 +35,8 @@ namespace MailFathom.Application.Access;
 /// operation for one, and none decides anything of its own. Each <c>Permits</c> member answers exactly what its
 /// <c>Require</c> counterpart would have refused — <see cref="Permits" /> for <see cref="RequirePermission" />,
 /// <see cref="PermitsAtAnyScope" /> for <see cref="RequirePermissionAtAnyScope" />, and the <c>PermitsOverAsync</c>
-/// overloads and <see cref="CoveredMailAccountsAsync" /> for the <c>RequirePermissionOverAsync</c> overloads — so the
+/// overloads, <see cref="PermitsOver" />, and <see cref="CoveredMailAccountsAsync" /> for
+/// the <c>RequirePermissionOverAsync</c> overloads — so the
 /// transport and the use case cannot come to disagree about what holding a permission means.
 /// <see cref="HoldsOnlyBelowDeployment" /> answers what a refusal of an operation admitted only at the deployment
 /// scope says on top of naming the permission: that the caller holds it, but only over an organization or a user.
@@ -255,6 +256,22 @@ public sealed class AccessAuthorization
         var placements = await this.targets.PlaceMailAccountsAsync(accounts, cancellationToken);
 
         return [.. accounts.Where(account => caller.HoldsOver(permission, PlacementOf(placements, account)))];
+    }
+
+    /// <summary>Answers whether the caller holds one named capability over a target the operation placed itself.</summary>
+    /// <param name="permission">The capability being asked about.</param>
+    /// <param name="target">Where the thing the operation names sits.</param>
+    /// <returns><see langword="true" /> when an admitted caller holds the capability at a scope covering the target.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="target" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// For an operation that has already read the record it acts on, so placing it again would be a second read of the
+    /// same rows.
+    /// </remarks>
+    public bool PermitsOver(MailFathomPermission permission, AdministrativeTarget target)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+
+        return this.PermitsAtAnyScope(permission) && this.principals.Current!.HoldsOver(permission, target);
     }
 
     /// <summary>Answers whether the caller holds one named capability over one user, for a boundary that has to decide rather than refuse.</summary>

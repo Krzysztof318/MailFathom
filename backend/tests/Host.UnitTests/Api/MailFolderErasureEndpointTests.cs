@@ -2,15 +2,18 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Synchronization;
 using MailFathom.Host.Api;
 using MailFathom.Host.UnitTests.TestDoubles;
+using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -142,6 +145,38 @@ public sealed class MailFolderErasureEndpointTests
         Assert.Empty(store.Passes);
     }
 
+    /// <summary>
+    /// The scope is asked before the folder's mapping is read, so a served account outside it is answered in the
+    /// sentence an unconfigured one is rather than by the refusal a folder it still mirrors would have reached.
+    /// </summary>
+    [Fact]
+    public async Task EraseAsync_AnAccountOutsideTheCallersOrganizationWithAFolderItStillMirrors_RefusesItAsUnknown()
+    {
+        // Arrange
+        this.Maps(MailFolderMapping.ToSpecialUse(Archive, MailFolderSpecialUse.Archive));
+
+        var store = new RecordingMirrorStore(MailFolderMirrorErasure.Nothing);
+        var authorization = AccessAuthorizations.ForAdministratorScoped(
+            ScopedGrant.Of(
+            [
+                (MailFathomPermission.AdminErase,
+                    AssignmentScope.Organization(new Guid("0198f0aa-0000-7000-8000-0000000000e5"))),
+            ]),
+            new StatedAdministrativeTargets().WithMailAccount(Account, new Guid("0198f0aa-0000-7000-8000-0000000000e6")));
+
+        // Act
+        var result = await this.EraseAsync(
+            store,
+            new MailFolderErasureRequest("work", "archive"),
+            authorization);
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(result.Result);
+        Assert.Equal(AdminAccountRequest.Refuse("work").ProblemDetails.Detail, refusal.ProblemDetails.Detail);
+        Assert.DoesNotContain("Synchronize", refusal.ProblemDetails.Detail, StringComparison.Ordinal);
+        Assert.Empty(store.Passes);
+    }
+
     /// <summary>Running it again after the folder is empty is the ordinary end of every erasure, not an error.</summary>
     [Fact]
     public async Task EraseAsync_AFolderHoldingNothing_SucceedsHavingErasedNothing()
@@ -229,9 +264,16 @@ public sealed class MailFolderErasureEndpointTests
     private void Maps(MailFolderMapping? mapping) =>
         this.mappings.FindFolderNamed(Account, Archive).Returns(mapping);
 
+    private Task<Results<Ok<MailFolderErasureResponse>, ProblemHttpResult>> EraseAsync(
+        IStoredMailFolderMirrorStore store,
+        MailFolderErasureRequest request,
+        params MailAccountId[] preparableAccounts) =>
+        this.EraseAsync(store, request, AdministrativeGrant.WholeSurface, preparableAccounts);
+
     private async Task<Results<Ok<MailFolderErasureResponse>, ProblemHttpResult>> EraseAsync(
         IStoredMailFolderMirrorStore store,
         MailFolderErasureRequest request,
+        AccessAuthorization authorization,
         params MailAccountId[] preparableAccounts)
     {
         using var scoped = AccountScopedRequest.Serving(
@@ -245,6 +287,7 @@ public sealed class MailFolderErasureEndpointTests
             CatalogServing(Account),
             scoped.MailSettings,
             scoped.Context,
+            authorization,
             TestContext.Current.CancellationToken);
     }
 

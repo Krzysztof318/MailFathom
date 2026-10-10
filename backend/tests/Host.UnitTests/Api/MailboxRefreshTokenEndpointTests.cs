@@ -4,6 +4,7 @@
 
 using System.Text.Json;
 using MailFathom.Application.Accounts;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Host.Api;
 using MailFathom.Host.UnitTests.TestDoubles;
@@ -42,6 +43,7 @@ public sealed class MailboxRefreshTokenEndpointTests
         var result = await MailboxRefreshTokenEndpoint.StoreAsync(
             request,
             this.RecorderServing(Workspace),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -63,6 +65,7 @@ public sealed class MailboxRefreshTokenEndpointTests
         var result = await MailboxRefreshTokenEndpoint.StoreAsync(
             request,
             this.RecorderServing(Workspace),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -93,6 +96,7 @@ public sealed class MailboxRefreshTokenEndpointTests
         var result = await MailboxRefreshTokenEndpoint.StoreAsync(
             request,
             this.RecorderServing(Workspace),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -112,11 +116,46 @@ public sealed class MailboxRefreshTokenEndpointTests
         var result = await MailboxRefreshTokenEndpoint.StoreAsync(
             request: null,
             this.RecorderServing(Workspace),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
         var refusal = Assert.IsType<ProblemHttpResult>(result.Result);
         Assert.Equal(StatusCodes.Status400BadRequest, refusal.StatusCode);
+    }
+
+    /// <summary>
+    /// A mailbox outside the caller's scope is refused in the sentence a mistyped one is, so an organization's
+    /// administrator learns nothing about an account that exists elsewhere in the deployment.
+    /// </summary>
+    [Fact]
+    public async Task StoreAsync_AnAccountOutsideTheCallersOrganization_IsRefusedAsOneNotConfiguredWithoutStoringAnything()
+    {
+        // Arrange
+        var request = new MailboxRefreshTokenRequest("workspace", "a-refresh-token");
+        var elsewhere = AccessAuthorizations.ForAdministratorScoped(
+            ScopedGrant.Of(
+            [
+                (MailFathomPermission.AdminCredentialsWrite,
+                    AssignmentScope.Organization(new Guid("0198f0aa-0000-7000-8000-0000000000e2"))),
+            ]),
+            new StatedAdministrativeTargets().WithMailAccount(Workspace, new Guid("0198f0aa-0000-7000-8000-0000000000e1")));
+
+        // Act
+        var result = await MailboxRefreshTokenEndpoint.StoreAsync(
+            request,
+            this.RecorderServing(Workspace),
+            elsewhere,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(result.Result);
+        Assert.Equal(StatusCodes.Status400BadRequest, refusal.StatusCode);
+        Assert.Contains("configures no mail account named 'workspace'", refusal.ProblemDetails.Detail, StringComparison.Ordinal);
+        await this.store.DidNotReceive().SaveTokenAsync(
+            Arg.Any<MailAccountId>(),
+            Arg.Any<MailboxRefreshToken>(),
+            Arg.Any<CancellationToken>());
     }
 
     /// <summary>
@@ -134,6 +173,7 @@ public sealed class MailboxRefreshTokenEndpointTests
         var result = await MailboxRefreshTokenEndpoint.StoreAsync(
             request,
             this.RecorderServing(Workspace),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert

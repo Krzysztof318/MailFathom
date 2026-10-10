@@ -101,7 +101,7 @@ public sealed class MailboxExports
         string? folderPath,
         CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.AdminExport);
+        await this.authorization.RequirePermissionOverAsync(MailFathomPermission.AdminExport, account, cancellationToken);
         this.RequireSomewhereToKeepAnArchive();
 
         var measurement = await this.reader.MeasureAsync(account, folderPath, cancellationToken);
@@ -135,7 +135,7 @@ public sealed class MailboxExports
         string? folderPath,
         CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.AdminExport);
+        await this.authorization.RequirePermissionOverAsync(MailFathomPermission.AdminExport, account, cancellationToken);
         this.RequireSomewhereToKeepAnArchive();
 
         var measurement = await this.reader.MeasureAsync(account, folderPath, cancellationToken);
@@ -215,7 +215,7 @@ public sealed class MailboxExports
         MailboxExportId export,
         CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.AdminExport);
+        await this.authorization.RequirePermissionOverAsync(MailFathomPermission.AdminExport, account, cancellationToken);
 
         var found = await this.RequireExportAsync(account, export, cancellationToken);
 
@@ -236,11 +236,11 @@ public sealed class MailboxExports
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The exports.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold the export permission.</exception>
-    public Task<IReadOnlyList<MailboxExport>> ListAsync(MailAccountId account, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<MailboxExport>> ListAsync(MailAccountId account, CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.AdminExport);
+        await this.authorization.RequirePermissionOverAsync(MailFathomPermission.AdminExport, account, cancellationToken);
 
-        return this.exports.ListAsync(account, ListingLimit, cancellationToken);
+        return await this.exports.ListAsync(account, ListingLimit, cancellationToken);
     }
 
     /// <summary>Stops an export that is still being written, and deletes whatever it had produced.</summary>
@@ -261,7 +261,7 @@ public sealed class MailboxExports
         MailboxExportId export,
         CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.AdminExport);
+        await this.authorization.RequirePermissionOverAsync(MailFathomPermission.AdminExport, account, cancellationToken);
 
         var found = await this.RequireExportAsync(account, export, cancellationToken);
 
@@ -314,7 +314,7 @@ public sealed class MailboxExports
         MailboxExportId export,
         CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.AdminExport);
+        await this.authorization.RequirePermissionOverAsync(MailFathomPermission.AdminExport, account, cancellationToken);
 
         var found = await this.RequireExportAsync(account, export, cancellationToken);
 
@@ -370,7 +370,7 @@ public sealed class MailboxExports
         MailboxExportId export,
         CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.AdminExport);
+        await this.authorization.RequirePermissionOverAsync(MailFathomPermission.AdminExport, account, cancellationToken);
 
         var found = await this.RequireExportAsync(account, export, cancellationToken);
 

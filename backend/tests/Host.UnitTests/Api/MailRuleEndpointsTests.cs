@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Jobs.Scheduling;
 using MailFathom.Application.Persistence;
@@ -11,6 +12,7 @@ using MailFathom.Application.Rules.Conditions;
 using MailFathom.Application.Rules.Evaluation;
 using MailFathom.Application.Rules.Facts;
 using MailFathom.Application.Rules.History;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -20,6 +22,7 @@ using MailFathom.Host.Api;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Rules;
 using MailFathom.Host.UnitTests.TestDoubles;
+using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -252,6 +255,34 @@ public sealed class MailRuleEndpointsTests
             Arg.Any<CancellationToken>());
     }
 
+    /// <summary>
+    /// The scope is asked before the run is recorded, so a served account outside it is answered in the sentence an
+    /// unconfigured one is and an organization's administrator cannot tell a mailbox elsewhere from a typo.
+    /// </summary>
+    [Fact]
+    public async Task StartRunAsync_AnAccountOutsideTheCallersOrganization_RefusesItAsUnknownWithoutStartingARun()
+    {
+        // Arrange
+        var authorization = AccessAuthorizations.ForAdministratorScoped(
+            ScopedGrant.Of(
+            [
+                (MailFathomPermission.AdminOperate,
+                    AssignmentScope.Organization(new Guid("0198f0aa-0000-7000-8000-0000000000e9"))),
+            ]),
+            new StatedAdministrativeTargets().WithMailAccount(Account, new Guid("0198f0aa-0000-7000-8000-0000000000ea")));
+
+        // Act
+        var result = await this.StartRunAsync(new MailRuleRunRequest(Account.Value), authorization);
+
+        // Assert
+        var refusal = AssertRefused(result.Result);
+        Assert.Equal(AdminAccountRequest.Refuse(Account.Value).ProblemDetails.Detail, refusal.ProblemDetails.Detail);
+        await this.runs.DidNotReceive().TryStartAsync(
+            Arg.Any<IPersistenceSession>(),
+            Arg.Any<MailRuleEvaluationRun>(),
+            Arg.Any<CancellationToken>());
+    }
+
     /// <summary>A request with no body at all is the same mistake as one naming no account, and is answered as one.</summary>
     [Fact]
     public async Task StartRunAsync_ARequestWithNoBody_IsRefusedWithoutStartingAnything()
@@ -275,6 +306,7 @@ public sealed class MailRuleEndpointsTests
             Account.Value,
             CatalogServing(Account),
             new MailRuleEvaluationRunReader(this.runs, AdministrativeGrant.WholeSurface),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -305,6 +337,7 @@ public sealed class MailRuleEndpointsTests
             Account.Value,
             CatalogServing(Account),
             new MailRuleEvaluationRunReader(this.runs, AdministrativeGrant.WholeSurface),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -321,6 +354,7 @@ public sealed class MailRuleEndpointsTests
             "nowhere",
             CatalogServing(Account),
             new MailRuleEvaluationRunReader(this.runs, AdministrativeGrant.WholeSurface),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -571,7 +605,8 @@ public sealed class MailRuleEndpointsTests
             .Returns(new MailRuleExecutionPage(executions, NextCursor: null));
 
     private Task<Results<Ok<MailRuleRunStartResponse>, ProblemHttpResult>> StartRunAsync(
-        MailRuleRunRequest? request)
+        MailRuleRunRequest? request,
+        AccessAuthorization? authorization = null)
     {
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ => new CommittingSession());
@@ -587,6 +622,7 @@ public sealed class MailRuleEndpointsTests
                     this.timeProvider),
                 this.timeProvider,
                 AdministrativeGrant.WholeSurface),
+            authorization ?? AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
     }
 

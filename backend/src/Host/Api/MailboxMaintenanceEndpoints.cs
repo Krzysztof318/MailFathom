@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Mail.Maintenance;
 using MailFathom.Domain.Access;
@@ -78,21 +79,21 @@ internal static class MailboxMaintenanceEndpoints
         ArgumentNullException.ThrowIfNull(api);
 
         api.MapGet(RewindRoute, AssessRewindAsync)
-            .RequirePermission(MailFathomPermission.AdminRead);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminRead);
 
         // The attribute is reached for its metadata rather than as an MVC filter, exactly as the erasure route reaches
         // it: it implements IRequestSizeLimitMetadata, which the routing pipeline applies to the request body feature,
         // so a body over the bound is answered 413 before the handler is reached.
         api.MapPost(RewindRoute, RewindAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxMaintenanceRequestBytes))
-            .RequirePermission(MailFathomPermission.AdminOperate);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminOperate);
 
         api.MapPost(RederivationRoute, RederiveAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxMaintenanceRequestBytes))
-            .RequirePermission(MailFathomPermission.AdminOperate);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminOperate);
 
         api.MapGet(RederivationRoute, ReadRederivationAsync)
-            .RequirePermission(MailFathomPermission.AdminRead);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminRead);
     }
 
     /// <summary>Reports what a rewind of one scope would have the next runs read again, without discarding anything.</summary>
@@ -100,6 +101,7 @@ internal static class MailboxMaintenanceEndpoints
     /// <param name="folder">The one folder of it to cover, or nothing for every folder the account holds mail in.</param>
     /// <param name="accounts">Reports whether this deployment serves the named account.</param>
     /// <param name="rewind">Counts what the scope holds.</param>
+    /// <param name="authorization">Answers whether the caller's scope covers the account the request names.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
     /// <returns><c>200</c> with the count, or <c>400</c> naming what was wrong with the request.</returns>
     internal static async Task<Results<Ok<MailboxRewindAssessmentResponse>, ProblemHttpResult>> AssessRewindAsync(
@@ -107,14 +109,15 @@ internal static class MailboxMaintenanceEndpoints
         [FromQuery] string? folder,
         [FromServices] IDeploymentMailAccountCatalog accounts,
         [FromServices] MailSynchronizationRewind rewind,
+        [FromServices] AccessAuthorization authorization,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(rewind);
 
-        if (await ResolveScopeAsync(account, folder, accounts, cancellationToken) is not { } resolution)
+        if (await ResolveScopeAsync(account, folder, accounts, authorization, MailFathomPermission.AdminRead, cancellationToken) is not { } resolution)
         {
-            return await RefusalAsync(account, accounts, cancellationToken);
+            return await RefusalAsync(account, accounts, authorization, MailFathomPermission.AdminRead, cancellationToken);
         }
 
         var storedEmailCount = await rewind.AssessAsync(resolution, cancellationToken);
@@ -129,6 +132,7 @@ internal static class MailboxMaintenanceEndpoints
     /// <param name="request">The account, and the one folder of it, whose progress is discarded.</param>
     /// <param name="accounts">Reports whether this deployment serves the named account.</param>
     /// <param name="rewind">Performs the removal.</param>
+    /// <param name="authorization">Answers whether the caller's scope covers the account the request names.</param>
     /// <param name="cancellationToken">Cancels the removal when the client disconnects, before its single transaction commits.</param>
     /// <returns><c>200</c> with the folders that held progress, or <c>400</c> naming what was wrong with the request.</returns>
     /// <remarks>
@@ -141,14 +145,15 @@ internal static class MailboxMaintenanceEndpoints
         [FromBody] MailboxMaintenanceRequest? request,
         [FromServices] IDeploymentMailAccountCatalog accounts,
         [FromServices] MailSynchronizationRewind rewind,
+        [FromServices] AccessAuthorization authorization,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(rewind);
 
-        if (await ResolveScopeAsync(request?.Account, request?.Folder, accounts, cancellationToken) is not { } resolution)
+        if (await ResolveScopeAsync(request?.Account, request?.Folder, accounts, authorization, MailFathomPermission.AdminOperate, cancellationToken) is not { } resolution)
         {
-            return await RefusalAsync(request?.Account, accounts, cancellationToken);
+            return await RefusalAsync(request?.Account, accounts, authorization, MailFathomPermission.AdminOperate, cancellationToken);
         }
 
         var rewound = await rewind.RewindAsync(resolution, cancellationToken);
@@ -163,6 +168,7 @@ internal static class MailboxMaintenanceEndpoints
     /// <param name="request">The account, and the one folder of it, whose stored mail is re-read.</param>
     /// <param name="accounts">Reports whether this deployment serves the named account.</param>
     /// <param name="requests">Records the run, or reports the one already in front of the scope.</param>
+    /// <param name="authorization">Answers whether the caller's scope covers the account the request names.</param>
     /// <param name="cancellationToken">Cancels the write when the client disconnects.</param>
     /// <returns><c>200</c> with the run, or <c>400</c> naming what was wrong with the request.</returns>
     /// <remarks>
@@ -178,14 +184,15 @@ internal static class MailboxMaintenanceEndpoints
         [FromBody] MailboxMaintenanceRequest? request,
         [FromServices] IDeploymentMailAccountCatalog accounts,
         [FromServices] StoredMailRederivationRequests requests,
+        [FromServices] AccessAuthorization authorization,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(requests);
 
-        if (await ResolveScopeAsync(request?.Account, request?.Folder, accounts, cancellationToken) is not { } resolution)
+        if (await ResolveScopeAsync(request?.Account, request?.Folder, accounts, authorization, MailFathomPermission.AdminOperate, cancellationToken) is not { } resolution)
         {
-            return await RefusalAsync(request?.Account, accounts, cancellationToken);
+            return await RefusalAsync(request?.Account, accounts, authorization, MailFathomPermission.AdminOperate, cancellationToken);
         }
 
         var submitted = await requests.SubmitAsync(resolution, cancellationToken);
@@ -198,6 +205,7 @@ internal static class MailboxMaintenanceEndpoints
     /// <param name="folder">The one folder of it the run covers, or nothing for the account's own run.</param>
     /// <param name="accounts">Reports whether this deployment serves the named account.</param>
     /// <param name="runs">Reads the one run a scope may have, for a caller the read's own grant admits.</param>
+    /// <param name="authorization">Answers whether the caller's scope covers the account the request names.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
     /// <returns><c>200</c> with the run, <c>200</c> with none where the scope has never been asked for one, or <c>400</c>.</returns>
     /// <remarks>
@@ -210,14 +218,15 @@ internal static class MailboxMaintenanceEndpoints
         [FromQuery] string? folder,
         [FromServices] IDeploymentMailAccountCatalog accounts,
         [FromServices] StoredMailRederivationRunReader runs,
+        [FromServices] AccessAuthorization authorization,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(runs);
 
-        if (await ResolveScopeAsync(account, folder, accounts, cancellationToken) is not { } resolution)
+        if (await ResolveScopeAsync(account, folder, accounts, authorization, MailFathomPermission.AdminRead, cancellationToken) is not { } resolution)
         {
-            return await RefusalAsync(account, accounts, cancellationToken);
+            return await RefusalAsync(account, accounts, authorization, MailFathomPermission.AdminRead, cancellationToken);
         }
 
         var run = await runs.FindAsync(resolution, cancellationToken);
@@ -238,9 +247,12 @@ internal static class MailboxMaintenanceEndpoints
         string? account,
         string? folder,
         IDeploymentMailAccountCatalog accounts,
+        AccessAuthorization authorization,
+        MailFathomPermission permission,
         CancellationToken cancellationToken)
     {
-        if (await AdminAccountRequest.ResolveAsync(account, accounts, cancellationToken) is not { } servedAccount)
+        if (await AdminAccountRequest.ResolveCoveredAsync(account, permission, accounts, authorization, cancellationToken)
+            is not { } servedAccount)
         {
             return null;
         }
@@ -263,9 +275,12 @@ internal static class MailboxMaintenanceEndpoints
     private static async Task<ProblemHttpResult> RefusalAsync(
         string? account,
         IDeploymentMailAccountCatalog accounts,
+        AccessAuthorization authorization,
+        MailFathomPermission permission,
         CancellationToken cancellationToken)
     {
-        if (await AdminAccountRequest.ResolveAsync(account, accounts, cancellationToken) is not null)
+        if (await AdminAccountRequest.ResolveCoveredAsync(account, permission, accounts, authorization, cancellationToken)
+            is not null)
         {
             return TypedResults.Problem(
                 "The request named a folder that is not an alias. Name the alias of one folder, or name none at all to cover every folder the account holds mail in.",

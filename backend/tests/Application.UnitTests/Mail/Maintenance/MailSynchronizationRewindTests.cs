@@ -6,6 +6,7 @@ using MailFathom.Application.Access;
 using MailFathom.Application.Mail.Maintenance;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization.Checkpoints;
+using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
@@ -182,6 +183,49 @@ public sealed class MailSynchronizationRewindTests
         // Assert
         Assert.Equal(MailFathomPermission.AdminOperate, refusal.RequiredPermission);
         Assert.Empty(checkpoints.Discards);
+    }
+
+    /// <summary>An organization's administrator naming a mailbox in another organization is refused naming the permission, and its progress stays.</summary>
+    [Fact]
+    public async Task RewindAsync_AnAccountOutsideTheCallersOrganization_IsRefusedAndDiscardsNothing()
+    {
+        // Arrange
+        var checkpoints = new RecordingCheckpointStore([Inbox]);
+        var rewind = RewindOver(
+            checkpoints,
+            new RecordingCounter(storedEmailCount: 4),
+            OrganizationAdministrators.Holding(
+                MailFathomPermission.AdminOperate,
+                Account,
+                OrganizationAdministrators.OtherOrganization));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            rewind.RewindAsync(new StoredMailScope(Account, null), TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.AdminOperate, refusal.RequiredPermission);
+        Assert.Empty(checkpoints.Discards);
+    }
+
+    [Fact]
+    public async Task RewindAsync_AnAccountInTheCallersOrganization_DiscardsItsProgress()
+    {
+        // Arrange
+        var checkpoints = new RecordingCheckpointStore([Inbox]);
+        var rewind = RewindOver(
+            checkpoints,
+            new RecordingCounter(storedEmailCount: 4),
+            OrganizationAdministrators.Holding(
+                MailFathomPermission.AdminOperate,
+                Account,
+                OrganizationAdministrators.AdministeredOrganization));
+
+        // Act
+        var rewound = await rewind.RewindAsync(new StoredMailScope(Account, null), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal([Inbox], rewound);
     }
 
     private static MailSynchronizationRewind RewindOver(

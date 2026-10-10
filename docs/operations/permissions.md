@@ -274,11 +274,14 @@ in that grant performs nothing there; it is read only as the ceiling
 from the credential rather than from the grant — [what a permission does not decide](#what-a-permission-does-not-decide).
 **An administrative permission answers a question naming no target only at deployment scope**, so a caller granted
 `mailfathom.admin.read` or `mailfathom.admin.operate` over one organization alone is refused every route that names
-none — except the listings of users and of organizations, which never refuse over a scope and answer with what the
-caller's scopes cover. **A route naming a user, a mail account, or an organization may be answered at any scope covering it** — the
-deployment, the organization it belongs to, or the one user it is wholly the concern of — and [a grant held below the
-deployment](admin-endpoint.md#a-grant-held-below-the-deployment) names the routes that are and how a target outside the
-scope is answered.
+none — except the listings of users, of organizations, of mail accounts, and of their synchronization status, which
+never refuse over a scope and answer with what the caller's scopes cover. **A route naming a user, a mail account, a
+user's contact book, or an organization may be answered at any scope covering it** — the
+deployment, the organization it belongs to, or the one user it is wholly the concern of, which a mail account is only
+while it belongs to an organization and is assigned to that user and nobody else. A mail account in no organization is
+therefore covered by the deployment alone, and a user in none by the deployment and by a scope naming them. [A grant
+held below the deployment](admin-endpoint.md#a-grant-held-below-the-deployment) names the routes that are and how a
+target outside the scope is answered.
 
 ### What only the deployment scope grants
 
@@ -302,8 +305,9 @@ A caller holding one of these permissions only over an organization or a user is
 administrative endpoint's usual shape, naming the permission and saying that it is held only below the deployment —
 [what a refusal says](admin-endpoint.md#what-a-refusal-says) shows the document. A grant below the deployment admits its
 holder to the endpoint, to its session route, and to [the routes checked against what they
-name](admin-endpoint.md#a-grant-held-below-the-deployment) for the users, mail accounts, and organizations its scope
-covers; every other route asks its permission at deployment scope and refuses such a holder in that same shape.
+name](admin-endpoint.md#a-grant-held-below-the-deployment) for the users, mail accounts, contact books, and
+organizations its scope covers; every other route asks its permission at deployment scope and refuses such a holder in
+that same shape.
 
 **`mailfathom.admin.spend` held below the deployment reaches nothing.** A role is assigned whole, so a role carrying it —
 the seeded `Administrator` among them — may be assigned over an organization or a user and grants its other names there.

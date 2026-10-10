@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Accounts.Custody;
 using MailFathom.Application.Synchronization.Drain;
@@ -65,13 +66,13 @@ internal static class MailAccountCustodyEndpoints
         ArgumentNullException.ThrowIfNull(api);
 
         api.MapGet(CustodyRoute, ReadAsync)
-            .RequirePermission(MailFathomPermission.AdminRead);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminRead);
         api.MapPost(CustodySwitchRoute, SwitchAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxCustodyRequestBytes))
-            .RequirePermission(MailFathomPermission.AdminCustodyWrite);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminCustodyWrite);
         api.MapPost(CustodyAppendSettlementRoute, SettleRestoreAppendAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxCustodyRequestBytes))
-            .RequirePermission(MailFathomPermission.AdminCustodyWrite);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminCustodyWrite);
     }
 
     /// <summary>Reports which copy of one account's mailbox is the truth, and how far a switch under way has got.</summary>
@@ -80,6 +81,7 @@ internal static class MailAccountCustodyEndpoints
     /// <param name="custody">Reads the account's custody.</param>
     /// <param name="drain">Reads how much of the source is still to be emptied.</param>
     /// <param name="restore">Reads how much of the mailbox is still to be put back.</param>
+    /// <param name="authorization">Answers whether the caller's scope covers the account the request names.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
     /// <returns><c>200</c> with the state and the standing figures, <c>400</c> naming what was wrong with the request, or <c>409</c> where the account is served but has bound no folder yet.</returns>
     internal static async Task<Results<Ok<MailAccountCustodyResponse>, ProblemHttpResult>> ReadAsync(
@@ -88,6 +90,7 @@ internal static class MailAccountCustodyEndpoints
         [FromServices] MailAccountCustodySwitch custody,
         [FromServices] MailboxDrainPass drain,
         [FromServices] MailboxRestorePass restore,
+        [FromServices] AccessAuthorization authorization,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(accounts);
@@ -95,7 +98,7 @@ internal static class MailAccountCustodyEndpoints
         ArgumentNullException.ThrowIfNull(drain);
         ArgumentNullException.ThrowIfNull(restore);
 
-        if (await AdminAccountRequest.ResolveAsync(account, accounts, cancellationToken) is not { } servedAccount)
+        if (await AdminAccountRequest.ResolveCoveredAsync(account, MailFathomPermission.AdminRead, accounts, authorization, cancellationToken) is not { } servedAccount)
         {
             return AdminAccountRequest.Refuse(account);
         }
@@ -154,6 +157,7 @@ internal static class MailAccountCustodyEndpoints
     /// <param name="accounts">Reports whether this deployment serves the named account.</param>
     /// <param name="mailSettings">Holds the account settings the switch reads, which this route prepares for the named account.</param>
     /// <param name="context">The request being answered, whose services the switch is resolved through once the account's settings are prepared.</param>
+    /// <param name="authorization">Answers whether the caller's scope covers the account the request names.</param>
     /// <param name="cancellationToken">Cancels the request when the client disconnects.</param>
     /// <returns><c>200</c> with what the request did, <c>400</c> naming what was wrong with it, <c>409</c> where the account is served but has bound no folder yet, or <c>503</c> where the source could not be read.</returns>
     /// <remarks>
@@ -178,13 +182,14 @@ internal static class MailAccountCustodyEndpoints
         [FromServices] IDeploymentMailAccountCatalog accounts,
         [FromServices] ScopedMailSynchronizationSettings mailSettings,
         HttpContext context,
+        [FromServices] AccessAuthorization authorization,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(mailSettings);
         ArgumentNullException.ThrowIfNull(context);
 
-        if (await AdminAccountRequest.ResolveAsync(request?.Account, accounts, cancellationToken) is not { } servedAccount)
+        if (await AdminAccountRequest.ResolveCoveredAsync(request?.Account, MailFathomPermission.AdminCustodyWrite, accounts, authorization, cancellationToken) is not { } servedAccount)
         {
             return AdminAccountRequest.Refuse(request?.Account);
         }
@@ -232,6 +237,7 @@ internal static class MailAccountCustodyEndpoints
     /// <param name="request">The account, the record, and what the folder holds.</param>
     /// <param name="accounts">Reports whether this deployment serves the named account.</param>
     /// <param name="settlement">Writes the verdict.</param>
+    /// <param name="authorization">Answers whether the caller's scope covers the account the request names.</param>
     /// <param name="cancellationToken">Cancels the request when the client disconnects.</param>
     /// <returns><c>200</c> with whether the record was still standing, or <c>400</c> naming what was wrong with the request.</returns>
     /// <remarks>
@@ -243,12 +249,13 @@ internal static class MailAccountCustodyEndpoints
         [FromBody] MailAccountRestoreSettlementRequest? request,
         [FromServices] IDeploymentMailAccountCatalog accounts,
         [FromServices] MailboxRestoreSettlement settlement,
+        [FromServices] AccessAuthorization authorization,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(settlement);
 
-        if (await AdminAccountRequest.ResolveAsync(request?.Account, accounts, cancellationToken) is not { } servedAccount)
+        if (await AdminAccountRequest.ResolveCoveredAsync(request?.Account, MailFathomPermission.AdminCustodyWrite, accounts, authorization, cancellationToken) is not { } servedAccount)
         {
             return AdminAccountRequest.Refuse(request?.Account);
         }

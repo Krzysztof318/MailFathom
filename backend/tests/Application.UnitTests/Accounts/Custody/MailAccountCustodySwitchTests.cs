@@ -360,6 +360,45 @@ public sealed class MailAccountCustodySwitchTests
         Assert.Empty(context.Auditor.Decisions);
     }
 
+    /// <summary>An organization's administrator naming a mailbox in another organization is refused by the use case itself, and its custody stays where it was.</summary>
+    [Fact]
+    public async Task SwitchAsync_AnAccountOutsideTheCallersOrganization_IsRefusedBeforeAnythingIsWritten()
+    {
+        // Arrange
+        var context = new SwitchContext(authorization: OrganizationAdministrators.Holding(
+            MailFathomPermission.AdminCustodyWrite,
+            Account,
+            OrganizationAdministrators.OtherOrganization));
+
+        // Act
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            context.Switch.SwitchAsync(Account, MailAccountCustody.HoldMailbox, TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailAccountCustody.MirrorSource, context.Custody.StateOf(Account)!.Requested);
+        Assert.Empty(context.Auditor.Decisions);
+    }
+
+    [Fact]
+    public async Task SwitchAsync_AnAccountInTheCallersOrganization_RecordsTheRequest()
+    {
+        // Arrange
+        var context = new SwitchContext(authorization: OrganizationAdministrators.Holding(
+            MailFathomPermission.AdminCustodyWrite,
+            Account,
+            OrganizationAdministrators.AdministeredOrganization));
+
+        // Act
+        var outcome = await context.Switch.SwitchAsync(
+            Account,
+            MailAccountCustody.HoldMailbox,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(outcome?.WasAccepted);
+        Assert.Equal(MailAccountCustody.HoldMailbox, context.Custody.StateOf(Account)!.Requested);
+    }
+
     /// <summary>Arranges one deployment the switch is asked about, with every refusal absent until a test adds one.</summary>
     private sealed class SwitchContext
     {
@@ -370,7 +409,8 @@ public sealed class MailAccountCustodySwitchTests
 
         internal SwitchContext(
             MailAccountCustody current = MailAccountCustody.MirrorSource,
-            MailFathomPermission? granted = null)
+            MailFathomPermission? granted = null,
+            AccessAuthorization? authorization = null)
         {
             this.Custody = InMemoryMailAccountCustodyStore.With(
                 Account,
@@ -400,7 +440,7 @@ public sealed class MailAccountCustodySwitchTests
                 this.Auditor,
                 this.deleteDispositions,
                 new OptimisticConcurrencyRetryPolicy(sessionFactory, new PersistenceConcurrencyOptions(), clock),
-                AccessAuthorizations.ForAdministratorGranted(granted ?? MailFathomPermission.AdminCustodyWrite),
+                authorization ?? AccessAuthorizations.ForAdministratorGranted(granted ?? MailFathomPermission.AdminCustodyWrite),
                 clock);
         }
 

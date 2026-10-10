@@ -7,11 +7,13 @@ using MailFathom.Application.Jobs;
 using MailFathom.Application.Mail.Maintenance;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization.Checkpoints;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Synchronization;
 using MailFathom.Host.Api;
 using MailFathom.Host.UnitTests.TestDoubles;
+using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -112,6 +114,7 @@ public sealed class MailboxMaintenanceEndpointsTests
             folder: null,
             CatalogServing(Account),
             RewindOver(checkpoints, storedEmailCount: 22_500),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -135,6 +138,7 @@ public sealed class MailboxMaintenanceEndpointsTests
             new MailboxMaintenanceRequest("work", null),
             CatalogServing(Account),
             RewindOver(checkpoints, storedEmailCount: 4),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -156,6 +160,7 @@ public sealed class MailboxMaintenanceEndpointsTests
             new MailboxMaintenanceRequest("work", "archive"),
             CatalogServing(Account),
             RewindOver(checkpoints, storedEmailCount: 4),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -176,6 +181,7 @@ public sealed class MailboxMaintenanceEndpointsTests
             new MailboxMaintenanceRequest("work", null),
             CatalogServing(Account),
             RequestsOver(runs),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -208,6 +214,7 @@ public sealed class MailboxMaintenanceEndpointsTests
             new MailboxMaintenanceRequest("work", null),
             CatalogServing(Account),
             RequestsOver(runs, segmentState),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -239,6 +246,7 @@ public sealed class MailboxMaintenanceEndpointsTests
             folder: null,
             CatalogServing(Account),
             ReaderOver(runs),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -260,6 +268,7 @@ public sealed class MailboxMaintenanceEndpointsTests
             folder: null,
             CatalogServing(Account),
             ReaderOver(new FakeRederivationRunStore()),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -283,11 +292,43 @@ public sealed class MailboxMaintenanceEndpointsTests
             new MailboxMaintenanceRequest(account, null),
             CatalogServing(Account),
             RewindOver(checkpoints, storedEmailCount: 4),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
         var refusal = Assert.IsType<ProblemHttpResult>(result.Result);
         Assert.Equal(StatusCodes.Status400BadRequest, refusal.StatusCode);
+        Assert.Empty(checkpoints.Discards);
+    }
+
+    /// <summary>
+    /// The scope is asked before the folder is read, so a served account outside it is answered in the sentence an
+    /// unconfigured one is rather than by whichever later refusal its folder would have reached.
+    /// </summary>
+    [Fact]
+    public async Task RewindAsync_AnAccountOutsideTheCallersOrganizationWithAFolderThatIsNoAlias_RefusesItAsUnknown()
+    {
+        // Arrange
+        var checkpoints = new RecordingCheckpointStore([Archive]);
+        var authorization = AccessAuthorizations.ForAdministratorScoped(
+            ScopedGrant.Of(
+            [
+                (MailFathomPermission.AdminOperate,
+                    AssignmentScope.Organization(new Guid("0198f0aa-0000-7000-8000-0000000000e3"))),
+            ]),
+            new StatedAdministrativeTargets().WithMailAccount(Account, new Guid("0198f0aa-0000-7000-8000-0000000000e4")));
+
+        // Act
+        var result = await MailboxMaintenanceEndpoints.RewindAsync(
+            new MailboxMaintenanceRequest("work", "arch\tive"),
+            CatalogServing(Account),
+            RewindOver(checkpoints, storedEmailCount: 4),
+            authorization,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(result.Result);
+        Assert.Equal(AdminAccountRequest.Refuse("work").ProblemDetails.Detail, refusal.ProblemDetails.Detail);
         Assert.Empty(checkpoints.Discards);
     }
 
@@ -307,6 +348,7 @@ public sealed class MailboxMaintenanceEndpointsTests
             new MailboxMaintenanceRequest("work", "arch\tive"),
             CatalogServing(Account),
             RequestsOver(runs),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -329,6 +371,7 @@ public sealed class MailboxMaintenanceEndpointsTests
             new MailboxMaintenanceRequest("work", folder),
             CatalogServing(Account),
             RequestsOver(runs),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert

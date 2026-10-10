@@ -93,10 +93,12 @@ internal sealed class InMemoryMailAccountRecordStore : IMailAccountRecordStore
     /// <inheritdoc />
     public Task<AdministrativeListingPage<MailAccountSummary>> ReadPageAsync(
         AdministrativeListingQuery query,
+        IReadOnlySet<AssignmentScope> reach,
         CancellationToken cancellationToken) =>
         Task.FromResult(query.PageOf(
             [
                 .. this.accounts
+                    .Where(account => reach.Any(AdministrativeTarget.MailAccount(this.OrganizationOf(account.Id), this.assignments[account.Id]).IsCoveredBy))
                     .Where(account => query.After is not { } after || account.Id.CompareTo(after) > 0)
                     .OrderBy(account => account.Id)
                     .Take(query.PageSize + 1)

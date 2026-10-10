@@ -55,24 +55,29 @@ it. A principal that could be admitted by holding a permission would be reachabl
 permission to — so a use case that may run without a caller admits it **by name**, and never by a permission check.
 
 **An administrative permission is asked about *over what* as well as *what*.** `RequirePermission` asks for a name held
-over the whole deployment, and every administrative operation asks it — whether or not it names a target — except the
-reads published under `mailfathom.admin.audit.read` and the operations that administer a user, their record, their
-credentials, or an organization's display name; recording an organization, deleting one, and changing its short name
-keep `RequirePermission`. Those ask over what they name: `RequirePermissionOverAsync` or `PermitsOverAsync`
+over the whole deployment, and every administrative operation admitted at the deployment scope alone asks it —
+recording an organization, deleting one, and changing its short name among them. The reads published under
+`mailfathom.admin.audit.read` and the operations that administer a user, their record, their credentials, or an
+organization's display name, and that administer or operate on a mail account, its mailbox, or a user's contact book,
+ask over what they name: `RequirePermissionOverAsync` or `PermitsOverAsync`
 with the user or the mail account, and `PermitsOverScopeAsync` with an organization or with a scope another grant is
 held at. `AccessAuthorization` places a user or an account through `IAdministrativeTargets` — the organization it
 belongs to, and the one user it is wholly the concern of — read from the records per question so a move between
 organizations reaches the next check on every replica. A listing asks `ScopesOf` and answers within them rather than
-refusing, and an act only the deployment scope admits behind an operation that otherwise names a target asks
-`RequirePermissionOverTheDeployment`, whose refusal a boundary may answer as held only below the deployment because
-it was decided before anything the request names was read. A name held over the deployment answers without placing
-anything, and a read across several mail accounts asks `CoveredMailAccountsAsync`, which places them in one read. A read addressed by an
+refusing — the store cuts the page over what those scopes cover rather than filtering it after it was cut — and the
+synchronization status, which reports every configured account, asks `CoveredMailAccountsAsync` and leaves out the
+ones no scope of the caller covers. An act only the deployment scope admits behind an operation that otherwise names
+a target asks `RequirePermissionOverTheDeployment`, whose refusal a boundary may answer as held only below the
+deployment because it was decided before anything the request names was read. A name held over the deployment answers
+without placing anything, and a read across several mail accounts asks `CoveredMailAccountsAsync`, which places them in
+one read. A read addressed by an
 identifier of its own, such as one queued message, learns its account only by reading the record: it asks
 `RequirePermissionAtAnyScope` before reading, then `PermitsOverAsync` over the account it found, and answers a record
 outside the caller's scope as one it did not find. A boundary that has to
 answer a target outside the caller's scope exactly as one that does not exist asks `PermitsOverAsync` first and takes
 the not-found path itself, which is how a refusal stops disclosing that the target exists elsewhere;
-`PermitsAtAnyScope` is the cheap question the transport asks of such a route, since it cannot place the target.
+`PermitsAtAnyScope` is the cheap question the transport asks of such a route, since it cannot place the target. A use
+case that already read the record it acts on places it itself and asks `PermitsOver`, which reads nothing.
 
 **The user is a second axis, and it is not a permission.** A permission says which operations a caller may perform;
 the user says whose mail those operations run against, and no grant an operator writes can make one caller act for

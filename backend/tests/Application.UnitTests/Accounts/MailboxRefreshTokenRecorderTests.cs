@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
+using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.TestSupport;
@@ -142,6 +143,49 @@ public sealed class MailboxRefreshTokenRecorderTests
 
         // Assert
         Assert.Equal(MailFathomPermission.AdminCredentialsWrite, refusal.RequiredPermission);
+    }
+
+    /// <summary>An organization's administrator naming a mailbox in another organization is refused by the use case itself, and nothing reaches the store.</summary>
+    [Fact]
+    public async Task RecordAsync_AnAccountOutsideTheCallersOrganization_IsRefusedWithoutStoringAnything()
+    {
+        // Arrange
+        var recorder = this.RecorderServing(
+            OrganizationAdministrators.Holding(
+                MailFathomPermission.AdminCredentialsWrite,
+                Workspace,
+                OrganizationAdministrators.OtherOrganization),
+            Workspace);
+        using var refreshToken = MailboxRefreshToken.FromText("a-refresh-token");
+
+        // Act
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            recorder.RecordAsync(Workspace, refreshToken, TestContext.Current.CancellationToken));
+
+        // Assert
+        await this.store.DidNotReceive().SaveTokenAsync(
+            Arg.Any<MailAccountId>(),
+            Arg.Any<MailboxRefreshToken>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RecordAsync_AnAccountInTheCallersOrganization_StoresTheTokenAgainstIt()
+    {
+        // Arrange
+        var recorder = this.RecorderServing(
+            OrganizationAdministrators.Holding(
+                MailFathomPermission.AdminCredentialsWrite,
+                Workspace,
+                OrganizationAdministrators.AdministeredOrganization),
+            Workspace);
+        using var refreshToken = MailboxRefreshToken.FromText("a-refresh-token");
+
+        // Act
+        await recorder.RecordAsync(Workspace, refreshToken, TestContext.Current.CancellationToken);
+
+        // Assert
+        await this.store.Received(1).SaveTokenAsync(Workspace, refreshToken, Arg.Any<CancellationToken>());
     }
 
     private MailboxRefreshTokenRecorder RecorderServing(params MailAccountId[] servedAccountIds) =>

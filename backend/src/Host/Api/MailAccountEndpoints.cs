@@ -52,29 +52,29 @@ internal static class MailAccountEndpoints
         ArgumentNullException.ThrowIfNull(api);
 
         api.MapGet(MailAccountsRoute, ReadPageAsync)
-            .RequirePermission(MailFathomPermission.AdminRead);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminRead);
 
         api.MapPost(MailAccountsRoute, CreateAsync)
             .WithMetadata(new RequestSizeLimitAttribute(UserRecordEndpoints.MaxWriteRequestBytes))
-            .RequirePermission(MailFathomPermission.AdminConfigurationWrite);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminConfigurationWrite);
 
         api.MapGet(MailAccountRoute, ReadAsync)
-            .RequirePermission(MailFathomPermission.AdminRead);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminRead);
 
         api.MapPost(MailAccountRoute, SaveAsync)
             .WithMetadata(new RequestSizeLimitAttribute(UserRecordEndpoints.MaxWriteRequestBytes))
-            .RequirePermission(MailFathomPermission.AdminConfigurationWrite);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminConfigurationWrite);
 
         api.MapDelete(MailAccountRoute, EraseAsync)
-            .RequirePermission(MailFathomPermission.AdminErase);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminErase);
 
         api.MapPost(AssignmentsRoute, AssignAsync)
             .WithMetadata(new RequestSizeLimitAttribute(UserRecordEndpoints.MaxWriteRequestBytes))
-            .RequirePermission(MailFathomPermission.AdminConfigurationWrite);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminConfigurationWrite);
 
         api.MapPost(AssignmentRemovalRoute, UnassignAsync)
             .WithMetadata(new RequestSizeLimitAttribute(UserRecordEndpoints.MaxWriteRequestBytes))
-            .RequirePermission(MailFathomPermission.AdminErase);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminErase);
     }
 
     /// <summary>Lists one page of the accounts this deployment holds.</summary>

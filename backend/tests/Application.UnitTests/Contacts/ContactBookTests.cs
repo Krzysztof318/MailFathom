@@ -680,6 +680,171 @@ public sealed class ContactBookTests
         Assert.Equal(MailFathomPermission.AdminErase, refusal.RequiredPermission);
     }
 
+    /// <summary>Writing into the book of a user in another organization is answered as a person the book does not hold, and nothing is written.</summary>
+    [Fact]
+    public async Task RecordAsync_AnOrganizationsAdministratorForAUserOutsideIt_IsNotFoundAndWritesNothing()
+    {
+        // Arrange
+        var store = new InMemoryContactBookStore();
+        var book = BookOver(
+            store,
+            authorization: OrganizationAdministrators.Holding(MailFathomPermission.AdminOperate, UserIn(OrganizationAdministrators.OtherOrganization)));
+
+        // Act
+        var result = await book.RecordAsync(
+            User,
+            NewContactOf("Ada Lovelace", ["ada@example.test"]),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(ContactWriteOutcome.NotFound, result.Outcome);
+        Assert.Equal(0, store.ContactCount);
+    }
+
+    /// <summary>Emptying the collected book of a mailbox in another organization is refused by the use case itself, and what it collected stays.</summary>
+    [Fact]
+    public async Task EraseCollectedAsync_AnAccountOutsideTheCallersOrganization_IsRefusedAndErasesNothing()
+    {
+        // Arrange
+        var store = new InMemoryContactBookStore();
+        store.Hold(Account, ContactOf("Marek Nowak", ["marek@example.test"], ContactOrigin.Collected));
+
+        var book = BookOver(
+            store,
+            authorization: OrganizationAdministrators.Holding(
+                MailFathomPermission.AdminErase,
+                Account,
+                OrganizationAdministrators.OtherOrganization));
+
+        // Act
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            book.EraseCollectedAsync(Account, TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Single(store.ContactsOf(Account));
+    }
+
+    /// <summary>
+    /// A collected record erased is gone for everybody assigned that mailbox, so the administrator of one user reaches
+    /// a mailbox that user shares no more through one person than through the whole book.
+    /// </summary>
+    [Fact]
+    public async Task EraseAsync_ACollectedRecordOfAMailboxTheUserShares_IsNotReachedByThatUsersAdministrator()
+    {
+        // Arrange
+        var store = new InMemoryContactBookStore();
+        var collected = ContactOf("Marek Nowak", ["marek@example.test"], ContactOrigin.Collected);
+        store.Hold(Account, collected);
+
+        var targets = new StatedAdministrativeTargets()
+            .WithUser(User, OrganizationAdministrators.AdministeredOrganization)
+            .WithMailAccount(Account, OrganizationAdministrators.AdministeredOrganization, User, SyntheticUser.Another);
+
+        var book = BookOver(
+            store,
+            authorization: AccessAuthorizations.ForAdministratorScoped(
+                ScopedGrant.Of([(MailFathomPermission.AdminErase, AssignmentScope.User(User))]),
+                targets));
+
+        // Act
+        var erasure = await book.EraseAsync(Scope, collected.Id, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(erasure.WasHeld);
+        Assert.Single(store.ContactsOf(Account));
+    }
+
+    [Fact]
+    public async Task EraseAsync_ACollectedRecordOfAMailboxTheUserHoldsAlone_IsErasedByThatUsersAdministrator()
+    {
+        // Arrange
+        var store = new InMemoryContactBookStore();
+        var collected = ContactOf("Marek Nowak", ["marek@example.test"], ContactOrigin.Collected);
+        store.Hold(Account, collected);
+
+        var targets = new StatedAdministrativeTargets()
+            .WithUser(User, OrganizationAdministrators.AdministeredOrganization)
+            .WithMailAccount(Account, OrganizationAdministrators.AdministeredOrganization, User);
+
+        var book = BookOver(
+            store,
+            authorization: AccessAuthorizations.ForAdministratorScoped(
+                ScopedGrant.Of([(MailFathomPermission.AdminErase, AssignmentScope.User(User))]),
+                targets));
+
+        // Act
+        var erasure = await book.EraseAsync(Scope, collected.Id, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(erasure.WasHeld);
+        Assert.Empty(store.ContactsOf(Account));
+    }
+
+    /// <summary>
+    /// A promotion copies a record into a book the administrator's scope reads, so out of a mailbox the user shares it
+    /// would carry that mailbox's record to somebody whose scope does not reach it. An amendment finds the same
+    /// record absent rather than refusing it by its origin, which would say it is there.
+    /// </summary>
+    [Fact]
+    public async Task PromoteAndAmendAsync_ACollectedRecordOfAMailboxTheUserShares_IsNotFoundForThatUsersAdministrator()
+    {
+        // Arrange
+        var store = new InMemoryContactBookStore();
+        var collected = ContactOf("Marek Nowak", ["marek@example.test"], ContactOrigin.Collected);
+        store.Hold(Account, collected);
+
+        var targets = new StatedAdministrativeTargets()
+            .WithUser(User, OrganizationAdministrators.AdministeredOrganization)
+            .WithMailAccount(Account, OrganizationAdministrators.AdministeredOrganization, User, SyntheticUser.Another);
+
+        var book = BookOver(
+            store,
+            authorization: AccessAuthorizations.ForAdministratorScoped(
+                ScopedGrant.Of([(MailFathomPermission.AdminOperate, AssignmentScope.User(User))]),
+                targets));
+
+        // Act
+        var promoted = await book.PromoteAsync(Scope, collected.Id, ContactOrigin.Asserted, TestContext.Current.CancellationToken);
+        var amended = await book.AmendAsync(
+            Scope,
+            AmendmentOf(collected, ContactOrigin.Asserted, "Marek Kowalski", ["marek@example.test"]),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(ContactWriteOutcome.NotFound, promoted.Outcome);
+        Assert.Equal(ContactWriteOutcome.NotFound, amended.Outcome);
+        Assert.Empty(store.ContactsOf(User));
+    }
+
+    [Fact]
+    public async Task PromoteAsync_ACollectedRecordOfAMailboxTheUserHoldsAlone_IsCopiedByThatUsersAdministrator()
+    {
+        // Arrange
+        var store = new InMemoryContactBookStore();
+        var collected = ContactOf("Marek Nowak", ["marek@example.test"], ContactOrigin.Collected);
+        store.Hold(Account, collected);
+
+        var targets = new StatedAdministrativeTargets()
+            .WithUser(User, OrganizationAdministrators.AdministeredOrganization)
+            .WithMailAccount(Account, OrganizationAdministrators.AdministeredOrganization, User);
+
+        var book = BookOver(
+            store,
+            authorization: AccessAuthorizations.ForAdministratorScoped(
+                ScopedGrant.Of([(MailFathomPermission.AdminOperate, AssignmentScope.User(User))]),
+                targets));
+
+        // Act
+        var promoted = await book.PromoteAsync(Scope, collected.Id, ContactOrigin.Asserted, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(ContactWriteOutcome.Written, promoted.Outcome);
+        Assert.Single(store.ContactsOf(User));
+    }
+
+    private static StatedAdministrativeTargets UserIn(Guid organization) =>
+        new StatedAdministrativeTargets().WithUser(User, organization);
+
     private static ContactBook BookOver(
         InMemoryContactBookStore book,
         FakeTimeProvider? clock = null,

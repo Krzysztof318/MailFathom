@@ -113,7 +113,7 @@ public sealed class StoredMailRederivationRequests
     {
         ArgumentNullException.ThrowIfNull(scope);
 
-        this.authorization.RequirePermission(MailFathomPermission.AdminOperate);
+        await this.authorization.RequirePermissionOverAsync(MailFathomPermission.AdminOperate, scope.Account, cancellationToken);
 
         var requested = await this.commitPolicy.CommitAsync(
             async (session, attemptCancellationToken) =>

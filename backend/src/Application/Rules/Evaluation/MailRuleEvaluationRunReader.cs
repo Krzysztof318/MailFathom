@@ -37,14 +37,14 @@ public sealed class MailRuleEvaluationRunReader
     /// <param name="account">The account whose run is read, by its generated identifier together.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The run, or <see langword="null" /> where the account has never been asked for one.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.AdminRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.AdminRead" /> at a scope covering the account.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels.</exception>
-    public Task<MailRuleEvaluationRun?> FindLatestAsync(
+    public async Task<MailRuleEvaluationRun?> FindLatestAsync(
         MailAccountId account,
         CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.AdminRead);
+        await this.authorization.RequirePermissionOverAsync(MailFathomPermission.AdminRead, account, cancellationToken);
 
-        return this.runs.FindLatestAsync(account, cancellationToken);
+        return await this.runs.FindLatestAsync(account, cancellationToken);
     }
 }

@@ -88,7 +88,7 @@ public sealed class UnmirroredMailFolderEraser
         MailFolderAlias folderAlias,
         CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.AdminErase);
+        await this.authorization.RequirePermissionOverAsync(MailFathomPermission.AdminErase, account, cancellationToken);
 
         var erasure = MailFolderMirrorErasure.Nothing;
 

@@ -74,10 +74,10 @@ internal static class SpamClassificationEndpoints
         // over the bound is answered 413 before the handler is reached.
         api.MapPost(RunsRoute, StartRunAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxRunRequestBytes))
-            .RequirePermission(MailFathomPermission.AdminOperate);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminOperate);
 
         api.MapGet(RunsRoute, ReadRunAsync)
-            .RequirePermission(MailFathomPermission.AdminRead);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminRead);
 
         api.MapGet(ClassificationsRoute, ReadClassificationsAsync)
             .RequirePermissionOverTarget(MailFathomPermission.AdminAuditRead);
@@ -89,6 +89,7 @@ internal static class SpamClassificationEndpoints
     /// <param name="mailSettings">Holds the account settings the scope is read from, which this route prepares for the named account.</param>
     /// <param name="requests">Records the request, or reports the run already in front of the account.</param>
     /// <param name="context">The request being answered, whose services the account's classification settings are resolved through once they are prepared.</param>
+    /// <param name="authorization">Answers whether the caller's scope covers the account the request names.</param>
     /// <param name="cancellationToken">Cancels the write when the client disconnects.</param>
     /// <returns><c>200</c> with the run, or <c>400</c> naming what was wrong with the request.</returns>
     /// <remarks>
@@ -112,6 +113,7 @@ internal static class SpamClassificationEndpoints
         [FromServices] ScopedMailSynchronizationSettings mailSettings,
         [FromServices] SpamClassificationRunRequests requests,
         HttpContext context,
+        [FromServices] AccessAuthorization authorization,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(accounts);
@@ -119,7 +121,7 @@ internal static class SpamClassificationEndpoints
         ArgumentNullException.ThrowIfNull(requests);
         ArgumentNullException.ThrowIfNull(context);
 
-        if (await AdminAccountRequest.ResolveAsync(request?.Account, accounts, cancellationToken) is not { } servedAccount)
+        if (await AdminAccountRequest.ResolveCoveredAsync(request?.Account, MailFathomPermission.AdminOperate, accounts, authorization, cancellationToken) is not { } servedAccount)
         {
             return AdminAccountRequest.Refuse(request?.Account);
         }
@@ -156,6 +158,7 @@ internal static class SpamClassificationEndpoints
     /// <param name="account">The identifier the deployment generated for the account whose run is read.</param>
     /// <param name="accounts">Reports whether this deployment serves the named account.</param>
     /// <param name="runs">Reads the one run an account may have outstanding, for a caller the read's own grant admits.</param>
+    /// <param name="authorization">Answers whether the caller's scope covers the account the request names.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
     /// <returns><c>200</c> with the run, <c>200</c> with none where the account has never been asked for one, or <c>400</c>.</returns>
     /// <remarks>
@@ -167,12 +170,13 @@ internal static class SpamClassificationEndpoints
         [FromQuery] string? account,
         [FromServices] IDeploymentMailAccountCatalog accounts,
         [FromServices] SpamClassificationRunReader runs,
+        [FromServices] AccessAuthorization authorization,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(runs);
 
-        if (await AdminAccountRequest.ResolveAsync(account, accounts, cancellationToken) is not { } servedAccount)
+        if (await AdminAccountRequest.ResolveCoveredAsync(account, MailFathomPermission.AdminRead, accounts, authorization, cancellationToken) is not { } servedAccount)
         {
             return AdminAccountRequest.Refuse(account);
         }

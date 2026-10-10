@@ -35,6 +35,10 @@ public sealed class MailAccountAdministrationTests
 
     private static readonly UserId Sam = SyntheticUser.Another;
 
+    private static readonly Guid Organization = new("0197c0de-0000-4000-8000-0000000000b1");
+
+    private static readonly Guid OtherOrganization = new("0197c0de-0000-4000-8000-0000000000b2");
+
     [Fact]
     public async Task CreateAsync_ADeclarationTheUsersMailboxesAccept_CreatesTheAccountAndAssignsItToThem()
     {
@@ -826,6 +830,226 @@ public sealed class MailAccountAdministrationTests
         Assert.DoesNotContain("/run/secrets/work-password", reading.Declaration, StringComparison.Ordinal);
     }
 
+    /// <summary>A listing never refuses on scope: an organization's administrator is answered with their organization's accounts and nothing else.</summary>
+    [Fact]
+    public async Task ReadPageAsync_AnOrganizationsAdministrator_ListsTheAccountsOfThatOrganizationAlone()
+    {
+        // Arrange
+        var inside = Mailbox("inside@example.test", "inside");
+        var outside = Mailbox("outside@example.test", "outside");
+        var deployment = ScopedTo(MailFathomPermission.AdminRead, AssignmentScope.Organization(Organization));
+        deployment.Holding(Alex, EmptyRecord, version: 1, inside);
+        deployment.Holding(Sam, EmptyRecord, version: 1, outside);
+        deployment.MailAccountRecords.PlaceAccount(inside.Id, Organization);
+        deployment.MailAccountRecords.PlaceAccount(outside.Id, OtherOrganization);
+
+        // Act
+        var page = await deployment.MailAccounts.ReadPageAsync(
+            AdministrativeListingQuery.Create(pageSize: 10, after: null)!,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal([inside.Id], page.Entries.Select(account => account.Id));
+    }
+
+    /// <summary>A mailbox in another organization is answered exactly as one the deployment does not hold.</summary>
+    [Fact]
+    public async Task ReadAsync_AnAccountOutsideTheCallersOrganization_ReportsNothing()
+    {
+        // Arrange
+        var outside = Mailbox("outside@example.test", "outside");
+        var deployment = ScopedTo(MailFathomPermission.AdminRead, AssignmentScope.Organization(Organization));
+        deployment.Holding(Sam, EmptyRecord, version: 1, outside);
+        deployment.MailAccountRecords.PlaceAccount(outside.Id, OtherOrganization);
+
+        // Act
+        var reading = await deployment.MailAccounts.ReadAsync(outside.Id, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(reading);
+    }
+
+    /// <summary>A user scope reaches a mailbox only while that user is the one person it is assigned to.</summary>
+    [Fact]
+    public async Task EraseAsync_AnAccountItsUserSharesWithSomebodyElse_ErasesNothingForThatUsersAdministrator()
+    {
+        // Arrange
+        var shared = Mailbox("shared@example.test", "shared");
+        var deployment = ScopedTo(MailFathomPermission.AdminErase, AssignmentScope.User(Alex));
+        deployment.Holding(Alex, EmptyRecord, version: 1, shared);
+        deployment.MailAccountRecords.HoldUser(Sam, EmptyRecord, version: 1, shared);
+
+        // Act
+        var erased = await deployment.MailAccounts.EraseAsync(shared.Id, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(erased);
+        Assert.Single(deployment.MailAccountRecords.Accounts);
+    }
+
+    /// <summary>Assigning reaches both sides, so the caller's scope has to cover the user as well as the account.</summary>
+    [Fact]
+    public async Task AssignAsync_AUserOutsideTheCallersOrganization_ReportsNothingAndAssignsNothing()
+    {
+        // Arrange
+        var inside = Mailbox("inside@example.test", "inside");
+        var deployment = ScopedTo(MailFathomPermission.AdminConfigurationWrite, AssignmentScope.Organization(Organization));
+        deployment.Holding(Alex, EmptyRecord, version: 1, inside);
+        deployment.Holding(Sam, EmptyRecord, version: 1);
+        deployment.MailAccountRecords.PlaceAccount(inside.Id, Organization);
+        deployment.Targets.WithUser(Sam, OtherOrganization);
+
+        // Act
+        var outcome = await deployment.MailAccounts.AssignAsync(inside.Id, Sam, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(outcome);
+        Assert.Empty(deployment.MailAccountRecords.DocumentOf(Sam)!.MailAccounts);
+    }
+
+    /// <summary>
+    /// Ending an assignment can erase the mailbox, so the scope has to cover the user as well as the account: an account
+    /// in the caller's organization does not carry a user elsewhere into it.
+    /// </summary>
+    [Fact]
+    public async Task UnassignAsync_AUserOutsideTheCallersOrganization_UnassignsNothing()
+    {
+        // Arrange
+        var shared = Mailbox("shared@example.test", "shared");
+        var deployment = ScopedTo(MailFathomPermission.AdminErase, AssignmentScope.Organization(Organization));
+        deployment.Holding(Alex, EmptyRecord, version: 1, shared);
+        deployment.Holding(Sam, EmptyRecord, version: 1, shared);
+        deployment.MailAccountRecords.PlaceAccount(shared.Id, Organization);
+        deployment.Targets.WithUser(Alex, Organization).WithUser(Sam, OtherOrganization);
+
+        // Act
+        var unassignment = await deployment.MailAccounts.UnassignAsync(shared.Id, Sam, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(unassignment.Unassigned);
+        Assert.Single(deployment.MailAccountRecords.DocumentOf(Sam)!.MailAccounts);
+    }
+
+    [Fact]
+    public async Task UnassignAsync_AnAccountAndAUserBothInTheCallersOrganization_UnassignsTheUser()
+    {
+        // Arrange
+        var shared = Mailbox("shared@example.test", "shared");
+        var deployment = ScopedTo(MailFathomPermission.AdminErase, AssignmentScope.Organization(Organization));
+        deployment.Holding(Alex, EmptyRecord, version: 1, shared);
+        deployment.Holding(Sam, EmptyRecord, version: 1, shared);
+        deployment.MailAccountRecords.PlaceAccount(shared.Id, Organization);
+        deployment.Targets.WithUser(Alex, Organization).WithUser(Sam, Organization);
+
+        // Act
+        var unassignment = await deployment.MailAccounts.UnassignAsync(shared.Id, Sam, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(unassignment.Unassigned);
+        Assert.Empty(deployment.MailAccountRecords.DocumentOf(Sam)!.MailAccounts);
+    }
+
+    /// <summary>An account recorded for a user in no organization sits in none, which is the deployment's alone to record.</summary>
+    [Fact]
+    public async Task CreateAsync_AUserInNoOrganizationByThatUsersAdministrator_IsRefusedNamingThePermission()
+    {
+        // Arrange
+        var deployment = ScopedTo(MailFathomPermission.AdminConfigurationWrite, AssignmentScope.User(Alex));
+        deployment.Holding(Alex, EmptyRecord, version: 4);
+        deployment.Targets.WithUser(Alex, organizationId: null);
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() => deployment.MailAccounts.CreateAsync(
+            Alex,
+            Declaration("archive@example.test", "archive"),
+            TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.AdminConfigurationWrite, refusal.RequiredPermission);
+        Assert.Empty(deployment.MailAccountRecords.Accounts);
+    }
+
+    /// <summary>
+    /// The server an account names is whatever its declaration says, so an organization's administrator pointing one at
+    /// a reference nobody provisioned for its user would have the deployment present that material to a machine of
+    /// their choosing. The whole deployment's administrator is trusted with every reference; a narrower one is not.
+    /// </summary>
+    [Fact]
+    public async Task CreateAsync_AnOrganizationsAdministratorNamingASecretNotProvisionedForTheUser_IsRefusedAndCreatesNothing()
+    {
+        // Arrange
+        var deployment = ScopedTo(MailFathomPermission.AdminConfigurationWrite, AssignmentScope.Organization(Organization));
+        deployment.Holding(Alex, EmptyRecord, version: 4);
+        deployment.MailAccountRecords.PlaceUser(Alex, Organization);
+        deployment.Targets.WithUser(Alex, Organization);
+
+        // Act
+        var creation = await deployment.MailAccounts.CreateAsync(
+            Alex,
+            Declaration("archive@example.test", "archive", "file:/run/secrets/database-password"),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(creation!.Outcome.IsCommitted);
+        Assert.Contains("was not provisioned for a user this mail account is assigned to", Assert.Single(creation.Outcome.Messages), StringComparison.Ordinal);
+        Assert.Empty(deployment.MailAccountRecords.Accounts);
+    }
+
+    /// <summary>The control for the refusal above: material provisioned for the account's own user is what a narrower administrator may name.</summary>
+    [Fact]
+    public async Task CreateAsync_AnOrganizationsAdministratorNamingASecretProvisionedForTheUser_CreatesTheAccount()
+    {
+        // Arrange
+        var deployment = ScopedTo(MailFathomPermission.AdminConfigurationWrite, AssignmentScope.Organization(Organization));
+        deployment.Holding(Alex, EmptyRecord, version: 4);
+        deployment.MailAccountRecords.PlaceUser(Alex, Organization);
+        deployment.Targets.WithUser(Alex, Organization);
+
+        // Act
+        var creation = await deployment.MailAccounts.CreateAsync(
+            Alex,
+            Declaration("archive@example.test", "archive", ProvisionedFor(Alex, "archive")),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(creation!.Outcome.IsCommitted);
+        Assert.Single(deployment.MailAccountRecords.Accounts);
+    }
+
+    /// <summary>
+    /// A save is the same act as a creation where its credential is concerned: the reference the account already
+    /// carries stays, an unrelated edit beside it commits, and replacing it with another user's material is refused.
+    /// </summary>
+    [Fact]
+    public async Task SaveAsync_AnOrganizationsAdministratorReplacingTheReferenceWithAnotherUsersMaterial_IsRefusedAndAnUnrelatedEditCommits()
+    {
+        // Arrange
+        var work = Mailbox("work@example.test", "work");
+        var deployment = ScopedTo(MailFathomPermission.AdminConfigurationWrite, AssignmentScope.Organization(Organization));
+        deployment.Holding(Alex, EmptyRecord, version: 1, work);
+        deployment.MailAccountRecords.PlaceAccount(work.Id, Organization);
+        deployment.Targets.WithUser(Alex, Organization);
+        var standing = Declaration("work@example.test", "work");
+
+        // Act
+        var replaced = await deployment.MailAccounts.SaveAsync(
+            work.Id,
+            Declaration("work@example.test", "work", ProvisionedFor(Sam, "work")),
+            expectedVersion: 1,
+            TestContext.Current.CancellationToken);
+        var renamedHost = await deployment.MailAccounts.SaveAsync(
+            work.Id,
+            standing.Replace("imap.example.test", "imap2.example.test", StringComparison.Ordinal),
+            expectedVersion: 1,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(replaced!.IsCommitted);
+        Assert.Contains("was not provisioned for a user this mail account is assigned to", Assert.Single(replaced.Messages), StringComparison.Ordinal);
+        Assert.True(renamedHost!.IsCommitted);
+        Assert.Contains("/run/secrets/work-password", Assert.Single(deployment.MailAccountRecords.Accounts).Document, StringComparison.Ordinal);
+    }
+
     /// <summary>
     /// A saved declaration becomes keyed changes rather than replacing the account wholesale, so a value left at the
     /// redaction marker leaves the reference beneath it exactly as it was rather than persisting the marker over
@@ -1104,6 +1328,10 @@ public sealed class MailAccountAdministrationTests
             "Folders": [ {{folderJson}} ]
           }
           """;
+
+    /// <summary>A deployment whose administrator holds one permission at one scope and nowhere else.</summary>
+    private static UserRecordDeployment ScopedTo(MailFathomPermission permission, AssignmentScope scope) =>
+        new([], scopedGrant: ScopedGrant.Of([(permission, scope)]));
 
     /// <summary>A mailbox already held, as its own record holds it.</summary>
     private static MailAccountRecord Mailbox(

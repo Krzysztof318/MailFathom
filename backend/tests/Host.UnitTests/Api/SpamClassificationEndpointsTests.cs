@@ -2,12 +2,14 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Spam;
 using MailFathom.Application.Spam.Actions;
 using MailFathom.Application.Spam.History;
 using MailFathom.Application.Spam.Runs;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -16,6 +18,7 @@ using MailFathom.Domain.Spam;
 using MailFathom.Domain.Synchronization;
 using MailFathom.Host.Api;
 using MailFathom.Host.UnitTests.TestDoubles;
+using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -185,6 +188,37 @@ public sealed class SpamClassificationEndpointsTests
             Arg.Any<CancellationToken>());
     }
 
+    /// <summary>
+    /// The scope is asked before the folders are held against the classification scope, so a served account outside it
+    /// is answered in the sentence an unconfigured one is rather than by the one naming a folder its user does not
+    /// classify.
+    /// </summary>
+    [Fact]
+    public async Task StartRunAsync_AnAccountOutsideTheCallersOrganizationWithAFolderOutsideTheConfiguredScope_RefusesItAsUnknown()
+    {
+        // Arrange
+        var authorization = AccessAuthorizations.ForAdministratorScoped(
+            ScopedGrant.Of(
+            [
+                (MailFathomPermission.AdminOperate,
+                    AssignmentScope.Organization(new Guid("0198f0aa-0000-7000-8000-0000000000e7"))),
+            ]),
+            new StatedAdministrativeTargets().WithMailAccount(Account, new Guid("0198f0aa-0000-7000-8000-0000000000e8")));
+
+        // Act
+        var result = await this.StartRunAsync(
+            new SpamClassificationRunRequestBody(Account.Value, [Archive.Value], Apply: null, Rescore: null),
+            authorization: authorization);
+
+        // Assert
+        var refusal = AssertRefused(result.Result);
+        Assert.Equal(AdminAccountRequest.Refuse(Account.Value).ProblemDetails.Detail, refusal.ProblemDetails.Detail);
+        await this.runs.DidNotReceive().SaveAsync(
+            Arg.Any<IPersistenceSession>(),
+            Arg.Any<SpamClassificationRun>(),
+            Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task StartRunAsync_AFolderNameNoAliasCouldBe_IsRefusedRatherThanRaised()
     {
@@ -263,6 +297,7 @@ public sealed class SpamClassificationEndpointsTests
             Account.Value,
             CatalogServing(Account),
             new SpamClassificationRunReader(this.runs, AdministrativeGrant.WholeSurface),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -294,6 +329,7 @@ public sealed class SpamClassificationEndpointsTests
             Account.Value,
             CatalogServing(Account),
             new SpamClassificationRunReader(this.runs, AdministrativeGrant.WholeSurface),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -315,6 +351,7 @@ public sealed class SpamClassificationEndpointsTests
             "nowhere",
             CatalogServing(Account),
             new SpamClassificationRunReader(this.runs, AdministrativeGrant.WholeSurface),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -453,7 +490,8 @@ public sealed class SpamClassificationEndpointsTests
 
     private async Task<Results<Ok<SpamClassificationRunStartResponse>, ProblemHttpResult>> StartRunAsync(
         SpamClassificationRunRequestBody? request,
-        SpamClassificationSettings? settings = null)
+        SpamClassificationSettings? settings = null,
+        AccessAuthorization? authorization = null)
     {
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ => new CommittingSession());
@@ -478,6 +516,7 @@ public sealed class SpamClassificationEndpointsTests
                 this.timeProvider,
                 AdministrativeGrant.WholeSurface),
             scoped.Context,
+            authorization ?? AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
     }
 

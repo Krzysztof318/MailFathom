@@ -209,11 +209,13 @@ published under — two, for the twelve commands that read something before they
 administrative permission at all is not an administrator, and every credential they hold is refused at sign-in. When a
 command is refused for want of one, it names the permission and says to give your user a role holding it, so the answer
 is to widen the user's roles rather than to replace the key. A role assigned over one organization or one user rather than
-the whole deployment is printed on a line of its own. Such a role reaches the users, the mail accounts, and the
-organization its scope covers on the routes that name one —
+the whole deployment is printed on a line of its own. Such a role reaches the users, the mail accounts with their
+mailboxes and contact books, and the organization its scope covers on the routes that name one —
 [a grant held below the deployment](../operations/admin-endpoint.md#a-grant-held-below-the-deployment) lists them — and
-nothing else. `mfctl user list` and `mfctl organization list` run under it show what that scope covers, and any other
-command naming no target is refused with a sentence saying the scope rather than the permission is what is missing.
+nothing else, and a user or a mail account outside it is answered as one the deployment does not hold. `mfctl user
+list`, `mfctl organization list`, `mfctl account list`, and `mfctl mailbox status` run under it show what that scope
+covers, and any other command naming no target is refused with a sentence saying the scope rather than the permission
+is what is missing.
 [What a credential may do](../operations/permissions.md) lists the names, what each covers, and which twelve commands need
 a second one; [what the endpoint serves](../operations/admin-endpoint.md#what-the-endpoint-serves) names the permission
 every route is published under.

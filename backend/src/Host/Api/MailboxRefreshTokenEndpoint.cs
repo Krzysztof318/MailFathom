@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
@@ -58,12 +59,13 @@ internal static class MailboxRefreshTokenEndpoint
         // process. A body over the limit is answered 413 before the handler is reached.
         api.MapPost(Route, StoreAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxRequestBytes))
-            .RequirePermission(MailFathomPermission.AdminCredentialsWrite);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminCredentialsWrite);
     }
 
     /// <summary>Stores one account's refresh token, or reports why it was not stored.</summary>
     /// <param name="request">The account and the token, as the client sent them.</param>
     /// <param name="recorder">The use case that checks the account and writes the token.</param>
+    /// <param name="authorization">Answers whether the caller's scope covers the named account, which is otherwise refused as one this deployment does not configure.</param>
     /// <param name="cancellationToken">Cancels the write when the client disconnects.</param>
     /// <returns><c>204</c> once the token is stored, or <c>400</c> naming what was wrong with the request.</returns>
     /// <remarks>
@@ -75,9 +77,11 @@ internal static class MailboxRefreshTokenEndpoint
     internal static async Task<Results<NoContent, ProblemHttpResult>> StoreAsync(
         MailboxRefreshTokenRequest? request,
         MailboxRefreshTokenRecorder recorder,
+        AccessAuthorization authorization,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(recorder);
+        ArgumentNullException.ThrowIfNull(authorization);
 
         if (string.IsNullOrWhiteSpace(request?.Account))
         {
@@ -91,6 +95,11 @@ internal static class MailboxRefreshTokenEndpoint
 
         var accountId = MailAccountId.Create(request.Account);
 
+        if (!await authorization.PermitsOverAsync(MailFathomPermission.AdminCredentialsWrite, accountId, cancellationToken))
+        {
+            return UnknownAccount(accountId);
+        }
+
         // Owned here and erased on the way out, because the request body is the one place the material arrives in a
         // form nothing can wipe; from here on it is only ever the domain value the store seals.
         using var refreshToken = MailboxRefreshToken.FromText(request.RefreshToken);
@@ -101,13 +110,15 @@ internal static class MailboxRefreshTokenEndpoint
         }
         catch (MailAccountNotAccessibleException)
         {
-            return TypedResults.Problem(
-                $"This deployment configures no mail account named '{accountId.Value}'.",
-                statusCode: StatusCodes.Status400BadRequest);
+            return UnknownAccount(accountId);
         }
 
         return TypedResults.NoContent();
     }
+
+    private static ProblemHttpResult UnknownAccount(MailAccountId accountId) => TypedResults.Problem(
+        $"This deployment configures no mail account named '{accountId.Value}'.",
+        statusCode: StatusCodes.Status400BadRequest);
 }
 
 /// <summary>The grant a client asks the deployment to keep for one of its accounts.</summary>

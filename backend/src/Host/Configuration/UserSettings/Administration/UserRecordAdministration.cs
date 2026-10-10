@@ -666,6 +666,41 @@ internal sealed class UserRecordAdministration(
     internal static IReadOnlyList<string> FindSecretsTheUserMayNotName(
         UserId user,
         string standingJson,
+        string candidateJson) =>
+    [
+        .. FindIntroducedSecretsProvisionedForNoneOf([user], standingJson, candidateJson)
+            .Select(path =>
+                $"{path} names a secret that was not provisioned for you: a reference is a path into what this deployment can read, and the mail server it would be presented to is yours. Name material this deployment holds for you — its own name begins with '{CredentialPrefixFor(user)}' — or ask whoever administers this deployment to declare the mailbox with 'mfctl account add'."),
+    ];
+
+    /// <summary>Names every secret-bearing value the candidate carries that an administrator below the deployment may not point a mail account at.</summary>
+    /// <param name="assignees">The users the account is, or would be, assigned to.</param>
+    /// <param name="standingJson">The settings the account holds now.</param>
+    /// <param name="candidateJson">The settings it would hold.</param>
+    /// <returns>One sentence per reference the change introduced that was provisioned for none of those users.</returns>
+    /// <remarks>
+    /// The bound <see cref="FindSecretsTheUserMayNotName" /> puts on a user is put on whoever administers them with less
+    /// than the whole deployment, for the same reason: the server a mail account names is whatever its declaration
+    /// says, so a reference written into one presents what stands behind it to a machine the writer chose. An
+    /// administrator of one organization is trusted with that organization's mailboxes and not with the database
+    /// password or another organization's credentials, so the material they may newly name is what was provisioned for
+    /// a user the account is assigned to. A reference the account already carries stays admissible, and a caller
+    /// holding the permission over the whole deployment is not asked this at all.
+    /// </remarks>
+    internal static IReadOnlyList<string> FindSecretsANarrowerScopeMayNotName(
+        IReadOnlyCollection<UserId> assignees,
+        string standingJson,
+        string candidateJson) =>
+    [
+        .. FindIntroducedSecretsProvisionedForNoneOf(assignees, standingJson, candidateJson)
+            .Select(path =>
+                $"{path} names a secret that was not provisioned for a user this mail account is assigned to: a reference is a path into what this deployment can read, and it is presented to whichever mail server the account names. A grant held below the deployment may name only material this deployment holds for one of those users — its own name begins with 'user-', that user's identifier, and '-'. Name such material, or ask an administrator holding the permission over the whole deployment to declare the reference."),
+    ];
+
+    /// <summary>Lists the paths of the secret-bearing values a change introduced that were provisioned for none of some users, in a stable order.</summary>
+    private static IReadOnlyList<string> FindIntroducedSecretsProvisionedForNoneOf(
+        IReadOnlyCollection<UserId> users,
+        string standingJson,
         string candidateJson)
     {
         var held = SecretValuesOf(RedactedDocumentSave.Flatten(standingJson));
@@ -675,11 +710,9 @@ internal sealed class UserRecordAdministration(
             .. RedactedDocumentSave.Flatten(candidateJson)
                 .Where(setting => NamesASecret(setting.Key)
                     && !held.Contains(setting.Value)
-                    && !NamesMaterialProvisionedFor(user, setting.Value))
+                    && !users.Any(user => NamesMaterialProvisionedFor(user, setting.Value)))
                 .Select(setting => setting.Key)
-                .Order(StringComparer.OrdinalIgnoreCase)
-                .Select(path =>
-                    $"{path} names a secret that was not provisioned for you: a reference is a path into what this deployment can read, and the mail server it would be presented to is yours. Name material this deployment holds for you — its own name begins with '{CredentialPrefixFor(user)}' — or ask whoever administers this deployment to declare the mailbox with 'mfctl account add'."),
+                .Order(StringComparer.OrdinalIgnoreCase),
         ];
     }
 

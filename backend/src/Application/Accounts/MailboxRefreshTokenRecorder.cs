@@ -75,7 +75,7 @@ public sealed class MailboxRefreshTokenRecorder
     {
         ArgumentNullException.ThrowIfNull(refreshToken);
 
-        this.authorization.RequirePermission(MailFathomPermission.AdminCredentialsWrite);
+        await this.authorization.RequirePermissionOverAsync(MailFathomPermission.AdminCredentialsWrite, accountId, cancellationToken);
 
         var served = await this.accountCatalog.ReadServedAccountsAsync([accountId], cancellationToken);
 

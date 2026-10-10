@@ -6,6 +6,7 @@ using MailFathom.Application.Access;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
+using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
@@ -105,6 +106,48 @@ public sealed class UnmirroredMailFolderEraserTests
         // Assert
         Assert.Equal(MailFathomPermission.AdminErase, refusal.RequiredPermission);
         Assert.Empty(store.Passes);
+    }
+
+    /// <summary>An organization's administrator naming a mailbox in another organization is refused by the use case itself, and none of its mail is erased.</summary>
+    [Fact]
+    public async Task EraseAsync_AnAccountOutsideTheCallersOrganization_IsRefusedAndErasesNothing()
+    {
+        // Arrange
+        var store = new RecordingMirrorStore(new MailFolderMirrorErasure(ErasedEmailCount: 4, EmailsRemain: false));
+        var eraser = EraserOver(
+            store,
+            maxEmailsPerPass: 500,
+            OrganizationAdministrators.Holding(
+                MailFathomPermission.AdminErase,
+                Account,
+                OrganizationAdministrators.OtherOrganization));
+
+        // Act
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            eraser.EraseAsync(Account, Junk, TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Empty(store.Passes);
+    }
+
+    [Fact]
+    public async Task EraseAsync_AnAccountInTheCallersOrganization_ErasesTheFolder()
+    {
+        // Arrange
+        var store = new RecordingMirrorStore(new MailFolderMirrorErasure(ErasedEmailCount: 4, EmailsRemain: false));
+        var eraser = EraserOver(
+            store,
+            maxEmailsPerPass: 500,
+            OrganizationAdministrators.Holding(
+                MailFathomPermission.AdminErase,
+                Account,
+                OrganizationAdministrators.AdministeredOrganization));
+
+        // Act
+        var erasure = await eraser.EraseAsync(Account, Junk, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(4, erasure.ErasedEmailCount);
     }
 
     /// <summary>A folder the source keeps messages in is what a held account's source removal record may name.</summary>

@@ -11,6 +11,7 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Exports;
 using MailFathom.Domain.Synchronization;
 using MailFathom.Host.Api;
+using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -77,6 +78,7 @@ public sealed class MailboxExportEndpointsTests
             folder: null,
             CatalogServing(Account),
             ExportsOver(reader: reader),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -103,6 +105,7 @@ public sealed class MailboxExportEndpointsTests
             folder: null,
             CatalogServing(Account),
             ExportsOver(archives: archives),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -132,6 +135,7 @@ public sealed class MailboxExportEndpointsTests
             Account.Value,
             CatalogServing(Account),
             ExportsOver(store: store),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -157,6 +161,7 @@ public sealed class MailboxExportEndpointsTests
             Account.Value,
             CatalogServing(Account),
             ExportsOver(store: store),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -181,6 +186,7 @@ public sealed class MailboxExportEndpointsTests
             new MailboxExportRequest(Account.Value, Folder: null),
             CatalogServing(Account),
             ExportsOver(store: store),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -211,6 +217,7 @@ public sealed class MailboxExportEndpointsTests
             Account.Value,
             CatalogServing(Account),
             ExportsOver(store: store, archives: archives),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -236,15 +243,50 @@ public sealed class MailboxExportEndpointsTests
 
         // Act
         var answers = await Task.WhenAll(
-            AsProblemAsync(async () => (await MailboxExportEndpoints.ReadAsync(Guid.Empty, Account.Value, accounts, exports, token)).Result),
-            AsProblemAsync(async () => (await MailboxExportEndpoints.CancelAsync(Guid.Empty, Account.Value, accounts, exports, token)).Result),
-            AsProblemAsync(async () => (await MailboxExportEndpoints.DeleteAsync(Guid.Empty, Account.Value, accounts, exports, token)).Result),
-            AsProblemAsync(async () => (await MailboxExportEndpoints.DownloadAsync(Guid.Empty, Account.Value, accounts, exports, token)).Result));
+            AsProblemAsync(async () => (await MailboxExportEndpoints.ReadAsync(Guid.Empty, Account.Value, accounts, exports, AdministrativeGrant.WholeSurface, token)).Result),
+            AsProblemAsync(async () => (await MailboxExportEndpoints.CancelAsync(Guid.Empty, Account.Value, accounts, exports, AdministrativeGrant.WholeSurface, token)).Result),
+            AsProblemAsync(async () => (await MailboxExportEndpoints.DeleteAsync(Guid.Empty, Account.Value, accounts, exports, AdministrativeGrant.WholeSurface, token)).Result),
+            AsProblemAsync(async () => (await MailboxExportEndpoints.DownloadAsync(Guid.Empty, Account.Value, accounts, exports, AdministrativeGrant.WholeSurface, token)).Result));
 
         // Assert
         Assert.All(answers, answer => Assert.Equal(StatusCodes.Status400BadRequest, answer.StatusCode));
         await store.DidNotReceive()
             .FindAsync(Arg.Any<MailAccountId>(), Arg.Any<MailboxExportId>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// The scope is asked before the identity is read, so a served account outside it is answered in the sentence an
+    /// unconfigured one is rather than by the one refusing an empty export identifier.
+    /// </summary>
+    [Fact]
+    public async Task DeleteAsync_AnAccountOutsideTheCallersOrganizationWithAnEmptyExportIdentity_RefusesItAsUnknown()
+    {
+        // Arrange
+        var store = Substitute.For<IMailboxExportStore>();
+        var archives = Substitute.For<IMailboxExportArchiveStore>();
+        var authorization = AccessAuthorizations.ForAdministratorScoped(
+            ScopedGrant.Of(
+            [
+                (MailFathomPermission.AdminExport,
+                    AssignmentScope.Organization(new Guid("0198f0aa-0000-7000-8000-0000000000ed"))),
+            ]),
+            new StatedAdministrativeTargets().WithMailAccount(Account, new Guid("0198f0aa-0000-7000-8000-0000000000ee")));
+
+        // Act
+        var result = await MailboxExportEndpoints.DeleteAsync(
+            Guid.Empty,
+            Account.Value,
+            CatalogServing(Account),
+            ExportsOver(store: store, archives: archives),
+            authorization,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(result.Result);
+        Assert.Equal(AdminAccountRequest.Refuse(Account.Value).ProblemDetails.Detail, refusal.ProblemDetails.Detail);
+        await store.DidNotReceive()
+            .FindAsync(Arg.Any<MailAccountId>(), Arg.Any<MailboxExportId>(), Arg.Any<CancellationToken>());
+        await archives.DidNotReceive().DeleteAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     private static async Task<ProblemHttpResult> AsProblemAsync(Func<Task<IResult>> route) =>

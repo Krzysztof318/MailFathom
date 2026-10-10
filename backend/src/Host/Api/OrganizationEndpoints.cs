@@ -82,7 +82,7 @@ internal static class OrganizationEndpoints
 
         api.MapPost(MailAccountOrganizationRoute, SetMailAccountOrganizationAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxRequestBytes))
-            .RequirePermission(MailFathomPermission.AdminConfigurationWrite);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminConfigurationWrite);
     }
 
     /// <summary>Lists one page of the organizations the caller's scopes cover.</summary>

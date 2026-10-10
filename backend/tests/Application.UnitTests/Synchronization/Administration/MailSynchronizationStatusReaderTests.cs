@@ -8,6 +8,7 @@ using MailFathom.Application.Coordination;
 using MailFathom.Application.Emails.AttachmentText.Administration;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Administration;
+using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
@@ -335,6 +336,28 @@ public sealed class MailSynchronizationStatusReaderTests
             });
         MailAccountId[] scopedTo = [.. coverage.Reads.Select(read => read!.Value)];
         Assert.Equal([Work, personal], scopedTo);
+    }
+
+    /// <summary>A listing never refuses on scope: an organization's administrator is answered with the mailboxes of their organization and told nothing about the rest.</summary>
+    [Fact]
+    public async Task ReadAsync_AnAdministratorOfOneOrganization_ReportsOnlyTheAccountsOfThatOrganization()
+    {
+        // Arrange
+        var personal = MailAccountId.Create("personal");
+        var reader = Reader(
+            new MailSynchronizationRunLedger(new FakeTimeProvider(Start)),
+            authorization: OrganizationAdministrators.Holding(
+                MailFathomPermission.AdminRead,
+                new StatedAdministrativeTargets()
+                    .WithMailAccount(Work, OrganizationAdministrators.AdministeredOrganization)
+                    .WithMailAccount(personal, OrganizationAdministrators.OtherOrganization)),
+            served: [Work, personal]);
+
+        // Act
+        var status = await reader.ReadAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal([Work], status.Accounts.Select(account => account.AccountId));
     }
 
     private static MailSynchronizationStatusReader Reader(
