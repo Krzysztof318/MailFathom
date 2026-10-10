@@ -13,7 +13,8 @@ namespace MailFathom.Cli.Commands.Users;
 /// <remarks>
 /// <para>
 /// The answer to "why can this person do that": one row per permission, role, and scope, naming the assignment that
-/// revokes it and the group it arrives through where it does not name the user directly. A permission held at a scope
+/// revokes it, the group it arrives through where it does not name the user directly, and the pattern on the role's
+/// list that reaches it where the role does not write the name out. A permission held at a scope
 /// it cannot act on — one whose every operation is the deployment's alone, given at an organization — is listed and
 /// marked rather than left out, because it is still recorded and still what an operator has to revoke.
 /// </para>
@@ -104,13 +105,14 @@ internal static class ExplainUserPermissionsCommand
 
     private static CliTable Draw(IReadOnlyList<GrantSource> sources)
     {
-        CliTable listing = new("Permission", "Role", "Through", "Scope", "Assignment", "Effect");
+        CliTable listing = new("Permission", "Role", "Listed as", "Through", "Scope", "Assignment", "Effect");
 
         foreach (var source in sources)
         {
             listing.AddRow(
                 ConsoleSafeText.Sanitize(source.Permission) ?? "unreported",
                 ConsoleSafeText.Sanitize(source.Role) ?? $"{source.RoleId:D}",
+                ConsoleSafeText.Sanitize(source.Pattern) is { } pattern ? $"pattern {pattern}" : "the name",
                 source.GroupId is { } group
                     ? $"group {ConsoleSafeText.Sanitize(source.Group) ?? $"{group:D}"}"
                     : "directly",

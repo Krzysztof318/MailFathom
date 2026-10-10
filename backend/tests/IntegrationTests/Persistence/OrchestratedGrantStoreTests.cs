@@ -46,12 +46,14 @@ public sealed class OrchestratedGrantStoreTests(MailFathomOrchestrationFixture o
         AdministrativeListingQuery.Create(AdministrativeListingQuery.MaximumPageSize, after: null)!;
 
     /// <summary>
-    /// The seeded lists are fixed by the migration that wrote them, so they are stated here as the names it wrote rather
-    /// than read from what this build publishes: a later release publishing a permission adds it to none of them, and a
-    /// name this build does not publish yet is still on the row, reported rather than granted.
+    /// The two lists written out by name are fixed by the migration that wrote them, so they are stated here as the names
+    /// it wrote rather than read from what this build publishes: a later release publishing a permission adds it to
+    /// neither, and a name this build does not publish yet is still on the row, reported rather than granted.
+    /// <c>Administrator</c> is the one the later migration rewrote, and what proves the rewrite ran is the entry as it is
+    /// stored: the single pattern, which reaches everything this build publishes rather than a list that happens to.
     /// </summary>
     [Fact]
-    public async Task ReadRolesAsync_TheSeededRoles_ListExactlyTheNamesTheMigrationWrote()
+    public async Task ReadRolesAsync_TheSeededRoles_ListWhatTheMigrationsWrote()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -69,14 +71,99 @@ public sealed class OrchestratedGrantStoreTests(MailFathomOrchestrationFixture o
                 "mailfathom.admin.read", "mailfathom.admin.roles.write",
             ],
             ListedNames(roles, "Organization administrator"));
-        Assert.Equal(
-            [
-                "mailfathom.admin.audit.read", "mailfathom.admin.configuration.write",
-                "mailfathom.admin.credentials.write", "mailfathom.admin.custody.write", "mailfathom.admin.erase",
-                "mailfathom.admin.export", "mailfathom.admin.operate", "mailfathom.admin.read",
-                "mailfathom.admin.roles.write", "mailfathom.admin.spend", .. MailHalf,
-            ],
-            ListedNames(roles, "Administrator"));
+        var administrator = Assert.Single(roles, role => role.Name == "Administrator").Permissions;
+
+        Assert.Equal(["*"], administrator.Written);
+        Assert.Equal(MailFathomPermission.All, administrator.Granted);
+        Assert.Empty(administrator.Unpublished);
+    }
+
+    /// <summary>
+    /// A pattern is one row holding what was written, and everything a grant is read by resolves it: what the holder
+    /// holds at the assignment's scope, which entry each permission is traced to, and that the role is one a release
+    /// can widen — asked of a user holding it directly, of one holding it only through a group, and of the group.
+    /// </summary>
+    [Fact]
+    public async Task CreateRoleAsync_AListCarryingAPattern_IsStoredAsWrittenAndResolvedWhereverAGrantIsRead()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var user = Guid.CreateVersion7();
+        var member = Guid.CreateVersion7();
+        var bystander = Guid.CreateVersion7();
+        var role = Guid.CreateVersion7();
+        var namedRole = Guid.CreateVersion7();
+        var group = Guid.CreateVersion7();
+        var assignment = Guid.CreateVersion7();
+        await ProvisionUserAsync(services, user, cancellationToken);
+        await ProvisionUserAsync(services, member, cancellationToken);
+        await ProvisionUserAsync(services, bystander, cancellationToken);
+        Assert.True(RolePermissions.TryCreate(["mailfathom.mail.read", "mailfathom.mail.contacts.*"], out var listed, out _));
+
+        try
+        {
+            await services.InScopeAsync(
+                (scope, token) => Store(scope).CreateRoleAsync(role, $"role-{role:N}", listed!, RecordedAt, token),
+                cancellationToken);
+            await CreateRoleAsync(services, namedRole, $"role-{namedRole:N}", cancellationToken);
+            await services.InScopeAsync(
+                (scope, token) => Store(scope).CreateGroupAsync(group, $"group-{group:N}", organizationId: null, RecordedAt, token),
+                cancellationToken);
+            await services.InScopeAsync(
+                (scope, token) => Store(scope).AddGroupMemberAsync(group, UserId.Create(member), RecordedAt, token),
+                cancellationToken);
+            await AssignAsync(services, assignment, role, AssignmentPrincipal.User(UserId.Create(user)), AssignmentScope.User(UserId.Create(user)), cancellationToken);
+            await AssignAsync(services, role, AssignmentPrincipal.Group(group), AssignmentScope.Deployment, cancellationToken);
+            await AssignAsync(services, namedRole, AssignmentPrincipal.User(UserId.Create(bystander)), AssignmentScope.Deployment, cancellationToken);
+
+            // Act
+            var stored = Assert.Single(await ReadEveryRoleAsync(services, cancellationToken), candidate => candidate.Id == role);
+            var held = await services.InScopeAsync((scope, token) => Store(scope).ReadGrantOfAsync(UserId.Create(user), token), cancellationToken);
+            var sources = await services.InScopeAsync(
+                (scope, token) => Store(scope).ReadGrantSourcesOfAsync(UserId.Create(user), GrantListingReach.Deployment, 100, token),
+                cancellationToken);
+            var bounded = await services.InScopeAsync(
+                (scope, token) => Store(scope).ReadGrantSourcesOfAsync(UserId.Create(user), GrantListingReach.Deployment, 2, token),
+                cancellationToken);
+            var directly = await HoldsWideningRoleAsync(services, AssignmentPrincipal.User(UserId.Create(user)), cancellationToken);
+            var throughTheGroup = await HoldsWideningRoleAsync(services, AssignmentPrincipal.User(UserId.Create(member)), cancellationToken);
+            var theGroup = await HoldsWideningRoleAsync(services, AssignmentPrincipal.Group(group), cancellationToken);
+            var byNameAlone = await HoldsWideningRoleAsync(services, AssignmentPrincipal.User(UserId.Create(bystander)), cancellationToken);
+
+            // Assert
+            Assert.Equal(["mailfathom.mail.read", "mailfathom.mail.contacts.*"], stored.Permissions.Written);
+            Assert.Equal(
+                new HashSet<MailFathomPermission>
+                {
+                    MailFathomPermission.MailRead, MailFathomPermission.MailContactsRead, MailFathomPermission.MailContactsWrite,
+                },
+                held.Permissions.ToHashSet());
+            Assert.Equal([AssignmentScope.User(UserId.Create(user))], held.ScopesOf(MailFathomPermission.MailContactsWrite));
+            Assert.Equal(
+                new HashSet<(string, string?, Guid)>
+                {
+                    ("mailfathom.mail.read", null, assignment),
+                    ("mailfathom.mail.contacts.read", "mailfathom.mail.contacts.*", assignment),
+                    ("mailfathom.mail.contacts.write", "mailfathom.mail.contacts.*", assignment),
+                },
+                sources.Select(source => (source.Permission.Name, source.Pattern, source.AssignmentId)).ToHashSet());
+            Assert.Equal(2, bounded.Count);
+            Assert.True(directly);
+            Assert.True(throughTheGroup);
+            Assert.True(theGroup);
+            Assert.False(byNameAlone);
+        }
+        finally
+        {
+            await OrchestratedForeignUser.EraseAsync(services, user);
+            await OrchestratedForeignUser.EraseAsync(services, member);
+            await OrchestratedForeignUser.EraseAsync(services, bystander);
+            await RevokeEveryAssignmentOfRoleAsync(services, role);
+            await services.InScopeAsync((scope, token) => Store(scope).DeleteGroupAsync(group, token), CancellationToken.None);
+            await DeleteRoleAsync(services, role);
+            await DeleteRoleAsync(services, namedRole);
+        }
     }
 
     [Fact]
@@ -775,6 +862,13 @@ public sealed class OrchestratedGrantStoreTests(MailFathomOrchestrationFixture o
             cancellationToken);
 
     private static IGrantStore Store(IServiceProvider scope) => scope.GetRequiredService<IGrantStore>();
+
+    private static Task<bool> HoldsWideningRoleAsync(
+        OrchestratedMailFathomServices services,
+        AssignmentPrincipal principal,
+        CancellationToken cancellationToken) => services.InScopeAsync(
+            (scope, token) => Store(scope).HoldsWideningRoleAsync(principal, token),
+            cancellationToken);
 
     private static string[] ListedNames(IReadOnlyList<Role> roles, string name)
     {

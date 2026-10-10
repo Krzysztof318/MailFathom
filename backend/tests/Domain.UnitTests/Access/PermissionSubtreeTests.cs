@@ -7,9 +7,9 @@ using Xunit;
 
 namespace MailFathom.Domain.UnitTests.Access;
 
-/// <summary>Covers the wildcard shorthand a grant may name a whole part of the vocabulary with.</summary>
+/// <summary>Covers the wildcard shorthand a role may name a whole part of the vocabulary with.</summary>
 /// <remarks>
-/// What is asserted here is the syntax and the reach, because both are read from an operator's own configuration file:
+/// What is asserted here is the syntax and the reach, because both are read from what an operator wrote in a role:
 /// which written values are a subtree at all, which published names each one reaches, and that the reach is computed
 /// from the published set every time rather than fixed when the value was parsed. A wildcard stands for one or more
 /// whole segments at whatever position it is written, so the trailing form is asserted as one case of that rule rather
@@ -145,28 +145,58 @@ public sealed class PermissionSubtreeTests
     [Theory]
     [InlineData("*")]
     [InlineData("mailfathom.*")]
-    public void ReachesEveryPublishedPermission_AValueSpanningBothSurfaces_SaysSo(string written)
+    public void CoveredPermissions_AValueSpanningBothSurfaces_ReachesTheWholePublishedSet(string written)
     {
         // Arrange
         Assert.True(PermissionSubtree.TryParse(written, out var subtree));
 
         // Act, Assert
-        Assert.True(subtree.ReachesEveryPublishedPermission());
         Assert.Equal(MailFathomPermission.All, subtree.CoveredPermissions());
     }
 
-    [Theory]
-    [InlineData("mailfathom.mail.*")]
-    [InlineData("mailfathom.admin.*")]
-    [InlineData("mailfathom.admin.audit.*")]
-    [InlineData("mailfathom.*.read")]
-    public void ReachesEveryPublishedPermission_ASubtreeShortOfTheWholeVocabulary_SaysItDoesNot(string written)
+    /// <summary>
+    /// A store finds the roles giving one name by comparing stored entries against this list, so it has to be exactly
+    /// the patterns that reach the name: one left out is a root the last-root refusal does not count, and one too many
+    /// is a role counted as a root that is not one. Held against every pattern that can be written from the name's own
+    /// segments, since a segment taken from anywhere else reaches nothing here.
+    /// </summary>
+    [Fact]
+    public void WritingsReaching_ThePermissionTheRootIs_ListsExactlyThePatternsWhoseReachHoldsIt()
     {
         // Arrange
-        Assert.True(PermissionSubtree.TryParse(written, out var subtree));
+        var root = MailFathomPermission.AdminRolesWrite;
+        string[] alphabet = [.. root.Name.Split('.'), "*"];
 
+        var writable = Enumerable.Range(1, root.Name.Split('.').Length)
+            .Aggregate(
+                (IEnumerable<string[]>)[[]],
+                (shorter, _) => [.. shorter, .. shorter.SelectMany(prefix => alphabet.Select(segment => (string[])[.. prefix, segment]))])
+            .Where(segments => segments.Length > 0)
+            .Select(segments => string.Join('.', segments))
+            .Distinct(StringComparer.Ordinal);
+
+        string[] reaching =
+        [
+            .. writable
+                .Where(written => PermissionSubtree.TryParse(written, out var subtree) && subtree.CoveredPermissions().Contains(root))
+                .Order(StringComparer.Ordinal),
+        ];
+
+        // Act
+        var writings = PermissionSubtree.WritingsReaching(root);
+
+        // Assert
+        Assert.Equal(reaching, writings);
+        Assert.Contains("*", writings);
+        Assert.Contains("mailfathom.admin.*.write", writings);
+        Assert.DoesNotContain(root.Name, writings);
+    }
+
+    [Fact]
+    public void WritingsReaching_TheUnspecifiedDefault_IsRefused()
+    {
         // Act, Assert
-        Assert.False(subtree.ReachesEveryPublishedPermission());
+        Assert.Throws<ArgumentException>(() => PermissionSubtree.WritingsReaching(default));
     }
 
     /// <summary>

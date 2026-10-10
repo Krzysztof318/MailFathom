@@ -6112,6 +6112,12 @@
           "inert": {
             "type": "boolean"
           },
+          "pattern": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "permission": {
             "type": "string"
           },
@@ -6128,6 +6134,7 @@
         },
         "required": [
           "permission",
+          "pattern",
           "roleId",
           "role",
           "assignmentId",
@@ -10125,6 +10132,24 @@
         ],
         "type": "object"
       },
+      "RolePatternResponse": {
+        "properties": {
+          "pattern": {
+            "type": "string"
+          },
+          "reaches": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "pattern",
+          "reaches"
+        ],
+        "type": "object"
+      },
       "RolePermissionsRequest": {
         "properties": {
           "permissions": {
@@ -10179,6 +10204,12 @@
           "name": {
             "type": "string"
           },
+          "patterns": {
+            "items": {
+              "$ref": "#/components/schemas/RolePatternResponse"
+            },
+            "type": "array"
+          },
           "permissions": {
             "items": {
               "type": "string"
@@ -10196,6 +10227,7 @@
           "id",
           "name",
           "permissions",
+          "patterns",
           "unpublished",
           "createdAt"
         ],

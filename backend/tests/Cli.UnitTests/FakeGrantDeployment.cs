@@ -101,6 +101,7 @@ internal static class FakeGrantDeployment
     /// <param name="group">The group's name where the assignment reaches the user through one, or <see langword="null" />.</param>
     /// <param name="scope">Where the permission is held.</param>
     /// <param name="inert">Whether it reaches nothing there.</param>
+    /// <param name="pattern">The pattern on the role's list that reaches the permission, or <see langword="null" /> where the role lists it by name.</param>
     /// <returns>The source, as an element of the explanation's array.</returns>
     internal static string Source(
         string permission,
@@ -108,8 +109,9 @@ internal static class FakeGrantDeployment
         Guid assignment,
         string? group,
         (string Kind, Guid? Id) scope,
-        bool inert = false) =>
-        $$"""{"permission":"{{permission}}","roleId":"{{Guid.Empty:D}}","role":{{JsonSerializer.Serialize(role)}},"assignmentId":"{{assignment:D}}","groupId":{{(group is null ? "null" : "\"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\"")}},"group":{{JsonSerializer.Serialize(group)}},"scope":{{Reference(scope.Kind, scope.Id)}},"inert":{{(inert ? "true" : "false")}}}""";
+        bool inert = false,
+        string? pattern = null) =>
+        $$"""{"permission":"{{permission}}","pattern":{{JsonSerializer.Serialize(pattern)}},"roleId":"{{Guid.Empty:D}}","role":{{JsonSerializer.Serialize(role)}},"assignmentId":"{{assignment:D}}","groupId":{{(group is null ? "null" : "\"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\"")}},"group":{{JsonSerializer.Serialize(group)}},"scope":{{Reference(scope.Kind, scope.Id)}},"inert":{{(inert ? "true" : "false")}}}""";
 
     private static string Reference(string kind, Guid? id) =>
         $$"""{"kind":"{{kind}}","id":{{(id is { } named ? $"\"{named:D}\"" : "null")}}}""";

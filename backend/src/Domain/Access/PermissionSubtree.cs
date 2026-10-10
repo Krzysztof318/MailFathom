@@ -7,29 +7,29 @@ namespace MailFathom.Domain.Access;
 /// <summary>A written shorthand for every published permission a wildcard pattern reaches within the name space.</summary>
 /// <remarks>
 /// <para>
-/// It is what an operator writes in a grant as <c>mailfathom.admin.*</c> rather than as the six names that prefix
-/// reaches, and as <c>mailfathom.*.read</c> rather than as the reading names that sit at two different depths. The
-/// syntax is one <c>*</c> occupying a whole dot-separated segment, standing for one or more consecutive segments, at
-/// any position and more than once; a trailing wildcard is that rule applied to the last segment rather than a form of
-/// its own. There is no partial segment, so <c>mailfathom.mail.c*</c> names nothing and is left to be refused as the
-/// unpublished name it is.
+/// It is what an operator writes in a role as <c>mailfathom.admin.*</c> rather than as every name that prefix reaches,
+/// and as <c>mailfathom.*.read</c> rather than as the reading names that sit at two different depths. The syntax is one
+/// <c>*</c> occupying a whole dot-separated segment, standing for one or more consecutive segments, at any position
+/// and more than once; a trailing wildcard is that rule applied to the last segment rather than a form of its own, and
+/// <c>*</c> alone is the pattern reaching every name. There is no partial segment, so <c>mailfathom.mail.c*</c> names
+/// nothing and is left to be refused as the unpublished name it is.
 /// </para>
 /// <para>
 /// A subtree resolves against <see cref="MailFathomPermission.All" /> whenever it is asked rather than being frozen
-/// when it is parsed, which is what makes it shorthand for the surface rather than for the names published the day the
-/// configuration file was written: a permission added where a written pattern reaches in a later release reaches a
-/// grant that already names it.
+/// when it is parsed, which is what makes it shorthand for the surface rather than for the names published the day it
+/// was written: a permission added where a written pattern reaches in a later release reaches a role that already
+/// lists the pattern, and everybody that role is assigned to.
 /// </para>
 /// <para>
 /// What it reaches is the whole published set rather than one protected surface's half, because a pattern with a
-/// wildcard before its last segment can name permissions of both — <c>mailfathom.*.read</c> is the worked example. The
-/// half an entry may actually grant is the entry's own question and is answered where a grant is validated, which is
-/// also where a pattern reaching only the other surface, or reaching everything, is refused.
+/// wildcard before its last segment can name permissions of both — <c>mailfathom.*.read</c> is the worked example —
+/// and a role may hold names of both.
 /// </para>
 /// <para>
-/// It is only ever read from a deployment's own configuration. A token never carries one — a scope is compared byte
-/// for byte at the authorization server, so nothing could mint a pattern — and neither does a published metadata
-/// document, which states the resolved names instead.
+/// A role's list is the one place a pattern is accepted, which <see cref="RolePermissions" /> decides. A credential's
+/// list and a token's scopes name permissions exactly: a scope is compared byte for byte at the authorization server,
+/// so nothing could mint a pattern, and a configured scope written as one is refused for what it would have granted
+/// had it been written in a role.
 /// </para>
 /// <para>
 /// Being a struct, <see langword="default" /> is reachable and names no subtree. It reports itself through
@@ -63,9 +63,8 @@ public readonly record struct PermissionSubtree
     /// <returns><see langword="true" /> when the value is written as a subtree; otherwise <see langword="false" />.</returns>
     /// <remarks>
     /// Answering <see langword="true" /> says the operator asked for a subtree and never that the subtree is one this
-    /// deployment can grant. A pattern nothing publishes beneath, a pattern belonging to the other protected surface,
-    /// and the whole name space each parse here and are refused where a grant is validated, because each needs a
-    /// different thing said about it than "that is not a permission".
+    /// build can grant. A pattern nothing is published beneath parses here and is refused where a role is written,
+    /// because it needs a different thing said about it than "that is not a permission".
     /// </remarks>
     public static bool TryParse(string? written, out PermissionSubtree subtree)
     {
@@ -91,15 +90,31 @@ public readonly record struct PermissionSubtree
         ];
     }
 
-    /// <summary>Reports whether this subtree reaches the whole vocabulary rather than one part of it.</summary>
-    /// <returns><see langword="true" /> when every published permission is covered; otherwise <see langword="false" />.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the value is the struct default rather than a subtree.</exception>
+    /// <summary>Lists every way a pattern reaching one published permission can be written.</summary>
+    /// <param name="permission">The permission.</param>
+    /// <returns>Each written pattern that reaches the permission, in ordinal order.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="permission" /> is the unspecified struct default.</exception>
     /// <remarks>
-    /// Such a value spans both protected surfaces, so it can never be shorthand for a subtree of the one being
-    /// configured, and what it would resolve to on either is exactly what an entry writing no grant at all already
-    /// says. It is read rather than declared, so it stays true of whatever the published set becomes.
+    /// The set is finite, because every segment of such a pattern is either a segment of the name or a wildcard taking
+    /// one or more of them. It is what lets a store ask which stored lists reach one name as an equality over these
+    /// strings, rather than matching patterns a second time in a query language that would have to agree with this type.
     /// </remarks>
-    public bool ReachesEveryPublishedPermission() => this.CoveredPermissions().Count == MailFathomPermission.All.Count;
+    public static IReadOnlyList<string> WritingsReaching(MailFathomPermission permission)
+    {
+        if (!permission.IsSpecified)
+        {
+            throw new ArgumentException("A pattern reaches a published permission.", nameof(permission));
+        }
+
+        return
+        [
+            .. Writings(permission.Name.Split(SegmentSeparator), from: 0)
+                .Where(segments => segments.Contains(Wildcard, StringComparer.Ordinal))
+                .Select(segments => string.Join(SegmentSeparator, segments))
+                .Distinct(StringComparer.Ordinal)
+                .Order(StringComparer.Ordinal),
+        ];
+    }
 
     /// <inheritdoc />
     public override string ToString() => this.written ?? "(unspecified)";
@@ -131,6 +146,23 @@ public readonly record struct PermissionSubtree
         }
 
         return carriesAWildcard;
+    }
+
+    /// <summary>Writes every sequence of segments that reaches a name's segments from one position onwards.</summary>
+    /// <remarks>The inverse of <see cref="Covers" />: a segment is written out, or a wildcard takes it and any number of those after it.</remarks>
+    private static string[][] Writings(string[] name, int from)
+    {
+        if (from == name.Length)
+        {
+            return [[]];
+        }
+
+        return
+        [
+            .. Writings(name, from + 1).Select(rest => (string[])[name[from], .. rest]),
+            .. Enumerable.Range(from + 1, name.Length - from)
+                .SelectMany(next => Writings(name, next).Select(rest => (string[])[Wildcard, .. rest])),
+        ];
     }
 
     /// <summary>Reports whether a pattern's segments reach a published name's segments.</summary>

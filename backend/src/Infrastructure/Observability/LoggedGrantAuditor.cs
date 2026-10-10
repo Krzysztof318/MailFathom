@@ -51,7 +51,7 @@ internal sealed partial class LoggedGrantAuditor(ILogger<LoggedGrantAuditor> log
                 change.Act,
                 change.RecordId,
                 change.Permissions is { } permissions
-                    ? string.Join(' ', permissions.Select(permission => permission.Name))
+                    ? string.Join(' ', permissions)
                     : "-",
                 change.ActingAdministrator,
                 change.OccurredAt);

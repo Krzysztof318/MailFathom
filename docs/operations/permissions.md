@@ -41,7 +41,7 @@ two disjoint halves, and the prefix after `mailfathom.` says which half a name b
 | `mailfathom.admin.custody.write` | administrative | Deciding which copy of one account's mailbox is the truth: reading it is `mailfathom.admin.read`, and changing it is this. Switching an account into [holding its mailbox](../features/held-mailboxes.md) is the one administrative act here that ends with a mail server no longer holding a copy of somebody's mailbox, so it is a name of its own that neither the configuration writer nor the erasure grant confers — a credential that may rewrite settings must not thereby be able to empty a source server. Every switch is written to the service log as an audit record naming who asked, the account, the value it moved from and to, and every reason a refused one was refused. No configuration value changes an account's custody, which is [ADR 0034](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md). It publishes no MCP tool |
 | `mailfathom.admin.export` | administrative | Carrying a whole mailbox, or one folder of it, out of this deployment as an archive: measuring what an export would carry, starting one, following it, downloading the finished archive, cancelling one still being written, and deleting one before its retention ends. It is a name of its own that no reading grant confers, because reading a message and carrying an entire mailbox away are different acts with different consequences — the archive is the mail, the folder structure, the flags, and the keywords, in a form a person opens on their own machine. It sits on the administrative surface because that is the surface the routes are served on, and the client offers no export at all, which is [ADR 0028](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0028-no-mail-on-the-device-and-an-honest-client-with-no-route-to-its-deployment.md). [The archive of a drained mailbox](mailbox-export.md) is the operation |
 | `mailfathom.admin.configuration.write` | administrative | Changing the deployment's own [persisted configuration](configuration-sources.md#changing-a-persisted-setting): persisting a setting, stopping the document carrying one, saving an edited document, and adopting what the files decide beneath a path. It also covers **who this deployment serves and what it reads for them** — recording a user, relabelling one, saving one user's record, and declaring or withdrawing a mailbox in it. Reading the settings and the records is `mailfathom.admin.read`, so a credential may be told where a value is decided without being able to decide it |
-| `mailfathom.admin.roles.write` | administrative | Deciding who holds what: defining, renaming, editing, and deleting a role, recording, renaming, and deleting a group and changing who belongs to it, and giving and revoking role assignments. Defining a role is the deployment's alone, so it needs this name at the deployment scope, which is **the root**: its holder can write themselves any name. Held over one organization it reaches that organization's groups, their members, and the assignments inside it, and never gives a name its holder does not hold there. Reading roles, groups, assignments, and why a user holds each name is `mailfathom.admin.read`; [administering roles, groups, and assignments](#administering-roles-groups-and-assignments) holds the rules |
+| `mailfathom.admin.roles.write` | administrative | Deciding who holds what: defining, renaming, editing, and deleting a role, recording, renaming, and deleting a group and changing who belongs to it, and giving and revoking role assignments. Defining a role is the deployment's alone, so it needs this name at the deployment scope, which is **the root**: its holder can write themselves any name. Held over one organization it reaches that organization's groups, their members, and the assignments inside it, and never gives a name its holder does not hold there, nor [a role that lists a pattern](#a-pattern-in-a-roles-list), which the root alone gives. Reading roles, groups, assignments, and why a user holds each name is `mailfathom.admin.read`; [administering roles, groups, and assignments](#administering-roles-groups-and-assignments) holds the rules |
 
 **Three surfaces draw on those two halves.** The MCP endpoint and the client endpoint each draw on the mail half — the
 client reads the mail an agent reads, and a second vocabulary for one authority would be two things to keep in step —
@@ -256,10 +256,12 @@ describes the tables and what each seeded role lists.
 ### How a caller's grant is computed
 
 **A user's grant is the union of every assignment that reaches them**: the ones naming the user, and the ones naming a
-group the user belongs to. Each permission a role lists is held at the scope of the assignment that gave it — the
-deployment, one organization, or one user — and a permission two assignments give is held at both scopes. There is no
-deny and no order between assignments, so adding one can only add, and the only way to take a permission away is to
-revoke, narrow, or delete what gave it. A name a stored role lists that this build does not publish grants nothing.
+group the user belongs to. Each permission a role grants — one it lists by name, and one
+[a pattern on its list](#a-pattern-in-a-roles-list) reaches in the build answering — is held at the scope of the
+assignment that gave it — the deployment, one organization, or one user — and a permission two assignments give is held
+at both scopes. There is no deny and no order between assignments, so adding one can only add, and the only way to take
+a permission away is to revoke, narrow, or delete what gave it. A name a stored role lists that this build does not
+publish grants nothing, and neither does a stored pattern reaching nothing it publishes.
 
 **A caller on a mail surface holds that grant kept to what its credential names**, and then, on an entry with
 `PermissionsFromTokenScopes`, to what its token's scopes carry. Each of those only keeps names: a name the credential
@@ -314,6 +316,11 @@ organizations, groups, and role assignments its scope covers; every other route 
 and refuses such a holder in
 that same shape.
 
+**Giving a role that lists a pattern is the root's alone as well, and is refused in a shape of its own.** The routes
+that give a role and place a credential are answered at any covering scope for a role of names, so what decides is the
+role rather than the operation — [a pattern in a role's list](#a-pattern-in-a-roles-list) holds the rule and the
+refusal.
+
 **`mailfathom.admin.spend` held below the deployment reaches nothing.** A role is assigned whole, so a role carrying it —
 the seeded `Administrator` among them — may be assigned over an organization or a user and grants its other names there.
 The spending name is not refused there, and it is not counted either: `GET /api/admin/session` and `mfctl status` report
@@ -336,8 +343,9 @@ held at a scope covering what the act names — the group, the user, and the sco
 
 **A role is the deployment's vocabulary, so only the root defines one.** Recording a role, renaming it, replacing the
 list it grants, and deleting it each need `mailfathom.admin.roles.write` at the deployment scope, and its holder may
-list any published name. **Granting that name at the deployment scope is therefore granting everything**, because its
-holder can write themselves any name. Every holder of `mailfathom.admin.read` reads every role, wherever they hold it.
+list any published name and any [pattern](#a-pattern-in-a-roles-list) reaching one. **Granting that name at the
+deployment scope is therefore granting everything**, because its holder can write themselves any name. Every holder of
+`mailfathom.admin.read` reads every role, wherever they hold it.
 
 **Held over one organization, the writing grant reaches that organization and nothing beside it.** Its holder records,
 renames, and deletes groups in that organization, changes who belongs to them, and gives and revokes assignments whose
@@ -349,11 +357,14 @@ administrator nothing about it, and the listings answer with what the caller's s
 **Nobody grants more than they hold, or wider than they hold it.** Each refusal names the permission and leaves nothing
 written:
 
-- **Assigning a role** needs every name the role lists held by the writer at a scope covering the assignment's scope.
+- **Assigning a role** needs every name the role grants held by the writer at a scope covering the assignment's scope.
   A mail name's scope is never read, so it needs only to be held somewhere. `mailfathom.admin.spend` has no operation
   below the deployment scope, so giving it at a narrower scope gives nothing and is not asked about.
 - **Adding a user to a group** is receiving every assignment the group holds, so it needs every name those assignments
   give held by the writer at a scope covering each of them, under the same two allowances.
+- **Giving a role that lists a pattern** — assigning it, or adding a member to a group an assignment gives it to —
+  needs the root on top of both, whatever scope the write names, because what a pattern comes to hold is nothing its
+  giver holds today. [A pattern in a role's list](#a-pattern-in-a-roles-list) holds that rule.
 - **Revoking an assignment and removing a member** need the coverage and nothing held, because taking a grant away
   widens nobody.
 
@@ -362,28 +373,97 @@ it, so the operator revokes each of them first; deleting one silently would take
 to.
 
 **Three writes cannot take the last root away.** Revoking the last assignment that gives
-`mailfathom.admin.roles.write` at the deployment scope to a user who still holds it, taking that name out of the last
-role giving it there, and removing the last member through whom a group gives it are each refused with `409`, because a
-deployment nobody can administer is recovered only through its database. The check and the write share one transaction
-under a lock on every role carrying the name, so two administrators each removing a different root at once cannot both
-succeed. Give the name to somebody else first. **Erasing a user is not one of the three, and neither is moving one**:
+`mailfathom.admin.roles.write` at the deployment scope to a user who still holds it, replacing the list of the last
+role giving it there with one that no longer does, and removing the last member through whom a group gives it are each
+refused with `409`, because a deployment nobody can administer is recovered only through its database. A role gives
+the name by listing it or by listing a pattern that reaches it — `*`, `mailfathom.admin.*`, `mailfathom.admin.*.write` —
+and either counts as holding the root. The check and the write share one transaction under a lock on every role giving
+the name, so two administrators each removing a different root at once cannot both succeed. Give the name to somebody
+else first. **Erasing a user is not one of the three, and neither is moving one**:
 erasing the last user who holds the name removes their assignments with them, moving them out of the organization
 whose group gives it to them ends what that group gave, and neither is refused, so check `mfctl user permissions` for
 another holder before erasing or moving an administrator.
 
 **`mfctl user permissions` explains a user's grant, within your own scope.** For each name the user holds it reports the
-role it came from, whether it was given directly or through which group, the scope it is held at, and whether that
-scope makes it reach nothing; then, for each of the user's credentials, what that credential keeps of what was listed.
+role it came from, whether that role lists the name itself or a pattern reaching it, whether it was given directly or
+through which group, the scope it is held at, and whether that scope makes it reach nothing; then, for each of the
+user's credentials, what that credential keeps of what was listed.
 It needs `mailfathom.admin.read` over the user, and it reads the assignments its caller could already list: a name the
 user holds through a group or at a scope the caller's grant does not cover is left out, so an organization's
 administrator reads that organization's part of a member's grant and nothing the deployment gave them. One explanation
 carries at most 1000 rows; past that it says it is a part of the answer, and `mfctl assignment list` pages the rest.
 
 **Every change is recorded.** Each write that changed something is written to the deployment's log after it committed,
-as one line naming the act, the role, group, user, or assignment it changed, a role's new list where the act set one,
-and the administrator it was admitted as. Adding somebody who is already a member and removing somebody who is not
+as one line naming the act, the role, group, user, or assignment it changed, a role's new list where the act set one —
+each entry as it was written, a pattern as the pattern rather than as the names it reached that day — and the
+administrator it was admitted as. Adding somebody who is already a member and removing somebody who is not
 change nothing, so they are answered as a success and leave no line. No line carries a role's or a group's name,
 because the identifier is what stays the same across a rename.
+
+### A pattern in a role's list
+
+**A role's list takes a pattern beside the names it writes out.** In a pattern `*` is a whole dot-separated segment
+standing for one or more consecutive segments, at any position and more than once:
+
+| Written | What it reaches |
+| --- | --- |
+| `mailfathom.admin.*` | Every administrative name |
+| `mailfathom.admin.*.write` | The administrative names ending in `.write` |
+| `mailfathom.*.read` | The names ending in `.read` in both halves, at whatever depth each sits |
+| `*` | The whole published set, both halves |
+
+A wildcard never stands for no segment, so `mailfathom.mail.*` reaches what is beneath that prefix and never the prefix
+itself. It never shares a segment either: `mailfathom.mail.c*` is not a pattern, and is refused as the unpublished name
+it is.
+
+**The pattern is stored as it was written and resolved on every read**, against the set the build answering publishes.
+So a role listing one **widens on upgrade**: a permission a later release publishes within the pattern's reach is held
+by everybody the role is assigned to from the release that publishes it, and nobody edits the role for that to happen.
+A role of names alone stays exactly as wide as somebody wrote it, whatever a release adds. While a rolling upgrade has
+two builds serving one database, each replica grants what its own build publishes in the reach, and nothing is
+rewritten when the newer one starts. Write a pattern where that widening is what you mean, and names where it is not.
+
+**A pattern has to reach something when it is written.** One reaching nothing this build publishes is refused with
+`400`, and the refusal tells it apart from a name nothing publishes, because the remedy differs — a name is misspelled
+or belongs to another release, while a pattern is well formed and has nothing beneath it. A stored pattern that comes
+to reach nothing, because a later build retired what it reached or the row was edited in the database, grants nothing
+and is reported beside the role exactly as a stored name no build publishes is.
+
+**What a pattern reaches is read back rather than worked out.** `mfctl role list` prints each role's list as it was
+written and, beneath the listing, the names each pattern reaches in the deployment's build, and `mfctl user
+permissions` says of every name a user holds whether the role lists it by name or through which pattern.
+[Roles, groups, and assignments](admin-endpoint.md#roles-groups-and-assignments) shows both.
+
+**A role listing a pattern is given by the root alone.** Nobody grants more than they hold, and what a pattern holds
+after the next release is nothing its giver holds today. So two writes need `mailfathom.admin.roles.write` over the
+whole deployment **whatever scope the write names**: assigning a role that lists a pattern, and adding a member to a
+group that any assignment gives such a role to. That is asked on top of the ordinary rule rather than instead of it —
+the writer still holds every name the role grants today, at a scope covering the assignment's. A stored pattern
+reaching nothing today counts, because the next upgrade may publish something in its reach. Revoking an assignment and
+removing a member widen nobody and are not asked this.
+
+**Placing a credential for a user who holds such a role needs the root as well.** Provisioning, rotating, and enabling
+a credential are each a way in as that user, and that user's grant widens on upgrade, so the bound
+[placing a credential](admin-endpoint.md#user-credentials) already carries — every name the user holds today — does
+not bound what the credential comes to. Disabling and deleting one widen nobody and are not asked this.
+
+Either write is refused below the root with `403` naming `mailfathom.admin.roles.write` and saying why it is asked of
+a write that may name one organization — [what a refusal says](admin-endpoint.md#what-a-refusal-says) shows the
+document — and nothing is written.
+
+**So an organization's administrator neither hands out a role that lists a pattern nor sets a password for a member
+who holds one.** Where an organization's administrator has to manage somebody, give that person roles of names alone.
+Writing a pattern into a role is the root's already, since defining and editing a role are.
+
+**Of the three seeded roles, `Administrator` is the one that lists a pattern, and it lists `*` alone.** Its holders —
+the default administrator `admin` among them — hold whatever a later release publishes, in both halves, from the moment
+that release runs. `Mail user` and `Organization administrator` list names, so an upgrade adds nothing to either: a
+name a later release publishes reaches their holders once somebody holding the root writes it into the role. A seeded
+role is an ordinary row, so one whose list an operator has changed lists what they wrote, and `mfctl role list` is
+where a deployment's own are read.
+
+**Nothing but a role's list takes a pattern.** A credential's narrowing, a token's scopes, and a configured scope each
+name permissions exactly — [on a user's credential](#on-a-users-credential) says why for the first.
 
 ### On a user's credential
 
@@ -406,9 +486,11 @@ name keeps it out of that endpoint altogether. The listing reports what is held 
 presented on.
 
 **Naming no permission records no narrowing**, so the credential holds exactly what its user's roles grant of the half
-each surface it is presented on reads, now and after every change to them. Nothing reaches it on an upgrade: a permission a later release publishes is
-held through such a credential only once a role its user holds lists it, which is an operator writing that name into a
-role rather than the release widening anything. `mailfathom.mail.send` is the sharpest name such a credential holds
+each surface it is presented on reads, now and after every change to them. What reaches it on an upgrade is what
+reaches its user: a permission a later release publishes is held through such a credential once a role its user holds
+grants it, which is an operator writing that name into a role, or the release publishing it within the reach of
+[a pattern a role already lists](#a-pattern-in-a-roles-list) — the one case where a release itself widens a grant.
+`mailfathom.mail.send` is the sharpest name such a credential holds
 wherever the user's roles grant it, since with it comes the ability to send mail from the user's address to anybody;
 `mailfathom.mail.contacts.write` is the next, being the ability to record, amend, and irreversibly erase what this
 deployment holds about identified third parties. `mailfathom.mail.drafts.write` is milder for the reason it exists: what
@@ -421,7 +503,9 @@ for when the reason may turn out to be nothing.
 **There is no pattern here, deliberately.** A narrowing on a credential is written once, by somebody deciding what one
 client of one user may do, and read back from a listing that states names — so a shorthand that quietly widens on the
 next release would be answering a question nobody asked at the moment they provisioned. Where everything the user holds
-is meant, name no permission; where part of it is, write the part out.
+is meant, name no permission; where part of it is, write the part out. A pattern is written in
+[a role's list](#a-pattern-in-a-roles-list) and nowhere else, and one written here is refused as a name nothing
+publishes.
 
 **Provisioning refuses a narrowing that says something impossible**, naming what was written: a name nothing publishes,
 and a name belonging to the administrative half — which a credential reaching one user's mail can never keep, and is
@@ -448,7 +532,8 @@ advertising them widens nothing, since a token holds only the intersection with 
 from the same assignments every surface reads. [Who administers the deployment](admin-endpoint.md#who-administers-the-deployment)
 is where admission is described, and [endpoint configuration](configuration-endpoints.md#adminendpoint) where the keys
 are specified. The deployment's first start records the default administrator `admin` holding the seeded
-`Administrator` role at deployment scope, which is every name both halves published when it was seeded.
+`Administrator` role at deployment scope, which lists [the pattern `*`](#a-pattern-in-a-roles-list) and so grants every
+name both halves publish, a name a later release adds included.
 
 **A caller here holds its user's grant, kept to what its credential keeps.** A credential naming no permission keeps
 everything its user's roles grant, and one whose `--permission` list names `mailfathom.admin.read` alone reads this

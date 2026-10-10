@@ -926,6 +926,13 @@ that way, so make sure somebody else can change roles before you erase or move a
 [administering roles, groups, and assignments](../operations/permissions.md#administering-roles-groups-and-assignments)
 holds the rules.
 
+**A role may list a pattern, and one that does grows with each release.** `mailfathom.admin.*` in a role's list holds
+every administrative permission the running release publishes, one a later release adds included, and the seeded
+`Administrator` role lists `*`, which is everything. Because nobody holds today what such a role holds tomorrow, only
+an administrator who may change roles over the whole deployment gives one, or provisions a credential for somebody who
+holds one — so give the people an organization's administrator looks after roles that list names.
+[A pattern in a role's list](../operations/permissions.md#a-pattern-in-a-roles-list) holds the syntax and the rule.
+
 **A row the deployment will not read is named rather than hidden.** A user record, a mail account declaration, or an
 organization row written by an older build, edited in the database, or restored from a backup may stop reading as one —
 and each of them costs only itself, so nothing else tells you. `mfctl organization list` names any organization row in

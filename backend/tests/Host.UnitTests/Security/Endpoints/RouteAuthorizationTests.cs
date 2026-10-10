@@ -253,6 +253,59 @@ public sealed class RouteAuthorizationTests
     }
 
     /// <summary>
+    /// A write giving a role that lists a pattern is refused below the root by the use case, naming the root. The
+    /// caller holds that name over their own organization, where the write was made, so the answer says why the whole
+    /// deployment is asked rather than that the name is missing, and marks itself for a caller that acts on the member.
+    /// </summary>
+    [Fact]
+    public async Task RefuseUnpermittedAsync_AUseCaseRefusingARoleListingAPatternBelowTheRoot_NamesTheRootAndSaysWhyItIsAsked()
+    {
+        // Arrange
+        var organization = AccessAuthorizations.ScopedOrganization;
+        var group = new Guid("0198f0aa-0000-7000-8000-00000000f0b2");
+        var member = AccessAuthorizations.ScopedHolder;
+        var joinedAt = new DateTimeOffset(2026, 10, 10, 12, 0, 0, TimeSpan.Zero);
+        var authorization = AccessAuthorizations.ForPrincipal(AuthorizedPrincipal.Caller(
+            "organization-administrator",
+            ScopedGrant.Of([
+                (MailFathomPermission.AdminRolesWrite, AssignmentScope.Organization(organization)),
+                (MailFathomPermission.AdminRead, AssignmentScope.Organization(organization)),
+            ])));
+        var grants = Substitute.For<IGrantStore>();
+        grants.ReadGroupAsync(group, Arg.Any<CancellationToken>())
+            .Returns(new UserGroup(group, "Sales", organization, 0, joinedAt));
+        grants.ReadUserPlacementAsync(member, Arg.Any<CancellationToken>()).Returns(new UserPlacement(member, organization));
+        grants.ReadGrantOfGroupAsync(group, Arg.Any<CancellationToken>())
+            .Returns(ScopedGrant.Of([(MailFathomPermission.AdminRead, AssignmentScope.Organization(organization))]));
+        grants.HoldsWideningRoleAsync(AssignmentPrincipal.Group(group), Arg.Any<CancellationToken>()).Returns(true);
+        var administration = new GrantAdministration(
+            authorization,
+            grants,
+            Substitute.For<IUserCredentialStore>(),
+            Substitute.For<IGrantAuditor>(),
+            new FakeTimeProvider(joinedAt));
+        var context = ContextFor(RoutePermission.RequiringOverTarget(MailFathomPermission.AdminRolesWrite), authorization);
+
+        // Act
+        var answer = await RouteAuthorization.RefuseUnpermittedAsync(
+            context,
+            async _ => await administration.AddGroupMemberAsync(group, member, TestContext.Current.CancellationToken),
+            Surface);
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(answer);
+        Assert.Equal(StatusCodes.Status403Forbidden, refusal.StatusCode);
+        Assert.Equal(
+            MailFathomPermission.AdminRolesWrite.Name,
+            Assert.Contains(RouteAuthorization.PermissionExtension, refusal.ProblemDetails.Extensions));
+        Assert.Equal(true, Assert.Contains(RouteAuthorization.WidensOnUpgradeExtension, refusal.ProblemDetails.Extensions));
+        Assert.DoesNotContain(RouteAuthorization.HeldBelowDeploymentExtension, refusal.ProblemDetails.Extensions.Keys);
+        Assert.Contains("lists a pattern", refusal.ProblemDetails.Detail, StringComparison.Ordinal);
+        Assert.DoesNotContain("not granted", refusal.ProblemDetails.Detail, StringComparison.Ordinal);
+        await grants.DidNotReceiveWithAnyArgs().AddGroupMemberAsync(default, default, default, TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
     /// The client surface answers the same way, and that is the decision rather than an inheritance: its caller is a
     /// page holding this person's own credential, and the session route already tells that caller its whole grant — so
     /// naming what is missing from it discloses nothing the caller could not already read about itself.

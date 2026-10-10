@@ -6,8 +6,9 @@ using MailFathom.Domain.Access;
 
 namespace MailFathom.Application.Access.Grants;
 
-/// <summary>Why a user holds one permission at one scope: the role that lists it, the assignment that gives the role, and the group the assignment reaches them through, if any.</summary>
+/// <summary>Why a user holds one permission at one scope: the role that lists it, the pattern it is listed through if it is not written out, the assignment that gives the role, and the group the assignment reaches them through, if any.</summary>
 /// <param name="Permission">The permission held.</param>
+/// <param name="Pattern">The pattern on the role's list that reaches the permission, as written, or <see langword="null" /> where the role lists the permission by name.</param>
 /// <param name="RoleId">The role listing it.</param>
 /// <param name="RoleName">The name an operator reads the role by.</param>
 /// <param name="AssignmentId">The assignment giving the role.</param>
@@ -16,10 +17,13 @@ namespace MailFathom.Application.Access.Grants;
 /// <param name="Scope">The scope the assignment names, which is where the permission is held.</param>
 /// <remarks>
 /// One row of the answer ADR 0012 gives every grant: <em>this role, directly or through this group, at this scope</em>.
-/// Groups are not nested, so the row is the whole explanation rather than the first step of a path.
+/// Groups are not nested, so the row is the whole explanation rather than the first step of a path. A name nobody wrote
+/// out is traced to the entry that reaches it, so a role listing a permission by name and through a pattern as well
+/// explains it twice, once per entry, because removing either leaves the other granting it.
 /// </remarks>
 public sealed record GrantSource(
     MailFathomPermission Permission,
+    string? Pattern,
     Guid RoleId,
     string RoleName,
     Guid AssignmentId,

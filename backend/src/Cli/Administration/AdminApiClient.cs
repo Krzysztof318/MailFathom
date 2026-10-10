@@ -2827,7 +2827,9 @@ internal sealed class AdminApiClient
     /// instruction: which permission, where it is written, and what the alternative is. The command never says which
     /// entry — it holds one credential and no view of the deployment's configuration — so it names the section and
     /// leaves the entry to whoever edits it. A refusal saying the permission is held only below the deployment asks for
-    /// the scope rather than the name, since granting the name again would change nothing.
+    /// the scope rather than the name, since granting the name again would change nothing, and one saying the write
+    /// gives a role that widens on upgrade says that, since the name it carries is the root and the write may well
+    /// have named an organization.
     /// </para>
     /// <para>
     /// A refusal carrying no permission is repeated as it was written. That is the deployment saying something other
@@ -2840,6 +2842,11 @@ internal sealed class AdminApiClient
         CancellationToken cancellationToken)
     {
         var problem = await ReadProblemAsync(response, cancellationToken);
+
+        if (problem is { Permission: { Length: > 0 } root, WidensOnUpgrade: true })
+        {
+            return $"The deployment refused the operation: a role this would give, or sign somebody in with, lists a pattern, which comes to hold whatever a later release publishes in its reach, so only an administrator holding '{root}' over the whole deployment gives one. Sign in as one, or have the role given by one; holding '{root}' over an organization or a user is not enough.";
+        }
 
         if (problem is { Permission: { Length: > 0 } scopedPermission, HeldBelowDeployment: true })
         {

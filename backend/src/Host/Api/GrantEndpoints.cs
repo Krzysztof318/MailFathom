@@ -24,7 +24,8 @@ namespace MailFathom.Host.Api;
 /// <para>
 /// A refusal for want of a name the write would give arrives as a <c>403</c> naming that name in the member the
 /// transport's own refusal names it in, because the remedy is the same: the caller needs it, or needs it wider. Its
-/// sentence says which of the two — not granted, or held at a scope narrower than the write gives it at.
+/// sentence says which of the two — not granted, or held at a scope narrower than the write gives it at. A write giving
+/// a role that lists a pattern is refused the same way below the root, naming the root and saying why it is asked.
 /// </para>
 /// </remarks>
 internal static class GrantEndpoints
@@ -527,8 +528,8 @@ internal static class GrantEndpoints
             : NotFound("This deployment holds no such user within your scope.");
     }
 
-    /// <summary>Reads the permission names a request listed into the list a role is written with.</summary>
-    /// <returns><see langword="true" /> when every name is published; otherwise <see langword="false" />, with the refusal naming those that are not.</returns>
+    /// <summary>Reads the names and patterns a request listed into the list a role is written with.</summary>
+    /// <returns><see langword="true" /> when every entry grants something; otherwise <see langword="false" />, with the refusal naming each name nothing publishes and each pattern reaching nothing.</returns>
     private static bool TryReadPermissions(
         IReadOnlyList<string>? names,
         [NotNullWhen(true)] out RolePermissions? permissions,
@@ -552,12 +553,33 @@ internal static class GrantEndpoints
         }
 
         permissions = null;
-        refusal = Refused(
-            $"This build publishes no permission named {string.Join(", ", unpublished.Select(name => $"'{name}'"))}. "
-            + "A role lists published names only.");
+        refusal = Refused(DescribeUngranting(unpublished));
 
         return false;
     }
+
+    /// <summary>Says why written entries grant nothing, telling a name nothing publishes from a pattern reaching nothing.</summary>
+    /// <remarks>
+    /// The two are answered apart because the remedy differs: a name is misspelled or belongs to another release, while
+    /// a pattern is well formed and simply has nothing beneath it, which no later release is promised to change.
+    /// </remarks>
+    private static string DescribeUngranting(IReadOnlyList<string> entries)
+    {
+        var patterns = entries.Where(entry => PermissionSubtree.TryParse(entry, out _)).ToArray();
+        var names = entries.Except(patterns, StringComparer.Ordinal).ToArray();
+
+        string?[] sentences =
+        [
+            names.Length > 0 ? $"This build publishes no permission named {Quoted(names)}." : null,
+            patterns.Length > 0 ? $"This build publishes nothing in the reach of the pattern {Quoted(patterns)}." : null,
+            "A role lists published names, and patterns reaching at least one of them, in which '*' is a whole "
+            + "dot-separated segment standing for one or more segments.",
+        ];
+
+        return string.Join(' ', sentences.OfType<string>());
+    }
+
+    private static string Quoted(IEnumerable<string> entries) => string.Join(", ", entries.Select(entry => $"'{entry}'"));
 
     /// <summary>Reads what an assignment request names, or why it names nothing an assignment can be made of.</summary>
     private static bool TryReadAssignment(

@@ -29,6 +29,12 @@ namespace MailFathom.Application.Access.Grants;
 /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0012-authorization-model-named-permissions-and-where-they-are-enforced.md">ADR 0012</see>.
 /// </para>
 /// <para>
+/// A role listing a pattern holds whatever a later release publishes in the pattern's reach, so no check of what its
+/// giver holds today bounds what it gives. Assigning such a role, and adding a member to a group an assignment gives
+/// one to, therefore needs the root on top of everything above, whatever scope the write names: the root already may
+/// write any name into any role, so it is the one grant a widening role cannot carry past.
+/// </para>
+/// <para>
 /// The escalation check reads the role's list, the group's assignments, and where each user belongs a moment before the
 /// write, and a concurrent change to any of them is not re-read inside it. Each of those changes is itself an act this
 /// class bounds by its writer's grant — a role's list is the root's alone to write — so the window lets nobody widen past
@@ -114,7 +120,7 @@ public sealed class GrantAdministration
 
         var result = await this.grants.CreateRoleAsync(roleId, label, permissions, createdAt, cancellationToken);
 
-        await this.RecordAsync(result, GrantAct.RoleCreated, roleId, cancellationToken, permissions: permissions.Granted);
+        await this.RecordAsync(result, GrantAct.RoleCreated, roleId, cancellationToken, permissions: permissions.Written);
 
         return result.Outcome == GrantWriteOutcome.Written ? result with { RecordId = roleId } : result;
     }
@@ -144,7 +150,7 @@ public sealed class GrantAdministration
     /// <returns>What the act did, refused as <see cref="GrantWriteOutcome.LastRoot" /> when it would drop the root from the last role giving it.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="permissions" /> is <see langword="null" />.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.AdminRolesWrite" /> over the deployment.</exception>
-    /// <remarks>The root may write any published name, its own role included: that is the one place a grant reaches past what its writer held, and why the root is the deployment-wide name alone.</remarks>
+    /// <remarks>The root may write any published name and any pattern, its own role included: that is the one place a grant reaches past what its writer held, and why the root is the deployment-wide name alone.</remarks>
     public async Task<GrantWriteResult> ReplaceRolePermissionsAsync(
         Guid roleId,
         RolePermissions permissions,
@@ -161,7 +167,7 @@ public sealed class GrantAdministration
             GrantAct.RolePermissionsReplaced,
             roleId,
             cancellationToken,
-            permissions: permissions.Granted);
+            permissions: permissions.Written);
 
         return result;
     }
@@ -311,7 +317,7 @@ public sealed class GrantAdministration
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>What the act did, <see cref="GrantWriteOutcome.Unchanged" /> for somebody who was already a member; <see cref="GrantWriteOutcome.UnknownGroup" /> and <see cref="GrantWriteOutcome.UnknownUser" /> also for a group or a user outside the caller's scope.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller holds <see cref="MailFathomPermission.AdminRolesWrite" /> at no scope, or does not hold a name the group's assignments give at a scope covering where they give it.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller holds <see cref="MailFathomPermission.AdminRolesWrite" /> at no scope, does not hold a name the group's assignments give at a scope covering where they give it, or is not the root while one of those assignments gives a role listing a pattern.</exception>
     public async Task<GrantWriteResult> AddGroupMemberAsync(
         Guid groupId,
         UserId user,
@@ -329,6 +335,11 @@ public sealed class GrantAdministration
         if (await this.CoveredUserAsync(user, cancellationToken) is null)
         {
             return GrantWriteResult.Of(GrantWriteOutcome.UnknownUser);
+        }
+
+        if (await this.grants.HoldsWideningRoleAsync(AssignmentPrincipal.Group(groupId), cancellationToken))
+        {
+            this.RequireTheRootForAWideningGrant();
         }
 
         var joined = await this.grants.ReadGrantOfGroupAsync(groupId, cancellationToken);
@@ -401,7 +412,7 @@ public sealed class GrantAdministration
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>What the act did, carrying the minted identifier when it was written; the outcome naming an unknown group, user, or organization also for one outside the caller's scope.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="principal" /> or <paramref name="scope" /> is <see langword="null" />.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller holds <see cref="MailFathomPermission.AdminRolesWrite" /> at no scope, not over the deployment for an assignment at the deployment scope, or does not hold a name the role lists at a scope covering the assignment's.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller holds <see cref="MailFathomPermission.AdminRolesWrite" /> at no scope, not over the deployment for an assignment at the deployment scope or of a role listing a pattern, or does not hold a name the role grants at a scope covering the assignment's.</exception>
     public async Task<GrantWriteResult> AssignAsync(
         Guid roleId,
         AssignmentPrincipal principal,
@@ -433,6 +444,11 @@ public sealed class GrantAdministration
         if (await this.grants.ReadRoleAsync(roleId, cancellationToken) is not { } role)
         {
             return GrantWriteResult.Of(GrantWriteOutcome.UnknownRole);
+        }
+
+        if (role.Permissions.WidensOnUpgrade)
+        {
+            this.RequireTheRootForAWideningGrant();
         }
 
         await this.RequireHeldAsync(role.Permissions.Granted.Select(permission => (permission, scope)), cancellationToken);
@@ -607,6 +623,17 @@ public sealed class GrantAdministration
                 : null,
         };
 
+    /// <summary>Requires the root of a caller whose write gives a role listing a pattern.</summary>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.AdminRolesWrite" /> over the deployment.</exception>
+    /// <remarks>Asked beside <see cref="RequireHeldAsync" /> and never instead of it: the root still gives only what it holds today, and what it does not yet hold it may write itself.</remarks>
+    private void RequireTheRootForAWideningGrant()
+    {
+        if (!this.authorization.Permits(MailFathomPermission.AdminRolesWrite))
+        {
+            throw PrincipalNotAuthorizedException.GivesAWideningGrant();
+        }
+    }
+
     /// <summary>Requires that the caller holds every name a write would give, at a scope covering where it would give it.</summary>
     /// <param name="given">Each name the write gives, paired with the scope it gives it at.</param>
     /// <param name="cancellationToken">Cancels the reads placing a user scope.</param>
@@ -656,7 +683,7 @@ public sealed class GrantAdministration
         CancellationToken cancellationToken,
         UserId? member = null,
         RoleAssignment? assignment = null,
-        IReadOnlyList<MailFathomPermission>? permissions = null) =>
+        IReadOnlyList<string>? permissions = null) =>
         result.Outcome == GrantWriteOutcome.Written
             ? this.auditor.RecordGrantChangeAsync(
                 new GrantChange(

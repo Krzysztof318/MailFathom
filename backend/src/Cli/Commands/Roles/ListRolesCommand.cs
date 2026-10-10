@@ -12,7 +12,8 @@ namespace MailFathom.Cli.Commands.Roles;
 /// <summary>Reads the roles this deployment defines.</summary>
 /// <remarks>
 /// The listing every other role and assignment command takes a role's identifier out of, and the one place an operator
-/// reads which names a role grants.
+/// reads what a role grants: its list as it was written, and beneath the listing what each pattern on it reaches in the
+/// deployment's build, because a pattern is the one entry whose meaning the next release may add to.
 /// </remarks>
 internal static class ListRolesCommand
 {
@@ -61,16 +62,48 @@ internal static class ListRolesCommand
         // The deployment pages in identifier order; an operator looks a role up by its name.
         context.Console.Write(Draw([.. roles.OrderBy(role => role.Name, StringComparer.Ordinal)]));
 
+        ReportPatterns(context, roles);
         ReportUnpublished(context, roles);
 
         return CliExitCode.Success;
     }
 
-    /// <summary>Says which roles list names this deployment's build does not publish.</summary>
+    /// <summary>Says what each pattern a role lists reaches now.</summary>
     /// <remarks>
-    /// Printed after the listing rather than mixed into it, because those names grant nothing: a build that stopped
-    /// publishing a permission leaves it stored on every role that listed it, and nothing else would tell an operator
-    /// the role is narrower than it reads.
+    /// Printed after the listing rather than inside it, because the listing shows a role as it was written and a
+    /// pattern's reach is the deployment's answer for the build it runs: the same role reads differently after an
+    /// upgrade that publishes a permission beneath one.
+    /// </remarks>
+    private static void ReportPatterns(CliContext context, IReadOnlyList<RoleEntry> roles)
+    {
+        var listed = roles
+            .OrderBy(role => role.Name, StringComparer.Ordinal)
+            .SelectMany(role => (role.Patterns ?? []).Select(pattern => (Role: role, Pattern: pattern)))
+            .ToArray();
+
+        if (listed.Length == 0)
+        {
+            return;
+        }
+
+        context.Console.WriteLine(string.Empty);
+        context.Console.WriteLine(
+            "A pattern holds what this deployment publishes in its reach, a permission a later release adds there "
+            + "included. What each reaches now:");
+
+        foreach (var (role, pattern) in listed)
+        {
+            context.Console.WriteLine(
+                $"  {role.Id:D} ({ConsoleSafeText.Sanitize(role.Name) ?? "unreported"}): "
+                + $"{ConsoleSafeText.Sanitize(pattern.Pattern) ?? "unreported"} reaches {DescribePermissions(pattern.Reaches)}");
+        }
+    }
+
+    /// <summary>Says which roles list entries that grant nothing in this deployment's build.</summary>
+    /// <remarks>
+    /// Printed after the listing rather than mixed into it, because those entries grant nothing: a build that stopped
+    /// publishing a permission leaves its name, and a pattern that reached only it, stored on every role that listed
+    /// them, and nothing else would tell an operator the role is narrower than it reads.
     /// </remarks>
     private static void ReportUnpublished(CliContext context, IReadOnlyList<RoleEntry> roles)
     {
@@ -83,8 +116,8 @@ internal static class ListRolesCommand
 
         context.Console.WriteLine(string.Empty);
         context.Console.WriteLine(
-            $"{carrying.Length} roles list names this deployment does not publish, which grant nothing. Replace each "
-            + "list with 'role set-permissions'.");
+            $"{carrying.Length} roles list names this deployment does not publish, or patterns reaching nothing it "
+            + "publishes, which grant nothing. Replace each list with 'role set-permissions'.");
 
         foreach (var role in carrying)
         {

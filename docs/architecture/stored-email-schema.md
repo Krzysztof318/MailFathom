@@ -698,25 +698,35 @@ foreign key is for: a person erased from the deployment leaves nothing behind th
 
 Five tables hold what a user's grant is computed from under
 [ADR 0012](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0012-authorization-model-named-permissions-and-where-they-are-enforced.md):
-a role is a name and an explicit list of permissions, a group is a set of users, and an assignment gives one role to
-one user or one group at one scope. They are rows rather than settings so a change to any of them is the same on every
-replica from the moment it commits. A caller on a mail surface holds what they grant its user, kept to what its
+a role is a name and a list of permissions written as names and patterns, a group is a set of users, and an assignment
+gives one role to one user or one group at one scope. They are rows rather than settings so a change to any of them is
+the same on every replica from the moment it commits. A caller on a mail surface holds what they grant its user, kept to what its
 credential names — [how a caller's grant is computed](../operations/permissions.md#how-a-callers-grant-is-computed).
 
 `roles` holds one row per role: `Id`, a version 7 identifier; `Name`, at most 128 characters and unique across the
 deployment under `ix_roles_name`, compared exactly; and `CreatedAt`. `role_permissions` holds the role's list, one row
-per published permission name keyed by `(RoleId, Permission)`, so a role lists a name once, and cascading from its
-role. A name is written only when this build publishes it. One stored name a later build no longer publishes is read
-back beside the role as unpublished and grants nothing, rather than making the whole role unreadable.
+per entry keyed by `(RoleId, Permission)`, so a role lists an entry once, and cascading from its role. An entry is a
+published permission name or [a pattern](../operations/permissions.md#a-pattern-in-a-roles-list), and `Permission`
+holds either exactly as it was written. A pattern is resolved against the set the reading build publishes whenever a
+grant is computed, so no row changes when a release publishes a name within one's reach, and two builds serving one
+database each grant what their own publishes there. An entry is written only when it grants something in this build: a
+name it publishes, or a pattern reaching at least one. One stored entry that comes to grant nothing — a name a later
+build no longer publishes, a pattern left reaching nothing — is read back beside the role as unpublished, rather than
+making the whole role unreadable.
 
-The migration that creates the tables seeds three roles, written once as ordinary rows an operator may rename, edit,
-or delete, and edited by no later migration:
+The migrations seed three roles, as ordinary rows an operator may rename, edit, or delete:
 
 | Role | What it lists |
 |---|---|
 | `Mail user` | Every name the mail half published when it was seeded |
 | `Organization administrator` | `mailfathom.admin.read`, `mailfathom.admin.audit.read`, `mailfathom.admin.operate`, `mailfathom.admin.credentials.write`, `mailfathom.admin.configuration.write`, `mailfathom.admin.erase`, and `mailfathom.admin.roles.write` |
-| `Administrator` | Every name both halves published when it was seeded, and `mailfathom.admin.roles.write` |
+| `Administrator` | The pattern `*` alone, which reaches every name both halves publish, a name a later release adds included |
+
+`RewriteAdministratorRoleAsAPattern` is the migration that wrote that pattern, in place of the names the seeding
+migration listed, and only where the role still listed exactly those names. A seeded `Administrator` an operator had
+narrowed, emptied, or deleted was left as it stood, because rewriting it would have handed its holders every permission
+they were deliberately denied. It changes no table: whether an entry is a name or a pattern is decided when a grant is
+computed. No migration edits either of the other two.
 
 The migration that moved mail grants from credentials onto users, `HoldMailGrantsOnUsers`, gave every user who held no
 assignment one at their own scope reproducing the union of what their credentials listed: `Mail user` where that union

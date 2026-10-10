@@ -70,7 +70,8 @@ where one key pair is registered for both.
 **An administrator is a user holding an administrative role.** There is no second identity system: the people and
 systems that administer this deployment are users like the ones whose mail it reads, recorded on
 [the roster](#users-and-their-records), and what makes one of them an administrator is a role assignment whose role
-lists at least one name from [the administrative half](permissions.md#the-published-set).
+grants at least one name from [the administrative half](permissions.md#the-published-set), listed by name or reached by
+[a pattern](permissions.md#a-pattern-in-a-roles-list).
 [How a caller's grant is computed](permissions.md#how-a-callers-grant-is-computed) is the model; this surface reads the
 administrative half of it. A role is given with `mfctl assignment add`, described under
 [roles, groups, and assignments](#roles-groups-and-assignments); an assignment at the deployment scope is what an
@@ -194,9 +195,10 @@ row back to `NULL`, and restarts with `MAILFATHOM_ADMIN_PASSWORD` carrying a new
 anybody able to change those rows already holds the deployment's data, and a route that restored access would be one
 more way in. [The stored schema](../architecture/stored-email-schema.md#the-default-administrator) describes the row.
 
-> **A user holding the `Administrator` role reaches every administrative operation.** The grant is what bounds a caller
-> here, so give each person or system a user of its own with a role holding what it does, and rotate its credentials
-> like any other secret.
+> **A user holding the `Administrator` role reaches every administrative operation**, and every one a later release
+> adds: the role lists [the pattern `*`](permissions.md#a-pattern-in-a-roles-list), so its holders hold whatever the
+> running release publishes. The grant is what bounds a caller here, so give each person or system a user of its own
+> with a role holding what it does, and rotate its credentials like any other secret.
 >
 > Weigh that against what the operations are. The endpoint serves reads — who a credential makes the caller, two
 > records of what a mailbox has had done to it and what has been read from it, where semantic search stands, and what
@@ -209,7 +211,7 @@ more way in. [The stored schema](../architecture/stored-email-schema.md#the-defa
 
 ## What a credential may do
 
-A caller here holds its user's grant — what the roles assigned to the user list, at the scope each assignment gives,
+A caller here holds its user's grant — what the roles assigned to the user grant, at the scope each assignment gives,
 the mail names among it held only as the ceiling a credential written here and a role given here are bounded by — and
 that grant holds on every credential the user presents
 here, narrowed by what the credential keeps. A credential's own `--permission` list may name names of both halves, and
@@ -365,6 +367,32 @@ deployment.
 Saying so discloses nothing about the deployment, because the answer is the same whatever target the request names, so
 it says nothing about whether that target exists.
 
+A third document answers a write that would give somebody
+[a role that lists a pattern](permissions.md#a-pattern-in-a-roles-list), or place a credential for a user who holds
+one, reached by a caller who does not hold `mailfathom.admin.roles.write` over the whole deployment. It names that
+permission and carries `widensOnUpgrade` beside it:
+
+```json
+{
+  "status": 403,
+  "detail": "A role this write gives, or signs somebody in with, lists a pattern, which comes to hold whatever a later release publishes in its reach. Only a credential holding 'mailfathom.admin.roles.write' over the whole deployment gives one.",
+  "permission": "mailfathom.admin.roles.write",
+  "widensOnUpgrade": true
+}
+```
+
+The member is there because the name alone would mislead: the write may name one organization, and a caller holding
+`mailfathom.admin.roles.write` over that organization would read the refusal as a grant to go looking for. It carries
+no `heldBelowDeployment`, because the operation is not the deployment's alone — the same route gives a role of names
+at any scope its writer covers. `mfctl` reports the reason rather than the name:
+
+```text
+The deployment refused the operation: a role this would give, or sign somebody in with, lists a pattern, which comes
+to hold whatever a later release publishes in its reach, so only an administrator holding
+'mailfathom.admin.roles.write' over the whole deployment gives one. Sign in as one, or have the role given by one;
+holding 'mailfathom.admin.roles.write' over an organization or a user is not enough.
+```
+
 Naming the permission is a deliberate difference from the MCP surface, which discloses nothing to a refused caller.
 [ADR 0012](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0012-authorization-model-named-permissions-and-where-they-are-enforced.md)
 records why: the caller here is an operator at their own terminal, and a refusal they can act on is worth more than a
@@ -423,9 +451,9 @@ These routes accept a grant held at any of the three, and check it against the t
 | `POST /api/admin/users/{userId}/record` | The user |
 | `POST /api/admin/users/{userId}/secrets` | The user |
 | `GET /api/admin/users/{userId}/credentials` | The user |
-| `POST /api/admin/users/{userId}/credentials` | The user, each scope the user holds each of their administrative [names](#user-credentials) at, and every mail name the user holds, held at any scope |
-| `PUT /api/admin/users/{userId}/credentials/{credentialId}/material` | The user, each scope the user holds each of their administrative names at, and every mail name the user holds, held at any scope |
-| `PUT /api/admin/users/{userId}/credentials/{credentialId}/enablement` | The user, and — to enable — each scope the user holds each of their administrative names at, and every mail name the user holds, held at any scope |
+| `POST /api/admin/users/{userId}/credentials` | The user, each scope the user holds each of their administrative [names](#user-credentials) at, and every mail name the user holds, held at any scope; where a role the user holds lists a pattern, the whole deployment under `mailfathom.admin.roles.write` as well |
+| `PUT /api/admin/users/{userId}/credentials/{credentialId}/material` | The user, each scope the user holds each of their administrative names at, and every mail name the user holds, held at any scope; where a role the user holds lists a pattern, the whole deployment under `mailfathom.admin.roles.write` as well |
+| `PUT /api/admin/users/{userId}/credentials/{credentialId}/enablement` | The user, and — to enable — each scope the user holds each of their administrative names at, and every mail name the user holds, held at any scope; where a role the user holds lists a pattern, the whole deployment under `mailfathom.admin.roles.write` as well |
 | `DELETE /api/admin/users/{userId}/credentials/{credentialId}` | The user |
 | `PUT /api/admin/users/{userId}/organization` | The user where they stand, and the organization the body moves them into; a move out of every organization is the deployment's alone |
 | `GET /api/admin/mail-accounts` | — lists the mail accounts the caller's scopes for `mailfathom.admin.read` cover |
@@ -485,8 +513,8 @@ under `mailfathom.admin.read` for a read and `mailfathom.admin.roles.write` for 
 | `GET /api/admin/roles` | Nothing further: a role is defined once for the whole deployment, and any holder of `mailfathom.admin.read`, at any scope, reads them |
 | `GET /api/admin/groups`, `GET /api/admin/role-assignments` | Each row, so the listing answers with the groups and the assignments the scope covers |
 | `POST /api/admin/groups`, `PUT /api/admin/groups/{groupId}/name`, `DELETE /api/admin/groups/{groupId}`, `GET /api/admin/groups/{groupId}/members` | The organization the group belongs to; recording a group into none is the deployment's alone |
-| `PUT` and `DELETE /api/admin/groups/{groupId}/members/{userId}` | The organization the group belongs to, and the user |
-| `POST /api/admin/role-assignments`, `DELETE /api/admin/role-assignments/{assignmentId}` | The user or the group the role is given to, and the scope it is given at; giving a role at the deployment scope is the deployment's alone |
+| `PUT` and `DELETE /api/admin/groups/{groupId}/members/{userId}` | The organization the group belongs to, and the user; adding a member to a group given a role that lists a pattern is the root's alone |
+| `POST /api/admin/role-assignments`, `DELETE /api/admin/role-assignments/{assignmentId}` | The user or the group the role is given to, and the scope it is given at; giving a role at the deployment scope is the deployment's alone, and giving one that lists a pattern is the root's alone at any scope |
 | `GET /api/admin/users/{userId}/permissions` | The user, and then each row: the answer lists what the user holds through the groups and at the scopes the caller's own scope covers |
 
 A group belongs to an organization and to nobody alone, so a user scope covers no group; one in no organization is the
@@ -511,7 +539,9 @@ ever answers with that document: a caller holding the route's permission nowhere
 permission, and one holding it at a scope that does not cover the target is answered as a target that does not exist.
 A write that would give somebody a name wider than its writer holds it is refused with a `403` of its own, naming that
 name in `permission` and saying it is held at a scope narrower than the write gives it at — which is as often an
-organization as the deployment, so it carries no `heldBelowDeployment` either.
+organization as the deployment, so it carries no `heldBelowDeployment` either. A write that gives a role listing a
+pattern, or places a credential for a user who holds one, is refused below the root with the `403` that carries
+`widensOnUpgrade` — [what a refusal says](#what-a-refusal-says) shows it.
 
 The `mfctl` command behind each route is checked where the route is, since the command does nothing the route does
 not: `mfctl user add --organization <id>` records a user straight into an organization, which is how an organization's
@@ -642,22 +672,22 @@ and a request with none is refused as any other.
 | `PUT /api/admin/organizations/{organizationId}/display-name` | `mailfathom.admin.configuration.write` | Replaces the name an operator reads the organization by. It answers `204`, `404` for an organization this deployment does not hold, and `400` for a name it does not accept. |
 | `PUT /api/admin/organizations/{organizationId}/short-name` | `mailfathom.admin.credentials.write` | Replaces the short name its members sign in under, which moves every member's login with it. It answers `204`, `404`, `409` for a short name another organization holds, and `400`. |
 | `DELETE /api/admin/organizations/{organizationId}` | `mailfathom.admin.configuration.write` | Removes an organization with neither members nor mail accounts. It answers `204`, `404`, and `409` naming how many members and how many mail accounts it still has. |
-| `GET /api/admin/roles` | `mailfathom.admin.read` | Reads one page of the [roles](#roles-groups-and-assignments) this deployment holds, each with the names it grants and any it lists that this build does not publish. |
-| `POST /api/admin/roles` | `mailfathom.admin.roles.write` at the deployment | Records a role from the name and the list of permissions the body carries, and answers with the identifier it was minted under. A name another role carries is answered `409`, and a name it does not accept, a missing list, or a permission this build does not publish `400`. |
+| `GET /api/admin/roles` | `mailfathom.admin.read` | Reads one page of the [roles](#roles-groups-and-assignments) this deployment holds, each with its list as it was written under `permissions`, what each pattern on that list reaches in this build under `patterns`, and any stored entry granting nothing in this build under `unpublished`. |
+| `POST /api/admin/roles` | `mailfathom.admin.roles.write` at the deployment | Records a role from the name and the list of permissions the body carries — published names, and [patterns](permissions.md#a-pattern-in-a-roles-list) — and answers with the identifier it was minted under. A name another role carries is answered `409`, and a name it does not accept, a missing list, a permission this build does not publish, or a pattern reaching nothing it publishes `400`. |
 | `PUT /api/admin/roles/{roleId}/name` | `mailfathom.admin.roles.write` at the deployment | Replaces the name an operator reads the role by. It answers `204`, `404`, `409` for a name already taken, and `400` for a name it does not accept. |
-| `PUT /api/admin/roles/{roleId}/permissions` | `mailfathom.admin.roles.write` at the deployment | Replaces the whole list the role grants, which everybody it is assigned to holds from their next request. It answers `204`, `404`, `400` for a missing list or a name this build does not publish, and `409` when it would take the root from the last role giving it. |
+| `PUT /api/admin/roles/{roleId}/permissions` | `mailfathom.admin.roles.write` at the deployment | Replaces the whole list the role grants, names and patterns alike, which everybody it is assigned to holds from their next request. It answers `204`, `404`, `400` for a missing list, a name this build does not publish, or a pattern reaching nothing it publishes, and `409` when it would take the root from the last role giving it. |
 | `DELETE /api/admin/roles/{roleId}` | `mailfathom.admin.roles.write` at the deployment | Removes a role nothing is assigned. It answers `204`, `404`, and `409` naming how many assignments still give it. |
 | `GET /api/admin/groups` | `mailfathom.admin.read` | Reads one page of the groups the caller's scope covers, each with its organization and how many members it has. |
 | `POST /api/admin/groups` | `mailfathom.admin.roles.write` | Records a group in the organization the body names, or in none when it says `"none": true`, and answers with the identifier it was minted under. A group in no organization needs the grant at the deployment. It answers `400` for a name it does not accept and for an organization that does not exist within the caller's scope, and `409` for a name already taken. |
 | `PUT /api/admin/groups/{groupId}/name` | `mailfathom.admin.roles.write` | Replaces the name an operator reads the group by. It answers `204`, `404` for a group outside the caller's scope, `409` for a name already taken, and `400` for a name it does not accept. |
 | `DELETE /api/admin/groups/{groupId}` | `mailfathom.admin.roles.write` | Removes a group nothing is assigned, and its memberships with it. It answers `204`, `404`, and `409` naming how many assignments still name it. |
 | `GET /api/admin/groups/{groupId}/members` | `mailfathom.admin.read` | Reads one page of the group's members. |
-| `PUT /api/admin/groups/{groupId}/members/{userId}` | `mailfathom.admin.roles.write` | Makes the user a member, which gives them every assignment the group holds; repeating it changes nothing, is answered `204` again, and is not recorded. It answers `204`, `403` naming a name those assignments give that the caller does not hold widely enough, `404`, and `409` for a user of a different organization from the group's. |
+| `PUT /api/admin/groups/{groupId}/members/{userId}` | `mailfathom.admin.roles.write` | Makes the user a member, which gives them every assignment the group holds; repeating it changes nothing, is answered `204` again, and is not recorded. It answers `204`, `403` naming a name those assignments give that the caller does not hold widely enough, or naming `mailfathom.admin.roles.write` where one of them gives a role that lists a pattern and the caller is not the root, `404`, and `409` for a user of a different organization from the group's. |
 | `DELETE /api/admin/groups/{groupId}/members/{userId}` | `mailfathom.admin.roles.write` | Ends the user's membership; for somebody who is not a member it changes nothing, is answered `204`, and is not recorded. It answers `204`, `404`, and `409` when the user is the last through whom the deployment's root is held. |
 | `GET /api/admin/role-assignments` | `mailfathom.admin.read` | Reads one page of the role assignments whose principal and scope the caller's scope both cover. |
-| `POST /api/admin/role-assignments` | `mailfathom.admin.roles.write` | Gives a role to a user or a group at the deployment, one organization, or one user, and answers with the identifier it was minted under. It answers `403` naming a name the role lists that the caller does not hold widely enough, `400` for a role, principal, or scope that does not exist within the caller's scope, and `409` for the same role already given to the same principal at the same scope. |
+| `POST /api/admin/role-assignments` | `mailfathom.admin.roles.write` | Gives a role to a user or a group at the deployment, one organization, or one user, and answers with the identifier it was minted under. It answers `403` naming a name the role grants that the caller does not hold widely enough, or naming `mailfathom.admin.roles.write` where the role lists a pattern and the caller is not the root, `400` for a role, principal, or scope that does not exist within the caller's scope, and `409` for the same role already given to the same principal at the same scope. |
 | `DELETE /api/admin/role-assignments/{assignmentId}` | `mailfathom.admin.roles.write` | Revokes one assignment. It answers `204`, `404`, and `409` when it is the last one giving the deployment's root. |
-| `GET /api/admin/users/{userId}/permissions` | `mailfathom.admin.read` | Explains why the user holds each permission they hold within the caller's own scope — the role, directly or through which group, and the scope — and what each of their credentials keeps of what it listed. It answers at most 1000 rows, and `sourcesTruncated` says when the user holds more there. |
+| `GET /api/admin/users/{userId}/permissions` | `mailfathom.admin.read` | Explains why the user holds each permission they hold within the caller's own scope — the role, the pattern on its list that reaches the permission where the role does not list it by name, directly or through which group, and the scope — and what each of their credentials keeps of what it listed. It answers at most 1000 rows, and `sourcesTruncated` says when the user holds more there. |
 | `GET /api/admin/records/held-back` | `mailfathom.admin.read` | Reads [the records this deployment will not read](#records-this-deployment-will-not-read), as three lists — `users`, `mailAccounts`, and `organizations` — each entry naming the record's identifier, the label it carries, the version refused where its kind has one, and one sentence per setting to correct. A deployment holding nothing back answers three empty lists. |
 | `PUT /api/admin/users/{userId}/organization` | `mailfathom.admin.credentials.write` | Moves the user into the organization the body's `organizationId` names, or out of every organization where the body says `"none": true`, re-scoping their passwords in the same transaction. A body stating neither, or both, is refused with `400` rather than read as a move out. This is what `mfctl user set-organization` sends. It answers `204`, `404` for a user this deployment does not hold, `400` for an organization it does not hold, and `409` naming the username the target already holds for another user, or how many of the user's mail accounts the target would not admit. |
 | `GET /api/admin/users/{userId}/credentials` | `mailfathom.admin.read` | Reads one user's [credentials](#user-credentials), each with its method, what it grants, the endpoints it may be presented on and the networks it is accepted from, whether it still authenticates, and when its material was last replaced. It publishes what each is resolved by, except where that value is derived from the secret, and for a password the `login` a person types to sign in with it. A credential whose method this build does not know, and one scoped to an organization whose short name it [will not read](#records-this-deployment-will-not-read), are left out rather than published without the login they would be typed as; the user's other credentials are listed as before. |
@@ -2025,10 +2055,10 @@ commands are where it is changed.
 
 | Command | What it does |
 | --- | --- |
-| `mfctl role list` | Reads the roles this deployment defines, with the names each grants and any it lists that this build does not publish |
-| `mfctl role add --name <name> (--permission <name>… \| --no-permissions)` | Defines a role, and reports the identifier it was minted under |
+| `mfctl role list` | Reads the roles this deployment defines, with each one's list as it was written, what each pattern on it reaches now, and any entry on it that grants nothing in this build |
+| `mfctl role add --name <name> (--permission <name or pattern>… \| --no-permissions)` | Defines a role, and reports the identifier it was minted under |
 | `mfctl role rename --role <id> --name <name>` | Replaces the name a role is read by |
-| `mfctl role set-permissions --role <id> (--permission <name>… \| --no-permissions)` | Replaces the whole list a role grants, for everybody it is assigned to |
+| `mfctl role set-permissions --role <id> (--permission <name or pattern>… \| --no-permissions)` | Replaces the whole list a role grants, for everybody it is assigned to |
 | `mfctl role remove --role <id>` | Removes a role nothing is assigned |
 | `mfctl group list` | Reads the groups within your scope, with each one's organization and member count |
 | `mfctl group add --name <name> (--organization <id> \| --no-organization)` | Records a group, and reports the identifier it was minted under |
@@ -2042,14 +2072,54 @@ commands are where it is changed.
 | `mfctl assignment revoke --assignment <id>` | Revokes one assignment |
 | `mfctl user permissions --user <id>` | Explains why a user holds each permission they hold, and what each of their credentials keeps of it |
 
-`--permission` is repeated once per name, and `--no-permissions` states an empty list on purpose, so a forgotten option
+`--permission` is repeated once per entry, and `--no-permissions` states an empty list on purpose, so a forgotten option
 never reads as a role granting nothing.
 
 **A role, a group, and an assignment are each minted with a version 7 UUID**, which is what every command names them by.
 A role's and a group's name is what an operator reads it by, trimmed and 1 to 128 characters; no two roles share one,
-and no two groups do. A role's list names
-published permissions only; a role the migration seeded, or one an earlier release wrote, may also list a name this
-build does not publish, which `mfctl role list` shows beside the role and which grants nothing.
+and no two groups do.
+
+**A role's list names published permissions, and patterns reaching at least one of them.** In a pattern `*` is a whole
+dot-separated segment standing for one or more segments, so `mailfathom.*.read` is every name ending in `.read`, in
+both halves — [a pattern in a role's list](permissions.md#a-pattern-in-a-roles-list) holds the syntax, and what an
+upgrade does to a role carrying one. Quote a pattern, so the shell does not expand the `*` before the command reads
+it:
+
+```console
+$ mfctl role add --name Reader \
+    --permission mailfathom.mail.ask \
+    --permission 'mailfathom.*.read'
+```
+
+A name this build does not publish and a pattern reaching nothing it publishes are each refused with `400`, the
+refusal saying which of the two each entry was:
+
+```text
+This build publishes no permission named 'mailfathom.admin.raed'. This build publishes nothing in the reach of the
+pattern 'mailfathom.calendar.*'. A role lists published names, and patterns reaching at least one of them, in which
+'*' is a whole dot-separated segment standing for one or more segments.
+```
+
+**A role is read back as it was written, with what each pattern reaches beside it.** `GET /api/admin/roles` carries
+three members for the list of each role:
+
+| Member | What it carries |
+| --- | --- |
+| `permissions` | The list as written: each published name, then each pattern. Sending it back writes the same role |
+| `patterns` | One `{ "pattern": "<as written>", "reaches": ["<published names it reaches now>"] }` per pattern on that list; empty for a role of names alone |
+| `unpublished` | Stored entries that grant nothing in this build: a name it does not publish, and a pattern reaching nothing it publishes. A role an earlier release wrote, or a row edited in the database, may carry one |
+
+`mfctl role list` prints `permissions` in its `Permissions` column and the other two beneath the listing — first what
+each pattern reaches, one line per role and pattern, then the roles carrying an entry that grants nothing:
+
+```text
+A pattern holds what this deployment publishes in its reach, a permission a later release adds there included. What each reaches now:
+  0199c3d4-… (Reader): mailfathom.*.read reaches mailfathom.mail.read, mailfathom.mail.contacts.read, mailfathom.admin.read, mailfathom.admin.audit.read
+```
+
+What a pattern reaches is the answer of the build the deployment runs, so the same role reads differently after an
+upgrade that publishes a permission in its reach. An entry reported as granting nothing is removed by replacing the
+list with `mfctl role set-permissions`.
 
 **An assignment names one role, one principal, and one scope.** The principal is a user or a group, and the scope is the
 deployment, one organization, or one user. The same role given to the same principal at the same scope twice is refused
@@ -2058,15 +2128,27 @@ anybody else is refused with `409`.
 
 **Every refusal says what to do next.** Deleting a role or a group something is still assigned names how many
 assignments stand in the way; a write giving a name the caller does not hold, or holds too narrowly, is answered `403`
-naming that name; and a write that would leave the deployment with nobody holding `mailfathom.admin.roles.write` over
-it is answered `409` saying to give it to somebody else first.
+naming that name; a write giving a role that lists a pattern, reached below the root, is answered `403` saying that
+only the root gives one; and a write that would leave the deployment with nobody holding
+`mailfathom.admin.roles.write` over it is answered `409` saying to give it to somebody else first. A role listing a
+pattern that reaches that name — `*`, `mailfathom.admin.*`, `mailfathom.admin.*.write` — assigned at the deployment
+scope holds the root exactly as one listing the name does, and is counted so.
+
+**A role that lists a pattern is given by the root alone.** `mfctl assignment add` naming such a role, and
+`mfctl group add-member` naming a group any assignment gives one to, need `mailfathom.admin.roles.write` over the whole
+deployment whatever scope the write names, beside every name the role grants today. So an organization's administrator
+hands out roles of names alone — [a pattern in a role's list](permissions.md#a-pattern-in-a-roles-list) holds the rule,
+and [what a refusal says](#what-a-refusal-says) the answer.
 
 **`mfctl user permissions --user <id>` answers why a user can do something.** It lists every name the user holds with
-the role that gave it, the group it came through or `directly`, and the scope, marking a name the scope makes reach
-nothing; then each of the user's credentials with what it keeps of what was listed. The listing is what your own scope
-covers: a name the user holds through a group or at a scope you do not administer is left out, so an organization's
-administrator reads that organization's part of a member's grant. Past 1000 rows the command says the listing is a
-part of the answer.
+the role that gave it, how the role lists it under `Listed as` — `the name`, or `pattern` and the pattern as it was
+written — the group it came through or `directly`, and the scope, marking a name the scope makes reach nothing; then
+each of the user's credentials with what it keeps of what was listed. A role listing a name both by name and through a
+pattern explains it twice, once per entry, because removing either leaves the other granting it. The route carries the
+same in each row of `sources` as `pattern`, which is `null` where the role lists the permission by name. The listing is
+what your own scope covers: a name the user holds through a group or at a scope you do not administer is left out, so
+an organization's administrator reads that organization's part of a member's grant. Past 1000 rows the command says
+the listing is a part of the answer.
 
 ### Records this deployment will not read
 
@@ -2229,8 +2311,13 @@ it at, and every mail name, held at all, since a mail name's scope is never read
 `mailfathom.admin.credentials.write` cannot mint itself, or a root, a key that administers with everything that user
 holds; an organization's administrator cannot set a password for a member who holds a name over the whole deployment;
 and an administrator whose own roles grant no `mailfathom.mail.send` cannot place a way in as somebody who sends. Each
-is refused naming the first name it lacks. Disabling and removing one widen nobody and need the write permission over
-the user alone.
+is refused naming the first name it lacks. **Where a role the user holds lists a pattern, the same three need the root
+as well** — `mailfathom.admin.roles.write` over the whole deployment — because that user's grant comes to hold
+whatever a later release publishes in the pattern's reach, which no check of what the caller holds today bounds. So an
+organization's administrator cannot set a password for a member who holds such a role, the seeded `Administrator`
+among them; [a pattern in a role's list](permissions.md#a-pattern-in-a-roles-list) holds the rule, and the refusal
+[carries `widensOnUpgrade`](#what-a-refusal-says). Disabling and removing one widen nobody and need the write
+permission over the user alone.
 
 ```console
 $ mfctl credential create --method password --username user
@@ -2269,7 +2356,7 @@ Each method takes what only it needs — `--username` for a password, `--public-
 records the names the credential keeps of its user's grant: a name the user's roles do not grant is accepted and holds
 nothing until they do, and no name adds to what the user holds. Naming none records no narrowing, so the credential
 holds exactly what its user's roles grant, now and after every change to them — and a permission a later release
-publishes reaches it only through a role that lists it. `--no-permissions` provisions one that authenticates and reaches
+publishes reaches it only through a role that lists it, by name or through a pattern reaching it. `--no-permissions` provisions one that authenticates and reaches
 no tool whatever its user holds. Each listed credential carries `permissions`, the names it keeps or `null` where it
 names none, beside `effectivePermissions`, what that leaves it holding under its user's grant at the moment of the
 reading; `mfctl credential list` shows them as "Narrows to" and "Holds". A token presented under
@@ -3080,6 +3167,7 @@ removing the log is a way to start a new one rather than a way to turn it off.
 | `The deployment refused the credential.` | Nobody holds what was presented, or it is disabled or its lifetime has ended, or it does not list `admin` among its endpoints, or the request arrived from outside the networks it is accepted from, or what its own permission list leaves of its user's grant holds no administrative permission. The answer is the same for all of them by design. A credential provisioned without `--surface admin` — what an MCP client is given — is the commonest case. |
 | `this credential does not hold …` | The credential was accepted and the operation was not: no role assigned to its user grants the name the message states at the deployment, or the credential's own permission list or its token's scopes leave it out. Give the user a role that holds it, provision a credential whose list keeps it, or run the command as an administrator who already holds it. `mfctl status` prints what the one in use holds. |
 | `this credential holds … only over an organization or a user` | The credential's user holds the name the message states, but only through a role assigned over an organization or a user, and this endpoint admits the operation only at the deployment scope, as it does every operation but [those a grant below the deployment reaches](#a-grant-held-below-the-deployment). Granting the name again changes nothing. Run the command as an administrator who holds it over the whole deployment, or assign the user a role holding it at the deployment scope only if they are meant to administer the whole deployment. `mfctl status` prints the scopes the one in use holds. |
+| `a role this would give, or sign somebody in with, lists a pattern` | The command would assign a role that lists a pattern, add a member to a group given one, or provision, rotate, or enable a credential for a user who holds one, and the credential in use does not hold `mailfathom.admin.roles.write` over the whole deployment. Holding it over the organization the command named changes nothing, because [such a role widens on upgrade](permissions.md#a-pattern-in-a-roles-list). Run the command as an administrator who holds that name over the whole deployment, or give the person a role of names alone. `mfctl role list` shows which roles list a pattern. |
 | `The deployment refused the operation: …` | The endpoint refused for a reason other than a missing permission, and the sentence is the deployment's own. A deployment publishing no permission for the route is a defect worth reporting, because no grant makes such a route reachable. |
 | `answered 429` | The endpoint refused the request for its rate limit rather than for its credential. `Retry-After` on the response says when capacity returns where the limiter can compute one. The whole endpoint shares one bucket, so another caller's burst — including somebody guessing keys — is enough to cause this. |
 | `serves no administrative endpoint at /api/admin/…` | The address answered, but on a listener that serves something else. Check the port, and check that `AdminEndpoint:Enabled` is true. |

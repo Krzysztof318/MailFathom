@@ -567,6 +567,11 @@ public sealed class UserCredentialAdministration
     /// own user and hold everything that user holds. Disabling and deleting widen nobody and are not asked this.
     /// </para>
     /// <para>
+    /// A user given a role listing a pattern holds whatever a later release publishes in its reach, so what the writer
+    /// holds today does not bound what signing in as that user comes to. Placing a credential for such a user needs the
+    /// root as well, which is the one grant a widening role cannot carry past.
+    /// </para>
+    /// <para>
     /// The scope is asked first, so a user outside it is answered as unknown rather than with a refusal naming a
     /// permission they hold — which would tell the caller the user exists and something about what they may do.
     /// </para>
@@ -576,6 +581,12 @@ public sealed class UserCredentialAdministration
         if (!await this.ReachesAsync(user, cancellationToken))
         {
             return false;
+        }
+
+        if (!this.authorization.Permits(MailFathomPermission.AdminRolesWrite)
+            && await this.grants.WidensOnUpgradeAsync(user, cancellationToken))
+        {
+            throw PrincipalNotAuthorizedException.GivesAWideningGrant();
         }
 
         var held = await this.grants.ResolveAsync(user, cancellationToken);

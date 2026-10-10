@@ -43,8 +43,87 @@ public sealed class GrantEndpointsTests
         // Assert
         var problem = Assert.IsType<ProblemHttpResult>(result.Result);
         Assert.Equal(StatusCodes.Status400BadRequest, problem.StatusCode);
-        Assert.Contains("'mailfathom.admin.everything'", problem.ProblemDetails.Detail, StringComparison.Ordinal);
+        Assert.Contains("no permission named 'mailfathom.admin.everything'", problem.ProblemDetails.Detail, StringComparison.Ordinal);
+        Assert.DoesNotContain("in the reach of", problem.ProblemDetails.Detail, StringComparison.Ordinal);
         Assert.Empty(harness.Grants.ReceivedCalls());
+    }
+
+    /// <summary>
+    /// A pattern reaching nothing is well formed, so it is refused in words of its own rather than as a misspelled
+    /// name, and a value with a wildcard inside a segment is told apart from it as the unpublished name it is.
+    /// </summary>
+    [Fact]
+    public async Task CreateRoleAsync_APatternReachingNothingBesideAWildcardInsideASegment_IsRefusedNamingEachForWhatItIs()
+    {
+        // Arrange
+        var harness = new EndpointHarness();
+
+        // Act
+        var result = await GrantEndpoints.CreateRoleAsync(
+            new RoleProvisioningRequest("Readers", ["mailfathom.admin.read", "mailfathom.billing.*", "mailfathom.mail.c*"]),
+            harness.Administration,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var problem = Assert.IsType<ProblemHttpResult>(result.Result);
+        Assert.Equal(StatusCodes.Status400BadRequest, problem.StatusCode);
+        Assert.Contains("no permission named 'mailfathom.mail.c*'", problem.ProblemDetails.Detail, StringComparison.Ordinal);
+        Assert.Contains("in the reach of the pattern 'mailfathom.billing.*'", problem.ProblemDetails.Detail, StringComparison.Ordinal);
+        Assert.Empty(harness.Grants.ReceivedCalls());
+    }
+
+    /// <summary>A pattern is written to the store as the pattern, so it still means its reach after a release adds to it.</summary>
+    [Fact]
+    public async Task CreateRoleAsync_APatternBesideAName_WritesBothAsTheyWereWritten()
+    {
+        // Arrange
+        var harness = new EndpointHarness();
+        harness.Grants
+            .CreateRoleAsync(Arg.Any<Guid>(), "Writers", Arg.Any<RolePermissions>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns(GrantWriteResult.Of(GrantWriteOutcome.Written));
+
+        // Act
+        var result = await GrantEndpoints.CreateRoleAsync(
+            new RoleProvisioningRequest("Writers", ["mailfathom.admin.*.write", "mailfathom.admin.read"]),
+            harness.Administration,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.IsNotType<ProblemHttpResult>(result.Result);
+        await harness.Grants.Received(1).CreateRoleAsync(
+            Arg.Any<Guid>(),
+            "Writers",
+            Arg.Is<RolePermissions>(permissions =>
+                permissions!.Written.Count == 2
+                && permissions.Written[0] == "mailfathom.admin.read"
+                && permissions.Written[1] == "mailfathom.admin.*.write"),
+            Arg.Any<DateTimeOffset>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// A role reads back as it was written, so sending the list back writes the same role, with each pattern beside
+    /// what it resolves to in this build and a stored entry that grants nothing kept apart.
+    /// </summary>
+    [Fact]
+    public void RoleResponseFor_ARoleListingANameAPatternAndAnEntryGrantingNothing_ListsItAsWrittenBesideWhatThePatternReaches()
+    {
+        // Arrange
+        var role = new Role(
+            RoleId,
+            "Contacts",
+            RolePermissions.Read(["mailfathom.mail.contacts.*", "mailfathom.mail.read", "mailfathom.retired.*", "mailfathom.admin.everything"]),
+            RecordedAt);
+
+        // Act
+        var response = RoleResponse.For(role);
+
+        // Assert
+        Assert.Equal(["mailfathom.mail.read", "mailfathom.mail.contacts.*"], response.Permissions);
+        var pattern = Assert.Single(response.Patterns);
+        Assert.Equal("mailfathom.mail.contacts.*", pattern.Pattern);
+        Assert.Equal(["mailfathom.mail.contacts.read", "mailfathom.mail.contacts.write"], pattern.Reaches);
+        Assert.Equal(["mailfathom.admin.everything", "mailfathom.retired.*"], response.Unpublished);
     }
 
     [Fact]
@@ -311,7 +390,7 @@ public sealed class GrantEndpointsTests
         Assert.Equal(StatusCodes.Status409Conflict, Assert.IsType<ProblemHttpResult>(result.Result).StatusCode);
     }
 
-    /// <summary>The explanation names the role and the group a permission came through, and marks a name that reaches nothing at its scope.</summary>
+    /// <summary>The explanation names the role, the pattern, and the group a permission came through, and marks a name that reaches nothing at its scope.</summary>
     [Fact]
     public async Task ExplainUserPermissionsAsync_AUserHoldingANameInertAtTheirScope_ReportsItAsInert()
     {
@@ -323,6 +402,7 @@ public sealed class GrantEndpointsTests
         [
             new GrantSource(
                 MailFathomPermission.AdminSpend,
+                "*",
                 RoleId,
                 "Administrator",
                 AssignmentId,
@@ -341,8 +421,8 @@ public sealed class GrantEndpointsTests
         // Assert
         var source = Assert.Single(Assert.IsType<Ok<UserPermissionsResponse>>(result.Result).Value!.Sources);
         Assert.Equal(
-            ("mailfathom.admin.spend", "Administrator", "Operators", "user", (Guid?)user.Value, true),
-            (source.Permission, source.Role, source.Group, source.Scope.Kind, source.Scope.Id, source.Inert));
+            ("mailfathom.admin.spend", "*", "Administrator", "Operators", "user", (Guid?)user.Value, true),
+            (source.Permission, source.Pattern, source.Role, source.Group, source.Scope.Kind, source.Scope.Id, source.Inert));
     }
 
     private sealed class EndpointHarness
