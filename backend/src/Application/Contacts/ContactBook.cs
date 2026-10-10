@@ -106,7 +106,10 @@ public sealed class ContactBook
     /// <returns>The page, and the cursor the following one is asked with.</returns>
     /// <exception cref="ArgumentNullException">Thrown when a required argument is <see langword="null" />.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the read was reached by anything but a caller granted <see cref="MailFathomPermission.AdminAuditRead" /> at a scope covering the scope's user.</exception>
-    /// <remarks>The page is bounded by the query the caller composed, which is where the ceiling on how much of a person's correspondents leaves the database at once already lives.</remarks>
+    /// <remarks>
+    /// The page is bounded by the query the caller composed, which is where the ceiling on how much of a person's
+    /// correspondents leaves the database at once already lives. A collected book whose mail account the caller's scope does not cover is left out of the read, so a contact held only there is answered as absent rather than refused.
+    /// </remarks>
     public async Task<ContactPage> ReadPageAsync(
         ContactBookScope scope,
         ContactQuery query,
@@ -127,6 +130,7 @@ public sealed class ContactBook
     /// <returns>The contact, or <see langword="null" /> where the scope shows no such person.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="scope" /> is <see langword="null" />.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the read was reached by anything but a caller granted <see cref="MailFathomPermission.AdminAuditRead" /> at a scope covering the scope's user.</exception>
+    /// <remarks>A collected book whose mail account the caller's scope does not cover is left out of the read, so a contact held only there is answered as absent rather than refused.</remarks>
     public async Task<Contact?> FindAsync(
         ContactBookScope scope,
         ContactId contactId,
@@ -146,7 +150,10 @@ public sealed class ContactBook
     /// <returns>The contact, or <see langword="null" /> where nobody in the scope holds it.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="scope" /> is <see langword="null" />.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the read was reached by anything but a caller granted <see cref="MailFathomPermission.AdminAuditRead" /> at a scope covering the scope's user.</exception>
-    /// <remarks>Resolving an address to a person is the most pointed read the book answers, which is why it asks for the same grant the listing does rather than a weaker one.</remarks>
+    /// <remarks>
+    /// Resolving an address to a person is the most pointed read the book answers, which is why it asks for the same grant
+    /// the listing does rather than a weaker one. A collected book whose mail account the caller's scope does not cover is left out of the read, so a contact held only there is answered as absent rather than refused.
+    /// </remarks>
     public async Task<Contact?> FindByAddressAsync(
         ContactBookScope scope,
         EmailAddress address,
@@ -476,7 +483,10 @@ public sealed class ContactBook
     /// <returns>The export, or <see langword="null" /> when the scope shows no such contact.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="scope" /> is <see langword="null" />.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the export was reached by anything but a caller granted <see cref="MailFathomPermission.AdminAuditRead" /> at a scope covering the scope's user.</exception>
-    /// <remarks>It is what a data-subject access request is answered from, which is reading what this deployment derived about a person rather than a report of its own state.</remarks>
+    /// <remarks>
+    /// It is what a data-subject access request is answered from, which is reading what this deployment derived about a
+    /// person rather than a report of its own state. A collected book whose mail account the caller's scope does not cover is left out of the read, so a contact held only there is answered as absent rather than refused.
+    /// </remarks>
     public async Task<ContactExport?> ExportAsync(
         ContactBookScope scope,
         ContactId contactId,

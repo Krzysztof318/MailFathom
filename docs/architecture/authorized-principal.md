@@ -60,7 +60,10 @@ reads published under `mailfathom.admin.audit.read`. Those ask `RequirePermissio
 account they name, and `AccessAuthorization` places it through `IAdministrativeTargets` — the organization it belongs
 to, and the one user it is wholly the concern of — read from the records per question so a move between organizations
 reaches the next check on every replica. A name held over the deployment answers without placing anything, and a read
-across several mail accounts asks `CoveredMailAccountsAsync`, which places them in one read. A boundary that has to
+across several mail accounts asks `CoveredMailAccountsAsync`, which places them in one read. A read addressed by an
+identifier of its own, such as one queued message, learns its account only by reading the record: it asks
+`RequirePermissionAtAnyScope` before reading, then `PermitsOverAsync` over the account it found, and answers a record
+outside the caller's scope as one it did not find. A boundary that has to
 answer a target outside the caller's scope exactly as one that does not exist asks `PermitsOverAsync` first and takes
 the not-found path itself, which is how a refusal stops disclosing that the target exists elsewhere;
 `PermitsAtAnyScope` is the cheap question the transport asks of such a route, since it cannot place the target.
