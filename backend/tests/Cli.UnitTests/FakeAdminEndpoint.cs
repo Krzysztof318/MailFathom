@@ -58,6 +58,22 @@ internal static class FakeAdminEndpoint
         params string[] permissions) =>
         AnsweringBody(HttpStatusCode.OK, SessionBody(credentialName, CommandVersion, permissions));
 
+    /// <summary>Builds an endpoint that accepts the credential and names the user it belongs to and the roles they hold.</summary>
+    /// <param name="credentialName">The name it reports for the credential.</param>
+    /// <param name="user">The user it reports.</param>
+    /// <param name="displayName">What it reports the user is called.</param>
+    /// <param name="roles">The <c>roles</c> array it reports, written as JSON.</param>
+    /// <returns>The endpoint.</returns>
+    internal static FakeHttpMessageHandler AcceptingAsUser(
+        string credentialName,
+        Guid user,
+        string displayName,
+        string roles) => AnsweringBody(
+        HttpStatusCode.OK,
+        $$"""
+        {"service":"MailFathom","version":"{{CommandVersion}}","credential":"{{credentialName}}","permissions":[],"user":{"id":"{{user:D}}","displayName":"{{displayName}}"},"roles":{{roles}}}
+        """);
+
     /// <summary>Builds the body the session route answers with, stating no grant.</summary>
     /// <param name="credentialName">The name it reports for the credential.</param>
     /// <param name="version">The version it reports.</param>

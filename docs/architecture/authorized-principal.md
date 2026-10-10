@@ -237,8 +237,9 @@ is one published under the other half's permission, which makes either omission 
 route. The use case behind the route asks the same question again and raises this refusal on its own, and the filter
 answers that exception in the same shape — so the transport is a cheap first reading rather than the authority.
 `GET /session` is the one route on each surface that requires no permission, because reporting what the credential is
-and what it may do is what a caller holding nothing needs in order to learn that it holds nothing. Which half a route
-may draw on is the group's decision rather than the route's, so the same filter serves both surfaces and each names its
+and what it may do is what a caller holding nothing needs in order to learn that it holds nothing. The administrative
+one also names the user and the roles that user holds at each scope, read from the user's own records rather than off
+the principal, which acts for no user there by design. Which half a route may draw on is the group's decision rather than the route's, so the same filter serves both surfaces and each names its
 own.
 [The administrative endpoint page](../operations/admin-endpoint.md#what-the-endpoint-serves) and
 [the client endpoint page](../operations/client-endpoint.md#what-it-serves) carry the two mappings.

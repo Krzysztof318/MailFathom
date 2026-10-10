@@ -380,10 +380,11 @@ public sealed class OrchestratedGrantStoreTests(MailFathomOrchestrationFixture o
     /// <summary>
     /// A user's grant is the union of what their own assignments and their groups' assignments give, each name at the
     /// scope of the assignment that gave it — so a name reached both ways is held at both scopes, and a group the user
-    /// does not belong to gives them nothing.
+    /// does not belong to gives them nothing. The roles read through the same assignments name each role once per scope,
+    /// a role given both directly and through a group included, in name order.
     /// </summary>
     [Fact]
-    public async Task ReadGrantOfAsync_AUserAssignedDirectlyAndThroughAGroup_HoldsTheUnionAtEachAssignmentsScope()
+    public async Task ReadGrantOfAsync_AUserAssignedDirectlyAndThroughAGroup_HoldsTheUnionAtEachAssignmentsScopeAndNamesEachRole()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -392,6 +393,7 @@ public sealed class OrchestratedGrantStoreTests(MailFathomOrchestrationFixture o
         var bystander = Guid.CreateVersion7();
         var mailRole = Guid.CreateVersion7();
         var groupRole = Guid.CreateVersion7();
+        var groupOnlyRole = Guid.CreateVersion7();
         var group = Guid.CreateVersion7();
         await ProvisionUserAsync(services, user, cancellationToken);
         await ProvisionUserAsync(services, bystander, cancellationToken);
@@ -399,6 +401,7 @@ public sealed class OrchestratedGrantStoreTests(MailFathomOrchestrationFixture o
         try
         {
             await CreateRoleAsync(services, mailRole, $"role-{mailRole:N}", cancellationToken);
+            await CreateRoleAsync(services, groupOnlyRole, $"role-{groupOnlyRole:N}", cancellationToken);
             await services.InScopeAsync(
                 (scope, token) => Store(scope).CreateRoleAsync(
                     groupRole,
@@ -415,27 +418,46 @@ public sealed class OrchestratedGrantStoreTests(MailFathomOrchestrationFixture o
                 cancellationToken);
             await AssignAsync(services, mailRole, AssignmentPrincipal.User(UserId.Create(user)), AssignmentScope.User(UserId.Create(user)), cancellationToken);
             await AssignAsync(services, groupRole, AssignmentPrincipal.Group(group), AssignmentScope.Deployment, cancellationToken);
+            await AssignAsync(services, groupRole, AssignmentPrincipal.User(UserId.Create(user)), AssignmentScope.Deployment, cancellationToken);
+            await AssignAsync(services, groupOnlyRole, AssignmentPrincipal.Group(group), AssignmentScope.User(UserId.Create(bystander)), cancellationToken);
 
             // Act
             var held = await services.InScopeAsync((scope, token) => Store(scope).ReadGrantOfAsync(UserId.Create(user), token), cancellationToken);
             var bystanderHeld = await services.InScopeAsync((scope, token) => Store(scope).ReadGrantOfAsync(UserId.Create(bystander), token), cancellationToken);
+            var roles = await services.InScopeAsync((scope, token) => Store(scope).ReadRolesHeldByAsync(UserId.Create(user), token), cancellationToken);
+            var bystanderRoles = await services.InScopeAsync((scope, token) => Store(scope).ReadRolesHeldByAsync(UserId.Create(bystander), token), cancellationToken);
 
             // Assert
             Assert.Equal(
-                new HashSet<AssignmentScope> { AssignmentScope.User(UserId.Create(user)), AssignmentScope.Deployment },
+                new HashSet<AssignmentScope>
+                {
+                    AssignmentScope.User(UserId.Create(user)),
+                    AssignmentScope.Deployment,
+                    AssignmentScope.User(UserId.Create(bystander)),
+                },
                 held.ScopesOf(MailFathomPermission.MailRead));
             Assert.Equal([AssignmentScope.Deployment], held.ScopesOf(MailFathomPermission.AdminRead));
             Assert.Equal(2, held.Permissions.Count);
             Assert.Empty(bystanderHeld.Permissions);
+            HeldRole[] expectedRoles =
+            [
+                new($"role-{mailRole:N}", AssignmentScope.User(UserId.Create(user))),
+                new($"role-{groupRole:N}", AssignmentScope.Deployment),
+                new($"role-{groupOnlyRole:N}", AssignmentScope.User(UserId.Create(bystander))),
+            ];
+            Assert.Equal(expectedRoles.OrderBy(role => role.Name, StringComparer.Ordinal), roles);
+            Assert.Empty(bystanderRoles);
         }
         finally
         {
             await OrchestratedForeignUser.EraseAsync(services, user);
             await OrchestratedForeignUser.EraseAsync(services, bystander);
             await RevokeEveryAssignmentOfRoleAsync(services, groupRole);
+            await RevokeEveryAssignmentOfRoleAsync(services, groupOnlyRole);
             await services.InScopeAsync((scope, token) => Store(scope).DeleteGroupAsync(group, token), CancellationToken.None);
             await DeleteRoleAsync(services, mailRole);
             await DeleteRoleAsync(services, groupRole);
+            await DeleteRoleAsync(services, groupOnlyRole);
         }
     }
 

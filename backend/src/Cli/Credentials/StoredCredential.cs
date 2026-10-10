@@ -13,6 +13,7 @@ namespace MailFathom.Cli.Credentials;
 /// <param name="Session">What an OAuth sign-in left behind, absent from a profile holding an API key or a pasted token.</param>
 /// <param name="KeyPair">Where a key-pair profile's private key lives, absent from every other kind of profile.</param>
 /// <param name="Transport">What the operator accepted about this deployment's transport, absent from a profile that accepted nothing beyond the default.</param>
+/// <param name="User">The user the deployment said this profile signed in as, absent where it named none.</param>
 /// <remarks>
 /// <para>
 /// <b>An absent <see cref="Token" /> is the statement that this file holds no secret for the profile.</b> Either the
@@ -44,12 +45,21 @@ internal sealed record StoredCredential(
     [property: JsonPropertyName("credential")] string Credential,
     [property: JsonPropertyName("session")] StoredOAuthSession? Session = null,
     [property: JsonPropertyName("keyPair")] StoredKeyPair? KeyPair = null,
-    [property: JsonPropertyName("transport")] StoredTransportTrust? Transport = null)
+    [property: JsonPropertyName("transport")] StoredTransportTrust? Transport = null,
+    [property: JsonPropertyName("user")] StoredUser? User = null)
 {
     /// <inheritdoc />
     /// <remarks>Redacted, so no diagnostic or exception message prints the token by formatting the record it lives in — even encrypted, which is a value worth not scattering.</remarks>
     public override string ToString() => $"{nameof(StoredCredential)} {{ {this.Endpoint}, {this.Credential} }}";
 }
+
+/// <summary>The user a profile signed in as, as the deployment reported them at sign-in.</summary>
+/// <param name="Id">The user's identifier.</param>
+/// <param name="DisplayName">What the user was called, absent where the deployment stated nothing.</param>
+/// <remarks>What was true at sign-in, like <see cref="StoredCredential.Credential" /> beside it; <c>status</c> is what asks the deployment again.</remarks>
+internal sealed record StoredUser(
+    [property: JsonPropertyName("id")] Guid Id,
+    [property: JsonPropertyName("displayName")] string? DisplayName);
 
 /// <summary>Where a key-pair profile's private key lives, so every command can mint the credential it presents.</summary>
 /// <param name="PrivateKeyPath">The absolute path of the operator's private key.</param>

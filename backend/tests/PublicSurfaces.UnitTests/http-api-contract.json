@@ -43,6 +43,12 @@
             },
             "type": "array"
           },
+          "roles": {
+            "items": {
+              "$ref": "#/components/schemas/AdminSessionRoleResponse"
+            },
+            "type": "array"
+          },
           "scopes": {
             "items": {
               "$ref": "#/components/schemas/AdminSessionScope"
@@ -51,6 +57,16 @@
           },
           "service": {
             "type": "string"
+          },
+          "user": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AdminSessionUserResponse"
+              }
+            ]
           },
           "version": {
             "type": "string"
@@ -61,7 +77,32 @@
           "version",
           "credential",
           "permissions",
-          "scopes"
+          "scopes",
+          "user",
+          "roles"
+        ],
+        "type": "object"
+      },
+      "AdminSessionRoleResponse": {
+        "properties": {
+          "role": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "target": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "role",
+          "scope",
+          "target"
         ],
         "type": "object"
       },
@@ -95,6 +136,25 @@
           "target",
           "permissions",
           "reachingNothing"
+        ],
+        "type": "object"
+      },
+      "AdminSessionUserResponse": {
+        "properties": {
+          "displayName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "displayName"
         ],
         "type": "object"
       },

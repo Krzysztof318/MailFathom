@@ -208,9 +208,9 @@ that goes on without it: a caller refused that read is told which credential it 
 anyway.
 
 **`GET /api/admin/session` sits outside the model and needs no permission.** It reports the credential the caller
-already presented, the version this deployment already publishes, and the permissions that credential holds, all of
-which the caller brought or may always ask about itself; and it is what every command reads first, `mfctl login`
-included. Requiring a permission for it would make that permission a component of every administrative grant, so a
+already presented, the version this deployment already publishes, the permissions that credential holds, and the user
+it belongs to with the roles that user holds and the scope of each, all of which the caller brought or may always ask
+about itself; and it is what every command reads first, `mfctl login` included. Requiring a permission for it would make that permission a component of every administrative grant, so a
 credential granted only the spend permission could not sign in to use it. A credential granted nothing therefore still
 answers here and nowhere else; an operator who wants nothing answered at all removes the entry.
 

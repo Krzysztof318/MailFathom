@@ -186,8 +186,9 @@ internal sealed class CredentialStore
     /// <param name="session">What an OAuth sign-in left behind, whose refresh token is kept alongside the access token, or <see langword="null" /> for a presented credential.</param>
     /// <param name="keyPair">Where a key-pair profile's private key lives, or <see langword="null" /> when the profile stores a credential of its own.</param>
     /// <param name="trust">What the operator accepted about this deployment's transport, or <see langword="null" /> when they accepted nothing beyond the default.</param>
+    /// <param name="user">The user the deployment said the profile signs in as, or <see langword="null" /> where it named none.</param>
     /// <returns>The name the profile is filed under, which is the one an earlier sign-in chose when the two spellings differ, and which of the two places took its secrets, for the command to say both.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when an argument other than <paramref name="session" />, <paramref name="keyPair" />, or <paramref name="trust" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when an argument other than <paramref name="session" />, <paramref name="keyPair" />, <paramref name="trust" />, or <paramref name="user" /> is <see langword="null" />.</exception>
     /// <exception cref="CliFailure">Thrown when the store cannot be written.</exception>
     /// <remarks>
     /// Signing in makes the new profile the default, because it is the deployment the operator just chose to work with;
@@ -205,7 +206,8 @@ internal sealed class CredentialStore
         string credentialName,
         OAuthSession? session = null,
         StoredKeyPair? keyPair = null,
-        StoredTransportTrust? trust = null)
+        StoredTransportTrust? trust = null,
+        StoredUser? user = null)
     {
         ArgumentNullException.ThrowIfNull(name);
         ArgumentNullException.ThrowIfNull(endpoint);
@@ -246,7 +248,8 @@ internal sealed class CredentialStore
             credentialName,
             this.Record(session, address, held),
             keyPair,
-            Recorded(trust));
+            Recorded(trust),
+            user);
 
         var written = stored with { Default = profileName };
 

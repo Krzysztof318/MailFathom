@@ -108,7 +108,7 @@ The first sign-in to a new deployment is the default administrator's, with its p
 ```console
 $ mfctl login --endpoint http://127.0.0.1:8090 --name local --mode password
 Password for 'admin':
-Signed in to http://127.0.0.1:8090 as 'user 3f1d... credential 0198f0c4-...' (MailFathom 0.2.0), saved as profile 'local' and selected.
+Signed in to http://127.0.0.1:8090 as admin (3f1d...) (MailFathom 0.2.0), saved as profile 'local' and selected.
 ```
 
 `--username` names anybody else who signs in with a password. With an API key instead:
@@ -116,7 +116,7 @@ Signed in to http://127.0.0.1:8090 as 'user 3f1d... credential 0198f0c4-...' (Ma
 ```console
 $ mfctl login --endpoint https://mail.example.test:8443 --name production
 Administrative credential (an API key, or an access token from the configured authorization server):
-Signed in to https://mail.example.test:8443 as 'user 3f1d... credential 41d7e2b0-...' (MailFathom 0.2.0), saved as profile 'production' and selected.
+Signed in to https://mail.example.test:8443 as Alice Example (3f1d...) (MailFathom 0.2.0), saved as profile 'production' and selected.
 ```
 
 The credential is typed at the prompt or piped in, never passed as an argument — an argument reaches your shell
@@ -192,11 +192,14 @@ from a host that is simply down — the stored profile can only say what was tru
 forgets a local profile without revoking anything: the credential keeps working until the deployment stops accepting
 it, so a lost laptop is a reason to rotate the key on the server rather than to sign out.
 
-`status` also prints what your credential may do, which is what decides whether any other command here will work:
+`status` also prints who you are signed in as, which roles you hold and the scope each was assigned at, and what your
+credential may do — which is what decides whether any other command here will work:
 
 ```console
 $ mfctl status
 'production' (https://mail.example.test:8443) accepts the stored credential as 'user 3f1d... credential 41d7e2b0-...' (MailFathom 0.2.0).
+Signed in as Alice Example (3f1d...).
+The user holds Administrator over the deployment.
 It holds mailfathom.admin.read, mailfathom.admin.operate.
 Documentation for that version: https://krzysztof318.github.io/MailFathom/docs/v0.2.0/
 ```

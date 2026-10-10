@@ -490,23 +490,7 @@ internal sealed class PersistedGrants(MailFathomDbContext dbContext, IGrantChang
     /// </remarks>
     public async Task<ScopedGrant> ReadGrantOfAsync(UserId user, CancellationToken cancellationToken)
     {
-        var userId = RequireUser(user);
-
-        // The membership rule AdmitsMember applies when a member is added, read again against the user's organization
-        // now: moving a user leaves their memberships of the old organization's groups behind, and those must grant
-        // nothing once nobody in that organization covers the user any more.
-        var groupsOfUser =
-            from member in dbContext.UserGroupMembers
-            where member.UserId == userId
-            join userGroup in dbContext.UserGroups on member.GroupId equals userGroup.Id
-            join account in dbContext.UserAccounts on member.UserId equals account.Id
-            where userGroup.OrganizationId == null || userGroup.OrganizationId == account.OrganizationId
-            select userGroup.Id;
-
-        var held = await dbContext.RoleAssignments
-            .AsNoTracking()
-            .Where(assignment => assignment.PrincipalUserId == userId
-                || (assignment.PrincipalGroupId != null && groupsOfUser.Contains(assignment.PrincipalGroupId.Value)))
+        var held = await this.AssignmentsHeldBy(RequireUser(user))
             .Join(
                 dbContext.RolePermissions,
                 assignment => assignment.RoleId,
@@ -518,6 +502,25 @@ internal sealed class PersistedGrants(MailFathomDbContext dbContext, IGrantChang
         return ScopedGrant.Of(held.Select(row => (
             MailFathomPermission.TryParse(row.Permission, out var permission) ? permission : default,
             ScopeOf(row.ScopeOrganizationId, row.ScopeUserId))));
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Nothing pages it, for the reason nothing pages <see cref="ReadGrantOfAsync" />: what it returns is bounded by the assignments an administrator wrote for this one user and their groups, not by anything a request names.</remarks>
+    public async Task<IReadOnlyList<HeldRole>> ReadRolesHeldByAsync(UserId user, CancellationToken cancellationToken)
+    {
+        var held = await this.AssignmentsHeldBy(RequireUser(user))
+            .Join(
+                dbContext.Roles,
+                assignment => assignment.RoleId,
+                role => role.Id,
+                (assignment, role) => new { role.Name, assignment.ScopeOrganizationId, assignment.ScopeUserId })
+            .Distinct()
+            .OrderBy(row => row.Name)
+            .ThenBy(row => row.ScopeOrganizationId)
+            .ThenBy(row => row.ScopeUserId)
+            .ToArrayAsync(cancellationToken);
+
+        return [.. held.Select(row => new HeldRole(row.Name, ScopeOf(row.ScopeOrganizationId, row.ScopeUserId)))];
     }
 
     /// <summary>Names what an assignment named that does not exist, from the foreign key that refused it.</summary>
@@ -571,6 +574,28 @@ internal sealed class PersistedGrants(MailFathomDbContext dbContext, IGrantChang
         (_, { } scopeUser) => AssignmentScope.User(UserId.Create(scopeUser)),
         _ => AssignmentScope.Deployment,
     };
+
+    /// <summary>Composes the assignments naming one user, directly or through a group that still covers them.</summary>
+    /// <remarks>
+    /// The membership rule <see cref="AdmitsMember" /> applies when a member is added, read again against the user's
+    /// organization now: moving a user leaves their memberships of the old organization's groups behind, and those must
+    /// give nothing once nobody in that organization covers the user any more.
+    /// </remarks>
+    private IQueryable<RoleAssignmentEntity> AssignmentsHeldBy(Guid userId)
+    {
+        var groupsOfUser =
+            from member in dbContext.UserGroupMembers
+            where member.UserId == userId
+            join userGroup in dbContext.UserGroups on member.GroupId equals userGroup.Id
+            join account in dbContext.UserAccounts on member.UserId equals account.Id
+            where userGroup.OrganizationId == null || userGroup.OrganizationId == account.OrganizationId
+            select userGroup.Id;
+
+        return dbContext.RoleAssignments
+            .AsNoTracking()
+            .Where(assignment => assignment.PrincipalUserId == userId
+                || (assignment.PrincipalGroupId != null && groupsOfUser.Contains(assignment.PrincipalGroupId.Value)));
+    }
 
     private static Guid RequireUser(UserId user) => user.IsSpecified
         ? user.Value

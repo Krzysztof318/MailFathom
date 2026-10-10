@@ -4,12 +4,15 @@
 
 using System.Security.Claims;
 using MailFathom.Application.Access;
+using MailFathom.Application.Access.Grants;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Security.Basic;
 using MailFathom.Host.Security.Endpoints;
 using MailFathom.Host.Security.Transport;
 using MailFathom.Versioning;
+using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.Mvc;
 
 namespace MailFathom.Host.Api;
 
@@ -22,11 +25,11 @@ namespace MailFathom.Host.Api;
 /// </para>
 /// <para>
 /// It reports what the deployment knows about the caller and nothing else. There is no configuration, no account list,
-/// and no mailbox here: the response names the credential that authenticated, the product version, and the permissions
-/// that credential's grant carries — which is what a client needs to tell "signed in" from "reached something else that
-/// answers HTTP", and what the caller needs to learn what the rest of this surface will serve it. Each of the three is
-/// something the caller brought or may ask about itself, which is why this is the one route published under no
-/// permission.
+/// and no mailbox here: the response names the credential that authenticated, the product version, the permissions
+/// that credential's grant carries, the user the caller administers as, and the roles that user holds at each scope —
+/// which is what a client needs to tell "signed in" from "reached something else that answers HTTP", and what the
+/// caller needs to learn what the rest of this surface will serve it. Every one of them is something the caller brought
+/// or may ask about itself, which is why this is the one route published under no permission.
 /// </para>
 /// <para>
 /// The second is the surface's only write, and <see cref="MailboxRefreshTokenEndpoint" /> states what that costs.
@@ -147,9 +150,10 @@ internal static class AdminApiEndpoints
 {
     /// <summary>The route reporting what the deployment knows about the caller, relative to the administrative prefix.</summary>
     /// <remarks>
-    /// The one administrative route published under no permission. It discloses nothing a caller did not bring — the
-    /// credential it presented, the version this deployment already publishes, and what its own grant carries — and it
-    /// is what every command reads first, <c>mfctl login</c> included. Putting it behind a permission would make that
+    /// The one administrative route published under no permission. It discloses nothing but what a caller brought or
+    /// may always ask about itself — the credential it presented, the version this deployment already publishes, what
+    /// its own grant carries, and who it is: its user's display name and the roles that user holds, each with the
+    /// organization or user its scope names — and it is what every command reads first, <c>mfctl login</c> included. Putting it behind a permission would make that
     /// permission a component of every administrative grant, so a credential granted only the spend permission could not
     /// sign in to use it. A credential granted nothing therefore still answers here and nowhere else; an operator who
     /// wants nothing answered at all removes the entry.
@@ -180,9 +184,7 @@ internal static class AdminApiEndpoints
 
         // TypedResults rather than Results, so the response type reaches the endpoint's metadata and the generated
         // OpenAPI document describes what this answers with rather than an untyped 200.
-        api.MapGet(SessionRoute, (ClaimsPrincipal caller, IAuthorizedPrincipalSource principals) =>
-                TypedResults.Ok(AdminSessionResponse.For(caller, principals.Current)))
-            .RequireNoPermission();
+        api.MapGet(SessionRoute, ReadSessionAsync).RequireNoPermission();
 
         api.MapMailboxRefreshToken();
         api.MapMailboxSynchronizationStatus();
@@ -209,6 +211,37 @@ internal static class AdminApiEndpoints
 
         return api;
     }
+
+    /// <summary>Answers who the caller is, which roles their user holds and where, and what this request may do.</summary>
+    /// <remarks>
+    /// The user and the roles are read here rather than carried on the principal, because an administrative principal
+    /// acts for no user's mail by construction and naming the user on it would invite exactly that reading. The roles
+    /// are the user's own assignments and are not narrowed by the credential presented; the permissions beside them are,
+    /// so the two together say both who the caller is to the deployment and what this credential carries of it.
+    /// </remarks>
+    internal static async Task<Ok<AdminSessionResponse>> ReadSessionAsync(
+        HttpContext context,
+        [FromServices] TransportAuthorizedPrincipalSource principals,
+        [FromServices] IUserDirectory users,
+        [FromServices] IGrantStore grants,
+        CancellationToken cancellationToken)
+    {
+        var principal = principals.Current;
+
+        if (principals.AdministratorActingIn(context) is not { } administrator)
+        {
+            return TypedResults.Ok(AdminSessionResponse.For(context.User, principal, user: null, roles: []));
+        }
+
+        var record = await users.ReadUserAsync(administrator, cancellationToken);
+        var roles = await grants.ReadRolesHeldByAsync(administrator, cancellationToken);
+
+        return TypedResults.Ok(AdminSessionResponse.For(
+            context.User,
+            principal,
+            new AdminSessionUserResponse(administrator.Value, record?.DisplayName),
+            [.. roles.Select(AdminSessionRoleResponse.For)]));
+    }
 }
 
 /// <summary>What the administrative endpoint reports back about an authenticated caller.</summary>
@@ -217,6 +250,8 @@ internal static class AdminApiEndpoints
 /// <param name="Credential">The administrator and the credential that admitted them, by identifier — the default administrator and none where the endpoint requires no credential — or <c>anonymous</c> where no administrator was admitted.</param>
 /// <param name="Permissions">The published names this caller holds over the whole deployment, which is every operation naming no target, in the order this repository publishes them, and empty for a credential granted nothing there.</param>
 /// <param name="Scopes">Each scope the caller holds anything at — the deployment first, then each organization, then each user — with what it holds there, and empty for a credential granted nothing.</param>
+/// <param name="User">The user the caller administers as, or <see langword="null" /> where no administrator was admitted.</param>
+/// <param name="Roles">The roles that user holds and the scope each is held at, before any credential narrows them; empty where no administrator was admitted.</param>
 /// <remarks>
 /// <para>
 /// The caller is named by identifiers this deployment assigned — the user and the credential record — never by the
@@ -242,28 +277,39 @@ internal sealed record AdminSessionResponse(
     string Version,
     string Credential,
     IReadOnlyList<string> Permissions,
-    IReadOnlyList<AdminSessionScope> Scopes)
+    IReadOnlyList<AdminSessionScope> Scopes,
+    AdminSessionUserResponse? User,
+    IReadOnlyList<AdminSessionRoleResponse> Roles)
 {
-    /// <summary>Describes the caller a validated credential produced, and what it was granted.</summary>
+    /// <summary>Describes the caller a validated credential produced, who they are, and what they were granted.</summary>
     /// <param name="caller">The principal the authentication scheme produced.</param>
     /// <param name="principal">What the application layer was told admitted this request, or nothing where the transport established none.</param>
+    /// <param name="user">The user the caller administers as, or <see langword="null" /> where none was admitted.</param>
+    /// <param name="roles">The roles that user holds.</param>
     /// <returns>The response body.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="caller" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="caller" /> or <paramref name="roles" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// A request that established no principal reports an empty grant rather than failing. This route requires no
     /// permission, so it answers a caller the rest of the surface refuses, and saying "nothing" is the accurate answer
     /// to what such a caller may do.
     /// </remarks>
-    internal static AdminSessionResponse For(ClaimsPrincipal caller, AuthorizedPrincipal? principal)
+    internal static AdminSessionResponse For(
+        ClaimsPrincipal caller,
+        AuthorizedPrincipal? principal,
+        AdminSessionUserResponse? user,
+        IReadOnlyList<AdminSessionRoleResponse> roles)
     {
         ArgumentNullException.ThrowIfNull(caller);
+        ArgumentNullException.ThrowIfNull(roles);
 
         return new AdminSessionResponse(
             "MailFathom",
             StampedAssemblyVersion.ReadFrom(typeof(AdminSessionResponse).Assembly).Version,
             principal?.Identity ?? NameOf(caller),
             GrantOf(principal),
-            AdminSessionScope.Of(principal?.Grant ?? ScopedGrant.None));
+            AdminSessionScope.Of(principal?.Grant ?? ScopedGrant.None),
+            user,
+            roles);
     }
 
     /// <summary>Names what the caller holds, in the order this repository publishes the set.</summary>
@@ -320,11 +366,38 @@ internal sealed record AdminSessionScope(
     private static bool IsInertAt(MailFathomPermission permission, AssignmentScope scope) =>
         scope.Kind != AssignmentScopeKind.Deployment && permission.IsDeploymentScopeOnly;
 
-    private static string NameOf(AssignmentScopeKind kind) => kind switch
+    /// <summary>Names a kind of scope the way this response publishes it, which a held role reports its own scope by as well.</summary>
+    internal static string NameOf(AssignmentScopeKind kind) => kind switch
     {
         AssignmentScopeKind.Deployment => "deployment",
         AssignmentScopeKind.Organization => "organization",
         AssignmentScopeKind.User => "user",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "The value names no scope."),
     };
+}
+
+/// <summary>The user a caller on the administrative endpoint administers as.</summary>
+/// <param name="Id">The user's identifier, which every other administrative command names a user by.</param>
+/// <param name="DisplayName">What the user is called, or <see langword="null" /> where their record was removed while the request was served.</param>
+internal sealed record AdminSessionUserResponse(Guid Id, string? DisplayName);
+
+/// <summary>One role the caller's user holds, and what the assignment giving it reaches.</summary>
+/// <param name="Role">The role's name.</param>
+/// <param name="Scope"><c>deployment</c>, <c>organization</c>, or <c>user</c>.</param>
+/// <param name="Target">The organization or the user the scope names, absent for the deployment.</param>
+internal sealed record AdminSessionRoleResponse(string Role, string Scope, Guid? Target)
+{
+    /// <summary>Describes one held role.</summary>
+    /// <param name="held">The role and its scope.</param>
+    /// <returns>The response entry.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="held" /> is <see langword="null" />.</exception>
+    internal static AdminSessionRoleResponse For(HeldRole held)
+    {
+        ArgumentNullException.ThrowIfNull(held);
+
+        return new AdminSessionRoleResponse(
+            held.Name,
+            AdminSessionScope.NameOf(held.Scope.Kind),
+            held.Scope.Kind == AssignmentScopeKind.Deployment ? null : held.Scope.Target);
+    }
 }
