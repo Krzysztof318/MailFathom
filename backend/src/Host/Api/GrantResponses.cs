@@ -9,7 +9,7 @@ namespace MailFathom.Host.Api;
 
 /// <summary>A role to record.</summary>
 /// <param name="Name">The name an operator reads it by.</param>
-/// <param name="Permissions">The published permission names it grants.</param>
+/// <param name="Permissions">What it grants: published permission names, and patterns reaching at least one of them.</param>
 internal sealed record RoleProvisioningRequest(string? Name, IReadOnlyList<string>? Permissions);
 
 /// <summary>A role's or a group's new name.</summary>
@@ -17,7 +17,7 @@ internal sealed record RoleProvisioningRequest(string? Name, IReadOnlyList<strin
 internal sealed record GrantRecordNameRequest(string? Name);
 
 /// <summary>The whole list of permissions a role grants from now on.</summary>
-/// <param name="Permissions">The published permission names, replacing every name the role listed.</param>
+/// <param name="Permissions">The published permission names and the patterns, replacing every entry the role listed.</param>
 /// <remarks>Nullable so a body naming no list is refused rather than read as an empty one, which would take every name away from everybody the role is assigned to.</remarks>
 internal sealed record RolePermissionsRequest(IReadOnlyList<string>? Permissions);
 
@@ -42,16 +42,23 @@ internal sealed record RoleAssignmentRequest(
     string? ScopeKind,
     Guid? ScopeId);
 
+/// <summary>One pattern a role lists, beside what it resolves to in the build answering.</summary>
+/// <param name="Pattern">The pattern as it was written.</param>
+/// <param name="Reaches">The published permission names it reaches now, which a later release may add to.</param>
+internal sealed record RolePatternResponse(string Pattern, IReadOnlyList<string> Reaches);
+
 /// <summary>One role as an administrator reads it.</summary>
 /// <param name="Id">The identifier every assignment of it names.</param>
 /// <param name="Name">The name an operator reads it by.</param>
-/// <param name="Permissions">The published permission names it grants.</param>
-/// <param name="Unpublished">Stored names this build does not publish, which grant nothing and are reported so somebody can remove them.</param>
+/// <param name="Permissions">The list as it was written: each published permission name, then each pattern. Sending it back writes the same role.</param>
+/// <param name="Patterns">Each pattern on that list beside the names it reaches now, empty for a role of names alone.</param>
+/// <param name="Unpublished">Stored entries that grant nothing in this build — a name it does not publish, a pattern reaching nothing it publishes — reported so somebody can remove them.</param>
 /// <param name="CreatedAt">When it was recorded.</param>
 internal sealed record RoleResponse(
     Guid Id,
     string Name,
     IReadOnlyList<string> Permissions,
+    IReadOnlyList<RolePatternResponse> Patterns,
     IReadOnlyList<string> Unpublished,
     DateTimeOffset CreatedAt)
 {
@@ -65,7 +72,14 @@ internal sealed record RoleResponse(
         return new RoleResponse(
             role.Id,
             role.Name,
-            [.. role.Permissions.Granted.Select(permission => permission.Name)],
+            role.Permissions.Written,
+            [
+                .. role.Permissions.Patterns
+                    .Select(pattern => new RolePatternResponse(
+                        pattern.Written,
+                        [.. pattern.CoveredPermissions().Select(permission => permission.Name)]))
+                    .Where(pattern => pattern.Reaches.Count > 0),
+            ],
             role.Permissions.Unpublished,
             role.CreatedAt);
     }
@@ -174,6 +188,7 @@ internal sealed record GrantRecordedResponse(Guid Id);
 
 /// <summary>Why a user holds one permission at one scope.</summary>
 /// <param name="Permission">The published permission name.</param>
+/// <param name="Pattern">The pattern on the role's list that reaches it, as written, or <see langword="null" /> where the role lists the permission by name.</param>
 /// <param name="RoleId">The role listing it.</param>
 /// <param name="Role">The role's name.</param>
 /// <param name="AssignmentId">The assignment giving the role.</param>
@@ -183,6 +198,7 @@ internal sealed record GrantRecordedResponse(Guid Id);
 /// <param name="Inert">Whether the permission reaches nothing there, every operation it covers being the deployment's alone.</param>
 internal sealed record GrantSourceResponse(
     string Permission,
+    string? Pattern,
     Guid RoleId,
     string Role,
     Guid AssignmentId,
@@ -200,6 +216,7 @@ internal sealed record GrantSourceResponse(
 
         return new GrantSourceResponse(
             source.Permission.Name,
+            source.Pattern,
             source.RoleId,
             source.RoleName,
             source.AssignmentId,
@@ -212,7 +229,7 @@ internal sealed record GrantSourceResponse(
 
 /// <summary>Why one user holds what they hold within the caller's own scope, and what each of their credentials keeps of it.</summary>
 /// <param name="User">The user the explanation is about.</param>
-/// <param name="Sources">One row per permission, assignment, and scope the caller's own grant covers, in the order the published set declares the permissions.</param>
+/// <param name="Sources">One row per permission, entry of a role's list granting it, and assignment the caller's own grant covers, in the order the published set declares the permissions.</param>
 /// <param name="SourcesTruncated">Whether the user holds more rows there than one explanation carries, so <paramref name="Sources" /> and what each credential is shown to hold are a part of the answer.</param>
 /// <param name="Credentials">The user's credentials, each with its own narrowing and what a request presenting it holds now of what <paramref name="Sources" /> names.</param>
 internal sealed record UserPermissionsResponse(

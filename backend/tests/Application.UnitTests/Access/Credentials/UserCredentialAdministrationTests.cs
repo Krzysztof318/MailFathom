@@ -591,6 +591,62 @@ public sealed class UserCredentialAdministrationTests
         Assert.Equal(UserCredentialWriteOutcome.Written, provisioning.Outcome);
     }
 
+    /// <summary>
+    /// A user given a role listing a pattern holds whatever a later release publishes in its reach, so holding all they
+    /// hold today does not bound what signing in as them comes to: below the root the credential is refused naming the
+    /// root.
+    /// </summary>
+    [Fact]
+    public async Task ProvisionApiKeyAsync_AMemberGivenARoleListingAPatternByACallerHoldingAllTheyHold_IsRefusedNamingTheRoot()
+    {
+        // Arrange
+        var organization = AssignmentScope.Organization(AccessAuthorizations.ScopedOrganization);
+        var harness = new AdministrationHarness(AccessAuthorizations.ForAdministratorScopedAt(
+            organization,
+            MailFathomPermission.AdminCredentialsWrite,
+            MailFathomPermission.AdminRolesWrite,
+            MailFathomPermission.AdminErase));
+        harness.Grants.ReadGrantOfAsync(User, Arg.Any<CancellationToken>())
+            .Returns(ScopedGrant.Of([(MailFathomPermission.AdminErase, organization)]));
+        harness.Grants.HoldsWideningRoleAsync(AssignmentPrincipal.User(User), Arg.Any<CancellationToken>()).Returns(true);
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() => harness.Administration.ProvisionApiKeyAsync(
+            User,
+            permissions: null,
+            UserCredentialReach.Default,
+            TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.AdminRolesWrite, refusal.RequiredPermission);
+        Assert.True(refusal.IsOverAWideningGrant);
+        Assert.Empty(harness.Credentials.ReceivedCalls());
+    }
+
+    [Fact]
+    public async Task ProvisionApiKeyAsync_AUserGivenARoleListingAPatternByTheRootHoldingAllTheyHold_IsWritten()
+    {
+        // Arrange
+        var harness = new AdministrationHarness(AccessAuthorizations.ForAdministratorScopedAt(
+            AssignmentScope.Deployment,
+            MailFathomPermission.AdminCredentialsWrite,
+            MailFathomPermission.AdminRolesWrite,
+            MailFathomPermission.AdminErase));
+        harness.Grants.ReadGrantOfAsync(User, Arg.Any<CancellationToken>())
+            .Returns(ScopedGrant.AtDeployment([MailFathomPermission.AdminErase]));
+        harness.Grants.HoldsWideningRoleAsync(AssignmentPrincipal.User(User), Arg.Any<CancellationToken>()).Returns(true);
+
+        // Act
+        var provisioning = await harness.Administration.ProvisionApiKeyAsync(
+            User,
+            permissions: null,
+            UserCredentialReach.Default,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(UserCredentialWriteOutcome.Written, provisioning.Outcome);
+    }
+
     [Fact]
     public async Task ProvisionPasswordAsync_AWrittenCredential_IsRecordedAgainstTheAdministratorThatAskedForIt()
     {

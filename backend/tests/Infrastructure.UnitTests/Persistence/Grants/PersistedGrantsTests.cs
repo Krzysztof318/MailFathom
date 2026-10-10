@@ -115,40 +115,102 @@ public sealed class PersistedGrantsTests
     }
 
     [Fact]
-    public void SourceOf_ANameGivenThroughAGroupAtAnOrganization_NamesTheRoleTheGroupAndTheScope()
+    public void SourcesOf_ANameGivenThroughAGroupAtAnOrganization_NamesTheRoleTheGroupAndTheScope()
     {
         // Arrange
         var assignment = new Guid("0198f0aa-0000-7000-8000-0000000000c7");
         GrantSourceRow row = new("mailfathom.admin.read", Role, "Readers", assignment, Group, "Operators", Organization, ScopeUserId: null);
 
         // Act
-        var source = PersistedGrants.SourceOf(row);
+        var sources = PersistedGrants.SourcesOf(row);
 
         // Assert
         Assert.Equal(
-            new GrantSource(
-                MailFathomPermission.AdminRead,
-                Role,
-                "Readers",
-                assignment,
-                Group,
-                "Operators",
-                AssignmentScope.Organization(Organization)),
-            source);
+            [
+                new GrantSource(
+                    MailFathomPermission.AdminRead,
+                    Pattern: null,
+                    Role,
+                    "Readers",
+                    assignment,
+                    Group,
+                    "Operators",
+                    AssignmentScope.Organization(Organization)),
+            ],
+            sources);
     }
 
-    /// <summary>A role may list a name this build does not publish, which grants nothing and so explains nothing.</summary>
+    /// <summary>A name nobody wrote out is traced to the entry that reaches it: one source per permission the stored pattern reaches, each naming the pattern as written.</summary>
     [Fact]
-    public void SourceOf_ANameThisBuildDoesNotPublish_IsNoSource()
+    public void SourcesOf_AStoredPattern_NamesThePatternBesideEveryPermissionItReaches()
     {
         // Arrange
-        GrantSourceRow row = new("mailfathom.admin.everything", Role, "Readers", Guid.NewGuid(), GroupId: null, GroupName: null, ScopeOrganizationId: null, ScopeUserId: null);
+        var assignment = new Guid("0198f0aa-0000-7000-8000-0000000000c8");
+        GrantSourceRow row = new("mailfathom.mail.contacts.*", Role, "Contacts", assignment, GroupId: null, GroupName: null, ScopeOrganizationId: null, User);
 
         // Act
-        var source = PersistedGrants.SourceOf(row);
+        var sources = PersistedGrants.SourcesOf(row);
 
         // Assert
-        Assert.Null(source);
+        Assert.Equal(
+            [MailFathomPermission.MailContactsRead, MailFathomPermission.MailContactsWrite],
+            sources.Select(source => source.Permission));
+        Assert.All(sources, source =>
+        {
+            Assert.Equal("mailfathom.mail.contacts.*", source.Pattern);
+            Assert.Equal(assignment, source.AssignmentId);
+            Assert.Equal(AssignmentScope.User(UserId.Create(User)), source.Scope);
+        });
+    }
+
+    /// <summary>A role may list an entry that grants nothing in this build — a name it does not publish, a pattern reaching nothing — which explains nothing.</summary>
+    [Theory]
+    [InlineData("mailfathom.admin.everything")]
+    [InlineData("mailfathom.retired.*")]
+    [InlineData("mailfathom.mail.c*")]
+    public void SourcesOf_AnEntryThatGrantsNothingInThisBuild_IsNoSource(string storedEntry)
+    {
+        // Arrange
+        GrantSourceRow row = new(storedEntry, Role, "Readers", Guid.NewGuid(), GroupId: null, GroupName: null, ScopeOrganizationId: null, ScopeUserId: null);
+
+        // Act
+        var sources = PersistedGrants.SourcesOf(row);
+
+        // Assert
+        Assert.Empty(sources);
+    }
+
+    /// <summary>
+    /// What a user's grant is computed from, one stored row at a time: a pattern gives everything this build publishes
+    /// in its reach at the assignment's scope, which is how a holder comes to hold a newly published permission without
+    /// anybody writing to the role.
+    /// </summary>
+    [Fact]
+    public void GivenBy_AStoredPatternAtAnOrganization_GivesEveryPermissionItReachesAtThatScope()
+    {
+        // Act
+        var given = PersistedGrants.GivenBy("mailfathom.admin.*.write", Organization, scopeUserId: null).ToArray();
+
+        // Assert
+        Assert.Equal(
+            MailFathomPermission.All
+                .Where(permission => permission.Name.StartsWith("mailfathom.admin.", StringComparison.Ordinal)
+                    && permission.Name.EndsWith(".write", StringComparison.Ordinal))
+                .Select(permission => (permission, AssignmentScope.Organization(Organization))),
+            given);
+        Assert.Contains((MailFathomPermission.AdminRolesWrite, AssignmentScope.Organization(Organization)), given);
+    }
+
+    [Theory]
+    [InlineData("mailfathom.admin.everything")]
+    [InlineData("mailfathom.retired.*")]
+    public void GivenBy_AStoredEntryThatGrantsNothingInThisBuild_GivesNothing(string storedEntry)
+    {
+        // Act
+        var given = PersistedGrants.GivenBy(storedEntry, scopeOrganizationId: null, scopeUserId: null);
+
+        // Assert
+        Assert.Empty(given);
     }
 
     private static RoleAssignmentEntity Stored(

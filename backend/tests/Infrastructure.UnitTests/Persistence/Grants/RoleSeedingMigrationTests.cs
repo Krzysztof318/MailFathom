@@ -14,21 +14,30 @@ using Xunit;
 
 namespace MailFathom.Infrastructure.UnitTests.Persistence.Grants;
 
-/// <summary>Holds the seeded roles to the rule that they are written once and edited by no later release.</summary>
+/// <summary>Holds the seeded roles to the rule that they are written once and edited by no later release that was not decided to.</summary>
 /// <remarks>
 /// A seeded role is an ordinary row an operator may have renamed, edited, or deleted, and a release that published a
-/// permission and wrote it into a seeded list would widen everybody holding that role on upgrade — the drift an
-/// explicit list exists to prevent. So no migration after the one that seeds them may touch a role or its list.
+/// permission and wrote it into a seeded list would widen everybody holding that role on upgrade — the drift a list
+/// written out by name exists to prevent. So no migration after the one that seeds them may touch a role or its list
+/// unless it is named below with the decision that admits it.
 /// </remarks>
 public sealed class RoleSeedingMigrationTests
 {
+    private const string MailUserRoleId = "01a11deb-3808-7000-8000-000000000001";
+
+    private const string OrganizationAdministratorRoleId = "01a11deb-3808-7000-8000-000000000002";
+
     /// <summary>The migrations allowed to write roles after the seeding one, each named rather than admitted by a looser rule.</summary>
     /// <remarks>
     /// <see cref="HoldMailGrantsOnUsers" /> carries what each credential granted onto its user, so it creates roles of
     /// its own and assigns them — and the seeded <c>Mail user</c> — to users who held no role before it. It widens no
     /// seeded role's list and nobody who already held a role, which is the drift this rule exists to refuse.
+    /// <see cref="RewriteAdministratorRoleAsAPattern" /> is the one deliberate edit of a seeded list: ADR 0012 decides
+    /// that <c>Administrator</c> lists the pattern <c>*</c>, which reaches on the day it is written exactly the names
+    /// it replaces, and the test below holds it to that role alone.
     /// </remarks>
-    private static readonly Type[] RoleWritersAfterTheSeedingOne = [typeof(HoldMailGrantsOnUsers)];
+    private static readonly Type[] RoleWritersAfterTheSeedingOne =
+        [typeof(HoldMailGrantsOnUsers), typeof(RewriteAdministratorRoleAsAPattern)];
 
     [Fact]
     public void Migrations_AfterTheSeedingOne_WriteNoRoleAndNoRolesPermissions()
@@ -68,6 +77,33 @@ public sealed class RoleSeedingMigrationTests
 
         // Assert
         Assert.Contains(seeding.UpOperations, WritesARole);
+    }
+
+    /// <summary>
+    /// The rewrite is admitted for one role, so it names neither of the two that stay written out by name: a
+    /// <c>Mail user</c> or an <c>Organization administrator</c> turned into a pattern would widen on every later release.
+    /// </summary>
+    [Fact]
+    public void Migrations_TheAdministratorRewrite_NamesNeitherRoleThatStaysWrittenOutByName()
+    {
+        // Arrange
+        using var context = CreateContext();
+        var migrations = context.GetService<IMigrationsAssembly>();
+
+        // Act
+        var rewrite = migrations.CreateMigration(
+            typeof(RewriteAdministratorRoleAsAPattern).GetTypeInfo(),
+            context.Database.ProviderName!);
+        var statements = rewrite.UpOperations.Concat(rewrite.DownOperations).OfType<SqlOperation>().ToArray();
+
+        // Assert
+        Assert.Equal(2, statements.Length);
+        Assert.All(statements, statement =>
+        {
+            Assert.Contains("01a11deb-3808-7000-8000-000000000003", statement.Sql, StringComparison.Ordinal);
+            Assert.DoesNotContain(MailUserRoleId, statement.Sql, StringComparison.Ordinal);
+            Assert.DoesNotContain(OrganizationAdministratorRoleId, statement.Sql, StringComparison.Ordinal);
+        });
     }
 
     private static bool WritesARole(MigrationOperation operation) => operation switch

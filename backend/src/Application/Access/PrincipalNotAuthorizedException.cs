@@ -59,6 +59,10 @@ public sealed class PrincipalNotAuthorizedException : MailFathomException
     /// <remarks>A boundary that names the permission reads this to say so, because telling a caller it was not granted a name it holds sends an operator to look for an assignment that is already there.</remarks>
     public bool IsHeldTooNarrowly { get; private init; }
 
+    /// <summary>Gets whether what was refused is giving a grant that widens on upgrade, which only a holder of <see cref="RequiredPermission" /> over the whole deployment gives.</summary>
+    /// <remarks>A boundary reads this to say why the name it reports is asked for over the deployment by a write that names a narrower scope, and that the caller holding it there would not have helped.</remarks>
+    public bool IsOverAWideningGrant { get; private init; }
+
     /// <inheritdoc />
     public override MailFathomErrorCode ErrorCode => MailFathomErrorCode.PrincipalNotAuthorized;
 
@@ -85,6 +89,21 @@ public sealed class PrincipalNotAuthorizedException : MailFathomException
         new($"The caller holds '{requiredPermission.Name}' only at a scope narrower than the one the act is bounded by.", requiredPermission)
         {
             IsHeldTooNarrowly = true,
+        };
+
+    /// <summary>Reports a caller below the root that reached a write giving, or signing somebody in with, a role whose list carries a pattern.</summary>
+    /// <returns>The failure to raise, naming <see cref="MailFathomPermission.AdminRolesWrite" /> and marked <see cref="IsOverAWideningGrant" />.</returns>
+    /// <remarks>
+    /// A pattern holds whatever a later release publishes in its reach, so no check of what the caller holds today bounds
+    /// what the write gives. The root is the one grant that already reaches past what its holder holds, so it is the
+    /// one that gives such a role.
+    /// </remarks>
+    internal static PrincipalNotAuthorizedException GivesAWideningGrant() =>
+        new(
+            $"The write gives, or signs somebody in with, a role listing a pattern, which widens on upgrade, and the caller was not granted '{MailFathomPermission.AdminRolesWrite.Name}' over the whole deployment.",
+            MailFathomPermission.AdminRolesWrite)
+        {
+            IsOverAWideningGrant = true,
         };
 
     /// <summary>Reports an operation reached under a kind of principal it does not admit.</summary>

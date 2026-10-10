@@ -90,7 +90,7 @@ public sealed class GrantAdministrationTests
         await harness.Auditor.Received(1).RecordGrantChangeAsync(
             Arg.Is<GrantChange>(change => change!.Act == GrantAct.RoleCreated
                 && change.RecordId == result.RecordId
-                && change.Permissions!.SequenceEqual(permissions.Granted)),
+                && change.Permissions!.SequenceEqual(permissions.Written)),
             Arg.Any<CancellationToken>());
     }
 
@@ -533,6 +533,161 @@ public sealed class GrantAdministrationTests
             Arg.Any<CancellationToken>());
     }
 
+    /// <summary>
+    /// A pattern holds whatever a later release publishes in its reach, so holding everything it reaches today bounds
+    /// nothing: below the root the assignment is refused naming the root, whatever scope it is made at.
+    /// </summary>
+    [Fact]
+    public async Task AssignAsync_ARoleListingAPatternByAnOrganizationsAdministratorHoldingAllItReaches_IsRefusedNamingTheRoot()
+    {
+        // Arrange
+        var harness = Harness.OrganizationAdministrator(MailFathomPermission.AdminRolesWrite, MailFathomPermission.AdminAuditRead);
+        harness.RoleListsAsWritten("mailfathom.admin.audit.*");
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() => harness.Administration.AssignAsync(
+            RoleId,
+            AssignmentPrincipal.User(Colleague),
+            AssignmentScope.Organization(OwnOrganization),
+            TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.AdminRolesWrite, refusal.RequiredPermission);
+        Assert.True(refusal.IsOverAWideningGrant);
+        Assert.False(refusal.IsHeldTooNarrowly);
+        await harness.Grants.DidNotReceiveWithAnyArgs().AssignAsync(default, default, default!, default!, default, TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>A stored pattern reaching nothing in this build still widens with the next one, so it is asked about exactly as one that reaches something.</summary>
+    [Fact]
+    public async Task AssignAsync_ARoleWhoseOnlyPatternReachesNothingByAnOrganizationsAdministrator_IsRefusedNamingTheRoot()
+    {
+        // Arrange
+        var harness = Harness.OrganizationAdministrator(MailFathomPermission.AdminRolesWrite, MailFathomPermission.AdminRead);
+        harness.RoleListsAsWritten("mailfathom.admin.read", "mailfathom.retired.*");
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() => harness.Administration.AssignAsync(
+            RoleId,
+            AssignmentPrincipal.User(Colleague),
+            AssignmentScope.Organization(OwnOrganization),
+            TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.True(refusal.IsOverAWideningGrant);
+    }
+
+    [Fact]
+    public async Task AssignAsync_ARoleListingAPatternByTheRootBelowTheDeployment_IsWritten()
+    {
+        // Arrange
+        var harness = Harness.Root();
+        harness.RoleListsAsWritten("mailfathom.admin.*.write");
+        harness.Grants
+            .AssignAsync(
+                Arg.Any<Guid>(),
+                RoleId,
+                AssignmentPrincipal.User(Colleague),
+                AssignmentScope.Organization(OwnOrganization),
+                RecordedAt,
+                Arg.Any<CancellationToken>())
+            .Returns(GrantWriteResult.Of(GrantWriteOutcome.Written));
+
+        // Act
+        var result = await harness.Administration.AssignAsync(
+            RoleId,
+            AssignmentPrincipal.User(Colleague),
+            AssignmentScope.Organization(OwnOrganization),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(GrantWriteOutcome.Written, result.Outcome);
+    }
+
+    /// <summary>The root is asked beside the ordinary rule and never instead of it: what a pattern reaches today is still given only by somebody holding it.</summary>
+    [Fact]
+    public async Task AssignAsync_ARoleListingAPatternReachingANameTheRootDoesNotHold_IsRefusedNamingThatName()
+    {
+        // Arrange
+        var harness = Harness.Root();
+        harness.RoleListsAsWritten("*");
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() => harness.Administration.AssignAsync(
+            RoleId,
+            AssignmentPrincipal.User(Colleague),
+            AssignmentScope.Deployment,
+            TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.MailRead, refusal.RequiredPermission);
+        Assert.False(refusal.IsOverAWideningGrant);
+    }
+
+    /// <summary>Joining a group is receiving its assignments, a role listing a pattern among them, so below the root the membership is refused naming the root.</summary>
+    [Fact]
+    public async Task AddGroupMemberAsync_AGroupGivenARoleListingAPatternByAnOrganizationsAdministrator_IsRefusedNamingTheRoot()
+    {
+        // Arrange
+        var harness = Harness.OrganizationAdministrator(MailFathomPermission.AdminRolesWrite, MailFathomPermission.AdminRead);
+        harness.GroupGives((MailFathomPermission.AdminRead, AssignmentScope.Organization(OwnOrganization)));
+        harness.GroupIsGivenARoleListingAPattern();
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            harness.Administration.AddGroupMemberAsync(OwnGroup, Colleague, TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.AdminRolesWrite, refusal.RequiredPermission);
+        Assert.True(refusal.IsOverAWideningGrant);
+        await harness.Grants.DidNotReceiveWithAnyArgs().AddGroupMemberAsync(default, default, default, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task AddGroupMemberAsync_AGroupGivenARoleListingAPatternByTheRoot_AddsTheMember()
+    {
+        // Arrange
+        var harness = Harness.Root();
+        harness.GroupGives((MailFathomPermission.AdminRead, AssignmentScope.Organization(OwnOrganization)));
+        harness.GroupIsGivenARoleListingAPattern();
+        harness.Grants.AddGroupMemberAsync(OwnGroup, Colleague, RecordedAt, Arg.Any<CancellationToken>())
+            .Returns(GrantWriteResult.Of(GrantWriteOutcome.Written));
+
+        // Act
+        var result = await harness.Administration.AddGroupMemberAsync(
+            OwnGroup,
+            Colleague,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(GrantWriteOutcome.Written, result.Outcome);
+    }
+
+    /// <summary>The record is of what somebody wrote, so a pattern is audited as the pattern rather than as the names it reached that day.</summary>
+    [Fact]
+    public async Task ReplaceRolePermissionsAsync_AListCarryingAPattern_AuditsTheEntriesAsWritten()
+    {
+        // Arrange
+        var harness = Harness.Root();
+        Assert.True(RolePermissions.TryCreate(["mailfathom.admin.read", "mailfathom.admin.*.write"], out var permissions, out _));
+        harness.Grants.ReplaceRolePermissionsAsync(RoleId, permissions!, Arg.Any<CancellationToken>())
+            .Returns(GrantWriteResult.Of(GrantWriteOutcome.Written));
+
+        // Act
+        var result = await harness.Administration.ReplaceRolePermissionsAsync(
+            RoleId,
+            permissions!,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(GrantWriteOutcome.Written, result.Outcome);
+        await harness.Auditor.Received(1).RecordGrantChangeAsync(
+            Arg.Is<GrantChange>(change => change!.Act == GrantAct.RolePermissionsReplaced
+                && change.Permissions!.SequenceEqual(permissions!.Written)
+                && change.Permissions!.Contains("mailfathom.admin.*.write")),
+            Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task RevokeAsync_AnAssignmentAtAnotherOrganization_IsAnsweredAsAnUnknownAssignmentWithoutRevoking()
     {
@@ -657,6 +812,7 @@ public sealed class GrantAdministrationTests
         [
             .. Enumerable.Range(0, UserGrantExplanation.MaximumSources + 1).Select(index => new GrantSource(
                 MailFathomPermission.AdminRead,
+                Pattern: null,
                 RoleId,
                 $"Role {index:D4}",
                 AssignmentId,
@@ -685,6 +841,7 @@ public sealed class GrantAdministrationTests
         var harness = Harness.OrganizationAdministrator(MailFathomPermission.AdminRead);
         var spend = new GrantSource(
             MailFathomPermission.AdminSpend,
+            "mailfathom.admin.*",
             RoleId,
             "Administrator",
             AssignmentId,
@@ -757,5 +914,12 @@ public sealed class GrantAdministrationTests
         internal void RoleLists(params MailFathomPermission[] permissions) =>
             this.Grants.ReadRoleAsync(RoleId, Arg.Any<CancellationToken>())
                 .Returns(new Role(RoleId, "Assigned", RolePermissions.Of(permissions), RecordedAt));
+
+        internal void RoleListsAsWritten(params string[] entries) =>
+            this.Grants.ReadRoleAsync(RoleId, Arg.Any<CancellationToken>())
+                .Returns(new Role(RoleId, "Assigned", RolePermissions.Read(entries), RecordedAt));
+
+        internal void GroupIsGivenARoleListingAPattern() =>
+            this.Grants.HoldsWideningRoleAsync(AssignmentPrincipal.Group(OwnGroup), Arg.Any<CancellationToken>()).Returns(true);
     }
 }

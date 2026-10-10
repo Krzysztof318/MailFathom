@@ -130,7 +130,7 @@ one further client scope per permission you intend a token to bring, named exact
 `mailfathom.mail.read`, `mailfathom.mail.ask`, `mailfathom.mail.contacts.read`, `mailfathom.mail.contacts.write`,
 `mailfathom.mail.flags.write`, `mailfathom.mail.move`, `mailfathom.mail.delete`, `mailfathom.mail.drafts.write`, `mailfathom.mail.send`, `mailfathom.mail.accounts.write`, `mailfathom.mail.folders.write`, or on the administrative endpoint one of the administrative names
 [the published set](permissions.md#the-published-set) lists. A scope is one published name and never the wildcard
-shorthand a grant accepts, which MailFathom refuses in `RequiredScopes` and `AdvertisedScopes` for the same reason no
+pattern [a role's list accepts](permissions.md#a-pattern-in-a-roles-list), which MailFathom refuses in `RequiredScopes` and `AdvertisedScopes` for the same reason no
 authorization server could mint one. The spelling is compared byte
 for byte, so a differently cased or padded name is a different scope and grants nothing. Leave **Include in token scope**
 on, as above, and assign each to the client in [step 4](#4-register-an-application-for-the-client) — a scope the client

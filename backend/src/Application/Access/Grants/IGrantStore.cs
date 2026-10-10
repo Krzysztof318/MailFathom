@@ -10,9 +10,15 @@ namespace MailFathom.Application.Access.Grants;
 /// <summary>Where the three records a user's grant is computed from are kept: roles, groups, and role assignments.</summary>
 /// <remarks>
 /// <para>
-/// A role is a name and an explicit list of permissions, a group is a set of users, and an assignment gives one role
-/// to one user or group at one scope. They are records in PostgreSQL rather than configuration, so a change to any of
-/// them is the same on every replica from the moment it commits.
+/// A role is a name and a list of permissions, a group is a set of users, and an assignment gives one role to one user
+/// or group at one scope. They are records in PostgreSQL rather than configuration, so a change to any of them is the
+/// same on every replica from the moment it commits.
+/// </para>
+/// <para>
+/// A role's list is stored as it was written: a name as the name, and a pattern as the pattern. Every read that
+/// computes a grant resolves a stored pattern against the set this build publishes at that moment, through
+/// <see cref="RolePermissions.GrantedBy" />, so two builds serving one database during a rolling upgrade each grant
+/// what their own build publishes in a pattern's reach, and nothing is rewritten when the newer one starts.
 /// </para>
 /// <para>
 /// Every invariant a write can break is decided by the database at the moment of the write rather than by a read a
@@ -27,7 +33,8 @@ namespace MailFathom.Application.Access.Grants;
 /// <see cref="MailFathomPermission.AdminRolesWrite" /> over it is one nobody can administer without the database.
 /// Revoking an assignment, ending a membership, and replacing a role's list are each refused as
 /// <see cref="GrantWriteOutcome.LastRoot" /> when they would take the last root away, decided inside the write with
-/// every role carrying the name locked, so two writes each removing one of two roots cannot both pass. Nothing else is
+/// every role giving the name locked, so two writes each removing one of two roots cannot both pass. A role listing a
+/// pattern that reaches the name gives it exactly as one listing the name does. Nothing else is
 /// refused over it, so it is not an invariant a caller may rely on: removing the last user who holds the root, or
 /// moving them out of the organization whose group gives it to them, takes it away.
 /// </para>
@@ -73,9 +80,9 @@ public interface IGrantStore
 
     /// <summary>Replaces the whole list of permissions a role grants.</summary>
     /// <param name="roleId">The role.</param>
-    /// <param name="permissions">What it is to grant from now on, which drops any stored name this build no longer publishes.</param>
+    /// <param name="permissions">What it is to grant from now on, which drops any stored entry that grants nothing in this build.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
-    /// <returns><see cref="GrantWriteOutcome.Written" />, <see cref="GrantWriteOutcome.UnknownRole" />, or <see cref="GrantWriteOutcome.LastRoot" /> where the list would drop the name from the last role giving it over the deployment.</returns>
+    /// <returns><see cref="GrantWriteOutcome.Written" />, <see cref="GrantWriteOutcome.UnknownRole" />, or <see cref="GrantWriteOutcome.LastRoot" /> where the list would leave the last role giving the root over the deployment with neither the name nor a pattern reaching it.</returns>
     Task<GrantWriteResult> ReplaceRolePermissionsAsync(
         Guid roleId,
         RolePermissions permissions,
@@ -167,6 +174,13 @@ public interface IGrantStore
     /// <returns>The grant the group's assignments give; empty for a group assigned nothing, and for no group at all.</returns>
     Task<ScopedGrant> ReadGrantOfGroupAsync(Guid groupId, CancellationToken cancellationToken);
 
+    /// <summary>Reads whether any role a principal's assignments give lists a pattern, so what the principal holds widens on upgrade.</summary>
+    /// <param name="principal">A user, read through every assignment <see cref="ReadGrantOfAsync" /> reads, or a group, read through every assignment naming it.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns><see langword="true" /> when one of those roles satisfies <see cref="RolePermissions.WidensOnUpgrade" />, a pattern reaching nothing in this build included.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="principal" /> is <see langword="null" />.</exception>
+    Task<bool> HoldsWideningRoleAsync(AssignmentPrincipal principal, CancellationToken cancellationToken);
+
     /// <summary>Reads one assignment.</summary>
     /// <param name="assignmentId">The assignment.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
@@ -202,9 +216,9 @@ public interface IGrantStore
     /// <summary>Reads what one user holds through every assignment naming them and every assignment naming a group they are a member of.</summary>
     /// <param name="user">The user.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>Each permission those assignments' roles list paired with the scope of the assignment that gave it; empty for a user assigned nothing, and for nobody at all.</returns>
+    /// <returns>Each permission those assignments' roles grant — listed by name or reached by a pattern — paired with the scope of the assignment that gave it; empty for a user assigned nothing, and for nobody at all.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
-    /// <remarks>A stored name this build does not publish is granted to nobody, as <see cref="RolePermissions.Read" /> decides for every role.</remarks>
+    /// <remarks>A stored entry that grants nothing in this build is granted to nobody, as <see cref="RolePermissions.Read" /> decides for every role.</remarks>
     Task<ScopedGrant> ReadGrantOfAsync(UserId user, CancellationToken cancellationToken);
 
     /// <summary>Reads which roles one user holds, at which scopes, through the same assignments <see cref="ReadGrantOfAsync" /> reads.</summary>
@@ -215,12 +229,12 @@ public interface IGrantStore
     /// <remarks>It answers who a user is to the deployment, which is what a person reads; what they may do is the grant, and the two are never derived from each other.</remarks>
     Task<IReadOnlyList<HeldRole>> ReadRolesHeldByAsync(UserId user, CancellationToken cancellationToken);
 
-    /// <summary>Reads why one user holds what they hold: one row per permission, assignment, and scope.</summary>
+    /// <summary>Reads why one user holds what they hold: one row per permission, entry of a role's list granting it, and assignment.</summary>
     /// <param name="user">The user.</param>
     /// <param name="reach">What the reader's own grant covers, which is what <see cref="ReadAssignmentsAsync" /> lists within.</param>
     /// <param name="limit">The most rows to answer with.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The rows <see cref="ReadGrantOfAsync" /> computes its union from that lie within <paramref name="reach" />, each naming the role and the group it came through, ordered by assignment and then by name; empty for a user assigned nothing there.</returns>
+    /// <returns>The rows <see cref="ReadGrantOfAsync" /> computes its union from that lie within <paramref name="reach" />, each naming the role, the pattern a name nobody wrote out is reached through, and the group it came through, ordered by assignment and then by stored entry; empty for a user assigned nothing there.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="limit" /> is not positive.</exception>
     /// <remarks>

@@ -8,8 +8,9 @@ namespace MailFathom.Cli.Commands.Roles;
 
 /// <summary>How a role, and the permissions it grants, are named by the commands that act on one.</summary>
 /// <remarks>
-/// Which names a role may list is the deployment's rule, which it states in its own refusal naming each unpublished
-/// one; restating it here would leave two lists to keep in agreement with the build that serves them.
+/// Which names a role may list, and what a pattern reaches, are the deployment's rule, which it states in its own
+/// refusal naming each unpublished name and each pattern reaching nothing; restating either here would leave two lists
+/// to keep in agreement with the build that serves them.
 /// </remarks>
 internal static class RoleOptions
 {
@@ -30,12 +31,15 @@ internal static class RoleOptions
         Required = true,
     };
 
-    /// <summary>Builds the repeatable option naming a permission the role grants.</summary>
+    /// <summary>Builds the repeatable option naming a permission, or a pattern of them, the role grants.</summary>
     /// <returns>The option.</returns>
-    /// <remarks>Written once per permission rather than as one delimited value, so a name is never split by whichever separator a shell decided to expand.</remarks>
+    /// <remarks>Written once per entry rather than as one delimited value, so a name is never split by whichever separator a shell decided to expand.</remarks>
     internal static Option<string[]> Permission() => new("--permission")
     {
-        Description = "A published permission the role grants, repeatable. Refused beside '--no-permissions'.",
+        Description = "A published permission the role grants, or a pattern such as 'mailfathom.admin.*.write' in "
+            + "which '*' is a whole segment standing for one or more; quote a pattern so the shell does not expand it. "
+            + "A pattern also holds what a later release publishes in its reach. Repeatable. Refused beside "
+            + "'--no-permissions'.",
     };
 
     /// <summary>Builds the flag stating that the role grants nothing.</summary>

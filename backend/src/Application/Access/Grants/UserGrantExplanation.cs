@@ -9,7 +9,7 @@ namespace MailFathom.Application.Access.Grants;
 
 /// <summary>Why one user holds each permission they hold within the reader's own scope, and what each of their credentials keeps of it.</summary>
 /// <param name="User">The user.</param>
-/// <param name="Sources">One row per permission, assignment, and scope, in the order the published set declares the permissions.</param>
+/// <param name="Sources">One row per permission, entry of a role's list granting it, and assignment, in the order the published set declares the permissions.</param>
 /// <param name="SourcesTruncated">Whether the user holds more rows within the reader's scope than <see cref="MaximumSources" />, so <paramref name="Sources" /> is a part of the answer.</param>
 /// <param name="Credentials">The user's credentials, each with the narrowing it applies, oldest first.</param>
 /// <remarks>
@@ -25,7 +25,7 @@ public sealed record UserGrantExplanation(
     IReadOnlyList<UserCredential> Credentials)
 {
     /// <summary>The most rows one explanation carries.</summary>
-    /// <remarks>A user holds one row per name per assignment, so reaching it takes hundreds of assignments for one person, which is a provisioning mistake to find rather than a page to turn.</remarks>
+    /// <remarks>A user holds one row per name each entry of a role's list grants per assignment, so reaching it takes dozens of assignments for one person, which is a provisioning mistake to find rather than a page to turn.</remarks>
     public const int MaximumSources = 1000;
 
     /// <summary>Gets the part of the user's grant the rows compose.</summary>

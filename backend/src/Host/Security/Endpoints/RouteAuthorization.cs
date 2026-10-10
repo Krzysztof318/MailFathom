@@ -59,6 +59,14 @@ internal static class RouteAuthorization
     /// </remarks>
     internal const string HeldBelowDeploymentExtension = "heldBelowDeployment";
 
+    /// <summary>The member a refusal carries, set to <see langword="true" />, when the write was refused for giving a role that lists a pattern rather than for the name its target needs.</summary>
+    /// <remarks>
+    /// The permission beside it is the root, asked over the whole deployment by a write that may name a narrower scope.
+    /// A caller reading the permission alone would be told to grant a name it may already hold where it wrote, so the
+    /// member says the sentence is the instruction this time.
+    /// </remarks>
+    internal const string WidensOnUpgradeExtension = "widensOnUpgrade";
+
     /// <summary>The member of the problem document that carries the failure's own code, beside the sentence.</summary>
     /// <remarks>
     /// Written for the same reason the permission above is: a caller matches a code it can act on, and reading the
@@ -181,13 +189,16 @@ internal static class RouteAuthorization
         {
             RecordRefusal(context.HttpContext, surface, refusal.RequiredPermission);
 
-            return refusal.IsHeldTooNarrowly
-                ? HeldTooNarrowly(refusal.RequiredPermission)
-                : Refused(
+            return refusal switch
+            {
+                { IsHeldTooNarrowly: true } => HeldTooNarrowly(refusal.RequiredPermission),
+                { IsOverAWideningGrant: true } => OverAWideningGrant(refusal.RequiredPermission),
+                _ => Refused(
                     context.HttpContext,
                     published,
                     refusal.RequiredPermission,
-                    refusal.RefusedForTheDeploymentAlone);
+                    refusal.RefusedForTheDeploymentAlone),
+            };
         }
         catch (DeploymentUserUnresolvedException refusal)
         {
@@ -291,6 +302,23 @@ internal static class RouteAuthorization
         $"The credential holds '{required.Name}' only at a scope narrower than the one this write would give it at, and nobody gives more than they hold.",
         statusCode: StatusCodes.Status403Forbidden,
         extensions: new Dictionary<string, object?>(StringComparer.Ordinal) { [PermissionExtension] = required.Name });
+
+    /// <summary>Writes the refusal of a write that would give, or sign somebody in with, a role listing a pattern, reached by a caller below the root.</summary>
+    /// <remarks>
+    /// The sentence says why the root is asked of a write naming a narrower scope, because a caller who holds the name
+    /// over their own organization would otherwise read the refusal as a missing grant and go looking for one. It carries
+    /// <see cref="WidensOnUpgradeExtension" /> so a caller acting on the member rather than the sentence can tell, and
+    /// <see cref="HeldBelowDeploymentExtension" /> for no caller: that member says an operation is the deployment's alone,
+    /// and this write is not — the same route gives a role of names alone at any scope its writer covers.
+    /// </remarks>
+    private static ProblemHttpResult OverAWideningGrant(MailFathomPermission required) => TypedResults.Problem(
+        $"A role this write gives, or signs somebody in with, lists a pattern, which comes to hold whatever a later release publishes in its reach. Only a credential holding '{required.Name}' over the whole deployment gives one.",
+        statusCode: StatusCodes.Status403Forbidden,
+        extensions: new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            [PermissionExtension] = required.Name,
+            [WidensOnUpgradeExtension] = true,
+        });
 
     /// <summary>Writes the answer an act reached by a credential naming no user receives where the deployment serves several.</summary>
     /// <remarks>

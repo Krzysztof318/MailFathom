@@ -48,8 +48,9 @@ public sealed record GrantChange(GrantAct Act, Guid RecordId, string ActingAdmin
     /// <remarks>Carried whole because a revoked assignment can no longer be read back by its identifier.</remarks>
     public RoleAssignment? Assignment { get; init; }
 
-    /// <summary>Gets what a role grants from now on, for <see cref="GrantAct.RoleCreated" /> and <see cref="GrantAct.RolePermissionsReplaced" />.</summary>
-    public IReadOnlyList<MailFathomPermission>? Permissions { get; init; }
+    /// <summary>Gets what a role grants from now on, for <see cref="GrantAct.RoleCreated" /> and <see cref="GrantAct.RolePermissionsReplaced" />: each entry as it was written, a pattern as the pattern.</summary>
+    /// <remarks>The entry rather than what it reaches, because what a pattern reaches is the build's to decide after the record is written, and the record is of what somebody wrote.</remarks>
+    public IReadOnlyList<string>? Permissions { get; init; }
 }
 
 /// <summary>Which administrative act a grant record describes.</summary>

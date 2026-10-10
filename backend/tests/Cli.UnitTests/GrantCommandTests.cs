@@ -74,6 +74,72 @@ public sealed class GrantCommandTests : IDisposable
         Assert.Contains($"{Role:D}", reported, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A pattern is drawn in the listing as it was written and, beneath it, beside what the deployment says it reaches
+    /// now, because that reach is the one part of a role the next release may add to without anybody writing to it.
+    /// </summary>
+    [Fact]
+    public async Task RoleList_ARoleListingAPattern_DrawsItAsWrittenAndNamesWhatItReachesBeneathTheListing()
+    {
+        // Arrange
+        using var deployment = FakeGrantDeployment.Answering(FakeGrantDeployment.RolePage(
+            null,
+            $$"""
+              {"id":"{{Role:D}}","name":"writers","permissions":["mailfathom.admin.read","mailfathom.admin.*.write"],
+               "patterns":[{"pattern":"mailfathom.admin.*.write","reaches":["mailfathom.admin.credentials.write","mailfathom.admin.roles.write"]}],
+               "unpublished":[],"createdAt":"2026-10-10T12:00:00+00:00"}
+              """));
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "role", "list", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+
+        var listing = DrawnListing.ReadFrom(this.harness.Console.Lines, "Role", "Name", "Permissions", "Recorded");
+
+        Assert.Equal(
+            "mailfathom.admin.read, mailfathom.admin.*.write",
+            listing.Cell(Assert.Single(listing.Rows), "Permissions"));
+
+        var reach = Assert.Single(this.harness.Console.Lines, line => line.Contains("(writers)", StringComparison.Ordinal));
+
+        Assert.Contains($"{Role:D} (writers): mailfathom.admin.*.write reaches", reach, StringComparison.Ordinal);
+        Assert.EndsWith("mailfathom.admin.credentials.write, mailfathom.admin.roles.write", reach, StringComparison.Ordinal);
+    }
+
+    /// <summary>A pattern is one more entry of the list, sent exactly as it was written for the deployment to judge.</summary>
+    [Fact]
+    public async Task RoleSetPermissions_APatternBesideAName_SendsBothAsWritten()
+    {
+        // Arrange
+        using var deployment = FakeGrantDeployment.Answering("{}");
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "role",
+            "set-permissions",
+            "--role",
+            $"{Role:D}",
+            "--permission",
+            "mailfathom.admin.read",
+            "--permission",
+            "mailfathom.admin.*.write",
+            "--endpoint",
+            Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+
+        var request = Assert.Single(deployment.RequestsTo(HttpMethod.Put, AdminEndpointRoutes.RolePermissionsPath(Role)));
+        using var body = JsonDocument.Parse(request.ContentAsUtf8String());
+
+        Assert.Equal(
+            ["mailfathom.admin.read", "mailfathom.admin.*.write"],
+            body.RootElement.GetProperty("permissions").EnumerateArray().Select(permission => permission.GetString()));
+    }
+
     /// <summary>The identifier is the deployment's to mint, so the command sends the name and every permission named, and reports what came back.</summary>
     [Fact]
     public async Task RoleAdd_ANameAndTwoPermissions_SendsBothAndReportsTheIdentifierItMinted()
@@ -616,6 +682,33 @@ public sealed class GrantCommandTests : IDisposable
         Assert.Contains(this.harness.Console.Failures, line => line.Contains("already given", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// A role listing a pattern is the root's alone to give, so the refusal sends the operator to an administrator
+    /// holding the root over the whole deployment instead of telling them to be granted a name they may already hold.
+    /// </summary>
+    [Fact]
+    public async Task AssignmentAdd_ADeploymentRefusingARoleListingAPatternBelowTheRoot_SendsTheOperatorToTheRoot()
+    {
+        // Arrange
+        using FakeHttpMessageHandler deployment = new((request, _) => Task.FromResult(
+            FakeAdminEndpoint.AnswerSession(request)
+            ?? FakeAdminEndpoint.Json(
+                HttpStatusCode.Forbidden,
+                """{"status":403,"detail":"A role this write gives lists a pattern.","permission":"mailfathom.admin.roles.write","widensOnUpgrade":true}""")));
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment, "assignment", "add", "--role", $"{Role:D}", "--user", $"{User:D}", "--organization", $"{Organization:D}", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Failure, exitCode);
+        Assert.Contains(
+            this.harness.Console.Errors,
+            line => line.Contains("lists a pattern", StringComparison.Ordinal)
+                && line.Contains("'mailfathom.admin.roles.write' over the whole deployment", StringComparison.Ordinal)
+                && !line.Contains("provision a credential", StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task AssignmentRevoke_AgreedUpFront_DeletesThatAssignment()
     {
@@ -678,7 +771,7 @@ public sealed class GrantCommandTests : IDisposable
             $$"""
               {"user":"{{User:D}}","sources":[
               {{FakeGrantDeployment.Source("mailfathom.admin.read", "readers", Assignment, group: null, ("deployment", null))}},
-              {{FakeGrantDeployment.Source("mailfathom.admin.configuration.write", "operators", inheritedAssignment, "acme-staff", ("organization", Organization), inert: true)}}
+              {{FakeGrantDeployment.Source("mailfathom.admin.configuration.write", "operators", inheritedAssignment, "acme-staff", ("organization", Organization), inert: true, pattern: "mailfathom.admin.*.write")}}
               ],"credentials":[{{FakeUserCredentialDeployment.CredentialNamingNothing(credential, "mailfathom.admin.read")}}]}
               """);
 
@@ -690,9 +783,10 @@ public sealed class GrantCommandTests : IDisposable
         Assert.Single(deployment.RequestsTo(HttpMethod.Get, AdminEndpointRoutes.UserPermissionsPath(User)));
 
         var sources = DrawnListing.ReadFrom(
-            this.harness.Console.Lines, "Permission", "Role", "Through", "Scope", "Assignment", "Effect");
+            this.harness.Console.Lines, "Permission", "Role", "Listed as", "Through", "Scope", "Assignment", "Effect");
 
         Assert.Equal(["readers", "operators"], sources.Rows.Select(row => sources.Cell(row, "Role")));
+        Assert.Equal(["the name", "pattern mailfathom.admin.*.write"], sources.Rows.Select(row => sources.Cell(row, "Listed as")));
         Assert.Equal(["directly", "group acme-staff"], sources.Rows.Select(row => sources.Cell(row, "Through")));
         Assert.Equal(["deployment", $"organization {Organization:D}"], sources.Rows.Select(row => sources.Cell(row, "Scope")));
         Assert.Equal(["held", "reaches nothing at this scope"], sources.Rows.Select(row => sources.Cell(row, "Effect")));

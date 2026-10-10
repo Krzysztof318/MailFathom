@@ -61,4 +61,14 @@ public sealed class UserGrantResolver
 
         return grant;
     }
+
+    /// <summary>Reports whether what one user holds widens on upgrade, because a role they were given lists a pattern.</summary>
+    /// <param name="user">The user.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns><see langword="true" /> when a role given to them, directly or through a group, lists a pattern.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
+    /// <remarks>Read from the records each time rather than remembered: only a write bounded by it asks, and a write decides on what is stored now.</remarks>
+    public Task<bool> WidensOnUpgradeAsync(UserId user, CancellationToken cancellationToken) => user.IsSpecified
+        ? this.store.HoldsWideningRoleAsync(AssignmentPrincipal.User(user), cancellationToken)
+        : throw new ArgumentException("A grant is computed for a named user.", nameof(user));
 }

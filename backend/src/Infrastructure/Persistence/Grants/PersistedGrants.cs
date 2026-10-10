@@ -27,8 +27,14 @@ namespace MailFathom.Infrastructure.Persistence.Grants;
 /// ahead leaves the concurrent write to meet a missing row rather than to dangle.
 /// </para>
 /// <para>
+/// A stored entry is a name or a pattern, and no statement here matches a pattern: a read computing a grant takes the
+/// entries as rows and resolves each through <see cref="RolePermissions.GrantedBy" />, and a statement that has to find
+/// the roles giving one name compares against <see cref="RolePermissions.EntriesGranting" />, which is every entry that
+/// can. So what a pattern reaches is decided in one place, by the build reading it.
+/// </para>
+/// <para>
 /// A write that can take the root away — revoking an assignment, ending a membership, replacing a role's list — locks
-/// every role listing <see cref="MailFathomPermission.AdminRolesWrite" />, in identifier order, before it reads whether
+/// every role giving <see cref="MailFathomPermission.AdminRolesWrite" />, in identifier order, before it reads whether
 /// a root is held, and reads it again after its own change and before it commits. Two such writes therefore commit one
 /// after the other, and the second reads what the first left, so removing two roots at once leaves the second refused
 /// rather than the deployment with none. Only a write that found a root and would leave none is refused, so a
@@ -38,6 +44,9 @@ namespace MailFathom.Infrastructure.Persistence.Grants;
 [RequiresIntegrationCoverage]
 internal sealed class PersistedGrants(MailFathomDbContext dbContext, IGrantChangeAnnouncer changes) : IGrantStore
 {
+    /// <summary>What every stored pattern carries and no published name does, which is how a statement narrows to the entries worth judging as one.</summary>
+    private const string Wildcard = "*";
+
     /// <inheritdoc />
     public async Task<Role?> ReadRoleAsync(Guid roleId, CancellationToken cancellationToken)
     {
@@ -484,9 +493,36 @@ internal sealed class PersistedGrants(MailFathomDbContext dbContext, IGrantChang
             .Distinct()
             .ToArrayAsync(cancellationToken);
 
-        return ScopedGrant.Of(given.Select(row => (
-            MailFathomPermission.TryParse(row.Permission, out var permission) ? permission : default,
-            ScopeOf(row.ScopeOrganizationId, row.ScopeUserId))));
+        return ScopedGrant.Of(given.SelectMany(row => GivenBy(row.Permission, row.ScopeOrganizationId, row.ScopeUserId)));
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The entries carrying a wildcard are read and judged by <see cref="PermissionSubtree.TryParse" /> rather than
+    /// counted by the statement, so a stored value that only resembles a pattern — a wildcard inside a segment, which
+    /// grants nothing and never will — is not taken for one.
+    /// </remarks>
+    public async Task<bool> HoldsWideningRoleAsync(AssignmentPrincipal principal, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(principal);
+
+        var principalId = principal.Id;
+
+        var given = principal.Kind == AssignmentPrincipalKind.Group
+            ? dbContext.RoleAssignments.AsNoTracking().Where(assignment => assignment.PrincipalGroupId == principalId)
+            : this.AssignmentsHeldBy(principalId);
+
+        var wildcarded = await given
+            .Join(
+                dbContext.RolePermissions,
+                assignment => assignment.RoleId,
+                listed => listed.RoleId,
+                (assignment, listed) => listed.Permission)
+            .Where(entry => entry.Contains(Wildcard))
+            .Distinct()
+            .ToArrayAsync(cancellationToken);
+
+        return wildcarded.Any(entry => PermissionSubtree.TryParse(entry, out _));
     }
 
     /// <inheritdoc />
@@ -608,11 +644,11 @@ internal sealed class PersistedGrants(MailFathomDbContext dbContext, IGrantChang
 
     /// <inheritdoc />
     /// <remarks>
-    /// One statement over the user's own assignments and their groups' assignments, joined to the names each role
-    /// lists. A name listed through several assignments at one scope comes back once, and what makes the result a
-    /// union rather than a list is <see cref="ScopedGrant.Of" />, which also drops a stored name this build does not
-    /// publish. Nothing pages it, because what it returns is bounded by the published set times the scopes the user
-    /// was given rather than by anything a request names.
+    /// One statement over the user's own assignments and their groups' assignments, joined to the entries each role
+    /// lists. An entry listed through several assignments at one scope comes back once, each is resolved against what
+    /// this build publishes, and what makes the result a union rather than a list is <see cref="ScopedGrant.Of" />.
+    /// Nothing pages it, because what it returns is bounded by the entries the user's roles list times the scopes the
+    /// user was given rather than by anything a request names.
     /// </remarks>
     public async Task<ScopedGrant> ReadGrantOfAsync(UserId user, CancellationToken cancellationToken)
     {
@@ -625,9 +661,7 @@ internal sealed class PersistedGrants(MailFathomDbContext dbContext, IGrantChang
             .Distinct()
             .ToArrayAsync(cancellationToken);
 
-        return ScopedGrant.Of(held.Select(row => (
-            MailFathomPermission.TryParse(row.Permission, out var permission) ? permission : default,
-            ScopeOf(row.ScopeOrganizationId, row.ScopeUserId))));
+        return ScopedGrant.Of(held.SelectMany(row => GivenBy(row.Permission, row.ScopeOrganizationId, row.ScopeUserId)));
     }
 
     /// <inheritdoc />
@@ -653,8 +687,10 @@ internal sealed class PersistedGrants(MailFathomDbContext dbContext, IGrantChang
     /// <remarks>
     /// One statement over the assignments <see cref="ReadGrantOfAsync" /> reads, narrowed by the reach
     /// <see cref="ReadAssignmentsAsync" /> lists within, so the membership rule and the reach are each the one rule
-    /// rather than a second copy of it. A stored name this build does not publish is left out by the statement rather
-    /// than after it, so the limit counts rows that explain something.
+    /// rather than a second copy of it. A stored entry that grants nothing in this build is left out by the statement
+    /// rather than after it, so every row read explains at least one permission and reading <paramref name="limit" /> of
+    /// them is enough to answer with that many. Which stored patterns grant something is read first, from the entries
+    /// the same assignments' roles list, because only this build can say what a pattern reaches.
     /// </remarks>
     public async Task<IReadOnlyList<GrantSource>> ReadGrantSourcesOfAsync(
         UserId user,
@@ -665,13 +701,29 @@ internal sealed class PersistedGrants(MailFathomDbContext dbContext, IGrantChang
         ArgumentNullException.ThrowIfNull(reach);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
 
-        string[] published = [.. MailFathomPermission.All.Select(permission => permission.Name)];
+        var held = this.Within(this.AssignmentsHeldBy(RequireUser(user)), reach);
+
+        var wildcarded = await held
+            .Join(
+                dbContext.RolePermissions,
+                assignment => assignment.RoleId,
+                listed => listed.RoleId,
+                (assignment, listed) => listed.Permission)
+            .Where(entry => entry.Contains(Wildcard))
+            .Distinct()
+            .ToArrayAsync(cancellationToken);
+
+        string[] granting =
+        [
+            .. MailFathomPermission.All.Select(permission => permission.Name),
+            .. wildcarded.Where(entry => RolePermissions.GrantedBy(entry).Count > 0),
+        ];
 
         var rows = await (
-                from assignment in this.Within(this.AssignmentsHeldBy(RequireUser(user)), reach)
+                from assignment in held
                 join role in dbContext.Roles on assignment.RoleId equals role.Id
                 join listed in dbContext.RolePermissions on assignment.RoleId equals listed.RoleId
-                where published.Contains(listed.Permission)
+                where granting.Contains(listed.Permission)
                 join userGroup in dbContext.UserGroups on assignment.PrincipalGroupId equals (Guid?)userGroup.Id into named
                 from userGroup in named.DefaultIfEmpty()
                 orderby assignment.Id, listed.Permission
@@ -687,7 +739,7 @@ internal sealed class PersistedGrants(MailFathomDbContext dbContext, IGrantChang
             .Take(limit)
             .ToArrayAsync(cancellationToken);
 
-        return [.. rows.Select(SourceOf).OfType<GrantSource>()];
+        return [.. rows.SelectMany(SourcesOf).Take(limit)];
     }
 
     /// <inheritdoc />
@@ -704,23 +756,42 @@ internal sealed class PersistedGrants(MailFathomDbContext dbContext, IGrantChang
         return account is null ? null : new UserPlacement(user, account.OrganizationId);
     }
 
-    /// <summary>Reads one stored row of a grant's explanation as the source it names.</summary>
+    /// <summary>Reads one stored row of a grant's explanation as the sources it names.</summary>
     /// <param name="row">The stored row.</param>
-    /// <returns>The source, or <see langword="null" /> for a stored name this build does not publish, which grants nothing and so explains nothing.</returns>
-    internal static GrantSource? SourceOf(GrantSourceRow row)
+    /// <returns>One source for a stored name, one per permission a stored pattern reaches, each naming the pattern, and none for a stored entry that grants nothing in this build and so explains nothing.</returns>
+    internal static IReadOnlyList<GrantSource> SourcesOf(GrantSourceRow row)
     {
         ArgumentNullException.ThrowIfNull(row);
 
-        return MailFathomPermission.TryParse(row.Permission, out var permission)
-            ? new GrantSource(
+        var pattern = PermissionSubtree.TryParse(row.Permission, out _) ? row.Permission : null;
+
+        return
+        [
+            .. RolePermissions.GrantedBy(row.Permission).Select(permission => new GrantSource(
                 permission,
+                pattern,
                 row.RoleId,
                 row.RoleName,
                 row.AssignmentId,
                 row.GroupId,
                 row.GroupName,
-                ScopeOf(row.ScopeOrganizationId, row.ScopeUserId))
-            : null;
+                ScopeOf(row.ScopeOrganizationId, row.ScopeUserId))),
+        ];
+    }
+
+    /// <summary>Reads one stored entry of a role's list, given at one assignment's scope, as what it gives there.</summary>
+    /// <param name="storedEntry">The entry as it is stored: a name or a pattern.</param>
+    /// <param name="scopeOrganizationId">The organization the assignment's scope names, if any.</param>
+    /// <param name="scopeUserId">The user the assignment's scope names, if any.</param>
+    /// <returns>Each permission the entry grants in this build paired with the scope; empty for an entry that grants nothing.</returns>
+    internal static IEnumerable<(MailFathomPermission Permission, AssignmentScope Scope)> GivenBy(
+        string storedEntry,
+        Guid? scopeOrganizationId,
+        Guid? scopeUserId)
+    {
+        var scope = ScopeOf(scopeOrganizationId, scopeUserId);
+
+        return RolePermissions.GrantedBy(storedEntry).Select(permission => (permission, scope));
     }
 
     /// <summary>Names what an assignment named that does not exist, from the foreign key that refused it.</summary>
@@ -843,26 +914,26 @@ internal sealed class PersistedGrants(MailFathomDbContext dbContext, IGrantChang
     /// <remarks>One statement taking every lock in one order, so two writes taking them cannot wait on each other in a cycle.</remarks>
     private async Task LockRootRolesAsync(Guid? alsoRoleId, CancellationToken cancellationToken)
     {
-        var root = MailFathomPermission.AdminRolesWrite.Name;
+        string[] root = [.. RolePermissions.EntriesGranting(MailFathomPermission.AdminRolesWrite)];
         var also = alsoRoleId ?? Guid.Empty;
 
         await dbContext.Database.ExecuteSqlAsync(
             $"""
              SELECT 1 FROM roles
-             WHERE "Id" = {also} OR "Id" IN (SELECT "RoleId" FROM role_permissions WHERE "Permission" = {root})
+             WHERE "Id" = {also} OR "Id" IN (SELECT "RoleId" FROM role_permissions WHERE "Permission" = ANY({root}))
              ORDER BY "Id"
              FOR UPDATE
              """,
             cancellationToken);
     }
 
-    /// <summary>Reads whether anybody holds the root: a role listing it assigned at the deployment scope to a user, or to a group with a member it still admits.</summary>
+    /// <summary>Reads whether anybody holds the root: a role giving it — by name, or through a pattern reaching it — assigned at the deployment scope to a user, or to a group with a member it still admits.</summary>
     private Task<bool> IsRootHeldAsync(CancellationToken cancellationToken)
     {
-        var root = MailFathomPermission.AdminRolesWrite.Name;
+        string[] root = [.. RolePermissions.EntriesGranting(MailFathomPermission.AdminRolesWrite)];
 
         var rootRoles = dbContext.RolePermissions
-            .Where(listed => listed.Permission == root)
+            .Where(listed => root.Contains(listed.Permission))
             .Select(listed => listed.RoleId);
 
         var admittingGroups =
@@ -898,12 +969,12 @@ internal sealed class PersistedGrants(MailFathomDbContext dbContext, IGrantChang
         RolePermissions permissions,
         CancellationToken cancellationToken)
     {
-        string[] names = [.. permissions.Granted.Select(permission => permission.Name)];
+        string[] entries = [.. permissions.Written];
 
         await dbContext.Database.ExecuteSqlAsync(
             $"""
              INSERT INTO role_permissions ("RoleId", "Permission")
-             SELECT {roleId}, name FROM unnest({names}) AS name
+             SELECT {roleId}, entry FROM unnest({entries}) AS entry
              """,
             cancellationToken);
     }

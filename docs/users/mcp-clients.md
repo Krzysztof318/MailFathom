@@ -318,7 +318,8 @@ changes it.
 
 **A credential reaches what its user's roles grant, kept to what it was provisioned with.** A credential provisioned
 with no `--permission` names nothing to keep, so the client connects with everything its user's roles grant; a name a
-later release adds reaches it once a role its user holds lists it. Narrowing that is a
+later release adds reaches it once a role its user holds lists it, by name or through
+[a pattern](../operations/permissions.md#a-pattern-in-a-roles-list) reaching it. Narrowing that is a
 change to the credential rather than anything the client sets, and it is made with `mfctl credential create`:
 [what a credential may do](../operations/mcp-endpoint.md#what-a-credential-may-do). A client whose credential you narrow
 is listed fewer tools — the ones its grant does not permit are absent, and a call naming one is answered as an unknown
