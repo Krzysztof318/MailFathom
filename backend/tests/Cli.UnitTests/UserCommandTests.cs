@@ -55,6 +55,47 @@ public sealed class UserCommandTests : IDisposable
         Assert.Contains(this.harness.Console.Lines, line => line.Contains("55555555", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public async Task Add_AnOrganizationNamed_SendsItsIdentifierWithTheLabel()
+    {
+        // Arrange
+        var organization = new Guid("33333333-3333-3333-3333-333333333333");
+        using var deployment = FakeUserRecordDeployment.HoldingNobody();
+
+        // Act
+        await this.RunAsync(
+            deployment,
+            "user",
+            "add",
+            "--display-name",
+            "alex",
+            "--organization",
+            $"{organization:D}",
+            "--endpoint",
+            Endpoint);
+
+        // Assert
+        var recording = Assert.Single(deployment.UserRequestsTo(HttpMethod.Post, AdminEndpointRoutes.UsersPath));
+
+        Assert.Equal($"{organization:D}", ReadField(recording.ContentAsUtf8String(), "organizationId"));
+    }
+
+    /// <summary>Recording somebody into no organization is the request saying nothing about one, which only the deployment's scope is admitted for.</summary>
+    [Fact]
+    public async Task Add_NoOrganizationNamed_SendsNoOrganizationIdentifier()
+    {
+        // Arrange
+        using var deployment = FakeUserRecordDeployment.HoldingNobody();
+
+        // Act
+        await this.RunAsync(deployment, "user", "add", "--display-name", "alex", "--endpoint", Endpoint);
+
+        // Assert
+        var recording = Assert.Single(deployment.UserRequestsTo(HttpMethod.Post, AdminEndpointRoutes.UsersPath));
+
+        Assert.False(JsonDocument.Parse(recording.ContentAsUtf8String()).RootElement.TryGetProperty("organizationId", out _));
+    }
+
     /// <summary>A new user reads no mail until an account is assigned to them, so the operator is told how to add one.</summary>
     [Fact]
     public async Task Add_ARecordedUser_SaysHowToAddTheirMailAccounts()

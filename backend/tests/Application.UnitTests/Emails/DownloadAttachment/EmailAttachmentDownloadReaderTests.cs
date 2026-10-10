@@ -60,7 +60,7 @@ public sealed class EmailAttachmentDownloadReaderTests
 
     /// <summary>The principal the client surface establishes, which is a credential holding the mailbox read grant.</summary>
     private static readonly AuthorizedPrincipal SignedInReader =
-        AuthorizedPrincipal.Caller("client-key", [MailFathomPermission.MailRead]);
+        AuthorizedPrincipal.CallerActingFor(SyntheticUser.Deployment, "client-key", [MailFathomPermission.MailRead]);
 
     [Fact]
     public async Task OpenAsync_AttachmentOfAServedEmail_OpensItThroughTheStoredCopy()
@@ -349,7 +349,8 @@ public sealed class EmailAttachmentDownloadReaderTests
         var summary = SyntheticEmailSummaries.Create(attachmentCount: 1);
         var reader = ReaderOver(
             summary,
-            authorization: AuthorizationOver(AuthorizedPrincipal.Caller(
+            authorization: AuthorizationOver(AuthorizedPrincipal.CallerActingFor(
+                SyntheticUser.Deployment,
                 "mcp-key",
                 MailFathomPermission.PublishedFor(ProtectedSurface.Mail))));
 

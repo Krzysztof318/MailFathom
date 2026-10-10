@@ -10826,6 +10826,13 @@
               "null",
               "string"
             ]
+          },
+          "organizationId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
           }
         },
         "required": [

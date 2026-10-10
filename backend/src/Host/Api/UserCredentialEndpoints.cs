@@ -85,25 +85,25 @@ internal static class UserCredentialEndpoints
         ArgumentNullException.ThrowIfNull(api);
 
         api.MapGet(UserCredentialsRoute, ListAsync)
-            .RequirePermission(MailFathomPermission.AdminRead);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminRead);
 
         // The attribute is reached for its metadata rather than as an MVC filter: it implements
         // IRequestSizeLimitMetadata, which the routing pipeline applies to the request body feature, so a body over the
         // bound is answered 413 before the handler is reached.
         api.MapPost(UserCredentialsRoute, ProvisionAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxRequestBytes))
-            .RequirePermission(MailFathomPermission.AdminCredentialsWrite);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminCredentialsWrite);
 
         api.MapPut(UserCredentialMaterialRoute, ReplaceMaterialAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxRequestBytes))
-            .RequirePermission(MailFathomPermission.AdminCredentialsWrite);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminCredentialsWrite);
 
         api.MapPut(UserCredentialEnablementRoute, SetEnabledAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxRequestBytes))
-            .RequirePermission(MailFathomPermission.AdminCredentialsWrite);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminCredentialsWrite);
 
         api.MapDelete(UserCredentialRoute, DeleteAsync)
-            .RequirePermission(MailFathomPermission.AdminCredentialsWrite);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminCredentialsWrite);
     }
 
     /// <summary>Lists one user's credentials, of every method.</summary>

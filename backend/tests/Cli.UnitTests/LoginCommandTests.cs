@@ -451,7 +451,7 @@ public sealed class LoginCommandTests : IDisposable
 
     /// <summary>
     /// An organization's administrator holds nothing over the whole deployment, so the scopes report what they are
-    /// granted at each scope, each saying the endpoint admits none of it there — and a name only the deployment scope
+    /// granted at each scope, each saying it reaches only what that scope covers — and a name only the deployment scope
     /// grants is named apart as reaching nothing.
     /// </summary>
     [Fact]
@@ -473,19 +473,19 @@ public sealed class LoginCommandTests : IDisposable
         Assert.Equal(0, exitCode);
         Assert.Contains(
             this.console.Lines,
-            line => line.Contains("Over organization 0198f0c4-0000-7000-8000-000000000001 it is granted mailfathom.admin.read, which this endpoint admits only at the deployment scope.", StringComparison.Ordinal)
+            line => line.Contains("Over organization 0198f0c4-0000-7000-8000-000000000001 it is granted mailfathom.admin.read, which reaches only what that scope covers.", StringComparison.Ordinal)
                 && line.Contains("mailfathom.admin.spend reaches nothing there", StringComparison.Ordinal));
         Assert.Contains(
             this.console.Lines,
-            line => line == "It holds no administrative permission over the whole deployment, so every operation but this one is refused.");
+            line => line == "It holds no administrative permission over the whole deployment, so every operation is refused but this one, those naming something a scope below covers, and the listings, which answer with what such a scope covers.");
     }
 
     /// <summary>
     /// With something held over the whole deployment the first line names it and says nothing about a narrower grant, so
-    /// the scope's own line is what says the endpoint admits none of that grant there.
+    /// the scope's own line is what says that grant reaches nothing outside its scope.
     /// </summary>
     [Fact]
-    public async Task Status_ADeploymentGrantBesideANarrowerScope_SaysOnTheScopeLineThatItIsAdmittedOnlyAtTheDeployment()
+    public async Task Status_ADeploymentGrantBesideANarrowerScope_SaysOnTheScopeLineThatItReachesOnlyWhatTheScopeCovers()
     {
         // Arrange
         var store = this.CreateStore();
@@ -504,15 +504,15 @@ public sealed class LoginCommandTests : IDisposable
         Assert.Contains(this.console.Lines, line => line == "It holds mailfathom.admin.audit.read.");
         Assert.Contains(
             this.console.Lines,
-            line => line == "Over organization 0198f0c4-0000-7000-8000-000000000002 it is granted mailfathom.admin.read, mailfathom.admin.operate, which this endpoint admits only at the deployment scope.");
+            line => line == "Over organization 0198f0c4-0000-7000-8000-000000000002 it is granted mailfathom.admin.read, mailfathom.admin.operate, which reaches only what that scope covers.");
     }
 
     /// <summary>
-    /// The audit read is the one name the endpoint admits below the deployment, so a scope holding it is told which
-    /// reads it reaches there, and the first line no longer says every operation is refused.
+    /// The audit read is bounded by its scope like every other name the endpoint admits below the deployment, so a scope
+    /// holding it is described by the same line, and the first line does not say every operation is refused.
     /// </summary>
     [Fact]
-    public async Task Status_ANarrowerScopeHoldingTheAuditRead_SaysWhichReadsItAdmitsThere()
+    public async Task Status_ANarrowerScopeHoldingTheAuditRead_SaysItReachesOnlyWhatThatScopeCovers()
     {
         // Arrange
         var store = this.CreateStore();
@@ -530,10 +530,10 @@ public sealed class LoginCommandTests : IDisposable
         Assert.Equal(0, exitCode);
         Assert.Contains(
             this.console.Lines,
-            line => line == "It holds no administrative permission over the whole deployment, so every operation is refused but this one and the reads a narrower scope admits below.");
+            line => line == "It holds no administrative permission over the whole deployment, so every operation is refused but this one, those naming something a scope below covers, and the listings, which answer with what such a scope covers.");
         Assert.Contains(
             this.console.Lines,
-            line => line == "Over organization 0198f0c4-0000-7000-8000-000000000003 it is granted mailfathom.admin.read, mailfathom.admin.audit.read. This endpoint admits mailfathom.admin.audit.read there, on the reads naming a user or a mail account that scope covers, and admits every other name only at the deployment scope.");
+            line => line == "Over organization 0198f0c4-0000-7000-8000-000000000003 it is granted mailfathom.admin.read, mailfathom.admin.audit.read, which reaches only what that scope covers.");
     }
 
     /// <summary>

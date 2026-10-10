@@ -60,7 +60,7 @@ public sealed class UserRosterAdministrationTests
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminRead);
         var query = AdministrativeListingQuery.Create(pageSize: 1, after: SyntheticUser.Another.Value)!;
-        harness.Directory.ReadUserPageAsync(query, Arg.Any<CancellationToken>())
+        harness.Directory.ReadUserPageAsync(query, Arg.Any<IReadOnlySet<AssignmentScope>>(), Arg.Any<CancellationToken>())
             .Returns(new AdministrativeListingPage<UserRecord>(
                 [new UserRecord(SyntheticUser.Deployment, "alex")],
                 ContinuesAfter: SyntheticUser.Deployment.Value));
@@ -121,9 +121,12 @@ public sealed class UserRosterAdministrationTests
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.MailRead);
 
-        // Act & Assert
-        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
             () => harness.Roster.ReadRosterAsync(FirstPage, TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.AdminRead, refusal.RequiredPermission);
     }
 
     /// <summary>
@@ -137,7 +140,7 @@ public sealed class UserRosterAdministrationTests
         var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
 
         // Act
-        var outcome = await harness.Roster.ProvisionAsync("alex", TestContext.Current.CancellationToken);
+        var outcome = await harness.Roster.ProvisionAsync("alex", organizationId: null, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(outcome.IsProvisioned);
@@ -158,7 +161,7 @@ public sealed class UserRosterAdministrationTests
         var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
 
         // Act
-        var outcome = await harness.Roster.ProvisionAsync("alex", TestContext.Current.CancellationToken);
+        var outcome = await harness.Roster.ProvisionAsync("alex", organizationId: null, TestContext.Current.CancellationToken);
 
         // Assert
         await harness.Documents.Received(1).CommitAsync(
@@ -182,7 +185,7 @@ public sealed class UserRosterAdministrationTests
         var heard = await RosterAnnouncementListener.ListenAsync(harness.Backplane, harness.CountsRead);
 
         // Act
-        await harness.Roster.ProvisionAsync("alex", TestContext.Current.CancellationToken);
+        await harness.Roster.ProvisionAsync("alex", organizationId: null, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal([1], heard);
@@ -198,7 +201,7 @@ public sealed class UserRosterAdministrationTests
         var heard = await RosterAnnouncementListener.ListenAsync(harness.Backplane, () => true);
 
         // Act
-        await harness.Roster.ProvisionAsync("alex", TestContext.Current.CancellationToken);
+        await harness.Roster.ProvisionAsync("alex", organizationId: null, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Empty(heard);
@@ -254,12 +257,12 @@ public sealed class UserRosterAdministrationTests
         harness.LabelTaken();
 
         // Act
-        var outcome = await harness.Roster.ProvisionAsync("  alex  ", TestContext.Current.CancellationToken);
+        var outcome = await harness.Roster.ProvisionAsync("  alex  ", organizationId: null, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.False(outcome.IsProvisioned);
         Assert.Contains("already recorded as 'alex'", outcome.RefusalMessage!, StringComparison.Ordinal);
-        await harness.Provisioning.Received(1).ProvisionAsync(Arg.Any<UserId>(), "alex", Arg.Any<CancellationToken>());
+        await harness.Provisioning.Received(1).ProvisionAsync(Arg.Any<UserId>(), "alex", Arg.Any<Guid?>(), Arg.Any<CancellationToken>());
     }
 
     /// <summary>An insert the index refused recorded nobody, so no record is written for an identifier nothing holds and nothing is counted again.</summary>
@@ -271,7 +274,7 @@ public sealed class UserRosterAdministrationTests
         harness.LabelTaken();
 
         // Act
-        var outcome = await harness.Roster.ProvisionAsync("alex", TestContext.Current.CancellationToken);
+        var outcome = await harness.Roster.ProvisionAsync("alex", organizationId: null, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.False(outcome.IsProvisioned);
@@ -300,7 +303,7 @@ public sealed class UserRosterAdministrationTests
             .Returns((long?)null);
 
         // Act
-        var outcome = await harness.Roster.ProvisionAsync("alex", TestContext.Current.CancellationToken);
+        var outcome = await harness.Roster.ProvisionAsync("alex", organizationId: null, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.False(outcome.IsProvisioned);
@@ -317,7 +320,7 @@ public sealed class UserRosterAdministrationTests
         var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
 
         // Act
-        var outcome = await harness.Roster.ProvisionAsync(displayName, TestContext.Current.CancellationToken);
+        var outcome = await harness.Roster.ProvisionAsync(displayName, organizationId: null, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.False(outcome.IsProvisioned);
@@ -335,6 +338,7 @@ public sealed class UserRosterAdministrationTests
         // Act
         var outcome = await harness.Roster.ProvisionAsync(
             new string('a', UserRecord.MaximumDisplayNameLength + 1),
+            organizationId: null,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -361,7 +365,7 @@ public sealed class UserRosterAdministrationTests
             .Returns([new UserSettingsDocumentVersion(SyntheticUser.Deployment, 1)]);
 
         // Act
-        var outcome = await harness.Roster.ProvisionAsync("morgan", TestContext.Current.CancellationToken);
+        var outcome = await harness.Roster.ProvisionAsync("morgan", organizationId: null, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.False(outcome.IsProvisioned);
@@ -381,7 +385,7 @@ public sealed class UserRosterAdministrationTests
             clientEndpoint: new ClientEndpointOptions { Enabled = true });
 
         // Act
-        var outcome = await harness.Roster.ProvisionAsync("alex", TestContext.Current.CancellationToken);
+        var outcome = await harness.Roster.ProvisionAsync("alex", organizationId: null, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(outcome.IsProvisioned);
@@ -399,22 +403,268 @@ public sealed class UserRosterAdministrationTests
         harness.Holding(new UserRecord(SyntheticUser.Deployment, "alex"));
 
         // Act
-        var outcome = await harness.Roster.ProvisionAsync("morgan", TestContext.Current.CancellationToken);
+        var outcome = await harness.Roster.ProvisionAsync("morgan", organizationId: null, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(outcome.IsProvisioned);
         await harness.Directory.DidNotReceiveWithAnyArgs().ReadUsersAsync(default, TestContext.Current.CancellationToken);
     }
 
-    [Fact]
-    public async Task ProvisionAsync_ACallerHoldingOnlyTheAdministrativeRead_IsRefused()
+    /// <summary>A caller holding the write nowhere is refused whether or not the request names an organization.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ProvisionAsync_ACallerHoldingOnlyTheAdministrativeRead_IsRefusedWithoutRecordingAnybody(bool intoAnOrganization)
     {
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminRead);
+        Guid? organizationId = intoAnOrganization ? AccessAuthorizations.ScopedOrganization : null;
 
-        // Act & Assert
-        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
-            () => harness.Roster.ProvisionAsync("alex", TestContext.Current.CancellationToken));
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
+            () => harness.Roster.ProvisionAsync("alex", organizationId, TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.AdminConfigurationWrite, refusal.RequiredPermission);
+        Assert.Empty(harness.Provisioning.ReceivedCalls());
+    }
+
+    public static TheoryData<AssignmentScope> ScopesCoveringTheUser => [.. AccessAuthorizations.ScopesCoveringTheirTarget];
+
+    public static TheoryData<AssignmentScope> ScopesOutsideTheUser => [.. AccessAuthorizations.ScopesOutsideTheirTarget];
+
+    public static TheoryData<AssignmentScope> ScopesCoveringTheOrganization =>
+        [AssignmentScope.Deployment, AssignmentScope.Organization(AccessAuthorizations.ScopedOrganization)];
+
+    /// <summary>Gets the narrower scopes that reach no organization: another organization, a member of this one, and somebody else.</summary>
+    public static TheoryData<AssignmentScope> ScopesOutsideTheOrganization =>
+        [.. AccessAuthorizations.ScopesOutsideTheirTarget, AssignmentScope.User(AccessAuthorizations.ScopedHolder)];
+
+    public static TheoryData<AssignmentScope> ScopesBelowTheDeployment =>
+    [
+        AssignmentScope.Organization(AccessAuthorizations.ScopedOrganization),
+        AssignmentScope.User(AccessAuthorizations.ScopedHolder),
+    ];
+
+    /// <summary>A listing never refuses over a scope: it answers within the one the caller reads at, whichever kind it is.</summary>
+    [Theory]
+    [MemberData(nameof(ScopesCoveringTheUser))]
+    public async Task ReadRosterAsync_ACallerReadingAtOneScope_AsksTheDirectoryWithinThatScopeAlone(AssignmentScope scope)
+    {
+        // Arrange
+        var harness = HarnessScopedAt(scope, MailFathomPermission.AdminRead);
+        harness.Holding();
+
+        // Act
+        await harness.Roster.ReadRosterAsync(FirstPage, TestContext.Current.CancellationToken);
+
+        // Assert
+        await harness.Directory.Received(1).ReadUserPageAsync(
+            FirstPage,
+            Arg.Is<IReadOnlySet<AssignmentScope>>(scopes => scopes!.SetEquals(new[] { scope })),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [MemberData(nameof(ScopesCoveringTheOrganization))]
+    public async Task ProvisionAsync_IntoAnOrganizationTheCallersScopeCovers_RecordsTheUserIntoIt(AssignmentScope scope)
+    {
+        // Arrange
+        var harness = HarnessScopedAt(scope, MailFathomPermission.AdminConfigurationWrite);
+
+        // Act
+        var outcome = await harness.Roster.ProvisionAsync(
+            "alex",
+            AccessAuthorizations.ScopedOrganization,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(outcome.IsProvisioned);
+        await harness.Provisioning.Received(1).ProvisionAsync(
+            outcome.User,
+            "alex",
+            AccessAuthorizations.ScopedOrganization,
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>An organization outside the caller's scope is refused exactly as one this deployment does not hold, so the refusal discloses nothing beyond the caller's own.</summary>
+    [Theory]
+    [MemberData(nameof(ScopesOutsideTheOrganization))]
+    public async Task ProvisionAsync_IntoAnOrganizationOutsideTheCallersScope_IsRefusedAsNoSuchOrganizationWithoutRecordingAnybody(
+        AssignmentScope scope)
+    {
+        // Arrange
+        var harness = HarnessScopedAt(scope, MailFathomPermission.AdminConfigurationWrite);
+
+        // Act
+        var outcome = await harness.Roster.ProvisionAsync(
+            "alex",
+            AccessAuthorizations.ScopedOrganization,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(outcome.IsProvisioned);
+        Assert.Contains(
+            $"holds no organization '{AccessAuthorizations.ScopedOrganization}'",
+            outcome.RefusalMessage!,
+            StringComparison.Ordinal);
+        Assert.Empty(harness.Provisioning.ReceivedCalls());
+    }
+
+    [Fact]
+    public async Task ProvisionAsync_IntoAnOrganizationTheInsertFindsNoLonger_IsRefusedAsNoSuchOrganization()
+    {
+        // Arrange
+        var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
+        harness.Provisioning
+            .ProvisionAsync(Arg.Any<UserId>(), Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(UserProvisioningResult.UnknownOrganization);
+
+        // Act
+        var outcome = await harness.Roster.ProvisionAsync(
+            "alex",
+            AccessAuthorizations.ScopedOrganization,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(outcome.IsProvisioned);
+        Assert.Contains(
+            $"holds no organization '{AccessAuthorizations.ScopedOrganization}'",
+            outcome.RefusalMessage!,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>Only the deployment's scope covers a user in no organization, so only it records one there, and the refusal is the same whatever the request named.</summary>
+    [Theory]
+    [MemberData(nameof(ScopesBelowTheDeployment))]
+    public async Task ProvisionAsync_IntoNoOrganizationByACallerScopedBelowTheDeployment_IsRefusedForTheDeploymentAloneWithoutRecordingAnybody(
+        AssignmentScope scope)
+    {
+        // Arrange
+        var harness = HarnessScopedAt(scope, MailFathomPermission.AdminConfigurationWrite);
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
+            () => harness.Roster.ProvisionAsync("alex", organizationId: null, TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.AdminConfigurationWrite, refusal.RequiredPermission);
+        Assert.True(refusal.RefusedForTheDeploymentAlone);
+        Assert.Empty(harness.Provisioning.ReceivedCalls());
+    }
+
+    [Theory]
+    [MemberData(nameof(ScopesCoveringTheUser))]
+    public async Task RelabelAsync_AUserTheCallersScopeCovers_PutsTheLabelOnTheirRow(AssignmentScope scope)
+    {
+        // Arrange
+        var harness = HarnessScopedAt(scope, MailFathomPermission.AdminConfigurationWrite);
+        harness.Holding(new UserRecord(AccessAuthorizations.ScopedHolder, "alexandra"));
+
+        // Act
+        var outcome = await harness.Roster.RelabelAsync(
+            AccessAuthorizations.ScopedHolder,
+            "alex",
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(outcome.IsRelabelled);
+    }
+
+    [Theory]
+    [MemberData(nameof(ScopesOutsideTheUser))]
+    public async Task RelabelAsync_AUserOutsideTheCallersScope_ReportsTheUserAsUnheldWithoutTouchingTheRow(AssignmentScope scope)
+    {
+        // Arrange
+        var harness = HarnessScopedAt(scope, MailFathomPermission.AdminConfigurationWrite);
+        harness.Holding(new UserRecord(AccessAuthorizations.ScopedHolder, "alexandra"));
+
+        // Act
+        var outcome = await harness.Roster.RelabelAsync(
+            AccessAuthorizations.ScopedHolder,
+            "alex",
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(UserRelabelOutcome.NoSuchUser, outcome);
+        Assert.Empty(harness.Provisioning.ReceivedCalls());
+    }
+
+    [Theory]
+    [MemberData(nameof(ScopesCoveringTheUser))]
+    public async Task EraseAsync_AUserTheCallersScopeCovers_ErasesThem(AssignmentScope scope)
+    {
+        // Arrange
+        var harness = HarnessScopedAt(scope, MailFathomPermission.AdminErase);
+        harness.Erasing(AccessAuthorizations.ScopedHolder);
+
+        // Act
+        var outcome = await harness.Roster.EraseAsync(AccessAuthorizations.ScopedHolder, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(outcome.UserErased);
+    }
+
+    /// <summary>A user outside the caller's scope is answered exactly as one this deployment does not hold, served or not.</summary>
+    [Theory]
+    [MemberData(nameof(ScopesOutsideTheUser))]
+    public async Task EraseAsync_AUserOutsideTheCallersScope_ErasesNothingAndReportsNothingServed(AssignmentScope scope)
+    {
+        // Arrange
+        var harness = HarnessScopedAt(scope, MailFathomPermission.AdminErase);
+        harness.Serving(AccessAuthorizations.ScopedHolder);
+        harness.Erasing(AccessAuthorizations.ScopedHolder);
+
+        // Act
+        var outcome = await harness.Roster.EraseAsync(AccessAuthorizations.ScopedHolder, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal((false, false), (outcome.UserErased, outcome.WasServed));
+        Assert.Empty(harness.Erasure.ReceivedCalls());
+    }
+
+    /// <summary>
+    /// An erasure deletes the mail accounts assigned to the user alone, and covering the user is not covering those: an
+    /// account the caller's scope does not cover refuses the whole erasure, while one it does cover goes with the user.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task EraseAsync_AUserAloneAssignedAnAccountOutsideTheCallersScope_IsRefusedBeforeAnythingIsErased(bool scopedOverTheOrganization)
+    {
+        // Arrange
+        var scope = scopedOverTheOrganization
+            ? AssignmentScope.Organization(AccessAuthorizations.ScopedOrganization)
+            : AssignmentScope.User(AccessAuthorizations.ScopedHolder);
+        var coveredAccount = Guid.Parse(AccessAuthorizations.ScopedAccount.Value);
+        var uncoveredAccount = new Guid("63f9d402-1e57-4c8a-a134-5d8f7a9c1e26");
+
+        var covering = HarnessScopedAt(scope, MailFathomPermission.AdminErase);
+        covering.Erasing(AccessAuthorizations.ScopedHolder);
+        covering.MailAccountRecords.HoldUser(
+            AccessAuthorizations.ScopedHolder,
+            "{}",
+            1,
+            new MailAccountRecord(coveredAccount, "covered@roster.test", "covered", "{}", 1));
+
+        var reachingPast = HarnessScopedAt(scope, MailFathomPermission.AdminErase);
+        reachingPast.Erasing(AccessAuthorizations.ScopedHolder);
+        reachingPast.MailAccountRecords.HoldUser(
+            AccessAuthorizations.ScopedHolder,
+            "{}",
+            1,
+            new MailAccountRecord(coveredAccount, "covered@roster.test", "covered", "{}", 1),
+            new MailAccountRecord(uncoveredAccount, "uncovered@roster.test", "uncovered", "{}", 1));
+
+        // Act
+        var erased = await covering.Roster.EraseAsync(AccessAuthorizations.ScopedHolder, TestContext.Current.CancellationToken);
+        var refused = await reachingPast.Roster.EraseAsync(AccessAuthorizations.ScopedHolder, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(erased.UserErased);
+        Assert.False(refused.UserErased);
+        Assert.Contains(MailFathomPermission.AdminErase.Name, refused.RefusalMessage!, StringComparison.Ordinal);
+        Assert.Empty(reachingPast.Erasure.ReceivedCalls());
     }
 
     /// <summary>
@@ -619,9 +869,12 @@ public sealed class UserRosterAdministrationTests
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
 
-        // Act & Assert
-        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
             () => harness.Roster.EraseAsync(SyntheticUser.Deployment, TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.AdminErase, refusal.RequiredPermission);
     }
 
     /// <summary>A label is what an administrator selects a user by, and nothing is keyed by it, so replacing one is an ordinary write.</summary>
@@ -759,12 +1012,15 @@ public sealed class UserRosterAdministrationTests
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminRead);
 
-        // Act & Assert
-        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
             () => harness.Roster.RelabelAsync(
                 SyntheticUser.Deployment,
                 "alex",
                 TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.AdminConfigurationWrite, refusal.RequiredPermission);
     }
 
     /// <summary>An administrator reads which endpoints each user is served on where they select the user, so the roster carries both switches.</summary>
@@ -787,23 +1043,33 @@ public sealed class UserRosterAdministrationTests
             Assert.Single(roster.Entries).EndpointAccess);
     }
 
+    /// <summary>The roster for an administrator holding one permission at one scope, over <see cref="AccessAuthorizations.ScopedHolder" /> placed in the scoped organization.</summary>
+    private static RosterHarness HarnessScopedAt(AssignmentScope scope, MailFathomPermission granted) =>
+        new(AccessAuthorizations.ForAdministratorScopedAt(scope, granted));
+
     /// <summary>The roster over substituted rows, with the endpoint posture a deployment's several-user refusal is read from.</summary>
     private sealed class RosterHarness
     {
         internal RosterHarness(
             MailFathomPermission granted,
             ClientEndpointOptions? clientEndpoint = null)
+            : this(
+                AccessAuthorizations.ForPrincipal(AuthorizedPrincipal.Caller(AdministratorIdentity, [granted])),
+                clientEndpoint)
         {
-            var principals = Substitute.For<IAuthorizedPrincipalSource>();
-            principals.Current.Returns(AuthorizedPrincipal.Caller(AdministratorIdentity, [granted]));
+        }
 
+        internal RosterHarness(
+            AccessAuthorization authorization,
+            ClientEndpointOptions? clientEndpoint = null)
+        {
             this.Directory = Substitute.For<IUserDirectory>();
             this.Directory.ReadUsersAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns([]);
 
             this.Provisioning = Substitute.For<IUserProvisioning>();
             this.Provisioning
-                .ProvisionAsync(Arg.Any<UserId>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-                .Returns(true);
+                .ProvisionAsync(Arg.Any<UserId>(), Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+                .Returns(UserProvisioningResult.Provisioned);
             this.Provisioning
                 .RelabelAsync(Arg.Any<UserId>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
                 .Returns(true);
@@ -829,7 +1095,7 @@ public sealed class UserRosterAdministrationTests
             this.ServedUsers = ResolvedServedUsers.Over(this.UserRows);
 
             this.Roster = new UserRosterAdministration(
-                new AccessAuthorization(principals),
+                authorization,
                 this.Directory,
                 this.Provisioning,
                 this.Erasure,
@@ -877,7 +1143,10 @@ public sealed class UserRosterAdministrationTests
         internal void Holding(params UserRecord[] held)
         {
             this.Directory.ReadUsersAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(held);
-            this.Directory.ReadUserPageAsync(Arg.Any<AdministrativeListingQuery>(), Arg.Any<CancellationToken>())
+            this.Directory.ReadUserPageAsync(
+                    Arg.Any<AdministrativeListingQuery>(),
+                    Arg.Any<IReadOnlySet<AssignmentScope>>(),
+                    Arg.Any<CancellationToken>())
                 .Returns(new AdministrativeListingPage<UserRecord>(held, ContinuesAfter: null));
 
             foreach (var record in held)
@@ -891,8 +1160,8 @@ public sealed class UserRosterAdministrationTests
         /// <summary>Has the table's unique index refuse whatever label is written, as it does a label another user carries.</summary>
         internal void LabelTaken() =>
             this.Provisioning
-                .ProvisionAsync(Arg.Any<UserId>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-                .Returns(false);
+                .ProvisionAsync(Arg.Any<UserId>(), Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+                .Returns(UserProvisioningResult.LabelTaken);
 
         /// <summary>Counts how often the users this deployment holds were counted, which a provisioning or an erasure does once it commits.</summary>
         internal int CountsRead() =>

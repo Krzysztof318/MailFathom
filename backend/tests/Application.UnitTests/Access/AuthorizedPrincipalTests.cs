@@ -50,6 +50,18 @@ public sealed class AuthorizedPrincipalTests
         Assert.True(caller.Holds(MailFathomPermission.MailRead));
     }
 
+    /// <summary>A principal acting for no user has no mail of its own, so a mail name its grant carries reaches nothing — and is still carried, as a ceiling.</summary>
+    [Fact]
+    public void Holds_AMailPermissionOfACallerActingForNoUser_IsNotHeld()
+    {
+        // Arrange
+        var caller = AuthorizedPrincipal.Caller("administrator", [MailFathomPermission.MailRead]);
+
+        // Act & Assert
+        Assert.False(caller.Holds(MailFathomPermission.MailRead));
+        Assert.Contains(MailFathomPermission.MailRead, caller.Permissions);
+    }
+
     /// <summary>
     /// A question naming no target is the deployment's, so an administrative permission held only over one organization
     /// answers it no — and is still carried, with its scope, for a check that does name a target inside it.

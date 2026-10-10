@@ -89,8 +89,8 @@ internal sealed class UserRecordDeployment
 
         this.Provisioning = Substitute.For<IUserProvisioning>();
         this.Provisioning
-            .ProvisionAsync(Arg.Any<UserId>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(true);
+            .ProvisionAsync(Arg.Any<UserId>(), Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(UserProvisioningResult.Provisioned);
         this.Provisioning
             .RelabelAsync(Arg.Any<UserId>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(true);
@@ -228,7 +228,10 @@ internal sealed class UserRecordDeployment
     internal void Held(params UserRecord[] held)
     {
         this.Directory.ReadUsersAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(held);
-        this.Directory.ReadUserPageAsync(Arg.Any<AdministrativeListingQuery>(), Arg.Any<CancellationToken>())
+        this.Directory.ReadUserPageAsync(
+                Arg.Any<AdministrativeListingQuery>(),
+                Arg.Any<IReadOnlySet<AssignmentScope>>(),
+                Arg.Any<CancellationToken>())
             .Returns(new AdministrativeListingPage<UserRecord>(held, ContinuesAfter: null));
 
         foreach (var record in held)

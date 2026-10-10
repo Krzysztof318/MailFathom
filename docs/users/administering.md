@@ -209,11 +209,11 @@ published under — two, for the twelve commands that read something before they
 administrative permission at all is not an administrator, and every credential they hold is refused at sign-in. When a
 command is refused for want of one, it names the permission and says to give your user a role holding it, so the answer
 is to widen the user's roles rather than to replace the key. A role assigned over one organization or one user rather than
-the whole deployment is printed on a line of its own. The endpoint admits an operation only at the deployment scope,
-so a command run under such a role is refused with a sentence saying the scope rather than the permission is what is
-missing. The exception is the reads published under `mailfathom.admin.audit.read`, which such a role reaches for the
-users and the mail accounts its scope covers —
-[a grant held below the deployment](../operations/admin-endpoint.md#a-grant-held-below-the-deployment) lists them.
+the whole deployment is printed on a line of its own. Such a role reaches the users, the mail accounts, and the
+organization its scope covers on the routes that name one —
+[a grant held below the deployment](../operations/admin-endpoint.md#a-grant-held-below-the-deployment) lists them — and
+nothing else. `mfctl user list` and `mfctl organization list` run under it show what that scope covers, and any other
+command naming no target is refused with a sentence saying the scope rather than the permission is what is missing.
 [What a credential may do](../operations/permissions.md) lists the names, what each covers, and which twelve commands need
 a second one; [what the endpoint serves](../operations/admin-endpoint.md#what-the-endpoint-serves) names the permission
 every route is published under.
@@ -895,6 +895,12 @@ person into it, taking the identifier `mfctl organization list` reports. From th
 password as `TESTFIRMA/username` rather than as `username`, so two companies can each have a `jan`; `--none` moves
 them back out. `mfctl organization rename`, `set-short-name`, and `remove` maintain the rest, and `mfctl credential list`
 shows each password credential's login in its "Resolved by" column, so you can read off what somebody should type.
+
+**A company can have an administrator of its own.** A role assigned at an organization's scope administers that
+organization's people — recording them with `mfctl user add --organization <id>`, editing their records, and provisioning
+their credentials — and nobody else: a person outside it reads to that administrator as somebody this deployment does not
+hold. [A grant held below the deployment](../operations/admin-endpoint.md#a-grant-held-below-the-deployment) lists which
+acts take a scope and which stay with an administrator over the whole deployment.
 
 **A company's mailboxes belong to it too, and are assigned only to its people.** `mfctl account set-organization
 --account <id> --organization <id>` moves a mail account into an organization, and `--none` takes it out. An account in

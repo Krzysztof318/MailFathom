@@ -217,7 +217,7 @@ public sealed class MailOutboxTests
             new InMemoryOutgoingEmailStore(),
             ContentStores.Substituted(),
             authorization: AccessAuthorizations.ForPrincipal(
-                AuthorizedPrincipal.Caller("agent-key", [MailFathomPermission.MailSend])));
+                AuthorizedPrincipal.CallerActingFor(SyntheticUser.Deployment, "agent-key", [MailFathomPermission.MailSend])));
 
         // Act
         var record = (await outbox.EnqueueAsync(CreateRequest("mfctl-4f2a"), RawMime, CancellationToken.None)).Record;

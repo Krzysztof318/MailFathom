@@ -58,6 +58,139 @@ public sealed class UserRecordAdministrationTests
         Assert.Equal(SyntheticUser.Deployment, reading.User);
     }
 
+    public static TheoryData<AssignmentScope> ScopesCoveringTheUser => [.. AccessAuthorizations.ScopesCoveringTheirTarget];
+
+    public static TheoryData<AssignmentScope> ScopesOutsideTheUser => [.. AccessAuthorizations.ScopesOutsideTheirTarget];
+
+    [Theory]
+    [MemberData(nameof(ScopesCoveringTheUser))]
+    public async Task ReadRecordAsync_AUserTheCallersScopeCovers_ReportsTheirRecord(AssignmentScope scope)
+    {
+        // Arrange
+        var harness = HarnessScopedAt(scope, MailFathomPermission.AdminRead);
+        harness.Holding(AccessAuthorizations.ScopedHolder, EmptyRecord, version: 4);
+
+        // Act
+        var reading = await harness.Records.ReadRecordAsync(AccessAuthorizations.ScopedHolder, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(4, reading!.Version);
+    }
+
+    [Theory]
+    [MemberData(nameof(ScopesOutsideTheUser))]
+    public async Task ReadRecordAsync_AUserOutsideTheCallersScope_IsAnsweredAsOneThisDeploymentDoesNotHold(AssignmentScope scope)
+    {
+        // Arrange
+        var harness = HarnessScopedAt(scope, MailFathomPermission.AdminRead);
+        harness.Holding(AccessAuthorizations.ScopedHolder, EmptyRecord, version: 4);
+
+        // Act
+        var reading = await harness.Records.ReadRecordAsync(AccessAuthorizations.ScopedHolder, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(reading);
+    }
+
+    [Theory]
+    [MemberData(nameof(ScopesCoveringTheUser))]
+    public async Task ApplyRecordAsync_AUserTheCallersScopeCovers_CommitsTheSavedRecord(AssignmentScope scope)
+    {
+        // Arrange
+        var harness = HarnessScopedAt(scope, MailFathomPermission.AdminConfigurationWrite);
+        harness.Holding(AccessAuthorizations.ScopedHolder, EmptyRecord, version: 4);
+
+        // Act
+        var outcome = await harness.Records.ApplyRecordAsync(
+            AccessAuthorizations.ScopedHolder,
+            """{"Language":"English"}""",
+            expectedVersion: 4,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(outcome!.IsCommitted);
+    }
+
+    [Theory]
+    [MemberData(nameof(ScopesOutsideTheUser))]
+    public async Task ApplyRecordAsync_AUserOutsideTheCallersScope_IsAnsweredAsOneThisDeploymentDoesNotHoldAndCommitsNothing(
+        AssignmentScope scope)
+    {
+        // Arrange
+        var harness = HarnessScopedAt(scope, MailFathomPermission.AdminConfigurationWrite);
+        harness.Holding(AccessAuthorizations.ScopedHolder, EmptyRecord, version: 4);
+
+        // Act
+        var outcome = await harness.Records.ApplyRecordAsync(
+            AccessAuthorizations.ScopedHolder,
+            """{"Language":"English"}""",
+            expectedVersion: 4,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(outcome);
+        Assert.Empty(harness.Store.ReceivedCalls());
+    }
+
+    [Fact]
+    public async Task ApplyRecordAsync_ACallerHoldingOnlyTheAdministrativeRead_IsRefusedNamingTheConfigurationWrite()
+    {
+        // Arrange
+        var harness = new RecordHarness(MailFathomPermission.AdminRead);
+        harness.Holding(SyntheticUser.Deployment, EmptyRecord, version: 4);
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() => harness.Records.ApplyRecordAsync(
+            SyntheticUser.Deployment,
+            """{"Language":"English"}""",
+            expectedVersion: 4,
+            TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.AdminConfigurationWrite, refusal.RequiredPermission);
+        Assert.Empty(harness.Store.ReceivedCalls());
+    }
+
+    [Theory]
+    [MemberData(nameof(ScopesCoveringTheUser))]
+    public async Task SetEndpointAccessAsync_AUserTheCallersScopeCovers_WritesTheSwitch(AssignmentScope scope)
+    {
+        // Arrange
+        var harness = HarnessScopedAt(scope, MailFathomPermission.AdminConfigurationWrite);
+        harness.Holding(AccessAuthorizations.ScopedHolder, EmptyRecord, version: 4);
+
+        // Act
+        var written = await harness.Records.SetEndpointAccessAsync(
+            AccessAuthorizations.ScopedHolder,
+            mcpEndpoint: false,
+            clientEndpoint: null,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(written!.Outcome.IsCommitted);
+    }
+
+    [Theory]
+    [MemberData(nameof(ScopesOutsideTheUser))]
+    public async Task SetEndpointAccessAsync_AUserOutsideTheCallersScope_IsAnsweredAsOneThisDeploymentDoesNotHoldAndCommitsNothing(
+        AssignmentScope scope)
+    {
+        // Arrange
+        var harness = HarnessScopedAt(scope, MailFathomPermission.AdminConfigurationWrite);
+        harness.Holding(AccessAuthorizations.ScopedHolder, EmptyRecord, version: 4);
+
+        // Act
+        var written = await harness.Records.SetEndpointAccessAsync(
+            AccessAuthorizations.ScopedHolder,
+            mcpEndpoint: false,
+            clientEndpoint: null,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(written);
+        Assert.Empty(harness.Store.ReceivedCalls());
+    }
+
     /// <summary>A link to somebody else's file would serve their octets as this user's picture, and only the database can say whose a file is.</summary>
     [Fact]
     public async Task ApplyOwnRecordAsync_ARecordLinkingAFileThatIsNotTheUsers_IsRefusedAndNothingIsCommitted()
@@ -417,9 +550,12 @@ public sealed class UserRecordAdministrationTests
         var harness = new RecordHarness(MailFathomPermission.MailRead);
         harness.Holding(SyntheticUser.Deployment, EmptyRecord, version: 1);
 
-        // Act & Assert
-        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
             () => harness.Records.ReadRecordAsync(SyntheticUser.Deployment, TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.AdminRead, refusal.RequiredPermission);
     }
 
     /// <summary>A user's own entry point resolves the user from whoever was admitted, so no request can name another.</summary>
@@ -863,6 +999,10 @@ public sealed class UserRecordAdministrationTests
               """,
             Version: 1);
 
+    /// <summary>The service for an administrator holding one permission at one scope, over <see cref="AccessAuthorizations.ScopedHolder" /> placed in the scoped organization.</summary>
+    private static RecordHarness HarnessScopedAt(AssignmentScope scope, MailFathomPermission granted) =>
+        new(granted, authorization: AccessAuthorizations.ForAdministratorScopedAt(scope, granted));
+
     /// <summary>Reads a zone the way the endpoint reaching this use case reads one, so a test cannot state an unknown one.</summary>
     private static UserTimeZone Zone(string zoneId) =>
         UserTimeZone.TryRead(zoneId, out var zone)
@@ -877,7 +1017,8 @@ public sealed class UserRecordAdministrationTests
             Dictionary<string, string?>? configuration = null,
             UserId actingFor = default,
             MailFathomPermission alsoGranted = default,
-            SensitiveContentOptions? scanning = null)
+            SensitiveContentOptions? scanning = null,
+            AccessAuthorization? authorization = null)
         {
             // A caller that has to read a record before saving it holds both grants, which is what an administrator
             // editing a record actually carries; the unspecified default is what a test granting one permission passes.
@@ -905,7 +1046,7 @@ public sealed class UserRecordAdministrationTests
                 .Build();
 
             this.Records = new UserRecordAdministration(
-                new AccessAuthorization(principals),
+                authorization ?? new AccessAuthorization(principals),
                 this.Documents,
                 this.Store,
                 new UserAccountDocumentBinder(

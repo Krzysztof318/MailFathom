@@ -18,6 +18,12 @@ namespace MailFathom.Application.Access.Organizations;
 /// password is typed as — a short name every member's at once — which is a decision about how people sign in.
 /// </para>
 /// <para>
+/// Which scope reaches each act is ADR 0012's. Recording and deleting an organization and changing its short name are
+/// the deployment's alone — a short name is a namespace every organization's logins share, so a refusal on a collision
+/// would tell one organization's administrator what another holds. Reading, renaming the display name, and moving a
+/// user are admitted at a scope covering what they name, and what it does not cover is answered as absent.
+/// </para>
+/// <para>
 /// The identifier is a version 7 value minted from the instant the organization is recorded at, like every identifier
 /// MailFathom mints. It reaches administrative listings, so it says when each company was added and in what order — a
 /// residual ADR 0036 accepts.
@@ -48,30 +54,35 @@ public sealed class OrganizationAdministration
         this.timeProvider = timeProvider;
     }
 
-    /// <summary>Reads one page of the organizations this deployment holds.</summary>
+    /// <summary>Reads one page of the organizations the caller's scope covers.</summary>
     /// <param name="query">The page asked for.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The page's organizations in identifier order, beside the rows on it this build will not read as one.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="query" /> is <see langword="null" />.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.AdminRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller holds <see cref="MailFathomPermission.AdminRead" /> at no scope.</exception>
+    /// <remarks>A listing never refuses over a scope: a caller reading at one organization's scope lists that organization, and one reading at a user's scope alone lists none.</remarks>
     public Task<OrganizationListing> ReadAsync(AdministrativeListingQuery query, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(query);
+        this.authorization.RequirePermissionAtAnyScope(MailFathomPermission.AdminRead);
 
-        this.authorization.RequirePermission(MailFathomPermission.AdminRead);
-
-        return this.organizations.ReadAsync(query, cancellationToken);
+        return this.organizations.ReadAsync(
+            query,
+            this.authorization.ScopesOf(MailFathomPermission.AdminRead),
+            cancellationToken);
     }
 
-    /// <summary>Reads every organization row this deployment holds and this build will not read as one.</summary>
+    /// <summary>Reads every organization row the caller's scope covers that this build will not read as one.</summary>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The unreadable rows, each with the sentence naming what its short name must become.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.AdminRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller holds <see cref="MailFathomPermission.AdminRead" /> at no scope.</exception>
     public Task<IReadOnlyList<UnreadableOrganization>> ReadUnreadableAsync(CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.AdminRead);
+        this.authorization.RequirePermissionAtAnyScope(MailFathomPermission.AdminRead);
 
-        return this.organizations.ReadUnreadableAsync(cancellationToken);
+        return this.organizations.ReadUnreadableAsync(
+            this.authorization.ScopesOf(MailFathomPermission.AdminRead),
+            cancellationToken);
     }
 
     /// <summary>Records an organization under an identifier this deployment mints.</summary>
@@ -107,16 +118,20 @@ public sealed class OrganizationAdministration
     /// <param name="displayName">The new display name.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>What the act did.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="displayName" /> breaks <see cref="FindDisplayNameRefusal" />.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.AdminConfigurationWrite" />.</exception>
-    public Task<OrganizationWriteResult> RenameAsync(
+    /// <exception cref="ArgumentException">Thrown when <paramref name="displayName" /> breaks <see cref="FindDisplayNameRefusal" />, or <paramref name="organizationId" /> is empty.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller holds <see cref="MailFathomPermission.AdminConfigurationWrite" /> at no scope.</exception>
+    /// <remarks>The display name is the one part of an organization its own administrator renames; an organization outside the caller's scope is answered as one this deployment does not hold.</remarks>
+    public async Task<OrganizationWriteResult> RenameAsync(
         Guid organizationId,
         string? displayName,
         CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.AdminConfigurationWrite);
+        var label = DisplayNameOrThrow(displayName);
+        this.authorization.RequirePermissionAtAnyScope(MailFathomPermission.AdminConfigurationWrite);
 
-        return this.organizations.RenameAsync(organizationId, DisplayNameOrThrow(displayName), cancellationToken);
+        return await this.CoversOrganizationAsync(MailFathomPermission.AdminConfigurationWrite, organizationId, cancellationToken)
+            ? await this.organizations.RenameAsync(organizationId, label, cancellationToken)
+            : OrganizationWriteResult.Of(OrganizationWriteOutcome.UnknownOrganization);
     }
 
     /// <summary>Replaces the short name an organization's members sign in under, which moves every one of their logins with it.</summary>
@@ -153,22 +168,53 @@ public sealed class OrganizationAdministration
     /// <param name="organizationId">The organization to move them into, or <see langword="null" /> to leave them in none.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>What the act did, carrying the colliding username where the target already holds one of theirs.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.AdminCredentialsWrite" />.</exception>
-    public Task<OrganizationWriteResult> SetUserOrganizationAsync(
+    /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody, or <paramref name="organizationId" /> is empty.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller holds <see cref="MailFathomPermission.AdminCredentialsWrite" /> at no scope, or moves a user out of every organization without holding it over the whole deployment.</exception>
+    /// <remarks>
+    /// Both sides have to be covered: the user where they stand now, and the organization they are moved into. Leaving
+    /// every organization is a move into what only the deployment's scope covers, so only the deployment's scope writes
+    /// it, and it is refused by name because it names no organization whose existence a refusal could disclose. A user
+    /// outside the caller's scope is answered as unknown and an organization outside it as unknown, each the way the
+    /// write answers one that does not exist.
+    /// </remarks>
+    public async Task<OrganizationWriteResult> SetUserOrganizationAsync(
         UserId user,
         Guid? organizationId,
         CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.AdminCredentialsWrite);
-
         if (!user.IsSpecified)
         {
             throw new ArgumentException("A user is moved between organizations by name.", nameof(user));
         }
 
-        return this.organizations.SetUserOrganizationAsync(user, organizationId, cancellationToken);
+        if (organizationId is not { } destination)
+        {
+            this.authorization.RequirePermissionOverTheDeployment(MailFathomPermission.AdminCredentialsWrite);
+
+            return await this.organizations.SetUserOrganizationAsync(user, organizationId, cancellationToken);
+        }
+
+        this.authorization.RequirePermissionAtAnyScope(MailFathomPermission.AdminCredentialsWrite);
+
+        if (!await this.authorization.PermitsOverAsync(MailFathomPermission.AdminCredentialsWrite, user, cancellationToken))
+        {
+            return OrganizationWriteResult.Of(OrganizationWriteOutcome.UnknownUser);
+        }
+
+        if (!await this.CoversOrganizationAsync(MailFathomPermission.AdminCredentialsWrite, destination, cancellationToken))
+        {
+            return OrganizationWriteResult.Of(OrganizationWriteOutcome.UnknownOrganization);
+        }
+
+        return await this.organizations.SetUserOrganizationAsync(user, organizationId, cancellationToken);
     }
+
+    /// <summary>Asks whether the caller holds a permission at a scope covering one organization itself.</summary>
+    private Task<bool> CoversOrganizationAsync(
+        MailFathomPermission permission,
+        Guid organizationId,
+        CancellationToken cancellationToken) =>
+        this.authorization.PermitsOverScopeAsync(permission, AssignmentScope.Organization(organizationId), cancellationToken);
 
     /// <summary>Moves a mail account into an organization, or out of every organization.</summary>
     /// <param name="mailAccountId">The mail account being moved.</param>

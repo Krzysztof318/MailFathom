@@ -169,6 +169,36 @@ public sealed class RouteAuthorizationTests
     }
 
     /// <summary>
+    /// One act behind a route naming its target is the deployment's alone whatever the request names — recording a user
+    /// into no organization, moving one out of every organization — so its refusal may say what a refusal over a target
+    /// may not: that the permission is held, only below the deployment.
+    /// </summary>
+    [Fact]
+    public async Task RefuseUnpermittedAsync_AUseCaseRefusingForTheDeploymentAloneBehindARouteNamingItsTarget_SaysItIsHeldBelowTheDeployment()
+    {
+        // Arrange
+        var authorization = AccessAuthorizations.ForAdministratorScopedAt(
+            AssignmentScope.Organization(AccessAuthorizations.ScopedOrganization),
+            MailFathomPermission.AdminCredentialsWrite);
+        var context = ContextFor(RoutePermission.RequiringOverTarget(MailFathomPermission.AdminCredentialsWrite), authorization);
+
+        // Act
+        var answer = await RouteAuthorization.RefuseUnpermittedAsync(
+            context,
+            RefusingForTheDeploymentAlone(authorization, MailFathomPermission.AdminCredentialsWrite),
+            Surface);
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(answer);
+        Assert.Equal(StatusCodes.Status403Forbidden, refusal.StatusCode);
+        Assert.Equal(
+            MailFathomPermission.AdminCredentialsWrite.Name,
+            Assert.Contains(RouteAuthorization.PermissionExtension, refusal.ProblemDetails.Extensions));
+        Assert.Equal(true, Assert.Contains(RouteAuthorization.HeldBelowDeploymentExtension, refusal.ProblemDetails.Extensions));
+        Assert.Contains("only over an organization or a user", refusal.ProblemDetails.Detail, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The client surface answers the same way, and that is the decision rather than an inheritance: its caller is a
     /// page holding this person's own credential, and the session route already tells that caller its whole grant — so
     /// naming what is missing from it discloses nothing the caller could not already read about itself.
@@ -537,6 +567,15 @@ public sealed class RouteAuthorizationTests
         _ =>
         {
             authorization.RequirePermission(required);
+
+            return ValueTask.FromResult<object?>("served");
+        };
+
+    /// <summary>A handler standing in for a use case that refuses an act only the deployment scope admits.</summary>
+    private static EndpointFilterDelegate RefusingForTheDeploymentAlone(AccessAuthorization authorization, MailFathomPermission required) =>
+        _ =>
+        {
+            authorization.RequirePermissionOverTheDeployment(required);
 
             return ValueTask.FromResult<object?>("served");
         };

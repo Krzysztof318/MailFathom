@@ -148,7 +148,11 @@ public sealed class TransportAuthorizedPrincipalSourceTests
         Assert.Equal([MailFathomPermission.MailRead], principal?.Permissions);
     }
 
-    /// <summary>An administrative surface authenticating nobody serves its callers as the default administrator, holding what that user's roles grant on the administrative half.</summary>
+    /// <summary>
+    /// An administrative surface authenticating nobody serves its callers as the default administrator, holding what that
+    /// user's roles grant — a mail name among them, carried as the ceiling a credential they place is bounded by and held
+    /// for nothing of their own, since the administrator acts for no user.
+    /// </summary>
     [Fact]
     public async Task Current_ARequestOnTheAdministrativeSurfaceConfiguringNoCredential_ActsAsTheDefaultAdministrator()
     {
@@ -165,7 +169,10 @@ public sealed class TransportAuthorizedPrincipalSourceTests
         Assert.Equal(AuthorizedPrincipalKind.Caller, principal.Kind);
         Assert.Equal(TransportCallerIdentity.OfAdministrator(DefaultAdministrator, credential: null), principal.Identity);
         Assert.Null(principal.User);
-        Assert.Equal(MailFathomPermission.PublishedFor(ProtectedSurface.Administration).ToHashSet(), principal.Permissions);
+        Assert.Equal(
+            new HashSet<MailFathomPermission>(MailFathomPermission.PublishedFor(ProtectedSurface.Administration)) { MailFathomPermission.MailRead },
+            principal.Permissions.ToHashSet());
+        Assert.False(principal.Holds(MailFathomPermission.MailRead));
     }
 
     /// <summary>Removing the default administrator is final, so a surface authenticating nobody then serves nobody rather than a caller holding the whole surface.</summary>
@@ -181,7 +188,8 @@ public sealed class TransportAuthorizedPrincipalSourceTests
 
     /// <summary>
     /// An administrator is named by the user and the credential that admitted them, which is what an audit record carries
-    /// and what an operator revokes, and holds their roles' administrative grant kept to what the credential names.
+    /// and what an operator revokes, and holds their roles' grant kept to what the credential names — a mail name the
+    /// credential carries kept as a ceiling rather than held, since the administrator acts for no user's mail.
     /// </summary>
     [Fact]
     public async Task Current_AnAdministratorsCredential_NamesTheUserAndCredentialAndKeepsTheGrantToWhatItNames()
@@ -212,7 +220,10 @@ public sealed class TransportAuthorizedPrincipalSourceTests
         Assert.NotNull(principal);
         Assert.Equal(TransportCallerIdentity.OfAdministrator(SyntheticUser.Another, credential), principal.Identity);
         Assert.Null(principal.User);
-        Assert.Equal([MailFathomPermission.AdminRead], principal.Permissions);
+        Assert.Equal(
+            new HashSet<MailFathomPermission> { MailFathomPermission.AdminRead, MailFathomPermission.MailRead },
+            principal.Permissions.ToHashSet());
+        Assert.False(principal.Holds(MailFathomPermission.MailRead));
     }
 
     /// <summary>

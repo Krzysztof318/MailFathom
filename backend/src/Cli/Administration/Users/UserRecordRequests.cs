@@ -8,9 +8,11 @@ namespace MailFathom.Cli.Administration.Users;
 
 /// <summary>The user an administrator asks a deployment to record.</summary>
 /// <param name="DisplayName">The label the user is told apart by, unique across the deployment.</param>
+/// <param name="OrganizationId">The organization the user is recorded into, or <see langword="null" /> to record them in none.</param>
 /// <remarks>The identifier is not here: the deployment mints one, so a command supplying one would decide an identity it does not own.</remarks>
 internal sealed record UserProvisioningRequest(
-    [property: JsonPropertyName("displayName")] string DisplayName);
+    [property: JsonPropertyName("displayName")] string DisplayName,
+    [property: JsonPropertyName("organizationId"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Guid? OrganizationId = null);
 
 /// <summary>The label a user is told apart by from now on.</summary>
 /// <param name="DisplayName">What an administrator selects this user by, unique across the deployment.</param>

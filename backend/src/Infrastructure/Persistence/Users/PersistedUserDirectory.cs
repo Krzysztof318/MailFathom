@@ -57,11 +57,13 @@ internal sealed class PersistedUserDirectory(MailFathomDbContext dbContext) : IU
     /// <inheritdoc />
     public async Task<AdministrativeListingPage<UserRecord>> ReadUserPageAsync(
         AdministrativeListingQuery query,
+        IReadOnlySet<AssignmentScope> within,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(query);
+        ArgumentNullException.ThrowIfNull(within);
 
-        var users = dbContext.UserAccounts.AsNoTracking();
+        var users = ListingScope.Covering(dbContext.UserAccounts.AsNoTracking(), within);
 
         // Compared by PostgreSQL as a `uuid`, which is the order the primary key's index holds.
         if (query.After is { } after)

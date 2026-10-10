@@ -30,8 +30,15 @@ namespace MailFathom.Application.Access;
 /// </remarks>
 public sealed class PrincipalNotAuthorizedException : MailFathomException
 {
-    private PrincipalNotAuthorizedException(string operatorSafeMessage, MailFathomPermission requiredPermission)
-        : base(operatorSafeMessage) => this.RequiredPermission = requiredPermission;
+    private PrincipalNotAuthorizedException(
+        string operatorSafeMessage,
+        MailFathomPermission requiredPermission,
+        bool refusedForTheDeploymentAlone = false)
+        : base(operatorSafeMessage)
+    {
+        this.RequiredPermission = requiredPermission;
+        this.RefusedForTheDeploymentAlone = refusedForTheDeploymentAlone;
+    }
 
     /// <summary>Gets the permission that would have sufficed, unspecified when the refusal was about the kind of principal rather than about a grant.</summary>
     /// <remarks>
@@ -41,6 +48,14 @@ public sealed class PrincipalNotAuthorizedException : MailFathomException
     /// </remarks>
     public MailFathomPermission RequiredPermission { get; }
 
+    /// <summary>Gets whether what was refused is an act only the deployment scope admits, decided before anything the request names was read.</summary>
+    /// <remarks>
+    /// A boundary serving a route that names a target says nothing of scope when it refuses, because whether a scope
+    /// covers a target tells the caller the target exists. This marks the one refusal behind such a route that is the
+    /// same whatever the request names, so the boundary may say the permission is held only below the deployment.
+    /// </remarks>
+    public bool RefusedForTheDeploymentAlone { get; }
+
     /// <inheritdoc />
     public override MailFathomErrorCode ErrorCode => MailFathomErrorCode.PrincipalNotAuthorized;
 
@@ -49,6 +64,22 @@ public sealed class PrincipalNotAuthorizedException : MailFathomException
     /// <returns>The failure to raise.</returns>
     internal static PrincipalNotAuthorizedException MissingPermission(MailFathomPermission requiredPermission) =>
         new($"The caller was not granted '{requiredPermission.Name}'.", requiredPermission);
+
+    /// <summary>Reports a caller that reached an act only the deployment scope admits without holding its permission there.</summary>
+    /// <param name="requiredPermission">The permission the act requires over the whole deployment.</param>
+    /// <returns>The failure to raise, marked <see cref="RefusedForTheDeploymentAlone" />.</returns>
+    internal static PrincipalNotAuthorizedException MissingOverTheDeployment(MailFathomPermission requiredPermission) =>
+        new(
+            $"The caller was not granted '{requiredPermission.Name}' over the whole deployment.",
+            requiredPermission,
+            refusedForTheDeploymentAlone: true);
+
+    /// <summary>Reports a caller that holds a permission, but at no scope covering one somebody else holds it at, where a write would widen that somebody past the caller.</summary>
+    /// <param name="requiredPermission">The permission held too narrowly.</param>
+    /// <returns>The failure to raise.</returns>
+    /// <remarks>It names the permission like <see cref="MissingPermission" />, because widening the grant is the remedy either way; the message tells an operator reading a log that the name is held, only not widely enough.</remarks>
+    internal static PrincipalNotAuthorizedException HeldTooNarrowly(MailFathomPermission requiredPermission) =>
+        new($"The caller holds '{requiredPermission.Name}' only at a scope narrower than the one the act is bounded by.", requiredPermission);
 
     /// <summary>Reports an operation reached under a kind of principal it does not admit.</summary>
     /// <param name="admittedKind">The one kind the operation admits.</param>

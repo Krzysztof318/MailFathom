@@ -284,7 +284,7 @@ public sealed class OrganizationEndpointsTests
     {
         // Arrange
         var harness = new EndpointHarness(MailFathomPermission.AdminRead);
-        harness.Organizations.ReadAsync(Arg.Any<AdministrativeListingQuery>(), Arg.Any<CancellationToken>())
+        harness.Organizations.ReadAsync(Arg.Any<AdministrativeListingQuery>(), Arg.Any<IReadOnlySet<AssignmentScope>>(), Arg.Any<CancellationToken>())
             .Returns(new OrganizationListing(
                 [
                     new Organization(
@@ -319,6 +319,7 @@ public sealed class OrganizationEndpointsTests
         var harness = new EndpointHarness(MailFathomPermission.AdminRead);
         harness.Organizations.ReadAsync(
                 Arg.Is<AdministrativeListingQuery>(query => query!.After == null),
+                Arg.Any<IReadOnlySet<AssignmentScope>>(),
                 Arg.Any<CancellationToken>())
             .Returns(new OrganizationListing([Acme], [], ContinuesAfter: OrganizationId));
 
@@ -344,6 +345,7 @@ public sealed class OrganizationEndpointsTests
         var harness = new EndpointHarness(MailFathomPermission.AdminRead);
         harness.Organizations.ReadAsync(
                 Arg.Is<AdministrativeListingQuery>(query => query!.After == OrganizationId),
+                Arg.Any<IReadOnlySet<AssignmentScope>>(),
                 Arg.Any<CancellationToken>())
             .Returns(new OrganizationListing([Acme], [], ContinuesAfter: null));
 
@@ -382,7 +384,7 @@ public sealed class OrganizationEndpointsTests
         // Assert
         var problem = Assert.IsType<ProblemHttpResult>(result.Result);
         Assert.Equal(StatusCodes.Status400BadRequest, problem.StatusCode);
-        await harness.Organizations.DidNotReceiveWithAnyArgs().ReadAsync(default!, TestContext.Current.CancellationToken);
+        await harness.Organizations.DidNotReceiveWithAnyArgs().ReadAsync(default!, default!, TestContext.Current.CancellationToken);
     }
 
     private sealed class EndpointHarness

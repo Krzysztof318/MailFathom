@@ -31,7 +31,8 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// holds an administrative grant; a user names nobody and holds one of their own, so their entry points resolve the
 /// user from the principal and there is no argument for a request to put another user's identifier in. Each pair
 /// delegates to the same private work, which is where the rules live, so the two callers cannot come to be judged
-/// differently.
+/// differently. An administrator's entry points are held at a scope as well: a user the administrator's scope does not
+/// cover is answered as one this deployment does not hold.
 /// </para>
 /// <para>
 /// The one rule that reads which of the two is acting is the secret-bearing settings. A secret reference is a path into
@@ -71,18 +72,20 @@ internal sealed class UserRecordAdministration(
     /// <summary>Reads one user's record as an administrator sees it.</summary>
     /// <param name="user">The user asked about.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The record, or <see langword="null" /> when this deployment holds no such user.</returns>
+    /// <returns>The record, or <see langword="null" /> when this deployment holds no such user or the caller's scope does not cover them.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminRead" /> at every scope.</exception>
     /// <exception cref="UserSettingsUnreadableException">Thrown when the deployment holds the record and it could not be handed on.</exception>
     /// <exception cref="FormatException">Thrown when the row is JSON but not an object of settings.</exception>
     /// <exception cref="JsonException">Thrown when the row is not JSON, or is nested past what a document may be.</exception>
-    internal Task<UserRecordReading?> ReadRecordAsync(UserId user, CancellationToken cancellationToken)
+    internal async Task<UserRecordReading?> ReadRecordAsync(UserId user, CancellationToken cancellationToken)
     {
         RequireNamed(user);
-        authorization.RequirePermission(MailFathomPermission.AdminRead);
+        authorization.RequirePermissionAtAnyScope(MailFathomPermission.AdminRead);
 
-        return this.ReadAsync(user, cancellationToken);
+        return !await authorization.PermitsOverAsync(MailFathomPermission.AdminRead, user, cancellationToken)
+            ? null
+            : await this.ReadAsync(user, cancellationToken);
     }
 
     /// <summary>Reads the signed-in user's own record.</summary>
@@ -102,11 +105,11 @@ internal sealed class UserRecordAdministration(
     /// <param name="documentJson">The record the caller saved.</param>
     /// <param name="expectedVersion">The version the buffer was opened over.</param>
     /// <param name="cancellationToken">Cancels the read and the commit.</param>
-    /// <returns>What the write did, or <see langword="null" /> when this deployment holds no such user.</returns>
+    /// <returns>What the write did, or <see langword="null" /> when this deployment holds no such user or the caller's scope does not cover them.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="documentJson" /> is <see langword="null" />.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminConfigurationWrite" />.</exception>
-    internal Task<UserRecordWriteOutcome?> ApplyRecordAsync(
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminConfigurationWrite" /> at every scope.</exception>
+    internal async Task<UserRecordWriteOutcome?> ApplyRecordAsync(
         UserId user,
         string documentJson,
         long expectedVersion,
@@ -114,9 +117,14 @@ internal sealed class UserRecordAdministration(
     {
         RequireNamed(user);
         ArgumentNullException.ThrowIfNull(documentJson);
-        authorization.RequirePermission(MailFathomPermission.AdminConfigurationWrite);
+        authorization.RequirePermissionAtAnyScope(MailFathomPermission.AdminConfigurationWrite);
 
-        return this.SaveAsync(
+        if (!await authorization.PermitsOverAsync(MailFathomPermission.AdminConfigurationWrite, user, cancellationToken))
+        {
+            return null;
+        }
+
+        return await this.SaveAsync(
             user,
             documentJson,
             expectedVersion,
@@ -152,9 +160,9 @@ internal sealed class UserRecordAdministration(
     /// <param name="mcpEndpoint">Whether they are served on the MCP endpoint from now on, or <see langword="null" /> to leave it.</param>
     /// <param name="clientEndpoint">Whether they are served on the client endpoint from now on, or <see langword="null" /> to leave it.</param>
     /// <param name="cancellationToken">Cancels the read and the commit.</param>
-    /// <returns>What the write did and the switches the record states afterwards, or <see langword="null" /> when this deployment holds no such user.</returns>
+    /// <returns>What the write did and the switches the record states afterwards, or <see langword="null" /> when this deployment holds no such user or the caller's scope does not cover them.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminConfigurationWrite" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminConfigurationWrite" /> at every scope.</exception>
     /// <remarks>
     /// <para>
     /// A keyed change to the record rather than a statement of its own, so the switch lands where a saved record would put
@@ -174,9 +182,10 @@ internal sealed class UserRecordAdministration(
         CancellationToken cancellationToken)
     {
         RequireNamed(user);
-        authorization.RequirePermission(MailFathomPermission.AdminConfigurationWrite);
+        authorization.RequirePermissionAtAnyScope(MailFathomPermission.AdminConfigurationWrite);
 
-        if (await documents.ReadAsync(user, cancellationToken) is not { } inForce)
+        if (!await authorization.PermitsOverAsync(MailFathomPermission.AdminConfigurationWrite, user, cancellationToken)
+            || await documents.ReadAsync(user, cancellationToken) is not { } inForce)
         {
             return null;
         }

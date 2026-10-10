@@ -37,7 +37,8 @@ internal sealed class OutgoingMailTrackingHarness
         string callerIdentity = CallerIdentity,
         IReadOnlyList<MailFathomPermission>? granted = null)
     {
-        var authorization = AccessAuthorizations.ForPrincipal(AuthorizedPrincipal.Caller(
+        var authorization = AccessAuthorizations.ForPrincipal(AuthorizedPrincipal.CallerActingFor(
+            SyntheticUser.Deployment,
             callerIdentity,
             granted ?? [MailFathomPermission.MailSend]));
 

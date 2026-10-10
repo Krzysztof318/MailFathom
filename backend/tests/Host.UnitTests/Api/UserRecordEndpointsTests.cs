@@ -72,6 +72,44 @@ public sealed class UserRecordEndpointsTests
         Assert.NotEqual(Guid.Empty, Assert.IsType<Ok<UserProvisionedResponse>>(result.Result).Value!.Id);
     }
 
+    [Fact]
+    public async Task ProvisionAsync_ARequestNamingAnOrganization_RecordsTheUserIntoIt()
+    {
+        // Arrange
+        var organizationId = new Guid("0198f0aa-0000-7000-8000-0000000001a1");
+        var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
+
+        // Act
+        await UserRecordEndpoints.ProvisionAsync(
+            deployment.Roster,
+            new UserProvisioningRequest("alex", organizationId),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        await deployment.Provisioning.Received(1).ProvisionAsync(
+            Arg.Any<UserId>(),
+            "alex",
+            organizationId,
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProvisionAsync_ARequestNamingTheEmptyOrganizationIdentifier_IsRefusedWithoutRecordingAnybody()
+    {
+        // Arrange
+        var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
+
+        // Act
+        var result = await UserRecordEndpoints.ProvisionAsync(
+            deployment.Roster,
+            new UserProvisioningRequest("alex", Guid.Empty),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        AssertRefusal(result.Result, StatusCodes.Status400BadRequest);
+        Assert.Empty(deployment.Provisioning.ReceivedCalls());
+    }
+
     /// <summary>A refusal is a request the administrator corrects, so it names what to change rather than reporting that something failed.</summary>
     [Fact]
     public async Task ProvisionAsync_ARequestCarryingNoLabel_IsRefusedNamingWhatHasToChange()
@@ -599,6 +637,7 @@ public sealed class UserRecordEndpointsTests
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminRead]);
         deployment.Directory.ReadUserPageAsync(
                 Arg.Is<AdministrativeListingQuery>(query => query!.After == null),
+                Arg.Any<IReadOnlySet<AssignmentScope>>(),
                 Arg.Any<CancellationToken>())
             .Returns(new AdministrativeListingPage<UserRecord>(
                 [new UserRecord(SyntheticUser.Deployment, "alex")],
@@ -625,6 +664,7 @@ public sealed class UserRecordEndpointsTests
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminRead]);
         deployment.Directory.ReadUserPageAsync(
                 Arg.Is<AdministrativeListingQuery>(query => query!.After == SyntheticUser.Deployment.Value),
+                Arg.Any<IReadOnlySet<AssignmentScope>>(),
                 Arg.Any<CancellationToken>())
             .Returns(new AdministrativeListingPage<UserRecord>(
                 [new UserRecord(SyntheticUser.Another, "blake")],
@@ -664,7 +704,7 @@ public sealed class UserRecordEndpointsTests
 
         // Assert
         AssertRefusal(result.Result, StatusCodes.Status400BadRequest);
-        await deployment.Directory.DidNotReceiveWithAnyArgs().ReadUserPageAsync(default!, TestContext.Current.CancellationToken);
+        await deployment.Directory.DidNotReceiveWithAnyArgs().ReadUserPageAsync(default!, default!, TestContext.Current.CancellationToken);
     }
 
     private static string AssertRefusal(IResult result, int expectedStatus)

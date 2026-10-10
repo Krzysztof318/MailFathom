@@ -270,7 +270,8 @@ public sealed class ContactBookReaderTests
         return new ContactBookReader(
             directory,
             ContactBookOwnerships.ForTheServedUser(),
-            AuthorizationOf(AuthorizedPrincipal.Caller(
+            AuthorizationOf(AuthorizedPrincipal.CallerActingFor(
+                SyntheticUser.Deployment,
                 "a-caller",
                 granted.Length == 0 ? [MailFathomPermission.MailContactsRead] : granted)));
     }

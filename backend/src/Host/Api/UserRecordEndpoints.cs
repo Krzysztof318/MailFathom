@@ -85,39 +85,39 @@ internal static class UserRecordEndpoints
         ArgumentNullException.ThrowIfNull(api);
 
         api.MapGet(UsersRoute, ReadRosterAsync)
-            .RequirePermission(MailFathomPermission.AdminRead);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminRead);
 
         // The attribute is reached for its metadata rather than as an MVC filter: it implements
         // IRequestSizeLimitMetadata, which the routing pipeline applies to the request body feature, so a body over the
         // bound is answered 413 before the handler is reached.
         api.MapPost(UsersRoute, ProvisionAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxWriteRequestBytes))
-            .RequirePermission(MailFathomPermission.AdminConfigurationWrite);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminConfigurationWrite);
 
         api.MapDelete(UserRoute, EraseAsync)
-            .RequirePermission(MailFathomPermission.AdminErase);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminErase);
 
         api.MapPut(UserDisplayNameRoute, RelabelAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxWriteRequestBytes))
-            .RequirePermission(MailFathomPermission.AdminConfigurationWrite);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminConfigurationWrite);
 
         api.MapPut(UserEndpointAccessRoute, SetEndpointAccessAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxWriteRequestBytes))
-            .RequirePermission(MailFathomPermission.AdminConfigurationWrite);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminConfigurationWrite);
 
         api.MapGet(UserRecordRoute, ReadRecordAsync)
-            .RequirePermission(MailFathomPermission.AdminRead);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminRead);
 
         api.MapPost(UserRecordRoute, SaveRecordAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxWriteRequestBytes))
-            .RequirePermission(MailFathomPermission.AdminConfigurationWrite);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminConfigurationWrite);
 
         api.MapPost(UserSecretsRoute, StoreSecretAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxStoredSecretWriteRequestBytes))
-            .RequirePermission(MailFathomPermission.AdminConfigurationWrite);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminConfigurationWrite);
     }
 
-    /// <summary>Lists one page of the users this deployment holds.</summary>
+    /// <summary>Lists one page of the users the caller's scopes cover.</summary>
     /// <param name="pageSize">How many users the page may hold, or <see langword="null" /> for the default.</param>
     /// <param name="cursor">The cursor the previous page returned, or <see langword="null" /> for the first page.</param>
     /// <param name="roster">The roster administration.</param>
@@ -145,7 +145,11 @@ internal static class UserRecordEndpoints
     /// <param name="request">The label the user is told apart by.</param>
     /// <param name="cancellationToken">Cancels the write when the client disconnects.</param>
     /// <returns><c>200</c> with the identifier the user was minted under, or <c>400</c> naming what has to change first.</returns>
-    /// <remarks>A refusal is a request the administrator corrects — an endpoint to narrow, a label already taken — so it names what to change rather than reporting that something failed.</remarks>
+    /// <remarks>
+    /// A refusal is a request the administrator corrects — an endpoint to narrow, a label already taken, an organization
+    /// this deployment does not hold — so it names what to change rather than reporting that something failed. An
+    /// organization outside the caller's scope is refused exactly as one this deployment does not hold.
+    /// </remarks>
     internal static async Task<Results<Ok<UserProvisionedResponse>, ProblemHttpResult>> ProvisionAsync(
         [FromServices] UserRosterAdministration roster,
         [FromBody] UserProvisioningRequest request,
@@ -154,7 +158,12 @@ internal static class UserRecordEndpoints
         ArgumentNullException.ThrowIfNull(roster);
         ArgumentNullException.ThrowIfNull(request);
 
-        var outcome = await roster.ProvisionAsync(request.DisplayName, cancellationToken);
+        if (request.OrganizationId == Guid.Empty)
+        {
+            return Refusal("An organization is named by the identifier this deployment recorded it under.");
+        }
+
+        var outcome = await roster.ProvisionAsync(request.DisplayName, request.OrganizationId, cancellationToken);
 
         return outcome.IsProvisioned
             ? TypedResults.Ok(new UserProvisionedResponse(outcome.User.Value))
@@ -165,19 +174,21 @@ internal static class UserRecordEndpoints
     /// <param name="userId">The user to remove.</param>
     /// <param name="roster">The roster administration.</param>
     /// <param name="cancellationToken">Cancels the erasure before it commits.</param>
-    /// <returns><c>200</c> with what was removed, <c>409</c> naming the work that would not stop, or <c>400</c> when the request names nobody.</returns>
+    /// <returns><c>200</c> with what was removed, <c>409</c> naming the work that would not stop or the mail account the caller's scope does not cover, or <c>400</c> when the request names nobody.</returns>
     /// <remarks>
     /// <para>
     /// A user this deployment does not hold is reported as nothing erased rather than as a refusal, because the
     /// caller asked for a state and the deployment is in it. That is a claim about the status code and not about the
-    /// body: the answer carries whether a row was there, so a caller granted the erasure learns which identifiers this
-    /// deployment holds. Nothing here withholds that — the sibling relabel reports the same fact through its own status
-    /// code — and nothing needs to, the erasure being the one permission that could act on the answer anyway.
+    /// body: the answer carries whether a row was there. A user outside the caller's scope is answered as one this
+    /// deployment does not hold, so what the body reveals is which identifiers the caller's own scope covers and
+    /// nothing about anybody else's — the sibling relabel withholds the same fact through its own status code.
     /// </para>
     /// <para>
     /// Work still running against the user's own mail accounts is <c>409</c> rather than <c>400</c>, because nothing
     /// about the request has to change: it is the deployment that is in the wrong state for it, and the same request
-    /// succeeds once the run or the job it names has ended. Nothing was erased when it is answered.
+    /// succeeds once the run or the job it names has ended. Nothing was erased when it is answered. A user the caller's
+    /// scope covers who alone is assigned a mail account it does not cover is the same <c>409</c>: the erasure would
+    /// delete that account with its mail, and the request succeeds under a grant covering it.
     /// </para>
     /// </remarks>
     internal static async Task<Results<Ok<UserErasureResponse>, ProblemHttpResult>> EraseAsync(
@@ -213,10 +224,9 @@ internal static class UserRecordEndpoints
     /// No body comes back, because the label the request carried is the whole of what changed and nothing about the
     /// user is decided here. A user this deployment does not hold is the same <c>404</c> the record routes beside
     /// this one answer with, which is why it is that rather than a refusal naming what went wrong: one shape for
-    /// "no such user" across every route addressing one is what makes a client's handling of it one branch. The
-    /// status code does report whether this deployment holds the user, and is not written to withhold it — a
-    /// credential holding the configuration write can learn an identifier it already had to name, one identifier per
-    /// request, which is the roster's own read only in the sense that guessing a UUID is.
+    /// "no such user" across every route addressing one is what makes a client's handling of it one branch. A user
+    /// outside the caller's scope is answered with that same <c>404</c>, so the status code reports whether the
+    /// caller's scope covers the user rather than whether this deployment holds them.
     /// </remarks>
     internal static async Task<Results<NoContent, NotFound<ProblemDetails>, ProblemHttpResult>> RelabelAsync(
         Guid userId,

@@ -128,6 +128,44 @@ public sealed class AdministrativeTargetTests
     }
 
     [Fact]
+    public void IsCoveredBy_TheDeploymentAndTheOrganizationItself_CoverAnOrganizationAndNoOtherOrganizationDoes()
+    {
+        // Arrange
+        var target = AdministrativeTarget.OrganizationItself(Organization);
+
+        // Act
+        var byTheDeployment = target.IsCoveredBy(AssignmentScope.Deployment);
+        var byItself = target.IsCoveredBy(AssignmentScope.Organization(Organization));
+        var byOtherOrganization = target.IsCoveredBy(AssignmentScope.Organization(OtherOrganization));
+
+        // Assert
+        Assert.True(byTheDeployment);
+        Assert.True(byItself);
+        Assert.False(byOtherOrganization);
+    }
+
+    /// <summary>An organization is nobody's alone, so a scope naming one of its members does not reach it.</summary>
+    [Fact]
+    public void IsCoveredBy_AUserScope_DoesNotCoverAnOrganizationItself()
+    {
+        // Arrange
+        var target = AdministrativeTarget.OrganizationItself(Organization);
+
+        // Act
+        var covered = target.IsCoveredBy(AssignmentScope.User(Person));
+
+        // Assert
+        Assert.False(covered);
+    }
+
+    [Fact]
+    public void OrganizationItself_AnIdentifierNamingNoOrganization_IsRefused()
+    {
+        // Act & Assert
+        Assert.Throws<ArgumentException>(() => AdministrativeTarget.OrganizationItself(Guid.Empty));
+    }
+
+    [Fact]
     public void Covers_APermissionHeldAtTheTargetsOrganization_CoversItAndNotAnotherPermission()
     {
         // Arrange

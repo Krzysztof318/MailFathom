@@ -39,6 +39,7 @@ namespace MailFathom.Application.Access;
 /// transport and the use case cannot come to disagree about what holding a permission means.
 /// <see cref="HoldsOnlyBelowDeployment" /> answers what a refusal of an operation admitted only at the deployment
 /// scope says on top of naming the permission: that the caller holds it, but only over an organization or a user.
+/// <see cref="ScopesOf" /> is what a listing answers within, since a listing never refuses over a scope.
 /// </para>
 /// </remarks>
 public sealed class AccessAuthorization
@@ -304,6 +305,53 @@ public sealed class AccessAuthorization
             token => this.targets.PlaceUserAsync(user, token),
             cancellationToken);
 
+    /// <summary>Answers whether the caller holds one named capability at a scope covering everything another scope covers.</summary>
+    /// <param name="permission">The capability being asked about.</param>
+    /// <param name="scope">The scope an operation is bounded by: the deployment, an organization it names, or a user.</param>
+    /// <param name="cancellationToken">Cancels placing the user a user scope names.</param>
+    /// <returns><see langword="true" /> when an admitted caller holds the capability over the deployment, over the organization the scope names or the user it names belongs to, or over that same user.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="scope" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// This is how an operation naming an organization is asked, and how one grant is held against another: whoever
+    /// places a credential for a user holds each name that user holds at a scope covering the one the user holds it
+    /// at, and a scope is covered exactly where the thing it names is.
+    /// </remarks>
+    public Task<bool> PermitsOverScopeAsync(
+        MailFathomPermission permission,
+        AssignmentScope scope,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(scope);
+
+        return this.PermitsOverAsync(permission, token => this.PlaceScopeAsync(scope, token), cancellationToken);
+    }
+
+    /// <summary>Reports the scopes the caller holds one capability at, which is what a listing answers within.</summary>
+    /// <param name="permission">The capability the listing is published under.</param>
+    /// <returns>The scopes, empty for a caller that does not hold it and for every principal that is not a caller.</returns>
+    /// <remarks>A listing never refuses over a scope: it answers with what the scopes cover, so a caller holding the permission over one organization lists that organization's people and nobody else's.</remarks>
+    public IReadOnlySet<AssignmentScope> ScopesOf(MailFathomPermission permission) =>
+        this.principals.Current is { Kind: AuthorizedPrincipalKind.Caller } caller
+            ? caller.Grant.ScopesOf(permission)
+            : new HashSet<AssignmentScope>();
+
+    /// <summary>Requires one named capability over the whole deployment, for an act only that scope admits reached through an operation that otherwise names a target.</summary>
+    /// <param name="permission">The capability the act is published under.</param>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="permission" /> names no published capability.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown as <see cref="RequirePermission" /> throws, and marked <see cref="PrincipalNotAuthorizedException.RefusedForTheDeploymentAlone" />.</exception>
+    /// <remarks>
+    /// Recording a user into no organization and moving one out of every organization are such acts. Ask this before
+    /// anything the request names is read, never after: the mark tells a boundary the refusal is the same whatever the
+    /// request names, which is what lets it say the caller holds the permission only below the deployment.
+    /// </remarks>
+    public void RequirePermissionOverTheDeployment(MailFathomPermission permission)
+    {
+        if (!this.RequireCaller(permission).Holds(permission))
+        {
+            throw PrincipalNotAuthorizedException.MissingOverTheDeployment(permission);
+        }
+    }
+
     /// <summary>Requires that the work in hand is being done for one user, and answers which.</summary>
     /// <returns>The user whose mail this unit of work may act on.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the work was reached under no principal, or under one acting for no user.</exception>
@@ -348,7 +396,10 @@ public sealed class AccessAuthorization
         MailFathomPermission first,
         MailFathomPermission second)
     {
-        var surfaces = principal.Permissions.Select(static permission => permission.Surface).ToHashSet();
+        var surfaces = principal.Permissions
+            .Where(permission => permission.Surface != ProtectedSurface.Mail || principal.User is not null)
+            .Select(static permission => permission.Surface)
+            .ToHashSet();
 
         return surfaces.Contains(first.Surface) || !surfaces.Contains(second.Surface) ? first : second;
     }
@@ -361,6 +412,14 @@ public sealed class AccessAuthorization
 
     private async Task<AdministrativeTarget> PlaceMailAccountAsync(MailAccountId account, CancellationToken cancellationToken) =>
         PlacementOf(await this.targets.PlaceMailAccountsAsync([account], cancellationToken), account);
+
+    private Task<AdministrativeTarget> PlaceScopeAsync(AssignmentScope scope, CancellationToken cancellationToken) =>
+        scope.Kind switch
+        {
+            AssignmentScopeKind.Organization => Task.FromResult(AdministrativeTarget.OrganizationItself(scope.Target)),
+            AssignmentScopeKind.User => this.targets.PlaceUserAsync(UserId.Create(scope.Target), cancellationToken),
+            _ => Task.FromResult(AdministrativeTarget.Unplaced),
+        };
 
     private async Task<bool> PermitsOverAsync(
         MailFathomPermission permission,

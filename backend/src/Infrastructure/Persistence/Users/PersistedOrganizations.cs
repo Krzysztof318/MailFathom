@@ -42,11 +42,13 @@ internal sealed class PersistedOrganizations(MailFathomDbContext dbContext, IGra
     /// </remarks>
     public async Task<OrganizationListing> ReadAsync(
         AdministrativeListingQuery query,
+        IReadOnlySet<AssignmentScope> within,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(query);
+        ArgumentNullException.ThrowIfNull(within);
 
-        var organizations = dbContext.Organizations.AsNoTracking();
+        var organizations = ListingScope.Covering(dbContext.Organizations.AsNoTracking(), within);
 
         // Compared by PostgreSQL as a `uuid`, which is the order the primary key's index holds and the order the page
         // is taken in, so the boundary never has to agree with how the CLR compares two `Guid` values.
@@ -114,12 +116,15 @@ internal sealed class PersistedOrganizations(MailFathomDbContext dbContext, IGra
     /// reports is exactly what the listing and a sign-in refuse and the rule is written once. The rows are streamed and
     /// judged one at a time, so what the read holds in memory is the unreadable rows rather than the table.
     /// </remarks>
-    public async Task<IReadOnlyList<UnreadableOrganization>> ReadUnreadableAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<UnreadableOrganization>> ReadUnreadableAsync(
+        IReadOnlySet<AssignmentScope> within,
+        CancellationToken cancellationToken)
     {
-        // ponytail: still reads every organization's short name over the wire; a SQL predicate mirroring
+        ArgumentNullException.ThrowIfNull(within);
+
+        // ponytail: still reads every covered organization's short name over the wire; a SQL predicate mirroring
         // OrganizationShortName's accepted form is the upgrade if this scan is measured slow.
-        var stored = dbContext.Organizations
-            .AsNoTracking()
+        var stored = ListingScope.Covering(dbContext.Organizations.AsNoTracking(), within)
             .OrderBy(organization => organization.Id)
             .Select(organization => new { organization.Id, organization.DisplayName, organization.ShortName })
             .AsAsyncEnumerable();

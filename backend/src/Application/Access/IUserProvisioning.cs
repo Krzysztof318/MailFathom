@@ -24,16 +24,28 @@ public interface IUserProvisioning
     /// <summary>Records a user this deployment did not hold, under the identifier they are declared with.</summary>
     /// <param name="user">The identity the user is declared under, which every mail account of theirs will name.</param>
     /// <param name="displayName">The label the user is told apart by.</param>
+    /// <param name="organizationId">The organization the user is recorded into, or <see langword="null" /> to record them in none.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
-    /// <returns><see langword="true" /> when the deployment holds this user once the write has run, <see langword="false" /> when the label belongs to somebody else.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody, or <paramref name="displayName" /> is <see langword="null" />, empty, or white space.</exception>
+    /// <returns><see cref="UserProvisioningResult.Provisioned" /> when the deployment holds this user once the write has run, or why it holds no row for them.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody, <paramref name="displayName" /> is <see langword="null" />, empty, or white space, or <paramref name="organizationId" /> is empty.</exception>
     /// <remarks>
+    /// <para>
     /// The answer is what the deployment holds afterwards rather than whether this call was the one that wrote it, so
-    /// a replica that lost the race to an identical declaration is told the same thing as the one that won. False is
-    /// the one outcome a caller has to act on: the label is unique across the deployment, so it says another user has
-    /// taken it and this user has no row — which is a start that would otherwise serve mail against a missing one.
+    /// a replica that lost the race to an identical declaration is told the same thing as the one that won. The
+    /// refusals are the outcomes a caller has to act on: the label is unique across the deployment, and the organization
+    /// has to stand when the row is written.
+    /// </para>
+    /// <para>
+    /// The user enters the organization in the statement that records them rather than in a move afterwards, so an
+    /// administrator scoped to that organization never records somebody who stands, even for a moment, where only the
+    /// deployment's scope reaches them.
+    /// </para>
     /// </remarks>
-    Task<bool> ProvisionAsync(UserId user, string displayName, CancellationToken cancellationToken);
+    Task<UserProvisioningResult> ProvisionAsync(
+        UserId user,
+        string displayName,
+        Guid? organizationId,
+        CancellationToken cancellationToken);
 
     /// <summary>Puts the label a declaration now carries onto the row of a user this deployment already holds.</summary>
     /// <param name="user">The user whose row is relabelled.</param>

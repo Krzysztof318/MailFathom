@@ -85,7 +85,8 @@ internal sealed class MailDraftHarness
 
         var granted = permissions.ToArray();
         var principals = Substitute.For<IAuthorizedPrincipalSource>();
-        principals.Current.Returns(AuthorizedPrincipal.Caller(
+        principals.Current.Returns(AuthorizedPrincipal.CallerActingFor(
+            SyntheticUser.Deployment,
             "a-caller",
             granted.Length == 0
                 ? [MailFathomPermission.MailDraftsWrite, MailFathomPermission.MailSend]

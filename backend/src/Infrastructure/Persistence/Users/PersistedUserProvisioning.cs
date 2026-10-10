@@ -7,6 +7,7 @@ using MailFathom.CodeCoverage;
 using MailFathom.Domain.Access;
 using MailFathom.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace MailFathom.Infrastructure.Persistence.Users;
 
@@ -32,28 +33,55 @@ internal sealed class PersistedUserProvisioning(MailFathomDbContext dbContext, T
     private const string EmptyDocument = "{}";
 
     /// <inheritdoc />
-    public async Task<bool> ProvisionAsync(UserId user, string displayName, CancellationToken cancellationToken)
+    public async Task<UserProvisioningResult> ProvisionAsync(
+        UserId user,
+        string displayName,
+        Guid? organizationId,
+        CancellationToken cancellationToken)
     {
         var userId = RequireNamed(user);
         ArgumentException.ThrowIfNullOrWhiteSpace(displayName);
+
+        if (organizationId == Guid.Empty)
+        {
+            throw new ArgumentException("A user is recorded into a named organization or into none.", nameof(organizationId));
+        }
 
         var provisionedAt = timeProvider.GetUtcNow();
 
         // The conflict clause names no target, so it covers the label's unique index as well as the primary key. Two
         // administrators recording one label at once each mint an identifier and reach this insert, and a clause
         // guarding the key alone would leave the loser raising the server's own unique-violation sentence instead of
-        // an answer. The read below is what turns the silence into one.
-        await dbContext.Database.ExecuteSqlAsync(
-            $"""
-             INSERT INTO settings_accounts ("Id", "DisplayName", "Document", "Version", "CreatedAt", "UpdatedAt")
-             VALUES ({userId}, {displayName}, CAST({EmptyDocument} AS jsonb), 1, {provisionedAt}, {provisionedAt})
-             ON CONFLICT DO NOTHING
-             """,
-            cancellationToken);
+        // an answer. The organization is selected rather than written as a value, so one whose deletion committed
+        // before this statement began inserts nothing, and the reads below turn that silence into an answer. A deletion
+        // still uncommitted is one the selection cannot see: the insert then waits on the foreign key and is refused
+        // once the deletion commits, which no conflict clause covers.
+        try
+        {
+            await dbContext.Database.ExecuteSqlAsync(
+                $"""
+                 INSERT INTO settings_accounts ("Id", "DisplayName", "Document", "Version", "CreatedAt", "UpdatedAt", "OrganizationId")
+                 SELECT {userId}, {displayName}, CAST({EmptyDocument} AS jsonb), 1, {provisionedAt}, {provisionedAt}, CAST({organizationId} AS uuid)
+                 WHERE CAST({organizationId} AS uuid) IS NULL
+                    OR EXISTS (SELECT 1 FROM organizations WHERE "Id" = CAST({organizationId} AS uuid))
+                 ON CONFLICT DO NOTHING
+                 """,
+                cancellationToken);
+        }
+        catch (PostgresException violation) when (violation.SqlState == PostgresErrorCodes.ForeignKeyViolation)
+        {
+            return UserProvisioningResult.UnknownOrganization;
+        }
 
-        return await dbContext.UserAccounts
-            .AsNoTracking()
-            .AnyAsync(record => record.Id == userId, cancellationToken);
+        if (await dbContext.UserAccounts.AsNoTracking().AnyAsync(record => record.Id == userId, cancellationToken))
+        {
+            return UserProvisioningResult.Provisioned;
+        }
+
+        return organizationId is { } organization
+            && !await dbContext.Organizations.AsNoTracking().AnyAsync(stored => stored.Id == organization, cancellationToken)
+                ? UserProvisioningResult.UnknownOrganization
+                : UserProvisioningResult.LabelTaken;
     }
 
     /// <inheritdoc />
