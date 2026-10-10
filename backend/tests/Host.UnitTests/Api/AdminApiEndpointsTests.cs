@@ -158,6 +158,9 @@ public sealed class AdminApiEndpointsTests
         // path, which is the listing and the creation, three times at one account's path for the reading, the saving,
         // and the erasure, and once at each of the assignment paths, because assigning an account and ending an
         // assignment are published under different grants.
+        // The roles and the groups each appear twice at their collection path, which is the listing and the recording; a
+        // group's member appears twice at its path, for joining and leaving, and the role assignments twice at theirs, for
+        // the listing and the assigning.
         // An account's custody is read at one path and changed at a path beneath it, because reading which copy of a
         // mailbox is the truth and emptying a mail server of it are published under different grants.
         Assert.Equal(
@@ -193,6 +196,13 @@ public sealed class AdminApiEndpointsTests
                 $"{AdminEndpointOptions.RoutePrefix}{MailboxExportEndpoints.ArchiveRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{MailboxExportEndpoints.CancellationRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{MailFolderErasureEndpoint.ErasureRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{GrantEndpoints.GroupsRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{GrantEndpoints.GroupsRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{GrantEndpoints.GroupRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{GrantEndpoints.GroupMembersRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{GrantEndpoints.GroupMemberRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{GrantEndpoints.GroupMemberRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{GrantEndpoints.GroupNameRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{JobDeadLetterEndpoints.DeadLettersRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{JobDeadLetterEndpoints.DropRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{JobDeadLetterEndpoints.RetryRoute}",
@@ -222,6 +232,14 @@ public sealed class AdminApiEndpointsTests
                 $"{AdminEndpointOptions.RoutePrefix}{OutboxEndpoints.SummaryRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{OutboxEndpoints.SendRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{HeldBackRecordEndpoints.HeldBackRecordsRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{GrantEndpoints.RoleAssignmentsRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{GrantEndpoints.RoleAssignmentsRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{GrantEndpoints.RoleAssignmentRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{GrantEndpoints.RolesRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{GrantEndpoints.RolesRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{GrantEndpoints.RoleRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{GrantEndpoints.RoleNameRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{GrantEndpoints.RolePermissionsRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{MailRuleEndpoints.RulesRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{MailRuleEndpoints.HistoryRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{MailRuleEndpoints.RunsRoute}",
@@ -241,6 +259,7 @@ public sealed class AdminApiEndpointsTests
                 $"{AdminEndpointOptions.RoutePrefix}{UserRecordEndpoints.UserDisplayNameRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{UserRecordEndpoints.UserEndpointAccessRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{OrganizationEndpoints.UserOrganizationRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{GrantEndpoints.UserPermissionsRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{UserRecordEndpoints.UserRecordRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{UserRecordEndpoints.UserRecordRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{UserRecordEndpoints.UserSecretsRoute}",
@@ -376,6 +395,22 @@ public sealed class AdminApiEndpointsTests
                 $"DELETE {prefix}{OrganizationEndpoints.OrganizationRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name}",
                 $"PUT {prefix}{OrganizationEndpoints.UserOrganizationRoute} -> {MailFathomPermission.AdminCredentialsWrite.Name} over its target",
                 $"POST {prefix}{OrganizationEndpoints.MailAccountOrganizationRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name} over its target",
+                $"GET {prefix}{GrantEndpoints.RolesRoute} -> {MailFathomPermission.AdminRead.Name} over its target",
+                $"POST {prefix}{GrantEndpoints.RolesRoute} -> {MailFathomPermission.AdminRolesWrite.Name}",
+                $"PUT {prefix}{GrantEndpoints.RoleNameRoute} -> {MailFathomPermission.AdminRolesWrite.Name}",
+                $"PUT {prefix}{GrantEndpoints.RolePermissionsRoute} -> {MailFathomPermission.AdminRolesWrite.Name}",
+                $"DELETE {prefix}{GrantEndpoints.RoleRoute} -> {MailFathomPermission.AdminRolesWrite.Name}",
+                $"GET {prefix}{GrantEndpoints.GroupsRoute} -> {MailFathomPermission.AdminRead.Name} over its target",
+                $"POST {prefix}{GrantEndpoints.GroupsRoute} -> {MailFathomPermission.AdminRolesWrite.Name} over its target",
+                $"PUT {prefix}{GrantEndpoints.GroupNameRoute} -> {MailFathomPermission.AdminRolesWrite.Name} over its target",
+                $"DELETE {prefix}{GrantEndpoints.GroupRoute} -> {MailFathomPermission.AdminRolesWrite.Name} over its target",
+                $"GET {prefix}{GrantEndpoints.GroupMembersRoute} -> {MailFathomPermission.AdminRead.Name} over its target",
+                $"PUT {prefix}{GrantEndpoints.GroupMemberRoute} -> {MailFathomPermission.AdminRolesWrite.Name} over its target",
+                $"DELETE {prefix}{GrantEndpoints.GroupMemberRoute} -> {MailFathomPermission.AdminRolesWrite.Name} over its target",
+                $"GET {prefix}{GrantEndpoints.RoleAssignmentsRoute} -> {MailFathomPermission.AdminRead.Name} over its target",
+                $"POST {prefix}{GrantEndpoints.RoleAssignmentsRoute} -> {MailFathomPermission.AdminRolesWrite.Name} over its target",
+                $"DELETE {prefix}{GrantEndpoints.RoleAssignmentRoute} -> {MailFathomPermission.AdminRolesWrite.Name} over its target",
+                $"GET {prefix}{GrantEndpoints.UserPermissionsRoute} -> {MailFathomPermission.AdminRead.Name} over its target",
                 $"GET {prefix}{ContentReleaseEndpoints.ReleaseRoute} -> {MailFathomPermission.AdminRead.Name}",
                 $"POST {prefix}{ContentReleaseEndpoints.ReleaseRoute} -> {MailFathomPermission.AdminErase.Name}",
                 $"GET {prefix}{MailboxExportEndpoints.MeasurementRoute} -> {MailFathomPermission.AdminExport.Name} over its target",
@@ -485,6 +520,39 @@ public sealed class AdminApiEndpointsTests
 
         Assert.Equal(
             UserRecordEndpoints.MaxWriteRequestBytes,
+            write.Metadata.GetMetadata<Microsoft.AspNetCore.Http.Metadata.IRequestSizeLimitMetadata>()!.MaxRequestBodySize);
+    }
+
+    /// <summary>
+    /// The same bound on each role, group, and role-assignment body, read by verb for the same reason: every one of these
+    /// paths but the two name routes carries a read or a removal beside its write.
+    /// </summary>
+    /// <param name="method">The verb the write is made with.</param>
+    /// <param name="route">The route it is made on.</param>
+    [Theory]
+    [InlineData("POST", GrantEndpoints.RolesRoute)]
+    [InlineData("PUT", GrantEndpoints.RoleNameRoute)]
+    [InlineData("PUT", GrantEndpoints.RolePermissionsRoute)]
+    [InlineData("POST", GrantEndpoints.GroupsRoute)]
+    [InlineData("PUT", GrantEndpoints.GroupNameRoute)]
+    [InlineData("POST", GrantEndpoints.RoleAssignmentsRoute)]
+    public void MapAdminApi_ARoleGroupOrAssignmentRouteThatReadsABody_CarriesTheRequestBodyBound(string method, string route)
+    {
+        // Arrange
+        var endpoints = BuildRouteBuilder();
+
+        // Act
+        endpoints.MapAdminApi();
+
+        // Assert
+        var write = endpoints.Materialize()
+            .OfType<RouteEndpoint>()
+            .Single(endpoint =>
+                $"/{endpoint.RoutePattern.RawText?.TrimStart('/')}" == $"{AdminEndpointOptions.RoutePrefix}{route}"
+                && endpoint.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods.Contains(method));
+
+        Assert.Equal(
+            GrantEndpoints.MaxRequestBytes,
             write.Metadata.GetMetadata<Microsoft.AspNetCore.Http.Metadata.IRequestSizeLimitMetadata>()!.MaxRequestBodySize);
     }
 

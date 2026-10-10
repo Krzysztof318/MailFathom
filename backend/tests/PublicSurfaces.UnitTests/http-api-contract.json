@@ -6045,6 +6045,214 @@
         ],
         "type": "object"
       },
+      "GrantRecordNameRequest": {
+        "properties": {
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "GrantRecordedResponse": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "GrantReferenceResponse": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "kind": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id"
+        ],
+        "type": "object"
+      },
+      "GrantSourceResponse": {
+        "properties": {
+          "assignmentId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "group": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "groupId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "inert": {
+            "type": "boolean"
+          },
+          "permission": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "roleId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/GrantReferenceResponse"
+          }
+        },
+        "required": [
+          "permission",
+          "roleId",
+          "role",
+          "assignmentId",
+          "groupId",
+          "group",
+          "scope",
+          "inert"
+        ],
+        "type": "object"
+      },
+      "GroupListResponse": {
+        "properties": {
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/GroupResponse"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "groups",
+          "nextCursor"
+        ],
+        "type": "object"
+      },
+      "GroupMemberListResponse": {
+        "properties": {
+          "group": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "members": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "group",
+          "members",
+          "nextCursor"
+        ],
+        "type": "object"
+      },
+      "GroupProvisioningRequest": {
+        "properties": {
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "none": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "organizationId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "organizationId",
+          "none"
+        ],
+        "type": "object"
+      },
+      "GroupResponse": {
+        "properties": {
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "members": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "organizationId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "organizationId",
+          "members",
+          "createdAt"
+        ],
+        "type": "object"
+      },
       "HeldBackRecordListResponse": {
         "properties": {
           "mailAccounts": {
@@ -9800,6 +10008,199 @@
         },
         "type": "object"
       },
+      "RoleAssignmentListResponse": {
+        "properties": {
+          "assignments": {
+            "items": {
+              "$ref": "#/components/schemas/RoleAssignmentResponse"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "assignments",
+          "nextCursor"
+        ],
+        "type": "object"
+      },
+      "RoleAssignmentRequest": {
+        "properties": {
+          "principalId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "principalKind": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "roleId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "scopeId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "scopeKind": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "roleId",
+          "principalKind",
+          "principalId",
+          "scopeKind",
+          "scopeId"
+        ],
+        "type": "object"
+      },
+      "RoleAssignmentResponse": {
+        "properties": {
+          "assignedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "principal": {
+            "$ref": "#/components/schemas/GrantReferenceResponse"
+          },
+          "roleId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/GrantReferenceResponse"
+          }
+        },
+        "required": [
+          "id",
+          "roleId",
+          "principal",
+          "scope",
+          "assignedAt"
+        ],
+        "type": "object"
+      },
+      "RoleListResponse": {
+        "properties": {
+          "nextCursor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "roles": {
+            "items": {
+              "$ref": "#/components/schemas/RoleResponse"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "roles",
+          "nextCursor"
+        ],
+        "type": "object"
+      },
+      "RolePermissionsRequest": {
+        "properties": {
+          "permissions": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          }
+        },
+        "required": [
+          "permissions"
+        ],
+        "type": "object"
+      },
+      "RoleProvisioningRequest": {
+        "properties": {
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "permissions": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "permissions"
+        ],
+        "type": "object"
+      },
+      "RoleResponse": {
+        "properties": {
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "permissions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "unpublished": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "permissions",
+          "unpublished",
+          "createdAt"
+        ],
+        "type": "object"
+      },
       "SettingChangeResponse": {
         "properties": {
           "after": {
@@ -10804,6 +11205,36 @@
         "required": [
           "organizationId",
           "none"
+        ],
+        "type": "object"
+      },
+      "UserPermissionsResponse": {
+        "properties": {
+          "credentials": {
+            "items": {
+              "$ref": "#/components/schemas/UserCredentialResponse"
+            },
+            "type": "array"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/GrantSourceResponse"
+            },
+            "type": "array"
+          },
+          "sourcesTruncated": {
+            "type": "boolean"
+          },
+          "user": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user",
+          "sources",
+          "sourcesTruncated",
+          "credentials"
         ],
         "type": "object"
       },
@@ -12336,6 +12767,287 @@
         ]
       }
     },
+    "/api/admin/groups": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "format": "int32",
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupListResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      },
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/GroupProvisioningRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GrantRecordedResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/groups/{groupId}": {
+      "delete": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "groupId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/groups/{groupId}/members": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "groupId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "format": "int32",
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupMemberListResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/groups/{groupId}/members/{userId}": {
+      "delete": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "groupId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      },
+      "put": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "groupId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/groups/{groupId}/name": {
+      "put": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "groupId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/GrantRecordNameRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
     "/api/admin/jobs/dead-letters": {
       "get": {
         "parameters": [
@@ -13598,6 +14310,316 @@
         ]
       }
     },
+    "/api/admin/role-assignments": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "format": "int32",
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoleAssignmentListResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      },
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RoleAssignmentRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GrantRecordedResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/role-assignments/{assignmentId}": {
+      "delete": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assignmentId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/roles": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "format": "int32",
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoleListResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      },
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RoleProvisioningRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GrantRecordedResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/roles/{roleId}": {
+      "delete": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "roleId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/roles/{roleId}/name": {
+      "put": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "roleId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/GrantRecordNameRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/roles/{roleId}/permissions": {
+      "put": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "roleId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RolePermissionsRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
     "/api/admin/rules": {
       "get": {
         "responses": {
@@ -14445,6 +15467,41 @@
               }
             },
             "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/users/{userId}/permissions": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserPermissionsResponse"
+                }
+              }
+            },
+            "description": "OK"
           }
         },
         "security": [

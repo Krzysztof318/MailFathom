@@ -171,7 +171,7 @@ internal static class UserCredentialOutput
     /// <remarks>A credential naming nothing takes nothing away, which is a different statement from one naming the empty list, so the two are printed apart.</remarks>
     private static string DescribeNarrowing(IReadOnlyList<string>? permissions) => permissions switch
     {
-        null => "nothing named",
+        null => "everything the user holds",
         _ => DescribeHeld(permissions),
     };
 

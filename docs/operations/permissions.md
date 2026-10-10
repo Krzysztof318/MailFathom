@@ -41,6 +41,7 @@ two disjoint halves, and the prefix after `mailfathom.` says which half a name b
 | `mailfathom.admin.custody.write` | administrative | Deciding which copy of one account's mailbox is the truth: reading it is `mailfathom.admin.read`, and changing it is this. Switching an account into [holding its mailbox](../features/held-mailboxes.md) is the one administrative act here that ends with a mail server no longer holding a copy of somebody's mailbox, so it is a name of its own that neither the configuration writer nor the erasure grant confers — a credential that may rewrite settings must not thereby be able to empty a source server. Every switch is written to the service log as an audit record naming who asked, the account, the value it moved from and to, and every reason a refused one was refused. No configuration value changes an account's custody, which is [ADR 0034](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md). It publishes no MCP tool |
 | `mailfathom.admin.export` | administrative | Carrying a whole mailbox, or one folder of it, out of this deployment as an archive: measuring what an export would carry, starting one, following it, downloading the finished archive, cancelling one still being written, and deleting one before its retention ends. It is a name of its own that no reading grant confers, because reading a message and carrying an entire mailbox away are different acts with different consequences — the archive is the mail, the folder structure, the flags, and the keywords, in a form a person opens on their own machine. It sits on the administrative surface because that is the surface the routes are served on, and the client offers no export at all, which is [ADR 0028](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0028-no-mail-on-the-device-and-an-honest-client-with-no-route-to-its-deployment.md). [The archive of a drained mailbox](mailbox-export.md) is the operation |
 | `mailfathom.admin.configuration.write` | administrative | Changing the deployment's own [persisted configuration](configuration-sources.md#changing-a-persisted-setting): persisting a setting, stopping the document carrying one, saving an edited document, and adopting what the files decide beneath a path. It also covers **who this deployment serves and what it reads for them** — recording a user, relabelling one, saving one user's record, and declaring or withdrawing a mailbox in it. Reading the settings and the records is `mailfathom.admin.read`, so a credential may be told where a value is decided without being able to decide it |
+| `mailfathom.admin.roles.write` | administrative | Deciding who holds what: defining, renaming, editing, and deleting a role, recording, renaming, and deleting a group and changing who belongs to it, and giving and revoking role assignments. Defining a role is the deployment's alone, so it needs this name at the deployment scope, which is **the root**: its holder can write themselves any name. Held over one organization it reaches that organization's groups, their members, and the assignments inside it, and never gives a name its holder does not hold there. Reading roles, groups, assignments, and why a user holds each name is `mailfathom.admin.read`; [administering roles, groups, and assignments](#administering-roles-groups-and-assignments) holds the rules |
 
 **Three surfaces draw on those two halves.** The MCP endpoint and the client endpoint each draw on the mail half — the
 client reads the mail an agent reads, and a second vocabulary for one authority would be two things to keep in step —
@@ -268,15 +269,17 @@ credential has nothing to narrow with, so its caller holds what the user that de
 half. **A caller on the administrative endpoint holds the same grant narrowed by its credential and its token the same
 way**, and is admitted only while that leaves at least one administrative name. It acts for nobody's mail, so a mail name
 in that grant performs nothing there; it is read only as the ceiling
-[placing a credential](admin-endpoint.md#user-credentials) is bounded by.
+[placing a credential](admin-endpoint.md#user-credentials) and
+[giving a role](#administering-roles-groups-and-assignments) are bounded by.
 
 **A mail permission is held whatever scope gave it.** It reaches its holder's own mail, and which mail that is follows
 from the credential rather than from the grant — [what a permission does not decide](#what-a-permission-does-not-decide).
 **An administrative permission answers a question naming no target only at deployment scope**, so a caller granted
 `mailfathom.admin.read` or `mailfathom.admin.operate` over one organization alone is refused every route that names
-none — except the listings of users, of organizations, of mail accounts, and of their synchronization status, which
-never refuse over a scope and answer with what the caller's scopes cover. **A route naming a user, a mail account, a
-user's contact book, or an organization may be answered at any scope covering it** — the
+none — except the listings of users, of organizations, of mail accounts, of their synchronization status, of groups,
+and of role assignments, which never refuse over a scope and answer with what the caller's scopes cover, and the list
+of roles, which any holder of `mailfathom.admin.read` reads. **A route naming a user, a mail account, a user's contact
+book, an organization, a group, or a role assignment may be answered at any scope covering it** — the
 deployment, the organization it belongs to, or the one user it is wholly the concern of, which a mail account is only
 while it belongs to an organization and is assigned to that user and nobody else. A mail account in no organization is
 therefore covered by the deployment alone, and a user in none by the deployment and by a scope naming them. [A grant
@@ -286,7 +289,7 @@ target outside the scope is answered.
 ### What only the deployment scope grants
 
 **Some administrative operations are the deployment's alone**, whatever target a caller's grant covers: an operation
-naming no target concerns every organization at once, and four that do name one reach beyond it. Each is admitted only
+naming no target concerns every organization at once, and some that do name one reach beyond it. Each is admitted only
 to a caller holding its permission at deployment scope:
 
 | Permission | Only at deployment scope |
@@ -297,6 +300,7 @@ to a caller holding its permission at deployment scope:
 | `mailfathom.admin.spend` | Activating the embedding model, which is the whole of what the name covers |
 | `mailfathom.admin.erase` | Releasing the database copies a finished content move left behind |
 | `mailfathom.admin.configuration.write` | Writing the persisted configuration, creating and deleting an organization, and recording a user or a mail account in no organization |
+| `mailfathom.admin.roles.write` | Creating, renaming, changing the permissions of, and deleting a role, which is defined once and assigned in every organization, and keeping a group in no organization or an assignment at the deployment scope |
 
 `mailfathom.admin.audit.read`, `mailfathom.admin.export`, and `mailfathom.admin.custody.write` have none: each operation
 they cover names the user or the mail account it concerns.
@@ -305,8 +309,9 @@ A caller holding one of these permissions only over an organization or a user is
 administrative endpoint's usual shape, naming the permission and saying that it is held only below the deployment —
 [what a refusal says](admin-endpoint.md#what-a-refusal-says) shows the document. A grant below the deployment admits its
 holder to the endpoint, to its session route, and to [the routes checked against what they
-name](admin-endpoint.md#a-grant-held-below-the-deployment) for the users, mail accounts, contact books, and
-organizations its scope covers; every other route asks its permission at deployment scope and refuses such a holder in
+name](admin-endpoint.md#a-grant-held-below-the-deployment) for the users, mail accounts, contact books,
+organizations, groups, and role assignments its scope covers; every other route asks its permission at deployment scope
+and refuses such a holder in
 that same shape.
 
 **`mailfathom.admin.spend` held below the deployment reaches nothing.** A role is assigned whole, so a role carrying it —
@@ -321,6 +326,64 @@ backplane is declared, and within thirty seconds where none is or the announceme
 own — only what its credential named — so a revoked assignment reaches a session already signed in on its first
 request after the replica serving it has forgotten: at once on the replica that wrote the change, and within the bound
 above on every other.
+
+### Administering roles, groups, and assignments
+
+Roles, groups, and assignments are written through the administrative endpoint, and
+[roles, groups, and assignments](admin-endpoint.md#roles-groups-and-assignments) lists the routes and the `mfctl`
+commands. Reading any of them is `mailfathom.admin.read` and writing any of them is `mailfathom.admin.roles.write`, each
+held at a scope covering what the act names — the group, the user, and the scope an assignment is made at.
+
+**A role is the deployment's vocabulary, so only the root defines one.** Recording a role, renaming it, replacing the
+list it grants, and deleting it each need `mailfathom.admin.roles.write` at the deployment scope, and its holder may
+list any published name. **Granting that name at the deployment scope is therefore granting everything**, because its
+holder can write themselves any name. Every holder of `mailfathom.admin.read` reads every role, wherever they hold it.
+
+**Held over one organization, the writing grant reaches that organization and nothing beside it.** Its holder records,
+renames, and deletes groups in that organization, changes who belongs to them, and gives and revokes assignments whose
+principal and scope are both inside it. A group in no organization and an assignment at the deployment scope are the
+deployment's, so only a holder at the deployment scope writes them. **A group, a user, or an assignment outside the
+caller's scope is answered exactly as one that does not exist**, so naming somebody else's tells an organization's
+administrator nothing about it, and the listings answer with what the caller's scopes cover rather than refusing.
+
+**Nobody grants more than they hold, or wider than they hold it.** Each refusal names the permission and leaves nothing
+written:
+
+- **Assigning a role** needs every name the role lists held by the writer at a scope covering the assignment's scope.
+  A mail name's scope is never read, so it needs only to be held somewhere. `mailfathom.admin.spend` has no operation
+  below the deployment scope, so giving it at a narrower scope gives nothing and is not asked about.
+- **Adding a user to a group** is receiving every assignment the group holds, so it needs every name those assignments
+  give held by the writer at a scope covering each of them, under the same two allowances.
+- **Revoking an assignment and removing a member** need the coverage and nothing held, because taking a grant away
+  widens nobody.
+
+**A role or a group something is still assigned is not deleted.** The refusal says how many assignments still stand on
+it, so the operator revokes each of them first; deleting one silently would take what it gave from everybody it gave it
+to.
+
+**Three writes cannot take the last root away.** Revoking the last assignment that gives
+`mailfathom.admin.roles.write` at the deployment scope to a user who still holds it, taking that name out of the last
+role giving it there, and removing the last member through whom a group gives it are each refused with `409`, because a
+deployment nobody can administer is recovered only through its database. The check and the write share one transaction
+under a lock on every role carrying the name, so two administrators each removing a different root at once cannot both
+succeed. Give the name to somebody else first. **Erasing a user is not one of the three, and neither is moving one**:
+erasing the last user who holds the name removes their assignments with them, moving them out of the organization
+whose group gives it to them ends what that group gave, and neither is refused, so check `mfctl user permissions` for
+another holder before erasing or moving an administrator.
+
+**`mfctl user permissions` explains a user's grant, within your own scope.** For each name the user holds it reports the
+role it came from, whether it was given directly or through which group, the scope it is held at, and whether that
+scope makes it reach nothing; then, for each of the user's credentials, what that credential keeps of what was listed.
+It needs `mailfathom.admin.read` over the user, and it reads the assignments its caller could already list: a name the
+user holds through a group or at a scope the caller's grant does not cover is left out, so an organization's
+administrator reads that organization's part of a member's grant and nothing the deployment gave them. One explanation
+carries at most 1000 rows; past that it says it is a part of the answer, and `mfctl assignment list` pages the rest.
+
+**Every change is recorded.** Each write that changed something is written to the deployment's log after it committed,
+as one line naming the act, the role, group, user, or assignment it changed, a role's new list where the act set one,
+and the administrator it was admitted as. Adding somebody who is already a member and removing somebody who is not
+change nothing, so they are answered as a success and leave no line. No line carries a role's or a group's name,
+because the identifier is what stays the same across a rename.
 
 ### On a user's credential
 
@@ -390,7 +453,8 @@ are specified. The deployment's first start records the default administrator `a
 **A caller here holds its user's grant, kept to what its credential keeps.** A credential naming no permission keeps
 everything its user's roles grant, and one whose `--permission` list names `mailfathom.admin.read` alone reads this
 deployment and changes nothing. The mail names in that grant are kept as well, but only as the ceiling a credential
-written here is bounded by: the caller acts for no user, so nothing on this endpoint performs one. A user holding no
+written here and a role given here are bounded by: the caller acts for no user, so nothing on this endpoint performs
+one, and the session route reports none. A user holding no
 administrative name at any scope is not an administrator, and every credential they hold is answered `401` here.
 
 **`PermissionsFromTokenScopes` narrows once more, by the token.** Written on an `AdminEndpoint:Authentication` entry

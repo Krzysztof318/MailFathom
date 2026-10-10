@@ -14,6 +14,7 @@ using MailFathom.Cli.Administration.Content;
 using MailFathom.Cli.Administration.Embeddings;
 using MailFathom.Cli.Administration.Exports;
 using MailFathom.Cli.Administration.Folders;
+using MailFathom.Cli.Administration.Grants;
 using MailFathom.Cli.Administration.Jobs;
 using MailFathom.Cli.Administration.Mailboxes;
 using MailFathom.Cli.Administration.Organizations;
@@ -2154,6 +2155,347 @@ internal sealed class AdminApiClient
             NoSuchMailAccount);
     }
 
+    /// <summary>The sentence a role route answers with when the deployment defines no such role.</summary>
+    private const string NoSuchRole =
+        "This deployment defines no role under that identifier. Run 'mfctl role list' and name one it defines.";
+
+    /// <summary>The sentence a group route answers with when no such group lies within the caller's scope.</summary>
+    private const string NoSuchGroup =
+        "This deployment holds no group under that identifier within your scope. Run 'mfctl group list' and name one it holds.";
+
+    /// <summary>The sentence a membership route answers with, where either the group or the user may be the one missing.</summary>
+    private const string NoSuchGroupOrUser =
+        "This deployment holds no group or no user under those identifiers within your scope. Run 'mfctl group list' and 'mfctl user list' and name ones it holds.";
+
+    /// <summary>The sentence the revocation route answers with when no such assignment lies within the caller's scope.</summary>
+    private const string NoSuchRoleAssignment =
+        "This deployment holds no role assignment under that identifier within your scope. Run 'mfctl assignment list' and name one it holds.";
+
+    /// <summary>Reads every role a deployment defines, following the listing's cursor to its end.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="cancellationToken">Cancels the requests.</param>
+    /// <returns>The roles.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused a request or the credential, could not be reached, or answered with something that is not a listing.</exception>
+    internal async Task<RoleList> ReadRolesAsync(string token, CancellationToken cancellationToken)
+    {
+        var pages = await this.ReadEveryPageAsync(
+            AdminEndpointRoutes.RolesPath,
+            token,
+            CliJsonContext.Default.RoleList,
+            page => page.NextCursor,
+            cancellationToken);
+
+        return new RoleList([.. pages.SelectMany(page => page.Roles ?? [])], NextCursor: null);
+    }
+
+    /// <summary>Defines a role.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="request">The name and the permissions it grants.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The identifier the deployment minted.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request, the name, or the credential, could not be reached, or answered with something that is not an identifier.</exception>
+    internal Task<GrantRecorded> ProvisionRoleAsync(
+        string token,
+        RoleProvisioningRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        return this.RequestAsync(
+            HttpMethod.Post,
+            AdminEndpointRoutes.RolesPath,
+            token,
+            CliJsonContext.Default.GrantRecorded,
+            cancellationToken,
+            JsonContent.Create(request, CliJsonContext.Default.RoleProvisioningRequest));
+    }
+
+    /// <summary>Replaces the name one role is read by.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="roleId">The role to rename.</param>
+    /// <param name="request">The name it carries from now on.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>A task that completes once the deployment has accepted the name.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> or <paramref name="request" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment defines no such role, another role or group carries the name, the request or the credential was refused, or the deployment could not be reached.</exception>
+    internal Task RenameRoleAsync(
+        string token,
+        Guid roleId,
+        GrantRecordNameRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        return this.RequestAsync(
+            HttpMethod.Put,
+            AdminEndpointRoutes.RoleNamePath(roleId),
+            token,
+            cancellationToken,
+            JsonContent.Create(request, CliJsonContext.Default.GrantRecordNameRequest),
+            NoSuchRole);
+    }
+
+    /// <summary>Replaces the whole list of permissions one role grants, for everybody it is assigned to.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="roleId">The role whose list is replaced.</param>
+    /// <param name="request">The permissions it grants from now on.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>A task that completes once the list stands.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> or <paramref name="request" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment defines no such role, the list would leave nobody administering it, the request or the credential was refused, or the deployment could not be reached.</exception>
+    internal Task ReplaceRolePermissionsAsync(
+        string token,
+        Guid roleId,
+        RolePermissionsRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        return this.RequestAsync(
+            HttpMethod.Put,
+            AdminEndpointRoutes.RolePermissionsPath(roleId),
+            token,
+            cancellationToken,
+            JsonContent.Create(request, CliJsonContext.Default.RolePermissionsRequest),
+            NoSuchRole);
+    }
+
+    /// <summary>Removes a role nobody is assigned.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="roleId">The role to remove.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>A task that completes once the role is gone.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment defines no such role, an assignment still gives it, the credential was refused, or the deployment could not be reached.</exception>
+    internal Task RemoveRoleAsync(string token, Guid roleId, CancellationToken cancellationToken) =>
+        this.RequestAsync(
+            HttpMethod.Delete,
+            AdminEndpointRoutes.RolePath(roleId),
+            token,
+            cancellationToken,
+            absenceMessage: NoSuchRole);
+
+    /// <summary>Reads every group the caller's scope covers, following the listing's cursor to its end.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="cancellationToken">Cancels the requests.</param>
+    /// <returns>The groups.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused a request or the credential, could not be reached, or answered with something that is not a listing.</exception>
+    internal async Task<GroupList> ReadGroupsAsync(string token, CancellationToken cancellationToken)
+    {
+        var pages = await this.ReadEveryPageAsync(
+            AdminEndpointRoutes.GroupsPath,
+            token,
+            CliJsonContext.Default.GroupList,
+            page => page.NextCursor,
+            cancellationToken);
+
+        return new GroupList([.. pages.SelectMany(page => page.Groups ?? [])], NextCursor: null);
+    }
+
+    /// <summary>Records a group, in an organization or in none.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="request">The name and the organization, or that it belongs to none.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The identifier the deployment minted.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request, the name, the organization, or the credential, could not be reached, or answered with something that is not an identifier.</exception>
+    internal Task<GrantRecorded> ProvisionGroupAsync(
+        string token,
+        GroupProvisioningRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        return this.RequestAsync(
+            HttpMethod.Post,
+            AdminEndpointRoutes.GroupsPath,
+            token,
+            CliJsonContext.Default.GrantRecorded,
+            cancellationToken,
+            JsonContent.Create(request, CliJsonContext.Default.GroupProvisioningRequest));
+    }
+
+    /// <summary>Replaces the name one group is read by.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="groupId">The group to rename.</param>
+    /// <param name="request">The name it carries from now on.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>A task that completes once the deployment has accepted the name.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> or <paramref name="request" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when no such group lies within the caller's scope, another role or group carries the name, the request or the credential was refused, or the deployment could not be reached.</exception>
+    internal Task RenameGroupAsync(
+        string token,
+        Guid groupId,
+        GrantRecordNameRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        return this.RequestAsync(
+            HttpMethod.Put,
+            AdminEndpointRoutes.GroupNamePath(groupId),
+            token,
+            cancellationToken,
+            JsonContent.Create(request, CliJsonContext.Default.GrantRecordNameRequest),
+            NoSuchGroup);
+    }
+
+    /// <summary>Removes a group nothing is assigned to, and its memberships with it.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="groupId">The group to remove.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>A task that completes once the group is gone.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when no such group lies within the caller's scope, an assignment still names it, the credential was refused, or the deployment could not be reached.</exception>
+    internal Task RemoveGroupAsync(string token, Guid groupId, CancellationToken cancellationToken) =>
+        this.RequestAsync(
+            HttpMethod.Delete,
+            AdminEndpointRoutes.GroupPath(groupId),
+            token,
+            cancellationToken,
+            absenceMessage: NoSuchGroup);
+
+    /// <summary>Reads every member of one group, following the listing's cursor to its end.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="groupId">The group asked about.</param>
+    /// <param name="cancellationToken">Cancels the requests.</param>
+    /// <returns>The members' user identifiers.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when no such group lies within the caller's scope, the deployment refused a request or the credential, could not be reached, or answered with something that is not a listing.</exception>
+    internal async Task<GroupMemberList> ReadGroupMembersAsync(
+        string token,
+        Guid groupId,
+        CancellationToken cancellationToken)
+    {
+        var pages = await this.ReadEveryPageAsync(
+            AdminEndpointRoutes.GroupMembersPath(groupId),
+            token,
+            CliJsonContext.Default.GroupMemberList,
+            page => page.NextCursor,
+            cancellationToken,
+            NoSuchGroup);
+
+        return new GroupMemberList(groupId, [.. pages.SelectMany(page => page.Members ?? [])], NextCursor: null);
+    }
+
+    /// <summary>Makes one user a member of one group, which gives them every assignment the group holds.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="groupId">The group.</param>
+    /// <param name="userId">The user joining it.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>A task that completes once they are a member, which they may already have been.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when no such group or user lies within the caller's scope, the user belongs to another organization than the group, the credential was refused, or the deployment could not be reached.</exception>
+    internal Task AddGroupMemberAsync(
+        string token,
+        Guid groupId,
+        Guid userId,
+        CancellationToken cancellationToken) =>
+        this.RequestAsync(
+            HttpMethod.Put,
+            AdminEndpointRoutes.GroupMemberPath(groupId, userId),
+            token,
+            cancellationToken,
+            absenceMessage: NoSuchGroupOrUser);
+
+    /// <summary>Ends one user's membership of one group.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="groupId">The group.</param>
+    /// <param name="userId">The user leaving it.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>A task that completes once they are no member, which they may already not have been.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when no such group or user lies within the caller's scope, leaving would take the last administrator away, the credential was refused, or the deployment could not be reached.</exception>
+    internal Task RemoveGroupMemberAsync(
+        string token,
+        Guid groupId,
+        Guid userId,
+        CancellationToken cancellationToken) =>
+        this.RequestAsync(
+            HttpMethod.Delete,
+            AdminEndpointRoutes.GroupMemberPath(groupId, userId),
+            token,
+            cancellationToken,
+            absenceMessage: NoSuchGroupOrUser);
+
+    /// <summary>Reads every role assignment the caller's scope covers, following the listing's cursor to its end.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="cancellationToken">Cancels the requests.</param>
+    /// <returns>The assignments.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused a request or the credential, could not be reached, or answered with something that is not a listing.</exception>
+    internal async Task<RoleAssignmentList> ReadRoleAssignmentsAsync(string token, CancellationToken cancellationToken)
+    {
+        var pages = await this.ReadEveryPageAsync(
+            AdminEndpointRoutes.RoleAssignmentsPath,
+            token,
+            CliJsonContext.Default.RoleAssignmentList,
+            page => page.NextCursor,
+            cancellationToken);
+
+        return new RoleAssignmentList([.. pages.SelectMany(page => page.Assignments ?? [])], NextCursor: null);
+    }
+
+    /// <summary>Gives a role to a user or a group at a scope.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="request">The role, the principal, and the scope.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The identifier the deployment minted, which is what revokes it.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request — a role, principal, or scope it does not hold among it — or the credential, already gives that role to that principal at that scope, could not be reached, or answered with something that is not an identifier.</exception>
+    internal Task<GrantRecorded> AssignRoleAsync(
+        string token,
+        RoleAssignmentRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        return this.RequestAsync(
+            HttpMethod.Post,
+            AdminEndpointRoutes.RoleAssignmentsPath,
+            token,
+            CliJsonContext.Default.GrantRecorded,
+            cancellationToken,
+            JsonContent.Create(request, CliJsonContext.Default.RoleAssignmentRequest));
+    }
+
+    /// <summary>Revokes one role assignment.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="assignmentId">The assignment to revoke.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>A task that completes once the assignment is gone.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when no such assignment lies within the caller's scope, it is the last one administering the deployment, the credential was refused, or the deployment could not be reached.</exception>
+    internal Task RevokeRoleAssignmentAsync(string token, Guid assignmentId, CancellationToken cancellationToken) =>
+        this.RequestAsync(
+            HttpMethod.Delete,
+            AdminEndpointRoutes.RoleAssignmentPath(assignmentId),
+            token,
+            cancellationToken,
+            absenceMessage: NoSuchRoleAssignment);
+
+    /// <summary>Reads why one user holds each permission they hold, and what each of their credentials keeps of it.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="userId">The user asked about.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The explanation.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when no such user lies within the caller's scope, the deployment refused the request or the credential, could not be reached, or answered with something that is not an explanation.</exception>
+    internal Task<UserPermissions> ReadUserPermissionsAsync(
+        string token,
+        Guid userId,
+        CancellationToken cancellationToken) =>
+        this.RequestAsync(
+            HttpMethod.Get,
+            AdminEndpointRoutes.UserPermissionsPath(userId),
+            token,
+            CliJsonContext.Default.UserPermissions,
+            cancellationToken,
+            absenceMessage: NoSuchUser);
+
     /// <summary>Reads every page of one administrative listing, following the cursor each page returns until one returns none.</summary>
     /// <remarks>Every page is held until the last arrives, because each listing command prints the whole listing at once.</remarks>
     private async Task<IReadOnlyList<TPage>> ReadEveryPageAsync<TPage>(
@@ -2161,7 +2503,8 @@ internal sealed class AdminApiClient
         string token,
         JsonTypeInfo<TPage> pageContract,
         Func<TPage, string?> nextCursor,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? absenceMessage = null)
         where TPage : class
     {
         List<TPage> pages = [];
@@ -2174,7 +2517,8 @@ internal sealed class AdminApiClient
                 $"{path}{new AdminQueryString().Add("cursor", cursor)}",
                 token,
                 pageContract,
-                cancellationToken);
+                cancellationToken,
+                absenceMessage: absenceMessage);
 
             pages.Add(page);
 

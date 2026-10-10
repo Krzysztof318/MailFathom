@@ -718,9 +718,6 @@ or delete, and edited by no later migration:
 | `Organization administrator` | `mailfathom.admin.read`, `mailfathom.admin.audit.read`, `mailfathom.admin.operate`, `mailfathom.admin.credentials.write`, `mailfathom.admin.configuration.write`, `mailfathom.admin.erase`, and `mailfathom.admin.roles.write` |
 | `Administrator` | Every name both halves published when it was seeded, and `mailfathom.admin.roles.write` |
 
-`mailfathom.admin.roles.write` is on two of those lists before this build publishes it, so both read it back as
-unpublished until the release that publishes it, from which it grants what it names without any row changing.
-
 The migration that moved mail grants from credentials onto users, `HoldMailGrantsOnUsers`, gave every user who held no
 assignment one at their own scope reproducing the union of what their credentials listed: `Mail user` where that union
 was the whole mail half — and for a user holding no credential, whom only an endpoint requiring none could have served —

@@ -20,6 +20,11 @@ public sealed class ScopedGrantTests
     private static readonly AssignmentScope OneUser =
         AssignmentScope.User(UserId.Create(new Guid("0198f0aa-0000-7000-8000-0000000000c2")));
 
+    private static readonly AssignmentScope AnotherOrganization =
+        AssignmentScope.Organization(new Guid("0198f0aa-0000-7000-8000-0000000000c3"));
+
+    private static readonly Guid AnotherUserId = new("0198f0aa-0000-7000-8000-0000000000c4");
+
     [Fact]
     public void Of_OnePermissionGivenAtTwoScopes_HoldsItAtBoth()
     {
@@ -129,6 +134,90 @@ public sealed class ScopedGrantTests
         // Assert
         Assert.Equal([MailFathomPermission.AdminRead], narrowed.Permissions);
         Assert.Equal(new HashSet<AssignmentScope> { OneOrganization, OneUser }, narrowed.ScopesOf(MailFathomPermission.AdminRead));
+    }
+
+    [Fact]
+    public void Covers_APermissionHeldOverTheDeployment_CoversAUserInNoOrganization()
+    {
+        // Arrange
+        var grant = ScopedGrant.AtDeployment([MailFathomPermission.AdminRead]);
+
+        // Act
+        var covered = grant.Covers(MailFathomPermission.AdminRead, AdministrativeTarget.User(UserId.Create(OneUser.Target), organization: null));
+
+        // Assert
+        Assert.True(covered);
+    }
+
+    [Fact]
+    public void Covers_APermissionHeldOverAnOrganization_CoversItsMemberAndNobodyElse()
+    {
+        // Arrange
+        var grant = ScopedGrant.Of([(MailFathomPermission.AdminRead, OneOrganization)]);
+        var user = UserId.Create(OneUser.Target);
+
+        // Act
+        bool[] covered =
+        [
+            grant.Covers(MailFathomPermission.AdminRead, AdministrativeTarget.User(user, OneOrganization.Target)),
+            grant.Covers(MailFathomPermission.AdminRead, AdministrativeTarget.User(user, AnotherOrganization.Target)),
+            grant.Covers(MailFathomPermission.AdminRead, AdministrativeTarget.User(user, organization: null)),
+        ];
+
+        // Assert
+        Assert.Equal([true, false, false], covered);
+    }
+
+    [Fact]
+    public void Covers_APermissionHeldOverAnOrganization_CoversThatOrganizationButNotTheDeployment()
+    {
+        // Arrange
+        var grant = ScopedGrant.Of([(MailFathomPermission.AdminConfigurationWrite, OneOrganization)]);
+
+        // Act
+        bool[] covered =
+        [
+            grant.Covers(MailFathomPermission.AdminConfigurationWrite, AdministrativeTarget.OrganizationItself(OneOrganization.Target)),
+            grant.Covers(MailFathomPermission.AdminConfigurationWrite, AdministrativeTarget.OrganizationItself(AnotherOrganization.Target)),
+            grant.Covers(MailFathomPermission.AdminConfigurationWrite, AdministrativeTarget.Unplaced),
+        ];
+
+        // Assert
+        Assert.Equal([true, false, false], covered);
+    }
+
+    /// <summary>A user scope reaches its user wherever they belong, and reaches no organization.</summary>
+    [Fact]
+    public void Covers_APermissionHeldOverOneUser_CoversThatUserAlone()
+    {
+        // Arrange
+        var grant = ScopedGrant.Of([(MailFathomPermission.AdminRead, OneUser)]);
+        var user = UserId.Create(OneUser.Target);
+
+        // Act
+        bool[] covered =
+        [
+            grant.Covers(MailFathomPermission.AdminRead, AdministrativeTarget.User(user, OneOrganization.Target)),
+            grant.Covers(MailFathomPermission.AdminRead, AdministrativeTarget.User(user, organization: null)),
+            grant.Covers(MailFathomPermission.AdminRead, AdministrativeTarget.User(UserId.Create(AnotherUserId), OneOrganization.Target)),
+            grant.Covers(MailFathomPermission.AdminRead, AdministrativeTarget.OrganizationItself(OneOrganization.Target)),
+        ];
+
+        // Assert
+        Assert.Equal([true, true, false, false], covered);
+    }
+
+    [Fact]
+    public void Covers_APermissionNotHeld_CoversNothing()
+    {
+        // Arrange
+        var grant = ScopedGrant.AtDeployment([MailFathomPermission.AdminRead]);
+
+        // Act
+        var covered = grant.Covers(MailFathomPermission.AdminErase, AdministrativeTarget.Unplaced);
+
+        // Assert
+        Assert.False(covered);
     }
 
     /// <summary>An empty narrowing — a credential written with an empty list, or a token carrying no permission scope — leaves nothing.</summary>

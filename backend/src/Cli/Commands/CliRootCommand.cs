@@ -9,9 +9,12 @@ using MailFathom.Cli.Commands.Contacts;
 using MailFathom.Cli.Commands.Content;
 using MailFathom.Cli.Commands.Exports;
 using MailFathom.Cli.Commands.Folders;
+using MailFathom.Cli.Commands.Groups;
 using MailFathom.Cli.Commands.Jobs;
 using MailFathom.Cli.Commands.Organizations;
 using MailFathom.Cli.Commands.Outbox;
+using MailFathom.Cli.Commands.RoleAssignments;
+using MailFathom.Cli.Commands.Roles;
 using MailFathom.Cli.Commands.Rules;
 using MailFathom.Cli.Commands.Spam;
 using MailFathom.Cli.Commands.Users;
@@ -227,7 +230,42 @@ internal static class CliRootCommand
             RenameUserCommand.Create(context),
             SetUserEndpointsCommand.Create(context),
             SetUserOrganizationCommand.Create(context),
+            ExplainUserPermissionsCommand.Create(context),
             RemoveUserCommand.Create(context),
+        };
+
+        // What a permission is called and which ones travel together. Defining a role grants nothing to anybody, which
+        // is why every write here is about the definition and none of them is about a person: giving a role is
+        // "assignment add", and reading who ends up holding what is "user permissions".
+        Command roleCommand = new("role", "Define the roles this deployment gives, and the permissions each grants.")
+        {
+            ListRolesCommand.Create(context),
+            AddRoleCommand.Create(context),
+            RenameRoleCommand.Create(context),
+            SetRolePermissionsCommand.Create(context),
+            RemoveRoleCommand.Create(context),
+        };
+
+        // A role given to a group reaches every member, so membership is administered beside the group rather than
+        // under "user": adding somebody to a group is a grant, and reads as one here.
+        Command groupCommand = new("group", "Record the groups roles are given to, and who belongs to each.")
+        {
+            ListGroupsCommand.Create(context),
+            AddGroupCommand.Create(context),
+            RenameGroupCommand.Create(context),
+            ListGroupMembersCommand.Create(context),
+            AddGroupMemberCommand.Create(context),
+            RemoveGroupMemberCommand.Create(context),
+            RemoveGroupCommand.Create(context),
+        };
+
+        // The one place a role reaches somebody. Named "assignment" rather than placed under "account", whose "assign"
+        // gives a mailbox to a user and answers a different question.
+        Command assignmentCommand = new("assignment", "Give roles to users and groups at a scope, and revoke them.")
+        {
+            ListRoleAssignmentsCommand.Create(context),
+            AddRoleAssignmentCommand.Create(context),
+            RevokeRoleAssignmentCommand.Create(context),
         };
 
         // How the people and mailboxes this deployment serves are grouped, which decides the login a password
@@ -282,6 +320,9 @@ internal static class CliRootCommand
             configCommand,
             userCommand,
             organizationCommand,
+            roleCommand,
+            groupCommand,
+            assignmentCommand,
             accountCommand,
             credentialCommand,
         };

@@ -210,8 +210,8 @@ public sealed class AuthorizedPrincipal
     /// <returns><see langword="true" /> when the principal holds it.</returns>
     /// <remarks>
     /// <para>
-    /// Asks the grant alone. That a kind other than a caller never holds one is a property of how a principal is
-    /// composed rather than a case decided here.
+    /// That a kind other than a caller never holds one is a property of how a principal is composed rather than a case
+    /// decided here.
     /// </para>
     /// <para>
     /// A mail permission is held at whichever scope it was granted, because its scope is never read: it reaches its

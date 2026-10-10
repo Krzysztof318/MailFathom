@@ -357,9 +357,10 @@ public sealed class AccessAuthorization
     /// <exception cref="ArgumentException">Thrown when <paramref name="permission" /> names no published capability.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown as <see cref="RequirePermission" /> throws, and marked <see cref="PrincipalNotAuthorizedException.RefusedForTheDeploymentAlone" />.</exception>
     /// <remarks>
-    /// Recording a user into no organization and moving one out of every organization are such acts. Ask this before
-    /// anything the request names is read, never after: the mark tells a boundary the refusal is the same whatever the
-    /// request names, which is what lets it say the caller holds the permission only below the deployment.
+    /// Recording a user or a group into no organization, moving a user out of every organization, and giving a role at
+    /// the deployment scope are such acts. Ask this before anything the request names is read, never after: the mark
+    /// tells a boundary the refusal is the same whatever the request names, which is what lets it say the caller holds
+    /// the permission only below the deployment.
     /// </remarks>
     public void RequirePermissionOverTheDeployment(MailFathomPermission permission)
     {

@@ -114,6 +114,43 @@ public sealed class PersistedGrantsTests
         Assert.Equal(AssignmentScope.User(UserId.Create(User)), assignment.Scope);
     }
 
+    [Fact]
+    public void SourceOf_ANameGivenThroughAGroupAtAnOrganization_NamesTheRoleTheGroupAndTheScope()
+    {
+        // Arrange
+        var assignment = new Guid("0198f0aa-0000-7000-8000-0000000000c7");
+        GrantSourceRow row = new("mailfathom.admin.read", Role, "Readers", assignment, Group, "Operators", Organization, ScopeUserId: null);
+
+        // Act
+        var source = PersistedGrants.SourceOf(row);
+
+        // Assert
+        Assert.Equal(
+            new GrantSource(
+                MailFathomPermission.AdminRead,
+                Role,
+                "Readers",
+                assignment,
+                Group,
+                "Operators",
+                AssignmentScope.Organization(Organization)),
+            source);
+    }
+
+    /// <summary>A role may list a name this build does not publish, which grants nothing and so explains nothing.</summary>
+    [Fact]
+    public void SourceOf_ANameThisBuildDoesNotPublish_IsNoSource()
+    {
+        // Arrange
+        GrantSourceRow row = new("mailfathom.admin.everything", Role, "Readers", Guid.NewGuid(), GroupId: null, GroupName: null, ScopeOrganizationId: null, ScopeUserId: null);
+
+        // Act
+        var source = PersistedGrants.SourceOf(row);
+
+        // Assert
+        Assert.Null(source);
+    }
+
     private static RoleAssignmentEntity Stored(
         Guid? principalUser = null,
         Guid? principalGroup = null,

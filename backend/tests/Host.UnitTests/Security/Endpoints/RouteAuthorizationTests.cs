@@ -3,6 +3,8 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Access;
+using MailFathom.Application.Access.Credentials;
+using MailFathom.Application.Access.Grants;
 using MailFathom.Application.Observability;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Failures;
@@ -13,6 +15,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.Routing.Patterns;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
 
@@ -196,6 +199,57 @@ public sealed class RouteAuthorizationTests
             Assert.Contains(RouteAuthorization.PermissionExtension, refusal.ProblemDetails.Extensions));
         Assert.Equal(true, Assert.Contains(RouteAuthorization.HeldBelowDeploymentExtension, refusal.ProblemDetails.Extensions));
         Assert.Contains("only over an organization or a user", refusal.ProblemDetails.Detail, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A write that would give somebody a name wider than its writer holds it is refused by the use case, and the caller
+    /// does hold the name. So the answer says it is held too narrowly rather than not granted, and says nothing of the
+    /// deployment scope, because the scope it falls short of is wherever the write gives the name.
+    /// </summary>
+    [Fact]
+    public async Task RefuseUnpermittedAsync_AUseCaseRefusingANameHeldTooNarrowly_SaysItIsHeldAndNothingOfTheDeploymentScope()
+    {
+        // Arrange
+        var organization = AccessAuthorizations.ScopedOrganization;
+        var group = new Guid("0198f0aa-0000-7000-8000-00000000f0b1");
+        var member = AccessAuthorizations.ScopedHolder;
+        var joinedAt = new DateTimeOffset(2026, 10, 10, 12, 0, 0, TimeSpan.Zero);
+        var authorization = AccessAuthorizations.ForPrincipal(AuthorizedPrincipal.Caller(
+            "organization-administrator",
+            ScopedGrant.Of([
+                (MailFathomPermission.AdminRolesWrite, AssignmentScope.Organization(organization)),
+                (MailFathomPermission.AdminRead, AssignmentScope.Organization(organization)),
+            ])));
+        var grants = Substitute.For<IGrantStore>();
+        grants.ReadGroupAsync(group, Arg.Any<CancellationToken>())
+            .Returns(new UserGroup(group, "Sales", organization, 0, joinedAt));
+        grants.ReadUserPlacementAsync(member, Arg.Any<CancellationToken>()).Returns(new UserPlacement(member, organization));
+        grants.ReadGrantOfGroupAsync(group, Arg.Any<CancellationToken>())
+            .Returns(ScopedGrant.Of([(MailFathomPermission.AdminRead, AssignmentScope.Deployment)]));
+        var administration = new GrantAdministration(
+            authorization,
+            grants,
+            Substitute.For<IUserCredentialStore>(),
+            Substitute.For<IGrantAuditor>(),
+            new FakeTimeProvider(joinedAt));
+        var context = ContextFor(RoutePermission.RequiringOverTarget(MailFathomPermission.AdminRolesWrite), authorization);
+
+        // Act
+        var answer = await RouteAuthorization.RefuseUnpermittedAsync(
+            context,
+            async _ => await administration.AddGroupMemberAsync(group, member, TestContext.Current.CancellationToken),
+            Surface);
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(answer);
+        Assert.Equal(StatusCodes.Status403Forbidden, refusal.StatusCode);
+        Assert.Equal(
+            MailFathomPermission.AdminRead.Name,
+            Assert.Contains(RouteAuthorization.PermissionExtension, refusal.ProblemDetails.Extensions));
+        Assert.DoesNotContain(RouteAuthorization.HeldBelowDeploymentExtension, refusal.ProblemDetails.Extensions.Keys);
+        Assert.Contains("narrower", refusal.ProblemDetails.Detail, StringComparison.Ordinal);
+        Assert.DoesNotContain("not granted", refusal.ProblemDetails.Detail, StringComparison.Ordinal);
+        await grants.DidNotReceiveWithAnyArgs().AddGroupMemberAsync(default, default, default, TestContext.Current.CancellationToken);
     }
 
     /// <summary>

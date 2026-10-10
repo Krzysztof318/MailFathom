@@ -165,6 +165,41 @@ public sealed class AdminEndpointRoutesTests
     }
 
     /// <summary>
+    /// The role, group, and assignment paths and the one explaining a user's grant, pinned for the reason every other
+    /// path here is: a rename on either side would compile cleanly and leave the command reaching a 404 that reads
+    /// exactly like an administrative endpoint nobody enabled.
+    /// </summary>
+    [Fact]
+    public void GrantPaths_AreTheRoutesTheDeploymentServesRolesGroupsAndAssignmentsAt()
+    {
+        var named = new Guid("11111111-2222-3333-4444-555555555555");
+        var member = new Guid("66666666-7777-8888-9999-000000000000");
+
+        Assert.Equal("/api/admin/roles", AdminEndpointRoutes.RolesPath);
+        Assert.Equal("/api/admin/roles/11111111-2222-3333-4444-555555555555", AdminEndpointRoutes.RolePath(named));
+        Assert.Equal("/api/admin/roles/11111111-2222-3333-4444-555555555555/name", AdminEndpointRoutes.RoleNamePath(named));
+        Assert.Equal(
+            "/api/admin/roles/11111111-2222-3333-4444-555555555555/permissions",
+            AdminEndpointRoutes.RolePermissionsPath(named));
+        Assert.Equal("/api/admin/groups", AdminEndpointRoutes.GroupsPath);
+        Assert.Equal("/api/admin/groups/11111111-2222-3333-4444-555555555555", AdminEndpointRoutes.GroupPath(named));
+        Assert.Equal("/api/admin/groups/11111111-2222-3333-4444-555555555555/name", AdminEndpointRoutes.GroupNamePath(named));
+        Assert.Equal(
+            "/api/admin/groups/11111111-2222-3333-4444-555555555555/members",
+            AdminEndpointRoutes.GroupMembersPath(named));
+        Assert.Equal(
+            "/api/admin/groups/11111111-2222-3333-4444-555555555555/members/66666666-7777-8888-9999-000000000000",
+            AdminEndpointRoutes.GroupMemberPath(named, member));
+        Assert.Equal("/api/admin/role-assignments", AdminEndpointRoutes.RoleAssignmentsPath);
+        Assert.Equal(
+            "/api/admin/role-assignments/11111111-2222-3333-4444-555555555555",
+            AdminEndpointRoutes.RoleAssignmentPath(named));
+        Assert.Equal(
+            "/api/admin/users/11111111-2222-3333-4444-555555555555/permissions",
+            AdminEndpointRoutes.UserPermissionsPath(named));
+    }
+
+    /// <summary>
     /// RFC 9728 places the document under a well-known segment with the resource's path appended, and the deployment
     /// refuses to start unless its resource path is the route prefix. Composing it here rather than reading it from a
     /// challenge is what makes a sign-in one request instead of two, and this is the assertion that keeps the

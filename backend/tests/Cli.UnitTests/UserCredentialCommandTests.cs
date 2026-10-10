@@ -881,7 +881,7 @@ public sealed class UserCredentialCommandTests : IDisposable
         var listing = DrawnListing.ReadFrom(this.harness.Console.Lines, "Credential", "Method", "Resolved by", "Narrows to", "Holds", "Endpoints", "Accepted from", "State");
         var row = Assert.Single(listing.Rows);
 
-        Assert.Equal("nothing named", listing.Cell(row, "Narrows to"));
+        Assert.Equal("everything the user holds", listing.Cell(row, "Narrows to"));
         Assert.Equal("mailfathom.mail.read, mailfathom.mail.ask", listing.Cell(row, "Holds"));
     }
 
