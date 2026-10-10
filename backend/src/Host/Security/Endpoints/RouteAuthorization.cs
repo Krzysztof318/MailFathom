@@ -170,7 +170,7 @@ internal static class RouteAuthorization
         {
             RecordRefusal(context.HttpContext, surface, published.Permission);
 
-            return Refused(context.HttpContext, published.Permission);
+            return Refused(context.HttpContext, published, published.Permission);
         }
 
         try
@@ -181,7 +181,7 @@ internal static class RouteAuthorization
         {
             RecordRefusal(context.HttpContext, surface, refusal.RequiredPermission);
 
-            return Refused(context.HttpContext, refusal.RequiredPermission);
+            return Refused(context.HttpContext, published, refusal.RequiredPermission);
         }
         catch (DeploymentUserUnresolvedException refusal)
         {
@@ -235,9 +235,12 @@ internal static class RouteAuthorization
     /// one — a use case refusing over the kind of principal that reached it rather than over a grant — says that instead
     /// of naming something that would not have helped, and carries no <see cref="PermissionExtension" /> member either.
     /// A caller holding the permission only at an organization or a user is told that rather than that it lacks the
-    /// name, and the document carries <see cref="HeldBelowDeploymentExtension" /> beside it.
+    /// name, and the document carries <see cref="HeldBelowDeploymentExtension" /> beside it. That is said only on a route
+    /// naming no target, where it is true whatever the request names. A route naming its target is admitted below the
+    /// deployment, so a use case refusing behind one refused over the target — which the route answers as a target that
+    /// does not exist before the use case is reached — and the backstop names the permission and says nothing of scope.
     /// </remarks>
-    private static ProblemHttpResult Refused(HttpContext context, MailFathomPermission required)
+    private static ProblemHttpResult Refused(HttpContext context, RoutePermission published, MailFathomPermission required)
     {
         if (!required.IsSpecified)
         {
@@ -248,7 +251,8 @@ internal static class RouteAuthorization
 
         var extensions = new Dictionary<string, object?>(StringComparer.Ordinal) { [PermissionExtension] = required.Name };
 
-        if (!context.RequestServices.GetRequiredService<AccessAuthorization>().HoldsOnlyBelowDeployment(required))
+        if (published.NamesTarget
+            || !context.RequestServices.GetRequiredService<AccessAuthorization>().HoldsOnlyBelowDeployment(required))
         {
             return TypedResults.Problem(
                 $"The credential is not granted '{required.Name}'.",

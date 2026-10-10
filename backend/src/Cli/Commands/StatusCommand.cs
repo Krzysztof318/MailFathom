@@ -5,6 +5,7 @@
 using System.CommandLine;
 using MailFathom.Cli.Administration;
 using MailFathom.Common;
+using MailFathom.Domain.Access;
 
 namespace MailFathom.Cli.Commands;
 
@@ -63,7 +64,7 @@ internal static class StatusCommand
 
         var narrowerScopes = (session.Scopes ?? []).Where(scope => scope.Target is not null).ToArray();
 
-        context.Console.WriteLine(DescribeGrant(session.Permissions, narrowerScopes.Length > 0));
+        context.Console.WriteLine(DescribeGrant(session.Permissions, narrowerScopes));
 
         foreach (var scope in narrowerScopes)
         {
@@ -84,28 +85,41 @@ internal static class StatusCommand
     /// to know which commands are theirs before they run one. A credential granted nothing is the case worth stating
     /// plainly, because it is how one is retired without its entry being deleted and its sign-in still succeeds. A
     /// credential holding names only over an organization or a user is told what it lacks over the whole deployment,
-    /// and the lines naming those scopes follow.
+    /// and the lines naming those scopes follow; where one of them holds the audit read, the reads that scope admits
+    /// are excepted from what is refused.
     /// </remarks>
-    private static string DescribeGrant(IReadOnlyList<string>? permissions, bool holdsNarrowerScopes) => permissions switch
+    private static string DescribeGrant(IReadOnlyList<string>? permissions, AdminSessionScope[] narrowerScopes) => permissions switch
     {
         null => "The deployment did not state what the credential may do.",
-        { Count: 0 } when holdsNarrowerScopes => "It holds no administrative permission over the whole deployment, so every operation but this one is refused.",
+        { Count: 0 } when narrowerScopes.Any(HoldsAuditRead) => "It holds no administrative permission over the whole deployment, so every operation is refused but this one and the reads a narrower scope admits below.",
+        { Count: 0 } when narrowerScopes.Length > 0 => "It holds no administrative permission over the whole deployment, so every operation but this one is refused.",
         { Count: 0 } => "It holds no administrative permission, so every operation but this one is refused.",
         _ => $"It holds {string.Join(", ", permissions)}.",
     };
 
-    /// <summary>States what the credential is granted over one organization or one user, and that the endpoint admits none of it there.</summary>
+    /// <summary>Reports whether a scope holds the one name this endpoint admits below the deployment.</summary>
+    private static bool HoldsAuditRead(AdminSessionScope scope) =>
+        scope.Permissions?.Contains(MailFathomPermission.AdminAuditRead.Name, StringComparer.Ordinal) == true;
+
+    /// <summary>States what the credential is granted over one organization or one user, and how much of it the endpoint admits there.</summary>
     /// <remarks>
     /// The caveat sits on the scope's own line rather than on the first one, because the first line names what is held
-    /// over the whole deployment and says nothing about a narrower grant once that list is not empty. A name only the
+    /// over the whole deployment and says nothing about a narrower grant once that list is not empty. The endpoint
+    /// admits one name below the deployment — the audit read, on the reads naming a user or a mail account — so a scope
+    /// holding it is told so, and every other name is told it acts only at the deployment scope. A name only the
     /// deployment scope grants is named apart, so an operator granted a role carrying it over one organization is not
     /// left to believe it acts there.
     /// </remarks>
     private static string DescribeScope(AdminSessionScope scope)
     {
-        var held = scope.Permissions is { Count: > 0 } permissions
-            ? $"Over {scope.Scope} {scope.Target} it is granted {string.Join(", ", permissions)}, which this endpoint admits only at the deployment scope."
-            : $"Over {scope.Scope} {scope.Target} it is granted only names the deployment scope alone grants.";
+        var held = scope.Permissions switch
+        {
+            { Count: > 0 } permissions when HoldsAuditRead(scope) =>
+                $"Over {scope.Scope} {scope.Target} it is granted {string.Join(", ", permissions)}. This endpoint admits {MailFathomPermission.AdminAuditRead.Name} there, on the reads naming a user or a mail account that scope covers, and admits every other name only at the deployment scope.",
+            { Count: > 0 } permissions =>
+                $"Over {scope.Scope} {scope.Target} it is granted {string.Join(", ", permissions)}, which this endpoint admits only at the deployment scope.",
+            _ => $"Over {scope.Scope} {scope.Target} it is granted only names the deployment scope alone grants.",
+        };
 
         return scope.ReachingNothing is { Count: > 0 } inert
             ? $"{held} {string.Join(", ", inert)} reaches nothing there, because only the deployment scope grants it."

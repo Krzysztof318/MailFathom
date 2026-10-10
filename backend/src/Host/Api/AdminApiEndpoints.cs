@@ -232,8 +232,9 @@ internal static class AdminApiEndpoints
 /// <para>
 /// The scopes are reported beside the permissions because an administrator granted a role over one organization holds
 /// names that <see cref="Permissions" /> leaves out, and a grant somebody holds without being told of it reads as one
-/// the deployment lost. <see cref="Permissions" /> stays the answer to what this endpoint admits, since it asks every
-/// route's permission at the deployment scope; the scopes say what the caller is granted, not what it may do here.
+/// the deployment lost. <see cref="Permissions" /> stays the answer to what this endpoint admits on every route naming
+/// no target, since it asks those routes' permissions at the deployment scope; the scopes say what the caller is
+/// granted, and only the audit reads naming a user or a mail account admit a name held at one of them.
 /// </para>
 /// </remarks>
 internal sealed record AdminSessionResponse(
@@ -280,7 +281,7 @@ internal sealed record AdminSessionResponse(
 /// <summary>One scope an administrative caller holds anything at, and what it holds there.</summary>
 /// <param name="Scope">Which kind of scope it is: <c>deployment</c>, <c>organization</c>, or <c>user</c>.</param>
 /// <param name="Target">The organization or the user the scope names, and none for the deployment.</param>
-/// <param name="Permissions">The published names granted at this scope, other than those only the deployment scope grants, in the order this repository publishes them. At a narrower scope none of them admits an operation on this endpoint, which asks every route's permission at the deployment scope.</param>
+/// <param name="Permissions">The published names granted at this scope, other than those only the deployment scope grants, in the order this repository publishes them. At a narrower scope the audit read among them admits the reads naming a user or a mail account that scope covers, and none of the others admits an operation on this endpoint, which asks every other route's permission at the deployment scope.</param>
 /// <param name="ReachingNothing">The published names granted at this scope that only the deployment scope grants, so at a narrower scope they reach nothing anywhere; always empty for the deployment.</param>
 /// <remarks>
 /// A role is assigned whole, so a role carrying <c>mailfathom.admin.spend</c> may be assigned over an organization and

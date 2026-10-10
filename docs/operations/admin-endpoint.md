@@ -266,13 +266,21 @@ that [only the deployment scope grants](permissions.md#what-only-the-deployment-
 ```
 
 `mfctl status` prints each scope narrower than the deployment on a line of its own. Those lines report what the caller
-is granted at each scope, not what it may do here: **this endpoint asks every route's permission at deployment scope**,
-the routes naming a target included, so a name held only over an organization or a user admits no operation on it, and
-each scope's line says so whatever the first line holds:
+is granted at each scope, and how much of it acts here: **this endpoint asks a route's permission at deployment scope**
+unless the route is one of [the reads a grant below the deployment reaches](#a-grant-held-below-the-deployment), so a
+name held only over an organization or a user admits no other operation on it, and each scope's line says so whatever
+the first line holds:
 
 ```text
 It holds no administrative permission over the whole deployment, so every operation but this one is refused.
 Over organization 0198f0aa-… it is granted mailfathom.admin.read, mailfathom.admin.operate, which this endpoint admits only at the deployment scope. mailfathom.admin.spend reaches nothing there, because only the deployment scope grants it.
+```
+
+A scope holding `mailfathom.admin.audit.read` is the one that acts there, and both lines say it:
+
+```text
+It holds no administrative permission over the whole deployment, so every operation is refused but this one and the reads a narrower scope admits below.
+Over organization 0198f0aa-… it is granted mailfathom.admin.read, mailfathom.admin.audit.read. This endpoint admits mailfathom.admin.audit.read there, on the reads naming a user or a mail account that scope covers, and admits every other name only at the deployment scope.
 ```
 
 **Some operations are the deployment's alone**, and a grant below the deployment never reaches them whatever else does:
@@ -327,8 +335,9 @@ an administrator who already holds it.
 ```
 
 A caller holding that permission only over an organization or a user is refused all the same wherever a route admits
-it only at the deployment scope — which is every route here — and the document says so, carrying
-`heldBelowDeployment` beside the name:
+it only at the deployment scope — which is every route here but
+[the reads a grant below the deployment reaches](#a-grant-held-below-the-deployment) — and the document says so,
+carrying `heldBelowDeployment` beside the name:
 
 ```json
 {
@@ -406,7 +415,9 @@ a user scope, where the account is assigned to somebody else too — reads the u
 it does cover, and leaves that one out rather than refusing the user.
 
 Every other route is reached only by a grant held over the whole deployment, and refuses one held at a narrower scope
-with the `403` above.
+with the `403` above that carries `heldBelowDeployment`. None of these routes ever answers with that document: a
+caller holding `mailfathom.admin.audit.read` nowhere is refused on them naming the permission, and one holding it at a
+scope that does not cover the target is answered as a target that does not exist.
 
 ## Where a credential may be presented from
 
@@ -2890,7 +2901,7 @@ removing the log is a way to start a new one rather than a way to turn it off.
 | `Not signed in to https://…` | `--endpoint` named an address no profile serves. Sign in to it, or name a profile instead. |
 | `The deployment refused the credential.` | Nobody holds what was presented, or it is disabled or its lifetime has ended, or it does not list `admin` among its endpoints, or the request arrived from outside the networks it is accepted from, or what its own permission list leaves of its user's grant holds no administrative permission. The answer is the same for all of them by design. A credential provisioned without `--surface admin` — what an MCP client is given — is the commonest case. |
 | `this credential does not hold …` | The credential was accepted and the operation was not: no role assigned to its user grants the name the message states at the deployment, or the credential's own permission list or its token's scopes leave it out. Give the user a role that holds it, provision a credential whose list keeps it, or run the command as an administrator who already holds it. `mfctl status` prints what the one in use holds. |
-| `this credential holds … only over an organization or a user` | The credential's user holds the name the message states, but only through a role assigned over an organization or a user, and this endpoint admits every operation only at the deployment scope. Granting the name again changes nothing. Run the command as an administrator who holds it over the whole deployment, or assign the user a role holding it at the deployment scope only if they are meant to administer the whole deployment. `mfctl status` prints the scopes the one in use holds. |
+| `this credential holds … only over an organization or a user` | The credential's user holds the name the message states, but only through a role assigned over an organization or a user, and this endpoint admits the operation only at the deployment scope, as it does every operation but [the reads a grant below the deployment reaches](#a-grant-held-below-the-deployment). Granting the name again changes nothing. Run the command as an administrator who holds it over the whole deployment, or assign the user a role holding it at the deployment scope only if they are meant to administer the whole deployment. `mfctl status` prints the scopes the one in use holds. |
 | `The deployment refused the operation: …` | The endpoint refused for a reason other than a missing permission, and the sentence is the deployment's own. A deployment publishing no permission for the route is a defect worth reporting, because no grant makes such a route reachable. |
 | `answered 429` | The endpoint refused the request for its rate limit rather than for its credential. `Retry-After` on the response says when capacity returns where the limiter can compute one. The whole endpoint shares one bucket, so another caller's burst — including somebody guessing keys — is enough to cause this. |
 | `serves no administrative endpoint at /api/admin/…` | The address answered, but on a listener that serves something else. Check the port, and check that `AdminEndpoint:Enabled` is true. |

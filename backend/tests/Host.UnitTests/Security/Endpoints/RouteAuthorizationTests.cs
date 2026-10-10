@@ -138,25 +138,34 @@ public sealed class RouteAuthorizationTests
         Assert.False(reached);
     }
 
-    /// <summary>A route naming no target is reached only with the permission held over the whole deployment.</summary>
+    /// <summary>
+    /// A use case refusing behind a route naming its target refused over the target, so the answer names the permission
+    /// and does not say the operation is the deployment's alone — which, on a route admitted below the deployment, it
+    /// is not.
+    /// </summary>
     [Fact]
-    public async Task RefuseUnpermittedAsync_AGrantBelowTheDeploymentOnARouteNamingNoTarget_Refuses()
+    public async Task RefuseUnpermittedAsync_AUseCaseRefusingBehindARouteNamingItsTarget_SaysNothingOfTheDeploymentScope()
     {
         // Arrange
-        var reached = false;
-        var context = ContextFor(
-            RoutePermission.Requiring(MailFathomPermission.AdminAuditRead),
-            AccessAuthorizations.ForAdministratorScopedAt(
-                AssignmentScope.Organization(AccessAuthorizations.ScopedOrganization),
-                MailFathomPermission.AdminAuditRead));
+        var authorization = AccessAuthorizations.ForAdministratorScopedAt(
+            AssignmentScope.Organization(AccessAuthorizations.ScopedOrganization),
+            MailFathomPermission.AdminAuditRead);
+        var context = ContextFor(RoutePermission.RequiringOverTarget(MailFathomPermission.AdminAuditRead), authorization);
 
         // Act
-        var answer = await RouteAuthorization.RefuseUnpermittedAsync(context, Reaching(() => reached = true), Surface);
+        var answer = await RouteAuthorization.RefuseUnpermittedAsync(
+            context,
+            Refusing(authorization, MailFathomPermission.AdminAuditRead),
+            Surface);
 
         // Assert
         var refusal = Assert.IsType<ProblemHttpResult>(answer);
         Assert.Equal(StatusCodes.Status403Forbidden, refusal.StatusCode);
-        Assert.False(reached);
+        Assert.Equal(
+            MailFathomPermission.AdminAuditRead.Name,
+            Assert.Contains(RouteAuthorization.PermissionExtension, refusal.ProblemDetails.Extensions));
+        Assert.DoesNotContain(RouteAuthorization.HeldBelowDeploymentExtension, refusal.ProblemDetails.Extensions.Keys);
+        Assert.DoesNotContain("deployment scope", refusal.ProblemDetails.Detail, StringComparison.Ordinal);
     }
 
     /// <summary>

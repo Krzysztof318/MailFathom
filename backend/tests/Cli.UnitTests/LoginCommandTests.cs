@@ -485,6 +485,35 @@ public sealed class LoginCommandTests : IDisposable
     }
 
     /// <summary>
+    /// The audit read is the one name the endpoint admits below the deployment, so a scope holding it is told which
+    /// reads it reaches there, and the first line no longer says every operation is refused.
+    /// </summary>
+    [Fact]
+    public async Task Status_ANarrowerScopeHoldingTheAuditRead_SaysWhichReadsItAdmitsThere()
+    {
+        // Arrange
+        var store = this.CreateStore();
+        store.Save("production", EndpointAddress, "not-a-real-key", "workstation");
+        using var handler = FakeAdminEndpoint.AnsweringBody(
+            HttpStatusCode.OK,
+            $$"""
+            {"service":"MailFathom","version":"{{FakeAdminEndpoint.CommandVersion}}","credential":"workstation","permissions":[],"scopes":[{"scope":"organization","target":"0198f0c4-0000-7000-8000-000000000003","permissions":["mailfathom.admin.read","mailfathom.admin.audit.read"],"reachingNothing":[]}]}
+            """);
+
+        // Act
+        var exitCode = await RunAsync(this.Context(store, handler), "status");
+
+        // Assert
+        Assert.Equal(0, exitCode);
+        Assert.Contains(
+            this.console.Lines,
+            line => line == "It holds no administrative permission over the whole deployment, so every operation is refused but this one and the reads a narrower scope admits below.");
+        Assert.Contains(
+            this.console.Lines,
+            line => line == "Over organization 0198f0c4-0000-7000-8000-000000000003 it is granted mailfathom.admin.read, mailfathom.admin.audit.read. This endpoint admits mailfathom.admin.audit.read there, on the reads naming a user or a mail account that scope covers, and admits every other name only at the deployment scope.");
+    }
+
+    /// <summary>
     /// A credential granted nothing signs in exactly as one granted everything does, so saying so is the difference
     /// between an operator understanding what they hold and meeting a refusal on the next command.
     /// </summary>

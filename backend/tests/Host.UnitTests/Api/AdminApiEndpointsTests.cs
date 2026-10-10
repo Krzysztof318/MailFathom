@@ -537,12 +537,15 @@ public sealed class AdminApiEndpointsTests
     }
 
     /// <summary>
-    /// Every route family the endpoint maps asks its permission at the deployment scope, so an organization's
-    /// administrator holding the whole administrative half over their organization alone is refused on each of them —
-    /// and told, on each, that the scope is what is missing. A route added later is covered by this without being named.
+    /// Every route the endpoint maps asks its permission at the deployment scope unless it states that it names its
+    /// target, so an organization's administrator holding the whole administrative half over their organization alone is
+    /// refused on each of the first kind — and told, on each, that the scope is what is missing — and reaches the
+    /// operation on each of the second, which decides whether that organization covers what the request named. A route
+    /// added later is covered by this without being named, and one that should be the deployment's alone cannot become
+    /// reachable below it without stating so in its own mapping.
     /// </summary>
     [Fact]
-    public async Task MapAdminApi_EveryPublishedRoute_RefusesACallerHoldingItsPermissionOnlyOverOneOrganization()
+    public async Task MapAdminApi_EveryPublishedRoute_RefusesACallerHoldingItsPermissionOnlyOverOneOrganizationUnlessItNamesItsTarget()
     {
         // Arrange
         var organization = AssignmentScope.Organization(new Guid("0198f0aa-0000-7000-8000-0000000000a1"));
@@ -568,18 +571,25 @@ public sealed class AdminApiEndpointsTests
                 static _ => ValueTask.FromResult<object?>("served"),
                 ProtectedSurface.Administration);
 
-            return (Route: $"{endpoint.RoutePattern.RawText} -> {Describe(endpoint)}", Answer: answer);
+            return (
+                Route: $"{endpoint.RoutePattern.RawText} -> {Describe(endpoint)}",
+                endpoint.Metadata.GetMetadata<RoutePermission>()!.NamesTarget,
+                Answer: answer);
         }));
 
         // Assert
-        Assert.NotEmpty(answers);
+        var namingNoTarget = answers.Where(answer => !answer.NamesTarget).ToArray();
+        var namingTheirTarget = answers.Where(answer => answer.NamesTarget).ToArray();
+        Assert.NotEmpty(namingNoTarget);
+        Assert.NotEmpty(namingTheirTarget);
         Assert.All(
-            answers,
+            namingNoTarget,
             answer => Assert.True(
                 answer.Answer is ProblemHttpResult { StatusCode: StatusCodes.Status403Forbidden } refusal
                     && refusal.ProblemDetails.Extensions.TryGetValue(RouteAuthorization.HeldBelowDeploymentExtension, out var held)
                     && held is true,
                 answer.Route));
+        Assert.All(namingTheirTarget, answer => Assert.True(answer.Answer is "served", answer.Route));
     }
 
     /// <summary>Reads back what each mapped route decided, as one line per verb and path.</summary>
