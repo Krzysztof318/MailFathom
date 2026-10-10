@@ -75,6 +75,7 @@ public sealed class MailAccountCustodyEndpointsTests
             custody,
             drain,
             RestoreOver(),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -118,6 +119,7 @@ public sealed class MailAccountCustodyEndpointsTests
                     UnansweredAppends: 1,
                     AwaitingConfirmation: 2),
                 unanswered),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -156,6 +158,7 @@ public sealed class MailAccountCustodyEndpointsTests
             custody,
             DrainOver(),
             RestoreOver(store),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -175,6 +178,7 @@ public sealed class MailAccountCustodyEndpointsTests
             SwitchOver(CustodyStoreHolding(MailAccountCustodyState.Mirrored)),
             DrainOver(),
             RestoreOver(),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -197,6 +201,7 @@ public sealed class MailAccountCustodyEndpointsTests
             SwitchOver(CustodyStoreHoldingNothing()),
             DrainOver(),
             RestoreOver(),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -236,6 +241,44 @@ public sealed class MailAccountCustodyEndpointsTests
         var problem = Assert.IsType<ProblemHttpResult>(answer.Result);
         Assert.Equal(StatusCodes.Status400BadRequest, problem.StatusCode);
         Assert.Contains("HoldMailbox", problem.ProblemDetails.Detail, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The scope is asked before the custody is read, so a served account outside it is answered in the sentence an
+    /// unconfigured one is rather than by the one listing the custodies the request could have named.
+    /// </summary>
+    [Fact]
+    public async Task SwitchAsync_AnAccountOutsideTheCallersOrganizationWithARequestNamingNoCustody_RefusesItAsUnknown()
+    {
+        // Arrange
+        var store = CustodyStoreHolding(MailAccountCustodyState.Mirrored);
+        var custody = SwitchOver(store);
+        var authorization = AccessAuthorizations.ForAdministratorScoped(
+            ScopedGrant.Of(
+            [
+                (MailFathomPermission.AdminCustodyWrite,
+                    AssignmentScope.Organization(new Guid("0198f0aa-0000-7000-8000-0000000000eb"))),
+            ]),
+            new StatedAdministrativeTargets().WithMailAccount(Account, new Guid("0198f0aa-0000-7000-8000-0000000000ec")));
+        using var scoped = AccountScopedRequest.Serving(services => services.AddSingleton(custody), Account);
+
+        // Act
+        var answer = await MailAccountCustodyEndpoints.SwitchAsync(
+            new MailAccountCustodySwitchRequest(Account.Value, "EmptyEverything"),
+            CatalogServing(Account),
+            scoped.MailSettings,
+            scoped.Context,
+            authorization,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(answer.Result);
+        Assert.Equal(AdminAccountRequest.Refuse(Account.Value).ProblemDetails.Detail, refusal.ProblemDetails.Detail);
+        await store.DidNotReceive().RequestAsync(
+            Arg.Any<IPersistenceSession>(),
+            Arg.Any<MailAccountId>(),
+            Arg.Any<MailAccountCustody>(),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -321,6 +364,7 @@ public sealed class MailAccountCustodyEndpointsTests
             accounts,
             scoped.MailSettings,
             scoped.Context,
+            AdministrativeGrant.WholeSurface,
             cancellationToken);
     }
 
@@ -415,6 +459,7 @@ public sealed class MailAccountCustodyEndpointsTests
             new MailAccountRestoreSettlementRequest("elsewhere", Guid.CreateVersion7(), SourceHoldsTheCopy: true),
             CatalogServing(Account),
             SettlementOver(store),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -444,6 +489,7 @@ public sealed class MailAccountCustodyEndpointsTests
             request,
             CatalogServing(Account),
             SettlementOver(store),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -481,6 +527,7 @@ public sealed class MailAccountCustodyEndpointsTests
             new MailAccountRestoreSettlementRequest(Account.Value, record, SourceHoldsTheCopy: true),
             CatalogServing(Account),
             SettlementOver(store),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert

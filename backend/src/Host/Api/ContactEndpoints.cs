@@ -118,7 +118,7 @@ internal static class ContactEndpoints
         // bound is answered 413 before the handler is reached.
         api.MapPost(ContactsRoute, RecordAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxRecordRequestBytes))
-            .RequirePermission(MailFathomPermission.AdminOperate);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminOperate);
 
         api.MapGet(ContactByAddressRoute, FindByAddressAsync)
             .RequirePermissionOverTarget(MailFathomPermission.AdminAuditRead);
@@ -128,16 +128,16 @@ internal static class ContactEndpoints
 
         api.MapPut(ContactRoute, AmendAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxRecordRequestBytes))
-            .RequirePermission(MailFathomPermission.AdminOperate);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminOperate);
 
         api.MapDelete(ContactRoute, EraseAsync)
-            .RequirePermission(MailFathomPermission.AdminErase);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminErase);
 
         api.MapDelete(CollectedContactsRoute, EraseCollectedAsync)
-            .RequirePermission(MailFathomPermission.AdminErase);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminErase);
 
         api.MapPost(ContactPromotionRoute, PromoteAsync)
-            .RequirePermission(MailFathomPermission.AdminOperate);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminOperate);
 
         api.MapGet(ContactExportRoute, ExportAsync)
             .RequirePermissionOverTarget(MailFathomPermission.AdminAuditRead);
@@ -218,6 +218,7 @@ internal static class ContactEndpoints
     /// <param name="request">The record to write.</param>
     /// <param name="book">Performs the write.</param>
     /// <param name="users">Answers whether this deployment holds a record for the named user.</param>
+    /// <param name="authorization">Answers whether the caller's scope covers the named user, who is otherwise refused as one this deployment holds no record for.</param>
     /// <param name="cancellationToken">Cancels the write when the client disconnects.</param>
     /// <returns><c>200</c> with the outcome, or <c>400</c> naming which rule the record broke.</returns>
     /// <remarks>
@@ -233,6 +234,7 @@ internal static class ContactEndpoints
         [FromBody] ContactRecordRequest? request,
         [FromServices] ContactBook book,
         [FromServices] IUserDirectory users,
+        [FromServices] AccessAuthorization authorization,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(book);
@@ -243,7 +245,8 @@ internal static class ContactEndpoints
             return EmptyUser();
         }
 
-        if (await users.ReadUserAsync(writer, cancellationToken) is null)
+        if (!await authorization.PermitsOverAsync(MailFathomPermission.AdminOperate, writer, cancellationToken)
+            || await users.ReadUserAsync(writer, cancellationToken) is null)
         {
             return UnknownUser(writer);
         }
@@ -364,6 +367,7 @@ internal static class ContactEndpoints
     /// <param name="book">Performs the write.</param>
     /// <param name="scopes">Composes the books that user reads.</param>
     /// <param name="users">Answers whether this deployment holds a record for the named user.</param>
+    /// <param name="authorization">Answers whether the caller's scope covers the named user, who is otherwise refused as one this deployment holds no record for.</param>
     /// <param name="cancellationToken">Cancels the write when the client disconnects.</param>
     /// <returns><c>200</c> with the outcome, or <c>400</c> naming which rule the record broke.</returns>
     /// <remarks>
@@ -378,6 +382,7 @@ internal static class ContactEndpoints
         [FromServices] ContactBook book,
         [FromServices] ContactBookScopes scopes,
         [FromServices] IUserDirectory users,
+        [FromServices] AccessAuthorization authorization,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(book);
@@ -389,7 +394,8 @@ internal static class ContactEndpoints
             return EmptyUser();
         }
 
-        if (await users.ReadUserAsync(writer, cancellationToken) is null)
+        if (!await authorization.PermitsOverAsync(MailFathomPermission.AdminOperate, writer, cancellationToken)
+            || await users.ReadUserAsync(writer, cancellationToken) is null)
         {
             return UnknownUser(writer);
         }
@@ -428,6 +434,7 @@ internal static class ContactEndpoints
     /// <param name="book">Performs the write.</param>
     /// <param name="scopes">Composes the books that user reads.</param>
     /// <param name="users">Answers whether this deployment holds a record for the named user.</param>
+    /// <param name="authorization">Answers whether the caller's scope covers the named user, who is otherwise refused as one this deployment holds no record for.</param>
     /// <param name="cancellationToken">Cancels the write when the client disconnects.</param>
     /// <returns><c>200</c> with the outcome and no record, including for a contact that was already asserted.</returns>
     /// <remarks>
@@ -442,6 +449,7 @@ internal static class ContactEndpoints
         [FromServices] ContactBook book,
         [FromServices] ContactBookScopes scopes,
         [FromServices] IUserDirectory users,
+        [FromServices] AccessAuthorization authorization,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(book);
@@ -453,7 +461,8 @@ internal static class ContactEndpoints
             return EmptyUser();
         }
 
-        if (await users.ReadUserAsync(writer, cancellationToken) is null)
+        if (!await authorization.PermitsOverAsync(MailFathomPermission.AdminOperate, writer, cancellationToken)
+            || await users.ReadUserAsync(writer, cancellationToken) is null)
         {
             return UnknownUser(writer);
         }
@@ -478,6 +487,7 @@ internal static class ContactEndpoints
     /// <param name="book">Performs the erasure.</param>
     /// <param name="scopes">Composes the books that user reads.</param>
     /// <param name="users">Answers whether this deployment holds a record for the named user.</param>
+    /// <param name="authorization">Answers whether the caller's scope covers the named user, who is otherwise refused as one this deployment holds no record for.</param>
     /// <param name="cancellationToken">Cancels the erasure when the client disconnects.</param>
     /// <returns><c>200</c> with what was removed, including books that held no such contact.</returns>
     /// <remarks>
@@ -492,6 +502,7 @@ internal static class ContactEndpoints
         [FromServices] ContactBook book,
         [FromServices] ContactBookScopes scopes,
         [FromServices] IUserDirectory users,
+        [FromServices] AccessAuthorization authorization,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(book);
@@ -503,7 +514,8 @@ internal static class ContactEndpoints
             return EmptyUser();
         }
 
-        if (await users.ReadUserAsync(reader, cancellationToken) is null)
+        if (!await authorization.PermitsOverAsync(MailFathomPermission.AdminErase, reader, cancellationToken)
+            || await users.ReadUserAsync(reader, cancellationToken) is null)
         {
             return UnknownUser(reader);
         }
@@ -527,6 +539,7 @@ internal static class ContactEndpoints
     /// <param name="account">The mail account whose book is erased.</param>
     /// <param name="book">Performs the erasure.</param>
     /// <param name="accounts">Reports the accounts this deployment serves, which the named one is resolved against.</param>
+    /// <param name="authorization">Answers whether the caller's scope covers the named account.</param>
     /// <param name="cancellationToken">Cancels the erasure when the client disconnects.</param>
     /// <returns><c>200</c> with what was removed, including a book that had collected nobody.</returns>
     /// <remarks>
@@ -540,6 +553,7 @@ internal static class ContactEndpoints
         [FromQuery] string? account,
         [FromServices] ContactBook book,
         [FromServices] IDeploymentMailAccountCatalog accounts,
+        [FromServices] AccessAuthorization authorization,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(book);
@@ -548,7 +562,12 @@ internal static class ContactEndpoints
         // The same two questions every administrative route taking an account asks of it, and they matter more here
         // than anywhere: this act cannot be undone, and a mistyped identifier would otherwise be answered with an
         // erasure of nothing, which reads exactly like a successful one on the account that was meant.
-        if (await AdminAccountRequest.ResolveAsync(account, accounts, cancellationToken) is not { } servedAccount)
+        if (await AdminAccountRequest.ResolveCoveredAsync(
+                account,
+                MailFathomPermission.AdminErase,
+                accounts,
+                authorization,
+                cancellationToken) is not { } servedAccount)
         {
             return AdminAccountRequest.Refuse(account);
         }

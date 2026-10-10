@@ -5,7 +5,9 @@
 using MailFathom.Application.Access;
 using MailFathom.Application.Access.Organizations;
 using MailFathom.Application.Paging;
+using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
@@ -24,6 +26,8 @@ public sealed class OrganizationAdministrationTests
     private static readonly Guid OtherOrganizationId = new("0197c0de-0000-4000-8000-000000000004");
 
     private static readonly DateTimeOffset RecordedAt = new(2026, 9, 13, 12, 0, 0, TimeSpan.Zero);
+
+    private static readonly Guid ScopedMailAccount = new("0197c0de-0000-4000-8000-000000000004");
 
     [Fact]
     public async Task CreateAsync_ACallerGrantedTheConfigurationWrite_RecordsTheTrimmedNameUnderAVersion7IdentifierMintedAtTheInstantItRecords()
@@ -129,6 +133,86 @@ public sealed class OrganizationAdministrationTests
         // Assert
         Assert.Equal(MailFathomPermission.AdminConfigurationWrite, refusal.RequiredPermission);
         Assert.Empty(harness.Organizations.ReceivedCalls());
+    }
+
+    /// <summary>An account in another organization is answered exactly as an account the deployment does not hold.</summary>
+    [Fact]
+    public async Task SetMailAccountOrganizationAsync_AnAccountOutsideTheCallersOrganization_AnswersUnknownMailAccountWithoutTouchingTheStore()
+    {
+        // Arrange
+        var harness = OrganizationAdministratorOverAccountIn(OrganizationAdministrators.OtherOrganization);
+
+        // Act
+        var result = await harness.Administration.SetMailAccountOrganizationAsync(
+            ScopedMailAccount,
+            OrganizationAdministrators.AdministeredOrganization,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(OrganizationWriteOutcome.UnknownMailAccount, result.Outcome);
+        Assert.Empty(harness.Organizations.ReceivedCalls());
+    }
+
+    /// <summary>Both sides of a move are checked, so an account the caller administers cannot be handed to an organization they do not.</summary>
+    [Fact]
+    public async Task SetMailAccountOrganizationAsync_IntoAnOrganizationOutsideTheCallersScope_AnswersUnknownOrganizationWithoutTouchingTheStore()
+    {
+        // Arrange
+        var harness = OrganizationAdministratorOverAccountIn(OrganizationAdministrators.AdministeredOrganization);
+
+        // Act
+        var result = await harness.Administration.SetMailAccountOrganizationAsync(
+            ScopedMailAccount,
+            OrganizationAdministrators.OtherOrganization,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(OrganizationWriteOutcome.UnknownOrganization, result.Outcome);
+        Assert.Empty(harness.Organizations.ReceivedCalls());
+    }
+
+    /// <summary>
+    /// An account in no organization is covered by the deployment alone, so leaving one there is not an organization's
+    /// administrator to do — and the refusal is marked as the deployment's, having been decided before the account was read.
+    /// </summary>
+    [Fact]
+    public async Task SetMailAccountOrganizationAsync_IntoNoOrganizationByAnOrganizationsAdministrator_IsRefusedWithoutTouchingTheStore()
+    {
+        // Arrange
+        var harness = OrganizationAdministratorOverAccountIn(OrganizationAdministrators.AdministeredOrganization);
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            harness.Administration.SetMailAccountOrganizationAsync(
+                ScopedMailAccount,
+                organizationId: null,
+                TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.AdminConfigurationWrite, refusal.RequiredPermission);
+        Assert.True(refusal.RefusedForTheDeploymentAlone);
+        Assert.Empty(harness.Organizations.ReceivedCalls());
+    }
+
+    [Fact]
+    public async Task SetMailAccountOrganizationAsync_AnAccountMovedWithinTheCallersOrganization_ReachesTheStore()
+    {
+        // Arrange
+        var harness = OrganizationAdministratorOverAccountIn(OrganizationAdministrators.AdministeredOrganization);
+        harness.Organizations.SetMailAccountOrganizationAsync(
+                ScopedMailAccount,
+                OrganizationAdministrators.AdministeredOrganization,
+                Arg.Any<CancellationToken>())
+            .Returns(OrganizationWriteResult.Of(OrganizationWriteOutcome.Written));
+
+        // Act
+        var result = await harness.Administration.SetMailAccountOrganizationAsync(
+            ScopedMailAccount,
+            OrganizationAdministrators.AdministeredOrganization,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(OrganizationWriteOutcome.Written, result.Outcome);
     }
 
     [Fact]
@@ -404,6 +488,12 @@ public sealed class OrganizationAdministrationTests
 
     /// <summary>The leading 48 bits of a version 7 value, which are the millisecond it was minted at.</summary>
     private static string TimestampOf(Guid identifier) => identifier.ToString("D")[..13];
+
+    private static AdministrationHarness OrganizationAdministratorOverAccountIn(Guid accountOrganization) =>
+        new(OrganizationAdministrators.Holding(
+            MailFathomPermission.AdminConfigurationWrite,
+            MailAccountId.Create(ScopedMailAccount.ToString("D")),
+            accountOrganization));
 
     private sealed class AdministrationHarness
     {

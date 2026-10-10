@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Mail.Export;
 using MailFathom.Domain.Access;
@@ -70,29 +71,29 @@ internal static class MailboxExportEndpoints
         ArgumentNullException.ThrowIfNull(api);
 
         api.MapGet(MeasurementRoute, MeasureAsync)
-            .RequirePermission(MailFathomPermission.AdminExport);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminExport);
 
         api.MapGet(ExportsRoute, ListAsync)
-            .RequirePermission(MailFathomPermission.AdminExport);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminExport);
 
         // The attribute is reached for its metadata rather than as an MVC filter, exactly as the maintenance routes
         // reach it: it implements IRequestSizeLimitMetadata, which routing applies to the request body feature, so a
         // body over the bound is answered 413 before the handler is reached.
         api.MapPost(ExportsRoute, StartAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxExportRequestBytes))
-            .RequirePermission(MailFathomPermission.AdminExport);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminExport);
 
         api.MapGet(ExportRoute, ReadAsync)
-            .RequirePermission(MailFathomPermission.AdminExport);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminExport);
 
         api.MapPost(CancellationRoute, CancelAsync)
-            .RequirePermission(MailFathomPermission.AdminExport);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminExport);
 
         api.MapDelete(ExportRoute, DeleteAsync)
-            .RequirePermission(MailFathomPermission.AdminExport);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminExport);
 
         api.MapGet(ArchiveRoute, DownloadAsync)
-            .RequirePermission(MailFathomPermission.AdminExport);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminExport);
     }
 
     /// <summary>Reports what an export would carry, without starting one.</summary>
@@ -100,6 +101,7 @@ internal static class MailboxExportEndpoints
     /// <param name="folder">The one folder to measure alone, or nothing for the whole mailbox.</param>
     /// <param name="accounts">Reports whether this deployment serves the named account.</param>
     /// <param name="exports">Performs the measurement.</param>
+    /// <param name="authorization">Answers whether the caller's scope covers the account the request names.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
     /// <returns><c>200</c> with the measurement, or <c>400</c> naming what was wrong with the request.</returns>
     /// <remarks>It reads the recorded length of each stored message and never a payload, so it answers in seconds whatever the mailbox holds.</remarks>
@@ -108,12 +110,13 @@ internal static class MailboxExportEndpoints
         [FromQuery] string? folder,
         [FromServices] IDeploymentMailAccountCatalog accounts,
         [FromServices] MailboxExports exports,
+        [FromServices] AccessAuthorization authorization,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(exports);
 
-        if (await AdminAccountRequest.ResolveAsync(account, accounts, cancellationToken) is not { } servedAccount)
+        if (await AdminAccountRequest.ResolveCoveredAsync(account, MailFathomPermission.AdminExport, accounts, authorization, cancellationToken) is not { } servedAccount)
         {
             return AdminAccountRequest.Refuse(account);
         }
@@ -134,18 +137,20 @@ internal static class MailboxExportEndpoints
     /// <param name="account">The account asked about.</param>
     /// <param name="accounts">Reports whether this deployment serves the named account.</param>
     /// <param name="exports">Reads the listing.</param>
+    /// <param name="authorization">Answers whether the caller's scope covers the account the request names.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
     /// <returns><c>200</c> with the exports, or <c>400</c> naming what was wrong with the request.</returns>
     internal static async Task<Results<Ok<MailboxExportListResponse>, ProblemHttpResult>> ListAsync(
         [FromQuery] string? account,
         [FromServices] IDeploymentMailAccountCatalog accounts,
         [FromServices] MailboxExports exports,
+        [FromServices] AccessAuthorization authorization,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(exports);
 
-        if (await AdminAccountRequest.ResolveAsync(account, accounts, cancellationToken) is not { } servedAccount)
+        if (await AdminAccountRequest.ResolveCoveredAsync(account, MailFathomPermission.AdminExport, accounts, authorization, cancellationToken) is not { } servedAccount)
         {
             return AdminAccountRequest.Refuse(account);
         }
@@ -159,6 +164,7 @@ internal static class MailboxExportEndpoints
     /// <param name="request">The account to export, and the one folder of it to cover.</param>
     /// <param name="accounts">Reports whether this deployment serves the named account.</param>
     /// <param name="exports">Records the export.</param>
+    /// <param name="authorization">Answers whether the caller's scope covers the account the request names.</param>
     /// <param name="cancellationToken">Cancels the write when the client disconnects.</param>
     /// <returns><c>200</c> with the measurement and the export, or <c>400</c> or <c>409</c> naming why no export was started.</returns>
     /// <remarks>
@@ -174,13 +180,14 @@ internal static class MailboxExportEndpoints
         [FromBody] MailboxExportRequest request,
         [FromServices] IDeploymentMailAccountCatalog accounts,
         [FromServices] MailboxExports exports,
+        [FromServices] AccessAuthorization authorization,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(exports);
 
-        if (await AdminAccountRequest.ResolveAsync(request.Account, accounts, cancellationToken) is not { } servedAccount)
+        if (await AdminAccountRequest.ResolveCoveredAsync(request.Account, MailFathomPermission.AdminExport, accounts, authorization, cancellationToken) is not { } servedAccount)
         {
             return AdminAccountRequest.Refuse(request.Account);
         }
@@ -202,6 +209,7 @@ internal static class MailboxExportEndpoints
     /// <param name="account">The account it belongs to.</param>
     /// <param name="accounts">Reports whether this deployment serves the named account.</param>
     /// <param name="exports">Reads the export.</param>
+    /// <param name="authorization">Answers whether the caller's scope covers the account the request names.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
     /// <returns><c>200</c> with the export, <c>404</c> when the account holds none under that identity, or <c>400</c> naming what was wrong with the request.</returns>
     internal static async Task<Results<Ok<MailboxExportResponse>, ProblemHttpResult>> ReadAsync(
@@ -209,12 +217,13 @@ internal static class MailboxExportEndpoints
         [FromQuery] string? account,
         [FromServices] IDeploymentMailAccountCatalog accounts,
         [FromServices] MailboxExports exports,
+        [FromServices] AccessAuthorization authorization,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(exports);
 
-        if (await AdminAccountRequest.ResolveAsync(account, accounts, cancellationToken) is not { } servedAccount)
+        if (await AdminAccountRequest.ResolveCoveredAsync(account, MailFathomPermission.AdminExport, accounts, authorization, cancellationToken) is not { } servedAccount)
         {
             return AdminAccountRequest.Refuse(account);
         }
@@ -244,6 +253,7 @@ internal static class MailboxExportEndpoints
     /// <param name="account">The account it belongs to.</param>
     /// <param name="accounts">Reports whether this deployment serves the named account.</param>
     /// <param name="exports">Records the cancellation.</param>
+    /// <param name="authorization">Answers whether the caller's scope covers the account the request names.</param>
     /// <param name="cancellationToken">Cancels the write when the client disconnects.</param>
     /// <returns><c>200</c> with the export as it now stands, <c>404</c> when the account holds none under that identity, or <c>400</c> naming what was wrong with the request.</returns>
     /// <remarks>An export that has already finished is answered as it stands rather than refused, because there is nothing left to stop and saying so is the answer.</remarks>
@@ -252,12 +262,13 @@ internal static class MailboxExportEndpoints
         [FromQuery] string? account,
         [FromServices] IDeploymentMailAccountCatalog accounts,
         [FromServices] MailboxExports exports,
+        [FromServices] AccessAuthorization authorization,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(exports);
 
-        if (await AdminAccountRequest.ResolveAsync(account, accounts, cancellationToken) is not { } servedAccount)
+        if (await AdminAccountRequest.ResolveCoveredAsync(account, MailFathomPermission.AdminExport, accounts, authorization, cancellationToken) is not { } servedAccount)
         {
             return AdminAccountRequest.Refuse(account);
         }
@@ -287,6 +298,7 @@ internal static class MailboxExportEndpoints
     /// <param name="account">The account it belongs to.</param>
     /// <param name="accounts">Reports whether this deployment serves the named account.</param>
     /// <param name="exports">Removes the archive.</param>
+    /// <param name="authorization">Answers whether the caller's scope covers the account the request names.</param>
     /// <param name="cancellationToken">Cancels the write when the client disconnects.</param>
     /// <returns><c>200</c> with the export as it now stands, <c>404</c> when the account holds none under that identity, or <c>400</c> naming what was wrong with the request.</returns>
     /// <remarks>Deleting an archive that has already expired or been deleted succeeds, because the caller asked for a state the deployment is already in — which is what an operator deleting after a download wants to be able to repeat.</remarks>
@@ -295,12 +307,13 @@ internal static class MailboxExportEndpoints
         [FromQuery] string? account,
         [FromServices] IDeploymentMailAccountCatalog accounts,
         [FromServices] MailboxExports exports,
+        [FromServices] AccessAuthorization authorization,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(exports);
 
-        if (await AdminAccountRequest.ResolveAsync(account, accounts, cancellationToken) is not { } servedAccount)
+        if (await AdminAccountRequest.ResolveCoveredAsync(account, MailFathomPermission.AdminExport, accounts, authorization, cancellationToken) is not { } servedAccount)
         {
             return AdminAccountRequest.Refuse(account);
         }
@@ -330,6 +343,7 @@ internal static class MailboxExportEndpoints
     /// <param name="account">The account it belongs to.</param>
     /// <param name="accounts">Reports whether this deployment serves the named account.</param>
     /// <param name="exports">Opens the archive.</param>
+    /// <param name="authorization">Answers whether the caller's scope covers the account the request names.</param>
     /// <param name="cancellationToken">Cancels opening the archive when the client disconnects.</param>
     /// <returns><c>200</c> with the archive, <c>404</c> when the account holds no such export, <c>409</c> when it has no archive to serve, or <c>400</c> naming what was wrong with the request.</returns>
     /// <remarks>
@@ -343,12 +357,13 @@ internal static class MailboxExportEndpoints
         [FromQuery] string? account,
         [FromServices] IDeploymentMailAccountCatalog accounts,
         [FromServices] MailboxExports exports,
+        [FromServices] AccessAuthorization authorization,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(exports);
 
-        if (await AdminAccountRequest.ResolveAsync(account, accounts, cancellationToken) is not { } servedAccount)
+        if (await AdminAccountRequest.ResolveCoveredAsync(account, MailFathomPermission.AdminExport, accounts, authorization, cancellationToken) is not { } servedAccount)
         {
             return AdminAccountRequest.Refuse(account);
         }

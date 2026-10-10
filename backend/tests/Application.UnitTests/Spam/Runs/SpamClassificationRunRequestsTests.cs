@@ -119,6 +119,47 @@ public sealed class SpamClassificationRunRequestsTests
         Assert.Null(this.runStore.Find(Account));
     }
 
+    /// <summary>An organization's administrator naming a mailbox in another organization is refused by the use case itself, and no run is put in front of it.</summary>
+    [Fact]
+    public async Task SubmitAsync_AnAccountOutsideTheCallersOrganization_IsRefusedAndRecordsNothing()
+    {
+        // Arrange
+        var requests = this.CreateRequests(OrganizationAdministrators.Holding(
+            MailFathomPermission.AdminOperate,
+            Account,
+            OrganizationAdministrators.OtherOrganization));
+
+        // Act
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() => requests.SubmitAsync(
+            Account,
+            TermsOf(SpamActionPosture.DryRun),
+            TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Null(this.runStore.Find(Account));
+        Assert.Empty(this.runStore.Saves);
+    }
+
+    [Fact]
+    public async Task SubmitAsync_AnAccountInTheCallersOrganization_RecordsTheRun()
+    {
+        // Arrange
+        var requests = this.CreateRequests(OrganizationAdministrators.Holding(
+            MailFathomPermission.AdminOperate,
+            Account,
+            OrganizationAdministrators.AdministeredOrganization));
+
+        // Act
+        var request = await requests.SubmitAsync(
+            Account,
+            TermsOf(SpamActionPosture.DryRun),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(request.Accepted);
+        Assert.NotNull(this.runStore.Find(Account));
+    }
+
     private SpamClassificationRunRequests CreateRequests(AccessAuthorization? authorization = null)
     {
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();

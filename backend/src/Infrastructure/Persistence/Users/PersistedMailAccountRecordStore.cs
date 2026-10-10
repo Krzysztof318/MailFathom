@@ -40,11 +40,16 @@ internal sealed class PersistedMailAccountRecordStore(
     /// <inheritdoc />
     public async Task<AdministrativeListingPage<MailAccountSummary>> ReadPageAsync(
         AdministrativeListingQuery query,
+        IReadOnlySet<AssignmentScope> within,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(query);
+        ArgumentNullException.ThrowIfNull(within);
 
-        var records = dbContext.MailAccountRecords.AsNoTracking();
+        var records = ListingScope.Covering(
+            dbContext.MailAccountRecords.AsNoTracking(),
+            dbContext.MailAccountAssignments.AsNoTracking(),
+            within);
 
         // Compared by PostgreSQL as a `uuid`, which is the order the primary key's index holds.
         if (query.After is { } after)

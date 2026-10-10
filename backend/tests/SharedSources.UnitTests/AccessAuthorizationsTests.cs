@@ -168,4 +168,22 @@ public sealed class AccessAuthorizationsTests
         Assert.False(narrowerReachesUser);
         Assert.True(deploymentReachesAccount);
     }
+
+    /// <summary>A narrower holding is held at its scope alone, so it answers a question naming no target as not held.</summary>
+    [Fact]
+    public void ForAdministratorScoped_AnOrganizationsHolding_IsHeldThereAndNotAtTheDeployment()
+    {
+        // Arrange
+        var organization = AssignmentScope.Organization(new Guid("0198f0aa-0000-7000-8000-0000000000f4"));
+
+        // Act
+        var authorization = AccessAuthorizations.ForAdministratorScoped(
+            ScopedGrant.Of([(MailFathomPermission.AdminRead, organization)]),
+            new StatedAdministrativeTargets());
+
+        // Assert
+        Assert.False(authorization.Permits(MailFathomPermission.AdminRead));
+        Assert.Equal(organization, Assert.Single(authorization.ScopesOf(MailFathomPermission.AdminRead)));
+        Assert.Throws<PrincipalNotAuthorizedException>(() => authorization.RequireUser());
+    }
 }

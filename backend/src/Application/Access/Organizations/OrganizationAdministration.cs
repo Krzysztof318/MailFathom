@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Paging;
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 
 namespace MailFathom.Application.Access.Organizations;
 
@@ -220,16 +221,41 @@ public sealed class OrganizationAdministration
     /// <param name="mailAccountId">The mail account being moved.</param>
     /// <param name="organizationId">The organization to move it into, or <see langword="null" /> to leave it in none.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
-    /// <returns>What the act did, carrying how many of its users stand outside the target where that refused it.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.AdminConfigurationWrite" />.</exception>
-    public Task<OrganizationWriteResult> SetMailAccountOrganizationAsync(
+    /// <returns>What the act did, carrying how many of its users stand outside the target where that refused it; an account or an organization outside the caller's scope is answered as one the deployment does not hold.</returns>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller holds <see cref="MailFathomPermission.AdminConfigurationWrite" /> at no scope, or moves an account out of every organization without holding it over the whole deployment.</exception>
+    /// <remarks>
+    /// Both sides have to be covered, as for <see cref="SetUserOrganizationAsync" />: the account where it sits now, and
+    /// the organization it is moved into. An account in no organization is covered by the deployment alone, so leaving
+    /// every organization is the deployment's to write, and it is refused by name before the account is read because it
+    /// names no organization whose existence a refusal could disclose.
+    /// </remarks>
+    public async Task<OrganizationWriteResult> SetMailAccountOrganizationAsync(
         Guid mailAccountId,
         Guid? organizationId,
         CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.AdminConfigurationWrite);
+        var permission = MailFathomPermission.AdminConfigurationWrite;
 
-        return this.organizations.SetMailAccountOrganizationAsync(mailAccountId, organizationId, cancellationToken);
+        if (organizationId is not { } destination)
+        {
+            this.authorization.RequirePermissionOverTheDeployment(permission);
+
+            return await this.organizations.SetMailAccountOrganizationAsync(mailAccountId, organizationId, cancellationToken);
+        }
+
+        this.authorization.RequirePermissionAtAnyScope(permission);
+
+        if (!await this.authorization.PermitsOverAsync(permission, MailAccountId.Create(mailAccountId.ToString("D")), cancellationToken))
+        {
+            return OrganizationWriteResult.Of(OrganizationWriteOutcome.UnknownMailAccount);
+        }
+
+        if (!await this.CoversOrganizationAsync(permission, destination, cancellationToken))
+        {
+            return OrganizationWriteResult.Of(OrganizationWriteOutcome.UnknownOrganization);
+        }
+
+        return await this.organizations.SetMailAccountOrganizationAsync(mailAccountId, organizationId, cancellationToken);
     }
 
     /// <summary>Reports why a written display name cannot be an organization's, or that it can.</summary>

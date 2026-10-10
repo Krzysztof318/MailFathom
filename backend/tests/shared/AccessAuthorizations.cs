@@ -88,6 +88,17 @@ internal static class AccessAuthorizations
                 ScopedGrant.Of(grantedPermissions.Select(permission => (permission, scope))))),
             new ScopedOrganizationTargets());
 
+    /// <summary>Builds the authorization of an administrator holding each permission at the scopes a test states, over targets the test places itself.</summary>
+    /// <param name="grant">What the administrator holds, each permission with the scopes it is held at.</param>
+    /// <param name="targets">Places each mail account or user the test names.</param>
+    /// <returns>The authorization a use case reached by that administrator consults.</returns>
+    /// <remarks>
+    /// For a test that needs more than <see cref="ForAdministratorScopedAt" /> arranges: several accounts in different
+    /// organizations, a mailbox two users share, or an account named by the identifier a suite's own catalogue serves.
+    /// </remarks>
+    internal static AccessAuthorization ForAdministratorScoped(ScopedGrant grant, IAdministrativeTargets targets) =>
+        new(new StatedPrincipalSource(AuthorizedPrincipal.Caller("test-administrator", grant)), targets);
+
     /// <summary>Builds the authorization of work reached under a stated principal, or under none.</summary>
     /// <param name="principal">Whoever the work is running for, or <see langword="null" /> for an entrypoint that stated nothing.</param>
     /// <returns>The authorization a use case reached that way consults.</returns>

@@ -78,10 +78,10 @@ internal static class MailRuleEndpoints
         // feature, so a body over the bound is answered 413 before the handler is reached.
         api.MapPost(RunsRoute, StartRunAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxRunRequestBytes))
-            .RequirePermission(MailFathomPermission.AdminOperate);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminOperate);
 
         api.MapGet(RunsRoute, ReadRunAsync)
-            .RequirePermission(MailFathomPermission.AdminRead);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminRead);
 
         api.MapGet(HistoryRoute, ReadHistoryAsync)
             .RequirePermissionOverTarget(MailFathomPermission.AdminAuditRead);
@@ -121,6 +121,7 @@ internal static class MailRuleEndpoints
     /// <param name="request">The account the run is asked for.</param>
     /// <param name="accounts">Reports whether this deployment serves the named account.</param>
     /// <param name="requests">Records the request, or reports the run already in front of the account.</param>
+    /// <param name="authorization">Answers whether the caller's scope covers the account the request names.</param>
     /// <param name="cancellationToken">Cancels the write when the client disconnects.</param>
     /// <returns><c>200</c> with the run, or <c>400</c> naming what was wrong with the request.</returns>
     /// <remarks>
@@ -137,12 +138,13 @@ internal static class MailRuleEndpoints
         [FromBody] MailRuleRunRequest? request,
         [FromServices] IDeploymentMailAccountCatalog accounts,
         [FromServices] MailRuleEvaluationRunRequests requests,
+        [FromServices] AccessAuthorization authorization,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(requests);
 
-        if (await AdminAccountRequest.ResolveAsync(request?.Account, accounts, cancellationToken) is not { } servedAccount)
+        if (await AdminAccountRequest.ResolveCoveredAsync(request?.Account, MailFathomPermission.AdminOperate, accounts, authorization, cancellationToken) is not { } servedAccount)
         {
             return AdminAccountRequest.Refuse(request?.Account);
         }
@@ -158,6 +160,7 @@ internal static class MailRuleEndpoints
     /// <param name="account">The identifier the deployment generated for the account whose run is read.</param>
     /// <param name="accounts">Reports whether this deployment serves the named account.</param>
     /// <param name="runs">Reads the one run an account may have outstanding, or the ending of the last one.</param>
+    /// <param name="authorization">Answers whether the caller's scope covers the account the request names.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
     /// <returns><c>200</c> with the run, <c>200</c> with none where the account has never been asked for one, or <c>400</c>.</returns>
     /// <remarks>
@@ -169,12 +172,13 @@ internal static class MailRuleEndpoints
         [FromQuery] string? account,
         [FromServices] IDeploymentMailAccountCatalog accounts,
         [FromServices] MailRuleEvaluationRunReader runs,
+        [FromServices] AccessAuthorization authorization,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(runs);
 
-        if (await AdminAccountRequest.ResolveAsync(account, accounts, cancellationToken) is not { } servedAccount)
+        if (await AdminAccountRequest.ResolveCoveredAsync(account, MailFathomPermission.AdminRead, accounts, authorization, cancellationToken) is not { } servedAccount)
         {
             return AdminAccountRequest.Refuse(account);
         }

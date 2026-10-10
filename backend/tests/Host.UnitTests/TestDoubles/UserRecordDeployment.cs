@@ -18,6 +18,7 @@ using MailFathom.Infrastructure.Persistence.Users;
 using MailFathom.Infrastructure.Secrets;
 using MailFathom.Infrastructure.Secrets.Database;
 using MailFathom.Infrastructure.Secrets.Resolution;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -50,16 +51,19 @@ internal sealed class UserRecordDeployment
     /// <param name="granted">The permissions the caller holds.</param>
     /// <param name="actingFor">The user the caller acts for, or the default for one acting for nobody's mail.</param>
     /// <param name="scanning">The deployment's own scanning section, which an account's block may only tighten; the default scans nothing.</param>
+    /// <param name="scopedGrant">What an administrator acting for nobody holds at which scopes, in place of <paramref name="granted" /> held over the whole deployment.</param>
     internal UserRecordDeployment(
         IReadOnlyList<MailFathomPermission> granted,
         UserId actingFor = default,
-        SensitiveContentOptions? scanning = null)
+        SensitiveContentOptions? scanning = null,
+        ScopedGrant? scopedGrant = null)
     {
         ArgumentNullException.ThrowIfNull(granted);
 
         var principals = Substitute.For<IAuthorizedPrincipalSource>();
-        principals.Current.Returns(actingFor.IsSpecified
-            ? AuthorizedPrincipal.CallerActingFor(actingFor, "operations", granted)
+        principals.Current.Returns(
+            scopedGrant is not null ? AuthorizedPrincipal.Caller("operations", scopedGrant)
+            : actingFor.IsSpecified ? AuthorizedPrincipal.CallerActingFor(actingFor, "operations", granted)
             : AuthorizedPrincipal.Caller("operations", granted));
 
         this.Documents = Substitute.For<IUserSettingsDocumentReader>();
@@ -99,7 +103,7 @@ internal sealed class UserRecordDeployment
         this.Erasure.EraseAsync(Arg.Any<UserId>(), Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>())
             .Returns(new UserErasureOutcome(false, null));
 
-        var authorization = new AccessAuthorization(principals);
+        var authorization = new AccessAuthorization(principals, this.Targets);
         var settings = new ConfigurationBuilder().Build();
         var admission = new SeveralUserAdmission(
             Options.Create(new McpEndpointOptions()),
@@ -136,6 +140,7 @@ internal sealed class UserRecordDeployment
 
         this.MailAccounts = new MailAccountAdministration(
             authorization,
+            this.Targets,
             this.Documents,
             this.MailAccountRecords,
             binder,
@@ -177,6 +182,9 @@ internal sealed class UserRecordDeployment
 
     /// <summary>Gets the mail-account administration the account routes and a user's own account routes are published over.</summary>
     internal MailAccountAdministration MailAccounts { get; }
+
+    /// <summary>Gets where each mail account and user a test places sits, which a scoped administrator is judged against.</summary>
+    internal StatedAdministrativeTargets Targets { get; } = new();
 
     /// <summary>Gets the accounts the deployment holds and the user records they are assigned to.</summary>
     internal InMemoryMailAccountRecordStore MailAccountRecords { get; } = new();

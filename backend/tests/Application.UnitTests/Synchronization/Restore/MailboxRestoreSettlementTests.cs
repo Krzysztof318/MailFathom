@@ -126,9 +126,52 @@ public sealed class MailboxRestoreSettlementTests
         Assert.Equal(1, standing.UnansweredAppends);
     }
 
+    /// <summary>An organization's administrator naming a mailbox in another organization is refused by the use case itself, and the record stays standing.</summary>
+    [Fact]
+    public async Task SettleAsync_AnAccountOutsideTheCallersOrganization_IsRefusedAndLeavesTheRecordStanding()
+    {
+        // Arrange
+        var context = new SettlementContext(authorization: OrganizationAdministrators.Holding(
+            MailFathomPermission.AdminCustodyWrite,
+            Account,
+            OrganizationAdministrators.OtherOrganization));
+
+        // Act
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            context.Settlement.SettleAsync(
+                Account,
+                context.Standing.Id,
+                sourceHoldsTheCopy: true,
+                TestContext.Current.CancellationToken));
+
+        // Assert
+        var standing = await context.Store.ReadStandingAsync(Account, TestContext.Current.CancellationToken);
+        Assert.Equal(1, standing.UnansweredAppends);
+    }
+
+    [Fact]
+    public async Task SettleAsync_AnAccountInTheCallersOrganization_SettlesTheRecord()
+    {
+        // Arrange
+        var context = new SettlementContext(authorization: OrganizationAdministrators.Holding(
+            MailFathomPermission.AdminCustodyWrite,
+            Account,
+            OrganizationAdministrators.AdministeredOrganization));
+
+        // Act
+        var settled = await context.Settlement.SettleAsync(
+            Account,
+            context.Standing.Id,
+            sourceHoldsTheCopy: true,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(settled);
+    }
+
     private sealed class SettlementContext
     {
-        internal SettlementContext(MailFathomPermission? granted = null)
+        internal SettlementContext(MailFathomPermission? granted = null, AccessAuthorization? authorization = null)
         {
             var email = StoredEmailId.Create(Guid.CreateVersion7());
             this.Standing = new MailboxRestoreAppend(
@@ -166,7 +209,7 @@ public sealed class MailboxRestoreSettlementTests
                     sessionFactory,
                     new PersistenceConcurrencyOptions { MaximumCommitAttempts = 1 },
                     clock),
-                AccessAuthorizations.ForAdministratorGranted(granted ?? MailFathomPermission.AdminCustodyWrite),
+                authorization ?? AccessAuthorizations.ForAdministratorGranted(granted ?? MailFathomPermission.AdminCustodyWrite),
                 clock);
         }
 

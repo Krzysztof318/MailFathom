@@ -67,15 +67,15 @@ public sealed class MailboxRestoreSettlement
     /// <see langword="true" /> leaves a message MailFathom holds with no occurrence it will ever write. Both are acts
     /// on the mailbox rather than readings of it.
     /// </remarks>
-    public Task<bool> SettleAsync(
+    public async Task<bool> SettleAsync(
         MailAccountId account,
         MailboxRestoreAppendId record,
         bool sourceHoldsTheCopy,
         CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.AdminCustodyWrite);
+        await this.authorization.RequirePermissionOverAsync(MailFathomPermission.AdminCustodyWrite, account, cancellationToken);
 
-        return this.commitPolicy.CommitAsync(
+        return await this.commitPolicy.CommitAsync(
             (session, token) => this.store.SettleAppendAsync(
                 session,
                 account,

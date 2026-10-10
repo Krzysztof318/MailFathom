@@ -253,7 +253,7 @@ A caller of an endpoint naming no method is named `user <the default administrat
 
 The route reports the grant twice over, beside the `user` and the `roles` those two lines are printed from.
 `permissions` names what the caller holds over the whole deployment, which is what an operation naming no target asks
-for — the two listings apart, which answer with what any scope covers. `scopes` names each scope the caller holds anything at — the deployment first, then each organization, then
+for — the listings apart, which answer with what any scope covers. `scopes` names each scope the caller holds anything at — the deployment first, then each organization, then
 each user, by identifier — with the administrative names held there, and with any name held there that
 [only the deployment scope grants](permissions.md#what-only-the-deployment-scope-grants) listed apart under
 `reachingNothing`. Neither reports a mail name: this endpoint performs none, whatever the caller's roles list:
@@ -280,9 +280,9 @@ each user, by identifier — with the administrative names held there, and with 
 `mfctl status` prints each scope narrower than the deployment on a line of its own. Those lines report what the caller
 is granted at each scope, and how far it acts: **a name held only over an organization or a user reaches what that
 scope covers and nothing else**. It admits [the routes a grant below the deployment
-reaches](#a-grant-held-below-the-deployment) for a target inside that scope, and the listings of users and of
-organizations, which answer with what that scope covers; it admits no other route that names no target, and each
-scope's line says so whatever the first line holds:
+reaches](#a-grant-held-below-the-deployment) for a target inside that scope, and the listings of users, of
+organizations, of mail accounts, and of their synchronization status, which answer with what that scope covers; it
+admits no other route that names no target, and each scope's line says so whatever the first line holds:
 
 ```text
 It holds no administrative permission over the whole deployment, so every operation is refused but this one, those naming something a scope below covers, and the listings, which answer with what such a scope covers.
@@ -342,7 +342,7 @@ an administrator who already holds it.
 
 A caller holding that permission only over an organization or a user is refused all the same wherever a route admits
 it only at the deployment scope — which is every route here but
-[the routes a grant below the deployment reaches](#a-grant-held-below-the-deployment), and the two acts behind those
+[the routes a grant below the deployment reaches](#a-grant-held-below-the-deployment), and the acts behind those
 that are the deployment's alone — and the document says so, carrying `heldBelowDeployment` beside the name:
 
 ```json
@@ -386,7 +386,7 @@ starts asking for what it was never granted is what the record exists to make vi
 ### A grant held below the deployment
 
 A role assigned at an organization or at one user grants its administrative names over that part of the deployment
-alone. A route that names a mail account, a user, or an organization checks the grant against what it names:
+alone. The routes listed below check the grant against the mail account, the user, or the organization they name:
 
 - **The deployment** covers everything.
 - **An organization** covers itself, its members, and the mail accounts that belong to it.
@@ -406,6 +406,15 @@ These routes accept a grant held at any of the three, and check it against the t
 | `GET /api/admin/spam/classifications` | The mail account `account` names |
 | `GET /api/admin/outbox/{id}` | The mail account the message was queued from |
 | `GET /api/admin/contacts`, `GET /api/admin/contacts/by-address`, `GET /api/admin/contacts/{id}`, `GET /api/admin/contacts/{id}/export` | The user `user` names, and each mail account whose collected book that user reads |
+| `POST /api/admin/contacts`, `PUT` and `DELETE /api/admin/contacts/{id}`, `POST /api/admin/contacts/{id}/promotion` | The user `user` names, and each mail account whose collected book the act would reach |
+| `DELETE /api/admin/contacts/collected` | The mail account `account` names |
+| `POST /api/admin/mailbox/refresh-token` | The mail account the request names |
+| `GET /api/admin/mailbox/synchronization` | — reports the mail accounts the caller's scopes for `mailfathom.admin.read` cover |
+| `GET` and `POST /api/admin/mailbox/rewind`, `GET` and `POST /api/admin/mailbox/rederivation` | The mail account the request names |
+| `GET /api/admin/accounts/custody`, `POST /api/admin/accounts/custody/switch`, `POST /api/admin/accounts/custody/restore/settle` | The mail account the request names |
+| `GET` and `POST /api/admin/rules/runs`, `GET` and `POST /api/admin/spam/runs` | The mail account the request names |
+| `POST /api/admin/folders/erasure` | The mail account the request names |
+| `GET /api/admin/exports/measurement`, `GET` and `POST /api/admin/exports`, `GET` and `DELETE /api/admin/exports/{id}`, `POST /api/admin/exports/{id}/cancellation`, `GET /api/admin/exports/{id}/archive` | The mail account the request names |
 | `GET /api/admin/users` | — lists the users the caller's scopes for `mailfathom.admin.read` cover |
 | `POST /api/admin/users` | The organization the body's `organizationId` names; recording a user into none is the deployment's alone |
 | `DELETE /api/admin/users/{userId}` | The user, and every mail account assigned to them alone, which the erasure deletes with them |
@@ -420,40 +429,66 @@ These routes accept a grant held at any of the three, and check it against the t
 | `PUT /api/admin/users/{userId}/credentials/{credentialId}/enablement` | The user, and — to enable — each scope the user holds each of their administrative names at, and every mail name the user holds, held at any scope |
 | `DELETE /api/admin/users/{userId}/credentials/{credentialId}` | The user |
 | `PUT /api/admin/users/{userId}/organization` | The user where they stand, and the organization the body moves them into; a move out of every organization is the deployment's alone |
+| `GET /api/admin/mail-accounts` | — lists the mail accounts the caller's scopes for `mailfathom.admin.read` cover |
+| `POST /api/admin/mail-accounts` | The user the account is recorded for; recording one for a user in no organization is the deployment's alone |
+| `GET`, `POST`, and `DELETE /api/admin/mail-accounts/{id}` | The mail account the path names |
+| `POST /api/admin/mail-accounts/{id}/assignments`, `POST /api/admin/mail-accounts/{id}/assignments/removal` | The mail account the path names and the user the request names, both |
+| `POST /api/admin/mail-accounts/{id}/organization` | The mail account where it sits now, and the organization the body moves it into; a move out of every organization is the deployment's alone |
 | `GET /api/admin/organizations` | — lists the organizations the caller's scopes for `mailfathom.admin.read` cover; a user scope covers none |
 | `PUT /api/admin/organizations/{organizationId}/display-name` | The organization |
 
 **A target outside the caller's scope is answered exactly as one that does not exist**, because a refusal naming the
 missing scope would tell an organization's administrator that the account, the person, or the organization exists
 elsewhere in the deployment. So an account outside it is refused with `400` as an account this deployment does not
-configure, a queued message from one is `404`, a contact read for a user outside it is answered with an empty page or
-no contact, and an export for one is refused with `400` as a user this deployment holds no record for. A user or an
-organization a route names in its path is `404`, a credential listing for a user outside the scope is empty, an erasure
-of one removes nothing, and a body naming an organization outside it is refused with `400` as an organization this
-deployment does not hold. The check runs before anything else about the request is answered, so a malformed cursor or
-filter on an account outside the scope draws the same refusal as the account itself.
+configure on a route that reads the account from the request and with `404` on a route under
+`/api/admin/mail-accounts`, a queued message from one is `404`, a contact read for a user outside it is answered with an
+empty page or no contact, and a contact write or an export for one is refused with `400` as a user this deployment
+holds no record for. A user or an organization a route names in its path is `404`, a credential listing for a user
+outside the scope is empty, an erasure or an unassignment of one removes nothing, and a body naming an organization
+outside it is refused with `400` as an organization this deployment does not hold. The check runs before anything else
+about the request is answered, so a malformed cursor or filter on an account outside the scope draws the same refusal
+as the account itself.
 
-**A read across several books returns the ones the scope covers.** The books a user reads are their own beside the
+**A read across several targets returns the ones the scope covers.** The books a user reads are their own beside the
 collected book of each mail account assigned to them, and a scope covering the user but not one of those accounts —
 a user scope, where the account is assigned to somebody else too — reads the user's own book and every collected book
-it does cover, and leaves that one out rather than refusing the user.
+it does cover, and leaves that one out rather than refusing the user. The synchronization status answers the same
+way: the accounts the scope covers, and nothing about the rest.
+
+**A grant below the deployment changes a mail account's settings only while every secret they name was provisioned for
+a user the account is assigned to** — material whose own name begins with `user-`, that user's identifier, and `-`. The
+server an account names is whatever its declaration says, so any other reference would present what stands behind it
+to a machine the writer chose: the database password, a private key, a client secret a whole workspace shares. That
+holds for a reference left in place as much as for one newly written, because moving the host or the token endpoint
+beside it presents it somewhere new all the same, so the rule names no particular setting and judges any change to
+them. An account carrying such a reference is therefore the deployment's to redeclare. A narrower grant still reads
+it, renames it, assigns and unassigns it, operates on its mailbox, and erases it, and redeclares it once its
+references are material held for its users, which `POST /api/admin/users/{userId}/secrets` provisions under that same
+grant. An administrator holding `mailfathom.admin.configuration.write` over the whole deployment names any reference
+as before. A declaration refused this way is refused in the write's own answer, naming each setting, and nothing is
+written.
 
 **A listing never refuses over a scope.** It answers with what the caller's scopes cover, a page at a time, so an
-organization's administrator lists that organization's people and nobody else's, and a caller holding
-`mailfathom.admin.read` over one user alone lists that user and no organization.
+organization's administrator lists that organization's people and mail accounts and nobody else's, and a caller holding
+`mailfathom.admin.read` over one user alone lists that user, the mail accounts assigned to them alone, and no
+organization.
 
 **One refusal does reach past a scope: a label already taken.** A user's label is unique across the deployment rather
 than within an organization, so an organization's administrator recording or relabelling one of their own people with a
 label somebody outside that organization carries is refused with `400` saying another user is already recorded under it.
 That tells them such a label exists somewhere in the deployment and nothing else about who carries it.
 
-**Two acts behind these routes are the deployment's alone**: recording a user into no organization, and moving a user
-out of every organization, because only the deployment scope covers somebody in none. A caller holding the permission
-only narrower is refused either with the `403` above that carries `heldBelowDeployment`. That is decided before
-anything the request names is read, so it is the same answer whoever the request names and discloses nobody.
+**Four acts behind these routes are the deployment's alone**, because only the deployment scope covers a user or a
+mail account in no organization. Three are decided before anything the request names is read — recording a user into
+no organization, moving a user out of every organization, and moving a mail account out of every organization — so a
+caller holding the permission only narrower is refused each with the `403` above that carries `heldBelowDeployment`,
+the same answer whoever the request names, which discloses nobody. The fourth is recording a mail account for a user
+in no organization, which is known only once that user is read: a caller whose scope covers them is refused with
+`403` naming the permission, and one whose scope does not is answered as for any user outside it.
 
 Every other route is reached only by a grant held over the whole deployment, and refuses one held at a narrower scope
-with that same `403`. Apart from those two acts, none of the routes in the table ever answers with that document: a
+with that same `403`. Apart from the three acts decided before the request is read, none of the routes in the table
+ever answers with that document: a
 caller holding the route's permission nowhere is refused on it naming the permission, and one holding it at a scope
 that does not cover the target is answered as a target that does not exist.
 

@@ -17,13 +17,19 @@ namespace MailFathom.Infrastructure.Persistence.Users;
 /// </remarks>
 public interface IMailAccountRecordStore
 {
-    /// <summary>Reads one page of the accounts the deployment holds, with the users each is assigned to.</summary>
+    /// <summary>Reads one page of the accounts some scopes cover, with the users each is assigned to.</summary>
     /// <param name="query">The page asked for.</param>
+    /// <param name="within">The scopes the listing answers within; an account none of them covers is left out, so an empty set reads nothing.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The page's accounts without their settings, in identifier order, and where the following page continues.</returns>
-    /// <remarks>The settings are left behind because a declaration may be as large as a user's whole record, and a page names up to a thousand accounts.</remarks>
+    /// <remarks>
+    /// The settings are left behind because a declaration may be as large as a user's whole record, and a page names up
+    /// to a thousand accounts. The scopes are applied in the query rather than to the page it returned, so a page holds
+    /// as many covered accounts as it may and a cursor never skips one an earlier page left out.
+    /// </remarks>
     Task<AdministrativeListingPage<MailAccountSummary>> ReadPageAsync(
         AdministrativeListingQuery query,
+        IReadOnlySet<AssignmentScope> within,
         CancellationToken cancellationToken);
 
     /// <summary>Reads one account and the users it is assigned to.</summary>

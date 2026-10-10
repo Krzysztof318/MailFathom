@@ -71,16 +71,16 @@ public sealed class SpamClassificationRunRequests
     /// deployment performs on request — reading what a run concluded is a different grant and neither implies the other.
     /// </para>
     /// </remarks>
-    public Task<SpamClassificationRunRequest> SubmitAsync(
+    public async Task<SpamClassificationRunRequest> SubmitAsync(
         MailAccountId account,
         SpamClassificationRunTerms terms,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(terms);
 
-        this.authorization.RequirePermission(MailFathomPermission.AdminOperate);
+        await this.authorization.RequirePermissionOverAsync(MailFathomPermission.AdminOperate, account, cancellationToken);
 
-        return this.commitPolicy.CommitAsync(
+        return await this.commitPolicy.CommitAsync(
             async (session, attemptCancellationToken) =>
             {
                 var outstanding = await this.runStore.FindOutstandingAsync(account, attemptCancellationToken);

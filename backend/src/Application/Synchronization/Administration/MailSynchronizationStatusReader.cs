@@ -86,27 +86,28 @@ public sealed class MailSynchronizationStatusReader
         this.authorization = authorization;
     }
 
-    /// <summary>Reads what synchronization is doing across every configured account.</summary>
+    /// <summary>Reads what synchronization is doing across every configured account the caller's scope covers.</summary>
     /// <param name="cancellationToken">Cancels the durable read.</param>
     /// <returns>The status.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.AdminRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.AdminRead" /> at some scope.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels.</exception>
     /// <remarks>
     /// It refuses nothing about the deployment's own state. A deployment that configures no account, one that switched
     /// synchronization off, and one whose process has only just started are all supported states an operator reads here
     /// rather than failures to report on — what it does refuse is a caller whose grant does not carry the permission
-    /// this report is published under.
+    /// this report is published under. A caller holding it below the deployment is answered with the accounts their
+    /// scope covers and nothing about the rest, as every listing is.
     /// </remarks>
     public async Task<MailSynchronizationStatus> ReadAsync(CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.AdminRead);
+        this.authorization.RequirePermissionAtAnyScope(MailFathomPermission.AdminRead);
 
         var progress = await this.progressReader.ReadAsync(cancellationToken);
         var progressByFolder = progress.ToDictionary(entry => entry.Folder);
         var mirrored = (await this.folders.ReadAsync(MailFolderSelection.Synchronized, cancellationToken)).ToHashSet();
         var mappedByAccount = (await this.folders.ReadAsync(MailFolderSelection.Mapped, cancellationToken))
             .ToLookup(folder => folder.AccountId);
-        var servedAccounts = await this.accounts.ReadServedAccountsAsync(cancellationToken);
+        var servedAccounts = await this.ReadCoveredAccountsAsync(cancellationToken);
         var supervisionByAccount = await this.ReadSupervisionAsync(servedAccounts, cancellationToken);
 
         // Counted per account rather than once for the deployment, because that is the scope this answer is read at:
@@ -131,6 +132,18 @@ public sealed class MailSynchronizationStatusReader
             this.replica,
             this.accounts.SynchronizationEnabled,
             accountStatuses);
+    }
+
+    /// <summary>Reads the served accounts the caller's scope covers, which is every one of them over the whole deployment.</summary>
+    private async Task<IReadOnlyList<ServedMailAccount>> ReadCoveredAccountsAsync(CancellationToken cancellationToken)
+    {
+        var served = await this.accounts.ReadServedAccountsAsync(cancellationToken);
+        var covered = (await this.authorization.CoveredMailAccountsAsync(
+            MailFathomPermission.AdminRead,
+            [.. served.Select(account => account.Id)],
+            cancellationToken)).ToHashSet();
+
+        return [.. served.Where(account => covered.Contains(account.Id))];
     }
 
     /// <summary>Reads which replica holds each served account's supervision, in one question to the lease table.</summary>

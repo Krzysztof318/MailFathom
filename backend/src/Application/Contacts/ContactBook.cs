@@ -248,18 +248,19 @@ public sealed class ContactBook
     /// The identity is minted here, from a UUID version 7 over the instant of the write, so the book's own identifiers
     /// order the way the records were created without a caller being able to choose one.
     /// </remarks>
-    public Task<ContactWriteResult> RecordAsync(
+    public async Task<ContactWriteResult> RecordAsync(
         UserId user,
         NewContact newContact,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(newContact);
 
-        this.authorization.RequireAnyPermission(
-            MailFathomPermission.AdminOperate,
-            MailFathomPermission.MailContactsWrite);
+        if (!await this.AdmitsWriterOfAsync(MailFathomPermission.AdminOperate, user, cancellationToken))
+        {
+            return ContactWriteResult.NotFound();
+        }
 
-        return this.WriteNewContactAsync(ContactBookHolder.Of(user), newContact, cancellationToken);
+        return await this.WriteNewContactAsync(ContactBookHolder.Of(user), newContact, cancellationToken);
     }
 
     /// <summary>Amends a contact of the caller's own book to the record they state, if its origin admits that writer.</summary>
@@ -276,13 +277,14 @@ public sealed class ContactBook
     /// record be refused as one rather than as a record nobody holds: it is a mailbox's, several users may be reading
     /// it, and rewriting it in place would change what each of them sees — so the origin rule refuses the writer and
     /// <see cref="PromoteAsync" /> is the act that makes a copy the user may amend. A contact outside the scope
-    /// altogether is a contact this caller does not hold, and is answered as such.
+    /// altogether is a contact this caller does not hold, and is answered as such — which is also what a collected
+    /// record is to an administrator admitted below the deployment whose scope does not cover its mail account.
     /// <para>
     /// The grant is asked for before the book is read, so a caller who may not write cannot learn from the refusal
     /// whether the book holds the person they named.
     /// </para>
     /// </remarks>
-    public Task<ContactWriteResult> AmendAsync(
+    public async Task<ContactWriteResult> AmendAsync(
         ContactBookScope scope,
         ContactAmendment amendment,
         CancellationToken cancellationToken)
@@ -290,16 +292,18 @@ public sealed class ContactBook
         ArgumentNullException.ThrowIfNull(scope);
         ArgumentNullException.ThrowIfNull(amendment);
 
-        this.authorization.RequireAnyPermission(
-            MailFathomPermission.AdminOperate,
-            MailFathomPermission.MailContactsWrite);
+        if (!await this.AdmitsWriterOfAsync(MailFathomPermission.AdminOperate, scope.User, cancellationToken))
+        {
+            return ContactWriteResult.NotFound();
+        }
 
         var holder = scope.OwnBook;
+        var reach = await this.ReachOfAsync(MailFathomPermission.AdminOperate, scope, cancellationToken);
 
-        return this.commitPolicy.CommitAsync(
+        return await this.commitPolicy.CommitAsync(
             async (session, token) =>
             {
-                var held = await this.directory.FindAsync(scope, amendment.ContactId, token);
+                var held = await this.directory.FindAsync(reach, amendment.ContactId, token);
 
                 if (held is null)
                 {
@@ -364,8 +368,13 @@ public sealed class ContactBook
     /// only by erasing it and writing it again. What the alternative does not widen is which writer may perform it —
     /// collection acts under its own origin and <see cref="Contact.IsPromotableBy" /> refuses it there.
     /// </para>
+    /// <para>
+    /// An administrator admitted below the deployment promotes only out of the collected books their own scope covers,
+    /// because a copy lands in a book that scope reads: promoting out of a mailbox the user shares would carry a
+    /// record of that mailbox to somebody whose scope does not reach it.
+    /// </para>
     /// </remarks>
-    public Task<ContactWriteResult> PromoteAsync(
+    public async Task<ContactWriteResult> PromoteAsync(
         ContactBookScope scope,
         ContactId contactId,
         ContactOrigin writer,
@@ -373,14 +382,17 @@ public sealed class ContactBook
     {
         ArgumentNullException.ThrowIfNull(scope);
 
-        this.authorization.RequireAnyPermission(
-            MailFathomPermission.AdminOperate,
-            MailFathomPermission.MailContactsWrite);
+        if (!await this.AdmitsWriterOfAsync(MailFathomPermission.AdminOperate, scope.User, cancellationToken))
+        {
+            return ContactWriteResult.NotFound();
+        }
 
-        return this.commitPolicy.CommitAsync(
+        var reach = await this.ReachOfAsync(MailFathomPermission.AdminOperate, scope, cancellationToken);
+
+        return await this.commitPolicy.CommitAsync(
             async (session, token) =>
             {
-                var held = await this.directory.FindAsync(scope, contactId, token);
+                var held = await this.directory.FindAsync(reach, contactId, token);
 
                 if (held is null)
                 {
@@ -424,25 +436,29 @@ public sealed class ContactBook
     /// Erasure is not a write a writer's origin gates. It is the data-subject path, and a person asking to be removed
     /// from somebody's contact book is not answered with which book they happen to be in — so it reaches the whole
     /// scope, a collected record included, and a collected record erased is gone for every user assigned that mailbox
-    /// because the record was one record rather than a copy each.
+    /// because the record was one record rather than a copy each. An administrator admitted below the deployment reaches
+    /// only the collected books of the accounts their own scope covers, so a mailbox the user shares stays out of reach.
     /// <para>
     /// It asks for the erasing grant rather than the writing one, beside the erasure of stored mail, because what it
     /// destroys cannot be written back and a credential provisioned to correct a record should not be able to remove one.
     /// </para>
     /// </remarks>
-    public Task<ContactErasure> EraseAsync(
+    public async Task<ContactErasure> EraseAsync(
         ContactBookScope scope,
         ContactId contactId,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(scope);
 
-        this.authorization.RequireAnyPermission(
-            MailFathomPermission.AdminErase,
-            MailFathomPermission.MailContactsWrite);
+        if (!await this.AdmitsWriterOfAsync(MailFathomPermission.AdminErase, scope.User, cancellationToken))
+        {
+            return new ContactErasure(contactId, WasHeld: false, AddressesErased: 0);
+        }
 
-        return this.commitPolicy.CommitAsync(
-            (session, token) => this.store.EraseAsync(session, scope, contactId, token),
+        var reach = await this.ReachOfAsync(MailFathomPermission.AdminErase, scope, cancellationToken);
+
+        return await this.commitPolicy.CommitAsync(
+            (session, token) => this.store.EraseAsync(session, reach, contactId, token),
             cancellationToken);
     }
 
@@ -450,7 +466,7 @@ public sealed class ContactBook
     /// <param name="account">The account whose book is erased.</param>
     /// <param name="cancellationToken">Cancels the erasure.</param>
     /// <returns>What the erasure removed.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the erasure was reached by anything but a caller granted <see cref="MailFathomPermission.AdminErase" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the erasure was reached by anything but a caller granted <see cref="MailFathomPermission.AdminErase" /> at a scope covering the account.</exception>
     /// <remarks>
     /// <para>
     /// The answer to a user who changed their mind about collection. Everything collection produced for one mailbox is
@@ -465,13 +481,13 @@ public sealed class ContactBook
     /// output is a disposal, and neither is something an agent should be able to do on somebody's behalf.
     /// </para>
     /// </remarks>
-    public Task<CollectedContactErasure> EraseCollectedAsync(
+    public async Task<CollectedContactErasure> EraseCollectedAsync(
         MailAccountId account,
         CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.AdminErase);
+        await this.authorization.RequirePermissionOverAsync(MailFathomPermission.AdminErase, account, cancellationToken);
 
-        return this.commitPolicy.CommitAsync(
+        return await this.commitPolicy.CommitAsync(
             (session, token) => this.store.EraseCollectedAsync(session, account, token),
             cancellationToken);
     }
@@ -518,6 +534,65 @@ public sealed class ContactBook
         MailAccountId[] accounts = [.. scope.Books.Select(book => book.Account).OfType<MailAccountId>()];
         var covered = await this.authorization.CoveredMailAccountsAsync(
             MailFathomPermission.AdminAuditRead,
+            accounts,
+            cancellationToken);
+
+        return covered.Count == accounts.Length ? scope : ContactBookScope.Of(scope.User, covered);
+    }
+
+    /// <summary>Decides whether the caller may write to one user's books: as that user through the mail half, or as an administrator whose scope covers them.</summary>
+    /// <param name="administrativePermission">The name the operator's half publishes the act under.</param>
+    /// <param name="user">The user whose books the act reaches.</param>
+    /// <param name="cancellationToken">Cancels the read of where the user sits.</param>
+    /// <returns><see langword="true" /> when the act may proceed, and <see langword="false" /> where the user is outside the administrator's scope, which the act answers as a person it does not hold.</returns>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller holds neither alternative at any scope, naming the one on the surface its grant is written on.</exception>
+    /// <remarks>
+    /// An agent writing through the mail half writes its own user's books, which no scope bounds. An operator writes
+    /// through the administrative half, whose permission is held at a scope, so the user the act names has to be inside
+    /// it — exactly as every other administrative act naming a user.
+    /// </remarks>
+    private async Task<bool> AdmitsWriterOfAsync(
+        MailFathomPermission administrativePermission,
+        UserId user,
+        CancellationToken cancellationToken)
+    {
+        if (this.authorization.Permits(MailFathomPermission.MailContactsWrite))
+        {
+            return true;
+        }
+
+        if (!this.authorization.PermitsAtAnyScope(administrativePermission))
+        {
+            this.authorization.RequireAnyPermission(administrativePermission, MailFathomPermission.MailContactsWrite);
+        }
+
+        return await this.authorization.PermitsOverAsync(administrativePermission, user, cancellationToken);
+    }
+
+    /// <summary>Narrows the books a write or an erasure reaches to the collected books the caller's own scope covers.</summary>
+    /// <param name="administrativePermission">The name the operator's half publishes the act under.</param>
+    /// <param name="scope">The books the user reads.</param>
+    /// <param name="cancellationToken">Cancels placing the accounts.</param>
+    /// <returns>The whole scope for the user themselves and a deployment's administrator, and otherwise the user's own book beside the collected books of the accounts the caller's scope covers.</returns>
+    /// <remarks>
+    /// A collected record is a mailbox's, so an administrator admitted over the user alone would otherwise reach a
+    /// mailbox the user shares — erasing a record everybody assigned it reads, or copying one out of it — which the
+    /// same scope may neither empty through <see cref="EraseCollectedAsync" /> nor read. Narrowing here keeps every
+    /// path to that book answering alike, by the rule <see cref="AuditedAsync" /> reads those books under.
+    /// </remarks>
+    private async Task<ContactBookScope> ReachOfAsync(
+        MailFathomPermission administrativePermission,
+        ContactBookScope scope,
+        CancellationToken cancellationToken)
+    {
+        if (this.authorization.Permits(MailFathomPermission.MailContactsWrite))
+        {
+            return scope;
+        }
+
+        MailAccountId[] accounts = [.. scope.Books.Select(book => book.Account).OfType<MailAccountId>()];
+        var covered = await this.authorization.CoveredMailAccountsAsync(
+            administrativePermission,
             accounts,
             cancellationToken);
 

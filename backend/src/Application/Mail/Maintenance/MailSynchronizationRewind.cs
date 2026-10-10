@@ -74,14 +74,14 @@ public sealed class MailSynchronizationRewind
     /// under and never for the one that performs the rewind.
     /// </para>
     /// </remarks>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.AdminRead" />.</exception>
-    public Task<int> AssessAsync(StoredMailScope scope, CancellationToken cancellationToken)
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.AdminRead" /> at a scope covering the account.</exception>
+    public async Task<int> AssessAsync(StoredMailScope scope, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(scope);
 
-        this.authorization.RequirePermission(MailFathomPermission.AdminRead);
+        await this.authorization.RequirePermissionOverAsync(MailFathomPermission.AdminRead, scope.Account, cancellationToken);
 
-        return this.storedMailCounter.CountStoredEmailsAsync(scope, cancellationToken);
+        return await this.storedMailCounter.CountStoredEmailsAsync(scope, cancellationToken);
     }
 
     /// <summary>Discards the durable progress of the scope's bindings in one transaction.</summary>
@@ -106,7 +106,7 @@ public sealed class MailSynchronizationRewind
     {
         ArgumentNullException.ThrowIfNull(scope);
 
-        this.authorization.RequirePermission(MailFathomPermission.AdminOperate);
+        await this.authorization.RequirePermissionOverAsync(MailFathomPermission.AdminOperate, scope.Account, cancellationToken);
 
         IReadOnlyList<MailFolderAlias> rewound = [];
 

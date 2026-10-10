@@ -204,6 +204,42 @@ public sealed class StoredMailRederivationRequestsTests
         Assert.Empty(this.EnqueuedRequests());
     }
 
+    /// <summary>An organization's administrator naming a mailbox in another organization is refused before a run is written or a job enqueued.</summary>
+    [Fact]
+    public async Task SubmitAsync_AnAccountOutsideTheCallersOrganization_IsRefusedAndRecordsNothing()
+    {
+        // Arrange
+        var requests = this.CreateRequests(OrganizationAdministrators.Holding(
+            MailFathomPermission.AdminOperate,
+            WholeAccount.Account,
+            OrganizationAdministrators.OtherOrganization));
+
+        // Act
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            requests.SubmitAsync(WholeAccount, TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Empty(this.runs.Saves);
+        Assert.Empty(this.EnqueuedRequests());
+    }
+
+    [Fact]
+    public async Task SubmitAsync_AnAccountInTheCallersOrganization_RecordsTheRun()
+    {
+        // Arrange
+        var requests = this.CreateRequests(OrganizationAdministrators.Holding(
+            MailFathomPermission.AdminOperate,
+            WholeAccount.Account,
+            OrganizationAdministrators.AdministeredOrganization));
+
+        // Act
+        var submitted = await requests.SubmitAsync(WholeAccount, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(submitted.Accepted);
+        Assert.Single(this.EnqueuedRequests());
+    }
+
     private IReadOnlyList<JobEnqueueRequest> EnqueuedRequests() =>
     [
         .. this.jobs.ReceivedCalls()

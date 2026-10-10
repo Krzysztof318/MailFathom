@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Folders;
 using MailFathom.Domain.Access;
@@ -59,7 +60,7 @@ internal static class MailFolderErasureEndpoint
         // so a body over the bound is answered 413 before the handler is reached.
         api.MapPost(ErasureRoute, EraseAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxErasureRequestBytes))
-            .RequirePermission(MailFathomPermission.AdminErase);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminErase);
     }
 
     /// <summary>Erases one bounded pass of what is stored for a folder this deployment no longer mirrors.</summary>
@@ -67,6 +68,7 @@ internal static class MailFolderErasureEndpoint
     /// <param name="accounts">Reports whether this deployment serves the named account.</param>
     /// <param name="mailSettings">Holds the account settings the pass reads, which this route prepares for the named account.</param>
     /// <param name="context">The request being answered, whose services the folder's mapping and the eraser are resolved through once the account's settings are prepared.</param>
+    /// <param name="authorization">Answers whether the caller's scope covers the account the request names.</param>
     /// <param name="cancellationToken">Cancels the pass when the client disconnects, leaving what earlier passes committed.</param>
     /// <returns><c>200</c> with what the pass erased, or <c>400</c> naming what was wrong with the request.</returns>
     /// <remarks>
@@ -87,13 +89,14 @@ internal static class MailFolderErasureEndpoint
         [FromServices] IDeploymentMailAccountCatalog accounts,
         [FromServices] ScopedMailSynchronizationSettings mailSettings,
         HttpContext context,
+        [FromServices] AccessAuthorization authorization,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(mailSettings);
         ArgumentNullException.ThrowIfNull(context);
 
-        if (await AdminAccountRequest.ResolveAsync(request?.Account, accounts, cancellationToken) is not { } servedAccount)
+        if (await AdminAccountRequest.ResolveCoveredAsync(request?.Account, MailFathomPermission.AdminErase, accounts, authorization, cancellationToken) is not { } servedAccount)
         {
             return AdminAccountRequest.Refuse(request?.Account);
         }

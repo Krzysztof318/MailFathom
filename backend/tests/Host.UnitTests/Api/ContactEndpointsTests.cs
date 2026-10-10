@@ -79,6 +79,7 @@ public sealed class ContactEndpointsTests
             new ContactRecordRequest("Anna Kowalska", ["anna@example.test"], "anna@example.test", Note: null),
             this.Book(),
             this.Roster(),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -108,6 +109,7 @@ public sealed class ContactEndpointsTests
             this.Book(),
             this.Scopes(),
             this.Roster(),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -141,6 +143,7 @@ public sealed class ContactEndpointsTests
             this.Book(),
             this.Scopes(),
             this.Roster(),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -163,6 +166,7 @@ public sealed class ContactEndpointsTests
             this.Book(),
             this.Scopes(),
             this.Roster(),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -205,6 +209,7 @@ public sealed class ContactEndpointsTests
                 note),
             this.Book(),
             this.Roster(),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -228,6 +233,7 @@ public sealed class ContactEndpointsTests
                 Note: null),
             this.Book(),
             this.Roster(),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         var longNote = await ContactEndpoints.RecordAsync(
@@ -239,6 +245,7 @@ public sealed class ContactEndpointsTests
                 new string('n', ContactNote.MaximumLength + 1)),
             this.Book(),
             this.Roster(),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -256,6 +263,7 @@ public sealed class ContactEndpointsTests
             request: null,
             book: this.Book(),
             users: this.Roster(),
+            authorization: AdministrativeGrant.WholeSurface,
             cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
@@ -280,6 +288,7 @@ public sealed class ContactEndpointsTests
             new ContactRecordRequest("Anna Kowalska", addresses, addresses[0], Note: null),
             this.Book(),
             this.Roster(),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -462,6 +471,7 @@ public sealed class ContactEndpointsTests
             this.Book(),
             this.Scopes(),
             this.Roster(),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -485,6 +495,7 @@ public sealed class ContactEndpointsTests
             Account,
             this.Book(),
             CatalogServing(SyntheticMailAccount.Deployment),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -505,6 +516,7 @@ public sealed class ContactEndpointsTests
             Account,
             this.Book(),
             CatalogServing(SyntheticMailAccount.Deployment),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -529,6 +541,37 @@ public sealed class ContactEndpointsTests
             new ContactRecordRequest("Anna Kowalska", ["anna@example.test"], "anna@example.test", Note: null),
             this.Book(),
             this.Roster(),
+            AdministrativeGrant.WholeSurface,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        await this.AssertRefusedWithoutWriting(result, "holds no user");
+    }
+
+    /// <summary>A user outside the caller's scope is refused in the sentence a user nobody holds is, so the refusal discloses nothing.</summary>
+    [Fact]
+    public async Task RecordAsync_AUserOutsideTheCallersOrganization_RefusesAsAUserNobodyHolds()
+    {
+        // Arrange
+        this.HoldsNoAddresses();
+        var targets = new StatedAdministrativeTargets()
+            .WithUser(SyntheticUser.Deployment, new Guid("0198f0aa-0000-7000-8000-0000000000e1"));
+
+        var authorization = AccessAuthorizations.ForAdministratorScoped(
+            ScopedGrant.Of(
+            [
+                (MailFathomPermission.AdminOperate,
+                    AssignmentScope.Organization(new Guid("0198f0aa-0000-7000-8000-0000000000e2"))),
+            ]),
+            targets);
+
+        // Act
+        var result = await ContactEndpoints.RecordAsync(
+            User,
+            new ContactRecordRequest("Anna Kowalska", ["anna@example.test"], "anna@example.test", Note: null),
+            this.Book(),
+            this.Roster(),
+            authorization,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -556,6 +599,7 @@ public sealed class ContactEndpointsTests
             this.Book(),
             this.Scopes(),
             this.Roster(),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         var export = await ContactEndpoints.ExportAsync(
@@ -573,6 +617,7 @@ public sealed class ContactEndpointsTests
             this.Book(),
             this.Scopes(),
             this.Roster(),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         var amendment = await ContactEndpoints.AmendAsync(
@@ -582,6 +627,7 @@ public sealed class ContactEndpointsTests
             this.Book(),
             this.Scopes(),
             this.Roster(),
+            AdministrativeGrant.WholeSurface,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -612,6 +658,40 @@ public sealed class ContactEndpointsTests
             "not-an-account-this-deployment-serves",
             this.Book(),
             CatalogServing(SyntheticMailAccount.Deployment),
+            AdministrativeGrant.WholeSurface,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(result.Result);
+
+        Assert.Equal(StatusCodes.Status400BadRequest, refusal.StatusCode);
+
+        await this.store.DidNotReceive().EraseCollectedAsync(
+            Arg.Any<IPersistenceSession>(),
+            Arg.Any<MailAccountId>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A mailbox outside the caller's scope is refused as one nothing serves, before the book is reached.</summary>
+    [Fact]
+    public async Task EraseCollectedAsync_AnAccountOutsideTheCallersOrganization_RefusesAsOneNotServedWithoutErasing()
+    {
+        // Arrange
+        var elsewhere = AccessAuthorizations.ForAdministratorScoped(
+            ScopedGrant.Of(
+            [
+                (MailFathomPermission.AdminErase,
+                    AssignmentScope.Organization(new Guid("0198f0aa-0000-7000-8000-0000000000e2"))),
+            ]),
+            new StatedAdministrativeTargets()
+                .WithMailAccount(SyntheticMailAccount.Deployment, new Guid("0198f0aa-0000-7000-8000-0000000000e1")));
+
+        // Act
+        var result = await ContactEndpoints.EraseCollectedAsync(
+            Account,
+            this.Book(elsewhere),
+            CatalogServing(SyntheticMailAccount.Deployment),
+            elsewhere,
             TestContext.Current.CancellationToken);
 
         // Assert

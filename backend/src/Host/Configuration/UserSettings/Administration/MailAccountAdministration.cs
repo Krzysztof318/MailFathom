@@ -50,6 +50,7 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
     Justification = "The dependency injection container materializes this service.")]
 internal sealed class MailAccountAdministration(
     AccessAuthorization authorization,
+    IAdministrativeTargets targets,
     IUserSettingsDocumentReader documents,
     IMailAccountRecordStore accounts,
     UserAccountDocumentBinder binder,
@@ -70,41 +71,44 @@ internal sealed class MailAccountAdministration(
     /// <summary>Lists one page of the accounts this deployment holds.</summary>
     /// <param name="query">The page asked for.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The page's accounts in identifier order, and where the following page continues.</returns>
+    /// <returns>The page's accounts the caller's scope covers, in identifier order, and where the following page continues.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="query" /> is <see langword="null" />.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminRead" />.</exception>
-    /// <remarks>The settings are not parsed, so one unreadable row never hides every other account.</remarks>
+    /// <remarks>The settings are not parsed, so one unreadable row never hides every other account. A listing never refuses on scope: it answers with the accounts the scopes the caller holds the read at cover.</remarks>
     internal Task<AdministrativeListingPage<MailAccountSummary>> ReadPageAsync(
         AdministrativeListingQuery query,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(query);
 
-        authorization.RequirePermission(MailFathomPermission.AdminRead);
+        authorization.RequirePermissionAtAnyScope(MailFathomPermission.AdminRead);
 
-        return accounts.ReadPageAsync(query, cancellationToken);
+        return accounts.ReadPageAsync(query, authorization.ScopesOf(MailFathomPermission.AdminRead), cancellationToken);
     }
 
     /// <summary>Reads one account.</summary>
     /// <param name="accountId">The account asked about.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The account, redacted, or <see langword="null" /> when this deployment holds none under that identifier.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminRead" />.</exception>
+    /// <returns>The account, redacted, or <see langword="null" /> when this deployment holds none under that identifier or the caller's scope does not cover it.</returns>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminRead" /> at every scope.</exception>
     internal async Task<MailAccountReading?> ReadAsync(Guid accountId, CancellationToken cancellationToken)
     {
-        authorization.RequirePermission(MailFathomPermission.AdminRead);
+        authorization.RequirePermissionAtAnyScope(MailFathomPermission.AdminRead);
 
-        return await accounts.ReadAsync(accountId, cancellationToken) is { } holding ? ReadingOf(holding) : null;
+        return await accounts.ReadAsync(accountId, cancellationToken) is { } holding
+            && authorization.PermitsOver(MailFathomPermission.AdminRead, TargetOf(holding))
+                ? ReadingOf(holding)
+                : null;
     }
 
     /// <summary>Creates an account in the organization of the user it is created for, and assigns it to them.</summary>
     /// <param name="user">The user the account is created for.</param>
     /// <param name="declarationJson">The declaration.</param>
     /// <param name="cancellationToken">Cancels the reads and the commit.</param>
-    /// <returns>What the write did, or <see langword="null" /> when this deployment holds no such user.</returns>
+    /// <returns>What the write did, or <see langword="null" /> when this deployment holds no such user or the caller's scope does not cover them.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="declarationJson" /> is <see langword="null" />.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminConfigurationWrite" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminConfigurationWrite" /> at every scope, or holds it below the deployment alone for a user in no organization, since an account recorded in none is the deployment's to record.</exception>
     internal async Task<MailAccountCreation?> CreateAsync(
         UserId user,
         string declarationJson,
@@ -112,9 +116,10 @@ internal sealed class MailAccountAdministration(
     {
         RequireNamed(user);
         ArgumentNullException.ThrowIfNull(declarationJson);
-        authorization.RequirePermission(MailFathomPermission.AdminConfigurationWrite);
+        authorization.RequirePermissionAtAnyScope(MailFathomPermission.AdminConfigurationWrite);
 
-        if (await documents.ReadAsync(user, cancellationToken) is not { } record)
+        if (!await this.AdmitsNewAccountForAsync(user, cancellationToken)
+            || await documents.ReadAsync(user, cancellationToken) is not { } record)
         {
             return null;
         }
@@ -129,9 +134,9 @@ internal sealed class MailAccountAdministration(
     /// <param name="declarationJson">The declaration as the administrator saved it.</param>
     /// <param name="expectedVersion">The account version the declaration was read at.</param>
     /// <param name="cancellationToken">Cancels the reads and the commit.</param>
-    /// <returns>What the write did, its version the account's, or <see langword="null" /> when this deployment holds no such account.</returns>
+    /// <returns>What the write did, its version the account's, or <see langword="null" /> when this deployment holds no such account or the caller's scope does not cover it.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="declarationJson" /> is <see langword="null" />.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminConfigurationWrite" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminConfigurationWrite" /> at every scope.</exception>
     /// <remarks>A value left at the redaction marker leaves the reference beneath it as it was, exactly as a saved user record does.</remarks>
     internal async Task<UserRecordWriteOutcome?> SaveAsync(
         Guid accountId,
@@ -140,9 +145,10 @@ internal sealed class MailAccountAdministration(
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(declarationJson);
-        authorization.RequirePermission(MailFathomPermission.AdminConfigurationWrite);
+        authorization.RequirePermissionAtAnyScope(MailFathomPermission.AdminConfigurationWrite);
 
-        if (await accounts.ReadAsync(accountId, cancellationToken) is not { } holding)
+        if (await accounts.ReadAsync(accountId, cancellationToken) is not { } holding
+            || !authorization.PermitsOver(MailFathomPermission.AdminConfigurationWrite, TargetOf(holding)))
         {
             return null;
         }
@@ -219,9 +225,9 @@ internal sealed class MailAccountAdministration(
     /// <param name="accountId">The account.</param>
     /// <param name="user">The user it is assigned to.</param>
     /// <param name="cancellationToken">Cancels the reads and the commit.</param>
-    /// <returns>What the write did, its version the account's, or <see langword="null" /> when this deployment holds no such account or user.</returns>
+    /// <returns>What the write did, its version the account's, or <see langword="null" /> when this deployment holds no such account or user, or the caller's scope does not cover both.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminConfigurationWrite" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminConfigurationWrite" /> at every scope.</exception>
     /// <remarks>
     /// An account somebody else is already assigned is assigned again rather than refused, which is what serving one
     /// mailbox to several people is. The account is judged against this user's own set, so an account whose display
@@ -238,9 +244,11 @@ internal sealed class MailAccountAdministration(
         CancellationToken cancellationToken)
     {
         RequireNamed(user);
-        authorization.RequirePermission(MailFathomPermission.AdminConfigurationWrite);
+        authorization.RequirePermissionAtAnyScope(MailFathomPermission.AdminConfigurationWrite);
 
         if (await accounts.ReadAsync(accountId, cancellationToken) is not { } holding
+            || !authorization.PermitsOver(MailFathomPermission.AdminConfigurationWrite, TargetOf(holding))
+            || !await authorization.PermitsOverAsync(MailFathomPermission.AdminConfigurationWrite, user, cancellationToken)
             || await documents.ReadAsync(user, cancellationToken) is not { } record)
         {
             return null;
@@ -288,9 +296,9 @@ internal sealed class MailAccountAdministration(
     /// <param name="accountId">The account.</param>
     /// <param name="user">The user whose assignment ends.</param>
     /// <param name="cancellationToken">Cancels the write before it commits.</param>
-    /// <returns>What the write did.</returns>
+    /// <returns>What the write did, which is nothing where the caller's scope does not cover both the account and the user.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminErase" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminErase" /> at every scope.</exception>
     /// <remarks>The erasure grant rather than the configuration write, because ending the last assignment disposes of every message the deployment holds for the mailbox.</remarks>
     internal async Task<MailAccountUnassignment> UnassignAsync(
         Guid accountId,
@@ -298,7 +306,13 @@ internal sealed class MailAccountAdministration(
         CancellationToken cancellationToken)
     {
         RequireNamed(user);
-        authorization.RequirePermission(MailFathomPermission.AdminErase);
+        authorization.RequirePermissionAtAnyScope(MailFathomPermission.AdminErase);
+
+        if (!authorization.PermitsOver(MailFathomPermission.AdminErase, await this.ReadTargetAsync(accountId, cancellationToken))
+            || !await authorization.PermitsOverAsync(MailFathomPermission.AdminErase, user, cancellationToken))
+        {
+            return new MailAccountUnassignment(Unassigned: false, AccountErased: false);
+        }
 
         var unassignment = await accounts.UnassignAsync(accountId, user, cancellationToken);
 
@@ -313,11 +327,16 @@ internal sealed class MailAccountAdministration(
     /// <summary>Erases an account, every assignment to it, and everything stored for it.</summary>
     /// <param name="accountId">The account.</param>
     /// <param name="cancellationToken">Cancels the erasure before it commits.</param>
-    /// <returns>Whether an account was there to erase.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminErase" />.</exception>
+    /// <returns>Whether an account the caller's scope covers was there to erase.</returns>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminErase" /> at every scope.</exception>
     internal async Task<bool> EraseAsync(Guid accountId, CancellationToken cancellationToken)
     {
-        authorization.RequirePermission(MailFathomPermission.AdminErase);
+        authorization.RequirePermissionAtAnyScope(MailFathomPermission.AdminErase);
+
+        if (!authorization.PermitsOver(MailFathomPermission.AdminErase, await this.ReadTargetAsync(accountId, cancellationToken)))
+        {
+            return false;
+        }
 
         var erased = await accounts.EraseAsync(accountId, cancellationToken);
 
@@ -679,6 +698,41 @@ internal sealed class MailAccountAdministration(
             version,
             ["This mail account cannot be added for you. Ask whoever administers this deployment to add it."]);
 
+    private static AdministrativeTarget TargetOf(MailAccountHolding holding) =>
+        AdministrativeTarget.MailAccount(holding.OrganizationId, holding.Users);
+
+    /// <summary>Decides whether the caller may record an account for one user, which places it in that user's organization.</summary>
+    /// <remarks>
+    /// The account a creation records is assigned to the user alone and sits in their organization, so it is covered
+    /// wherever the user is. Recording one in no organization is the deployment's alone, so a user in none is refused
+    /// naming the permission to a caller holding it only below the deployment — that user is already in the caller's
+    /// scope, so the refusal discloses nothing about them.
+    /// </remarks>
+    private async Task<bool> AdmitsNewAccountForAsync(UserId user, CancellationToken cancellationToken)
+    {
+        if (authorization.Permits(MailFathomPermission.AdminConfigurationWrite))
+        {
+            return true;
+        }
+
+        var owner = await targets.PlaceUserAsync(user, cancellationToken);
+
+        if (!authorization.PermitsOver(MailFathomPermission.AdminConfigurationWrite, owner))
+        {
+            return false;
+        }
+
+        if (owner.Organization is null)
+        {
+            authorization.RequirePermission(MailFathomPermission.AdminConfigurationWrite);
+        }
+
+        return true;
+    }
+
+    private async Task<AdministrativeTarget> ReadTargetAsync(Guid accountId, CancellationToken cancellationToken) =>
+        await accounts.ReadAsync(accountId, cancellationToken) is { } holding ? TargetOf(holding) : AdministrativeTarget.Unplaced;
+
     private static void RequireNamed(UserId user)
     {
         if (!user.IsSpecified)
@@ -883,6 +937,13 @@ internal sealed class MailAccountAdministration(
     /// <param name="users">The users the account would be assigned to.</param>
     /// <param name="actingUser">The user making the change on their own behalf, or <see langword="null" /> for an administrator.</param>
     /// <param name="cancellationToken">Cancels the reads.</param>
+    /// <remarks>
+    /// Which secrets the account may carry afterwards is asked first and follows who is making the change. A user may
+    /// newly name their own material. An administrator holding <see cref="MailFathomPermission.AdminConfigurationWrite" />
+    /// below the deployment may change the settings only while every secret they name is the material of a user the
+    /// account is assigned to, so a reference left in place cannot be presented somewhere new. One holding it over the
+    /// whole deployment names anything.
+    /// </remarks>
     private async Task<Judgement> JudgeAsync(
         MailAccountRecord candidate,
         string standingDocument,
@@ -890,8 +951,13 @@ internal sealed class MailAccountAdministration(
         UserId? actingUser,
         CancellationToken cancellationToken)
     {
-        if (actingUser is { } user
-            && UserRecordAdministration.FindSecretsTheUserMayNotName(user, standingDocument, candidate.Document) is { Count: > 0 } introduced)
+        var introduced = actingUser is { } user
+            ? UserRecordAdministration.FindSecretsTheUserMayNotName(user, standingDocument, candidate.Document)
+            : authorization.Permits(MailFathomPermission.AdminConfigurationWrite)
+                ? []
+                : UserRecordAdministration.FindSecretsANarrowerScopeMayNotName(users, standingDocument, candidate.Document);
+
+        if (introduced.Count > 0)
         {
             return new Judgement(introduced, []);
         }

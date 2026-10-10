@@ -50,15 +50,16 @@ internal static class MailboxSynchronizationStatusEndpoint
         ArgumentNullException.ThrowIfNull(api);
 
         api.MapGet(StatusRoute, ReadStatusAsync)
-            .RequirePermission(MailFathomPermission.AdminRead);
+            .RequirePermissionOverTarget(MailFathomPermission.AdminRead);
     }
 
-    /// <summary>Reports where each configured account's synchronization stands.</summary>
+    /// <summary>Reports where the synchronization of each configured account the caller's scope covers stands.</summary>
     /// <param name="reader">Composes the answer from configuration, the running process, and the durable checkpoints.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
-    /// <returns><c>200</c> with the state on every deployment including one that synchronizes nothing, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.admin.read</c>.</returns>
+    /// <returns><c>200</c> with the state on every deployment including one that synchronizes nothing, or <c>403</c> for a caller holding <c>mailfathom.admin.read</c> at no scope.</returns>
     /// <remarks>
-    /// The grant is the only thing it refuses over. A deployment configuring no account, one that has switched
+    /// The grant is the only thing it refuses over, and a grant held below the deployment is answered with the accounts
+    /// it covers rather than refused. A deployment configuring no account, one that has switched
     /// synchronization off, and one whose process has only just started are supported states rather than errors, and the
     /// last of them is the reading an operator most needs to be given rather than left to infer from an empty answer.
     /// </remarks>
@@ -77,7 +78,7 @@ internal static class MailboxSynchronizationStatusEndpoint
 /// <summary>What the administrative endpoint reports about this deployment's synchronization.</summary>
 /// <param name="Replica">The replica that composed the answer, which every figure only one process can answer for is read against.</param>
 /// <param name="SynchronizationEnabled">Whether this deployment refreshes its local copy at all.</param>
-/// <param name="Accounts">One entry per configured account, ordered ordinally by identifier.</param>
+/// <param name="Accounts">One entry per configured account the caller's scope covers, ordered ordinally by identifier.</param>
 internal sealed record MailSynchronizationStatusResponse(
     string Replica,
     bool SynchronizationEnabled,

@@ -215,6 +215,52 @@ public sealed class MailboxExportsTests
         await jobs.DidNotReceive().EnqueueAsync(Arg.Any<JobEnqueueRequest>(), Arg.Any<CancellationToken>());
     }
 
+    /// <summary>An organization's administrator naming a mailbox in another organization is refused before it is measured, recorded, or queued.</summary>
+    [Fact]
+    public async Task StartAsync_AnAccountOutsideTheCallersOrganization_IsRefusedBeforeAnythingIsReadOrStarted()
+    {
+        // Arrange
+        var store = new InMemoryMailboxExportStore();
+        var reader = new StatedMailboxExportReader().Holding(MessageOf(1, byteLength: 400));
+        var jobs = Substitute.For<IJobStore>();
+        var exports = ExportsOver(
+            authorization: OrganizationAdministrators.Holding(
+                MailFathomPermission.AdminExport,
+                Account,
+                OrganizationAdministrators.OtherOrganization),
+            store: store,
+            reader: reader,
+            jobs: jobs);
+
+        // Act
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            exports.StartAsync(Account, folderPath: null, TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Empty(reader.AskedFolderPaths);
+        Assert.Empty(await store.ListAsync(Account, 50, TestContext.Current.CancellationToken));
+        await jobs.DidNotReceive().EnqueueAsync(Arg.Any<JobEnqueueRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task StartAsync_AnAccountInTheCallersOrganization_QueuesTheExport()
+    {
+        // Arrange
+        var exports = ExportsOver(
+            authorization: OrganizationAdministrators.Holding(
+                MailFathomPermission.AdminExport,
+                Account,
+                OrganizationAdministrators.AdministeredOrganization),
+            reader: new StatedMailboxExportReader().Holding(MessageOf(1, byteLength: 400)),
+            jobs: AcceptingJobs());
+
+        // Act
+        var started = await exports.StartAsync(Account, folderPath: null, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailboxExportState.Queued, started.Export.State);
+    }
+
     [Fact]
     public async Task ReadAsync_AnExportTheAccountDoesNotHold_IsRefusedAsNotFound()
     {
@@ -308,6 +354,55 @@ public sealed class MailboxExportsTests
             exports.OpenArchiveAsync(Account, finished.Id, TestContext.Current.CancellationToken));
 
         Assert.Equal(MailFathomErrorCode.MailboxExportNoLongerDownloadable, refusal.ErrorCode);
+    }
+
+    /// <summary>Deleting an archive cannot be undone, so another organization's archive is refused before it is touched.</summary>
+    [Fact]
+    public async Task DeleteAsync_AnAccountOutsideTheCallersOrganization_IsRefusedAndDeletesNothing()
+    {
+        // Arrange
+        var finished = Completed();
+        var archives = new InMemoryMailboxExportArchiveStore();
+        var exports = ExportsOver(
+            authorization: OrganizationAdministrators.Holding(
+                MailFathomPermission.AdminExport,
+                Account,
+                OrganizationAdministrators.OtherOrganization),
+            store: new InMemoryMailboxExportStore().Holding(finished),
+            archives: archives);
+
+        // Act
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            exports.DeleteAsync(Account, finished.Id, TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Empty(archives.Deleted);
+    }
+
+    /// <summary>An archive is the whole mailbox, so another organization's is refused rather than streamed.</summary>
+    [Fact]
+    public async Task OpenArchiveAsync_AnAccountOutsideTheCallersOrganization_IsRefusedAndAuditsNothing()
+    {
+        // Arrange
+        var finished = Completed();
+        var archives = new InMemoryMailboxExportArchiveStore();
+        var located = finished with { ObjectLocator = await ArchiveOf(archives, finished.Id) };
+        var auditor = new RecordingMailboxExportAuditor();
+        var exports = ExportsOver(
+            authorization: OrganizationAdministrators.Holding(
+                MailFathomPermission.AdminExport,
+                Account,
+                OrganizationAdministrators.OtherOrganization),
+            store: new InMemoryMailboxExportStore().Holding(located),
+            archives: archives,
+            auditor: auditor);
+
+        // Act
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            exports.OpenArchiveAsync(Account, finished.Id, TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Empty(auditor.Acts);
     }
 
     [Fact]

@@ -83,13 +83,13 @@ public sealed class MailRuleEvaluationRunRequests
     /// than a caller.
     /// </para>
     /// </remarks>
-    public Task<MailRuleEvaluationRunRequest> SubmitAsync(
+    public async Task<MailRuleEvaluationRunRequest> SubmitAsync(
         MailAccountId account,
         CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.AdminOperate);
+        await this.authorization.RequirePermissionOverAsync(MailFathomPermission.AdminOperate, account, cancellationToken);
 
-        return this.commitPolicy.CommitAsync(
+        return await this.commitPolicy.CommitAsync(
             async (session, attemptCancellationToken) =>
             {
                 var requested = new MailRuleEvaluationRun

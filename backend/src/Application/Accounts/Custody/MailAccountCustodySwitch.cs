@@ -103,11 +103,11 @@ public sealed class MailAccountCustodySwitch
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The state, or <see langword="null" /> where the deployment holds no such account.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <c>mailfathom.admin.read</c>.</exception>
-    public Task<MailAccountCustodyState?> ReadAsync(MailAccountId account, CancellationToken cancellationToken)
+    public async Task<MailAccountCustodyState?> ReadAsync(MailAccountId account, CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.AdminRead);
+        await this.authorization.RequirePermissionOverAsync(MailFathomPermission.AdminRead, account, cancellationToken);
 
-        return this.store.ReadAsync(account, cancellationToken);
+        return await this.store.ReadAsync(account, cancellationToken);
     }
 
     /// <summary>Asks for one account's custody to become what was named.</summary>
@@ -127,7 +127,7 @@ public sealed class MailAccountCustodySwitch
         MailAccountCustody requested,
         CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.AdminCustodyWrite);
+        await this.authorization.RequirePermissionOverAsync(MailFathomPermission.AdminCustodyWrite, account, cancellationToken);
 
         if (await this.store.ReadAsync(account, cancellationToken) is not { } current)
         {
