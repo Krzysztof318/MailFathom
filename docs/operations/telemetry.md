@@ -1358,7 +1358,9 @@ five counters are the whole of what an operator reads it by.
 
 All five carry `mailfathom.client_telemetry.signal`, whose values are `traces`, `metrics`, and `logs`. A refusal
 carries `mailfathom.client_telemetry.refusal` as well — `unsupported_media_type`, `rate_limited`, `too_large`,
-`too_many_records`, or `malformed`, which is this endpoint's own closed vocabulary for the bounds it enforces. A
+`too_many_records`, `malformed`, or `level_none`, which is this endpoint's own closed vocabulary for the bounds it
+enforces. `level_none` is a batch of log records from a caller whose level resolved to
+[`None`](client-endpoint.md#the-telemetry-routes), so it is only ever counted under the `logs` signal. A
 failure carries `mailfathom.client_telemetry.condition`, written as a past participle like every other outcome here:
 `refused` for a destination that will never take the batch, and `throttled`, `unavailable`, `timed_out`, `unreachable`,
 or `cancelled` for one that might.
@@ -1552,7 +1554,7 @@ refused until the client had nothing but its own interval left, and a region tha
 **A deployment states how much of that it wants, and the client stops writing the rest.**
 [`ClientEndpoint:TelemetryLevel`](configuration-endpoints.md#clientendpoint) is that statement, and the session route
 publishes it as [`telemetry`](client-endpoint.md#the-session-route) — one of `trace`, `debug`, `info`, `warn`, `error`,
-`fatal`, or `off`. A record below the level is never written at all, rather than written and then discarded: the hold
+`fatal`, `none`, or `off`. A record below the level is never written at all, rather than written and then discarded: the hold
 buffer below is bounded at 512 records, so a per-request `TRACE` stream that reached it would evict the cold-start
 records the buffer exists for within seconds of somebody opening a folder.
 
@@ -1563,13 +1565,25 @@ as the report takes. `debug` is the level to ask for then — it adds the sign-i
 the acts, the sends and the withdrawals, the preference writes, the notification answer, the failed requests, and the
 two refusals the deployment issued itself, and leaves out the two per-request and per-move streams that `trace` adds.
 
+**`None` is the level at which no log record is written, and it is the only signal the level governs.** A client
+answered `none` writes no log record whatever its severity, and goes on recording and exporting the spans and the
+measurements below exactly as under every other level — one span and two measurements per request among them. So a
+deployment set to `None` receives no client log record and still receives its clients' traces and metrics. That is
+what separates it from `off`, which is a deployment that named no collector and stops all three. The deployment holds
+`None` rather than merely asking for it: a batch of log records from a caller it applies to is
+[refused](client-endpoint.md#the-telemetry-routes), which reaches a client that wrote one before it had read its
+answer. A client throws those away when it reads `none` instead of flushing them; one that had already left is refused,
+and is counted once in `mailfathom.client.telemetry.dropped` as `export_failed`.
+
 **Ask for it on the one person reporting the defect, not on the deployment.** Their own record carries a
 [`ClientTelemetryLevel`](configuration-sources.md#the-level-this-persons-client-records-at--clienttelemetrylevel),
 which the session route serves them in place of the deployment's, so one `mfctl user edit` raises that client and no
 other — no restart, and nothing exported at `debug` by the clients of everybody who is not reporting anything. Clearing
 the key puts them back on whatever the deployment asks for. Raising `ClientEndpoint:TelemetryLevel` instead restarts
 the process and pays the collector for every client of the deployment until somebody remembers to put it back, which is
-the reason the key on the record exists.
+the reason the key on the record exists. The record wins under `None` as well: a deployment set to `None` that raises
+one person to `debug` receives that one client's log records and nobody else's, and `None` on one record silences that
+one client under a deployment that asks the rest for some.
 
 **A record made before the deployment answers is held at `info` too.** The client has no level until the session route
 has answered, and the alternative to standing on the default there is picking between recording a `TRACE` stream into a

@@ -4,6 +4,7 @@
 
 using System.Globalization;
 using MailFathom.Application.Access;
+using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.Observability.ClientTelemetry;
 using MailFathom.Host.Security.Basic;
 using MailFathom.Host.Security.Endpoints;
@@ -51,6 +52,13 @@ namespace MailFathom.Host.Api;
 /// specification names and a status document rather than a truncation, so the client can tell a batch that will never
 /// be accepted from one worth holding.
 /// </para>
+/// <para>
+/// <b>The level a caller is asked for is held here as well as answered to them.</b> A caller whose level resolves to
+/// <see cref="ClientTelemetryLevel.None" /> is refused on the log route and on that route alone, because log records
+/// are the one signal a level governs. So what an operator set is something this deployment keeps rather than
+/// something it asks a client for, and a client built before the value existed, or one that wrote a record before it
+/// had read its answer, reaches a collector with none.
+/// </para>
 /// </remarks>
 internal static class ClientTelemetryEndpoint
 {
@@ -83,18 +91,22 @@ internal static class ClientTelemetryEndpoint
     internal const int MaxRecordsPerBatch = 10_000;
 
     private const int InvalidArgumentStatus = 3;
+    private const int PermissionDeniedStatus = 7;
     private const int ResourceExhaustedStatus = 8;
     private const int UnavailableStatus = 14;
 
     /// <summary>Maps the three OTLP routes into the client group, where the deployment named somewhere to forward to.</summary>
     /// <param name="api">The client route group.</param>
+    /// <param name="deploymentLevel">The level this deployment asks every client for, as the session route mapped beside these answers it.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="api" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// The destination being registered is what says the deployment configured one, so the switch is read where
     /// composition read it rather than a second time here. Nothing is mapped without it, which is what makes "not
-    /// configured" answer as nothing served rather than as a route that always fails.
+    /// configured" answer as nothing served rather than as a route that always fails. The level is handed in rather
+    /// than read here for the same reason: the session route answers it and the log route holds it, so one read
+    /// serves both and the two cannot come to disagree about what a caller was asked for.
     /// </remarks>
-    internal static void MapClientTelemetry(this RouteGroupBuilder api)
+    internal static void MapClientTelemetry(this RouteGroupBuilder api, ClientTelemetryLevel deploymentLevel)
     {
         ArgumentNullException.ThrowIfNull(api);
 
@@ -109,6 +121,7 @@ internal static class ClientTelemetryEndpoint
                     $"{TelemetryRoutePrefix}{signal.Route}",
                     (HttpContext context,
                         [FromServices] AccessAuthorization authorization,
+                        [FromServices] ServedUsers servedUsers,
                         [FromServices] ClientTelemetryQuota quota,
                         [FromServices] ClientTelemetryForwarder forwarder,
                         [FromServices] ClientTelemetryProxyTelemetry telemetry,
@@ -116,6 +129,8 @@ internal static class ClientTelemetryEndpoint
                         signal,
                         context,
                         authorization,
+                        servedUsers,
+                        deploymentLevel,
                         quota,
                         forwarder,
                         telemetry,
@@ -141,6 +156,8 @@ internal static class ClientTelemetryEndpoint
     /// <param name="signal">The signal the route serves.</param>
     /// <param name="context">The request being answered, whose body carries the batch.</param>
     /// <param name="authorization">Answers whose telemetry this is, and refuses a caller acting for nobody.</param>
+    /// <param name="servedUsers">The served-user cache, which holds the level that person's own record states where it states one.</param>
+    /// <param name="deploymentLevel">The level this deployment asks every client for, which a record stating none of its own is held to.</param>
     /// <param name="quota">Bounds how often one user may export.</param>
     /// <param name="forwarder">Sends the batch to the deployment's own collector.</param>
     /// <param name="telemetry">Reports what was accepted, refused, forwarded, and not forwarded.</param>
@@ -149,14 +166,18 @@ internal static class ClientTelemetryEndpoint
     /// <exception cref="ArgumentNullException">Thrown when any resolved dependency is <see langword="null" />.</exception>
     /// <remarks>
     /// The order is deliberate. The credential is resolved to a user first, because an export nobody can be
-    /// attributed to must not be read at all; the media type is read next, which costs one header and settles whether
-    /// this is an export request at all; the quota is spent after that, so a client past its rate costs this process
-    /// one refusal rather than a parse; and only then is the batch read, bounded, and rewritten.
+    /// attributed to must not be read at all; a log batch from somebody asked for none is refused there, before
+    /// anything about it is read and before it spends any of that person's rate; the media type is read next, which
+    /// costs one header and settles whether this is an export request at all; the quota is spent after that, so a
+    /// client past its rate costs this process one refusal rather than a parse; and only then is the batch read,
+    /// bounded, and rewritten.
     /// </remarks>
     internal static async Task<IResult> AcceptAsync(
         ClientTelemetrySignal signal,
         HttpContext context,
         AccessAuthorization authorization,
+        ServedUsers servedUsers,
+        ClientTelemetryLevel deploymentLevel,
         ClientTelemetryQuota quota,
         ClientTelemetryForwarder forwarder,
         ClientTelemetryProxyTelemetry telemetry,
@@ -165,11 +186,27 @@ internal static class ClientTelemetryEndpoint
         ArgumentNullException.ThrowIfNull(signal);
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(authorization);
+        ArgumentNullException.ThrowIfNull(servedUsers);
         ArgumentNullException.ThrowIfNull(quota);
         ArgumentNullException.ThrowIfNull(forwarder);
         ArgumentNullException.ThrowIfNull(telemetry);
 
         var user = authorization.RequireUser();
+
+        // The record's level over the deployment's, which is the resolution the session route answered this caller
+        // with. Forbidden rather than not found: the route is served and this caller is the one it takes nothing from,
+        // and it is a status the specification never retries, so a client holds nothing for a batch that will not go.
+        if (signal == ClientTelemetrySignal.Logs
+            && (servedUsers.Peek(user)?.ClientTelemetryLevel ?? deploymentLevel) == ClientTelemetryLevel.None)
+        {
+            return Refused(
+                telemetry,
+                signal,
+                "level_none",
+                StatusCodes.Status403Forbidden,
+                PermissionDeniedStatus,
+                "This deployment asks this client for no log records. Its traces and metrics are taken as before.");
+        }
 
         if (!SpeaksProtobuf(context.Request.ContentType))
         {
@@ -328,7 +365,7 @@ internal static class ClientTelemetryEndpoint
     /// <param name="RetryAfter">How long the client is asked to hold for, where there is an answer to that.</param>
     /// <remarks>
     /// A result of its own rather than one of the typed helpers, because every one of them fixes the status, the media
-    /// type, or both, and this endpoint answers four statuses with the same media type on all of them — the
+    /// type, or both, and this endpoint answers several statuses with the same media type on all of them — the
     /// specification requires the document whether the news is good or not.
     /// </remarks>
     private sealed record OtlpProtobufResult(int StatusCode, byte[] Body, TimeSpan? RetryAfter = null) : IResult

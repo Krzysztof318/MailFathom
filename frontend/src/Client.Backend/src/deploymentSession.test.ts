@@ -64,6 +64,7 @@ describe('readDeploymentSession', () => {
         ['a deployment asking for the quietest level there is', 'fatal', 'fatal'],
         ['a deployment asking for the whole stream', 'trace', 'trace'],
         ['a deployment that forwards none', 'off', 'off'],
+        ['a deployment that takes no log record and forwards the rest', 'none', 'none'],
         // Each of these is read as `off` rather than refusing the answer, so a deployment older or newer than this
         // client still signs somebody in — and the direction it is wrong in is the one that sends nothing.
         ['a deployment answering nothing about it', undefined, 'off'],

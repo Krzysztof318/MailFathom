@@ -53,10 +53,12 @@ export interface DeploymentSession {
     readonly permissions: readonly MailFathomPermission[];
 
     /**
-     * How much this deployment asks a client to record, or `off` where it forwards none of it.
+     * How much this deployment asks a client to record, `none` where it asks for no log record and still takes the
+     * client's traces and metrics, or `off` where it forwards none of it.
      *
-     * It is not part of the grant and never varies by credential: what decides `off` is whether the deployment named a
-     * collector at all, and what decides the rest is one configured level. A client reads the first so that it can say
+     * It is not part of the grant: what decides `off` is whether the deployment named a collector at all, and what
+     * decides the rest is the level the deployment configured or this person's own record states. A client reads the
+     * first so that it can say
      * there is nothing behind its telemetry switch rather than offering a control that decides nothing — the only other
      * way to find out being to export a batch and read the refusal, which is finding out by doing the thing — and reads
      * the second as the floor below which it writes no record at all, so a vocabulary rich enough to diagnose one

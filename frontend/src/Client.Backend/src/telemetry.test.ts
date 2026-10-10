@@ -556,13 +556,19 @@ describe('what this client asks a deployment that asked for nothing to keep', ()
 
 describe('the level a deployment asks for', () => {
     it('reads every level this client publishes and nothing else', () => {
-        for (const level of ['off', 'trace', 'debug', 'info', 'warn', 'error', 'fatal']) {
+        for (const level of ['off', 'none', 'trace', 'debug', 'info', 'warn', 'error', 'fatal']) {
             expect(isDeploymentTelemetryLevel(level)).toBe(true);
         }
 
         for (const notALevel of ['verbose', 'Info', '', true, null, undefined, 3]) {
             expect(isDeploymentTelemetryLevel(notALevel)).toBe(false);
         }
+    });
+
+    it('admits no record at all where a deployment takes none, however severe', () => {
+        recordDownTo('none');
+
+        expect(worthRecording(SeverityNumber.FATAL4)).toBe(false);
     });
 
     it('admits a record at the floor and refuses one below it', () => {

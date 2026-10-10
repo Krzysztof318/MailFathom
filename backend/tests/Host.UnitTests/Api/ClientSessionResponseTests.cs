@@ -133,6 +133,7 @@ public sealed class ClientSessionResponseTests
                 [ClientTelemetryLevel.Warn] = "warn",
                 [ClientTelemetryLevel.Error] = "error",
                 [ClientTelemetryLevel.Fatal] = "fatal",
+                [ClientTelemetryLevel.None] = "none",
             },
             granted);
         Assert.Equal(granted, ungranted);
@@ -164,6 +165,40 @@ public sealed class ClientSessionResponseTests
             AuthorizedPrincipal.Caller("reader", [MailFathomPermission.MailRead]),
             forwardsTelemetry: true,
             ClientTelemetryLevel.Info,
+            ClientTelemetryLevel.Debug);
+
+        // Assert
+        Assert.Equal("debug", session.Telemetry);
+    }
+
+    /// <summary>
+    /// The record wins in the other direction too: one person is asked for no log records under a deployment that asks
+    /// everybody else for some, and is answered <c>none</c> rather than <c>off</c>, which would stop their traces and
+    /// metrics as well.
+    /// </summary>
+    [Fact]
+    public void For_ARecordStatingNoneUnderADeploymentAskingForRecords_ReportsNone()
+    {
+        // Act
+        var session = ClientSessionResponse.For(
+            AuthorizedPrincipal.Caller("reader", [MailFathomPermission.MailRead]),
+            forwardsTelemetry: true,
+            ClientTelemetryLevel.Info,
+            ClientTelemetryLevel.None);
+
+        // Assert
+        Assert.Equal("none", session.Telemetry);
+    }
+
+    /// <summary>A deployment set to take no log records still raises the one person whose report is open, without turning anybody else's on.</summary>
+    [Fact]
+    public void For_ARecordStatingALevelUnderADeploymentSetToNone_ReportsTheRecordsLevel()
+    {
+        // Act
+        var session = ClientSessionResponse.For(
+            AuthorizedPrincipal.Caller("reader", [MailFathomPermission.MailRead]),
+            forwardsTelemetry: true,
+            ClientTelemetryLevel.None,
             ClientTelemetryLevel.Debug);
 
         // Assert

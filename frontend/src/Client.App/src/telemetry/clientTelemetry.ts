@@ -85,7 +85,8 @@ export interface ClientTelemetry {
      * — one effect reads the session answer and the person's own switch together — and it answers a different
      * question: `permitted` is whether this person is reported on at all, and this is how much a deployment wants from
      * whoever is. A person who declined is `off` whatever the deployment asked, which is what keeps the switch the
-     * stronger of the two.
+     * stronger of the two. `none` is a level rather than a refusal: no log record is written under it, and the spans
+     * and the measurements go on being recorded and exported.
      */
     readonly exportFor: (
         session: ClientSession | null,
@@ -160,6 +161,11 @@ export function clientTelemetryForThisApplication(): ClientTelemetry {
     // makes a restart honour a decision rather than record until it is confirmed.
     let permitted = true;
 
+    // Whether the deployment takes a log record from this client at all, which every level but `none` says it does. It
+    // is the one thing the floor cannot carry: a floor stops a record being written, and what this decides is what
+    // becomes of the ones written while the deployment had said nothing.
+    let recordsTaken = true;
+
     // Everything this module does is put in a queue rather than run where it was asked for, and that is a correctness
     // rule rather than tidiness. A registry answers whoever is registered at the instant it is asked, and a record
     // written before the pipeline arrives is dropped for good — there is no retroactive delivery once the real
@@ -217,6 +223,7 @@ export function clientTelemetryForThisApplication(): ClientTelemetry {
     return {
         exportFor(session, allowed, level) {
             permitted = allowed;
+            recordsTaken = level !== 'none';
 
             // Both halves of the client are held to it, which is why it is stated on the package that owns the
             // vocabulary rather than kept here: the wire package writes a record per request from wherever a screen
@@ -255,7 +262,21 @@ export function clientTelemetryForThisApplication(): ClientTelemetry {
                 // the credential they declined them with, leaving the discard behind it nothing to throw away. Both
                 // steps are queued in one turn, so by the time this one runs the body has already stated the new
                 // answer: reading it here is reading the decision rather than guessing what follows.
-                next((pipeline) => (permitted ? pipeline?.hold() : undefined));
+                //
+                // The same reading settles a deployment that has just answered `none`. The log records written while
+                // it had said nothing would be flushed at a route that now refuses them, so they are thrown away first
+                // and holding then flushes the two signals the deployment still takes.
+                next(async (pipeline) => {
+                    if (!permitted) {
+                        return;
+                    }
+
+                    if (!recordsTaken) {
+                        await pipeline?.discardRecords();
+                    }
+
+                    await pipeline?.hold();
+                });
             };
         },
 

@@ -623,7 +623,7 @@ public sealed class ClientEndpointOptionsTests
     public void ReadFrom_AConfiguredTelemetryLevel_AsksItsClientsForExactlyThat()
     {
         // Arrange
-        string[] written = ["trace", "Debug", "warn", "fatal"];
+        string[] written = ["trace", "Debug", "warn", "fatal", "None", "none"];
 
         // Act
         var asked = written.Select(level => ClientEndpointOptions
@@ -637,22 +637,38 @@ public sealed class ClientEndpointOptionsTests
                 ClientTelemetryLevel.Debug,
                 ClientTelemetryLevel.Warn,
                 ClientTelemetryLevel.Fatal,
+                ClientTelemetryLevel.None,
+                ClientTelemetryLevel.None,
             ],
             asked);
     }
 
-    /// <summary>A level nobody publishes is refused rather than bound to whatever the binder made of it, for the reason every other misspelling here is.</summary>
-    [Fact]
-    public void ReadFrom_ATelemetryLevelNobodyPublishes_FailsRatherThanReadingAsSomethingElse()
+    /// <summary>
+    /// A level nobody publishes is refused rather than bound to whatever the binder made of it, and the refusal says
+    /// what the key takes. A number is among them: the framework parses one into a member that does not exist, which
+    /// no client could then be answered, and <c>off</c> is the session route's word rather than a level anybody sets.
+    /// </summary>
+    [Theory]
+    [InlineData("verbose")]
+    [InlineData("7")]
+    [InlineData("off")]
+    public void ReadFrom_ATelemetryLevelNobodyPublishes_IsRefusedNamingTheKeyAndTheValuesItTakes(string written)
     {
         // Arrange
         var configuration = Configuration(new Dictionary<string, string?>
         {
-            ["ClientEndpoint:TelemetryLevel"] = "verbose",
+            ["ClientEndpoint:TelemetryLevel"] = written,
         });
 
-        // Act & Assert
-        Assert.ThrowsAny<InvalidOperationException>(() => ClientEndpointOptions.ReadFrom(configuration));
+        // Act
+        var refusal = Assert.Throws<InvalidOperationException>(() => ClientEndpointOptions.ReadFrom(configuration));
+
+        // Assert
+        Assert.Contains("ClientEndpoint:TelemetryLevel", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains(
+            "'Trace', 'Debug', 'Info', 'Warn', 'Error', 'Fatal', 'None'",
+            refusal.Message,
+            StringComparison.Ordinal);
     }
 
     private static IConfiguration Configuration(Dictionary<string, string?> values) =>

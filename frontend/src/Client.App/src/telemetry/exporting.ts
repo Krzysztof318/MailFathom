@@ -55,6 +55,15 @@ export interface ClientPipeline {
     readonly discard: () => Promise<void>;
 
     /**
+     * Throws away the log records this run is holding, addressing none of them, and leaves the spans and the
+     * measurements as they are.
+     *
+     * This is what a deployment answering that it takes no log record does to the ones written before it had said so.
+     * It refuses a batch of them, so flushing would spend a request on being told that and report the records as lost.
+     */
+    readonly discardRecords: () => Promise<void>;
+
+    /**
      * Stops recording altogether and lets the three providers go.
      *
      * The client itself never reaches this: a run records for as long as it is open, and closing the page is what ends
@@ -152,6 +161,15 @@ export function startRecording(): ClientPipeline {
 
             spans.discard();
             measurements.discard();
+            records.discard();
+        },
+
+        async discardRecords() {
+            // The destination goes first for the reason it does above: what the processor still has queued then drains
+            // into a buffer that addresses nothing, and emptying that buffer is what leaves nothing to send.
+            records.hold();
+            await loggers.forceFlush();
+
             records.discard();
         },
 

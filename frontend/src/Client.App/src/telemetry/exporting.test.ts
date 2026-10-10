@@ -235,6 +235,23 @@ describe('startRecording', () => {
         expect(destinations.exported.filter((batch) => !batch.url.endsWith('/metrics'))).toEqual([]);
     });
 
+    it('throws away the log records it held and keeps the spans, once a deployment takes no log record', async () => {
+        running = startRecording();
+
+        record();
+
+        await running.discardRecords();
+
+        // Signing in afterwards is what makes both halves provable, as it is above: the span recorded beside the log
+        // record leaves in this first export, and the log record is not there to leave.
+        await running.exportTo(session);
+
+        expect(destinations.exported.map((batch) => batch.url)).toContain(
+            'https://mail.example/api/client/telemetry/v1/traces',
+        );
+        expect(destinations.exported.filter((batch) => batch.url.endsWith('/logs'))).toEqual([]);
+    });
+
     it('stops recording when the run that composed it lets it go', async () => {
         running = startRecording();
 

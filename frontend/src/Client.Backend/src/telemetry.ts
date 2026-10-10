@@ -59,8 +59,12 @@ const requestDuration = 'mailfathom.client.request.duration';
  * are. A person's own answer is the switch on the settings screen and is a different question — whether to be reported
  * on at all — so neither is read as the other, and the client stands on {@link defaultTelemetryLevel} until the
  * deployment has said.
+ *
+ * Two members ask for no log record and they are not one answer. `none` is a level: the deployment takes no log record
+ * and goes on taking the spans and the measurements this client writes beside them. `off` is a deployment forwarding
+ * nothing at all, which stops all three.
  */
-export type DeploymentTelemetryLevel = 'off' | 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
+export type DeploymentTelemetryLevel = 'off' | 'none' | 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
 
 /** What a client records at before any deployment has answered, which is what a collector keeps by default. */
 export const defaultTelemetryLevel: DeploymentTelemetryLevel = 'info';
@@ -74,7 +78,9 @@ const levelFloors: Readonly<Record<DeploymentTelemetryLevel, number>> = {
     fatal: SeverityNumber.FATAL,
 
     // Above every severity rather than a flag beside them, so refusing everything is the same comparison as refusing
-    // what is merely too quiet and there is no second way for a record to be admitted.
+    // what is merely too quiet and there is no second way for a record to be admitted. The two share a floor because
+    // a log record is refused under both; what `off` stops beyond that is not a question about a floor.
+    none: Number.POSITIVE_INFINITY,
     off: Number.POSITIVE_INFINITY,
 };
 
@@ -91,7 +97,8 @@ let floor = levelFloors[defaultTelemetryLevel];
 /**
  * States the floor every record written from either half of this client is held to from now on.
  *
- * @param level What the deployment asked for, or `off` where it forwards nothing or the person declined.
+ * @param level What the deployment asked for — `none` where it takes no log record — or `off` where it forwards
+ * nothing or the person declined.
  */
 export function recordDownTo(level: DeploymentTelemetryLevel): void {
     floor = levelFloors[level];

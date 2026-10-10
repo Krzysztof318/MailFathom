@@ -28,6 +28,12 @@ describe('telemetryForwardedBy', () => {
         expect(telemetryForwardedBy(answering('fatal'), address)).toEqual({ answered: true, destination: address });
     });
 
+    // A deployment taking no log record still takes the traces and the metrics, so there is something behind the
+    // switch and it goes where everything else does — which is what separates this answer from `off`.
+    it('names the deployment where it takes no log record and forwards the rest', () => {
+        expect(telemetryForwardedBy(answering('none'), address)).toEqual({ answered: true, destination: address });
+    });
+
     // The distinction the screen exists to draw: a deployment that has said nothing has not said no, and the frame
     // records under the person's own answer meanwhile — so a screen told these two apart says nothing untrue.
     it('answers nothing either way while no session has been read', () => {

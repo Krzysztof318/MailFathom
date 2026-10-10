@@ -49,6 +49,12 @@ const pipeline = vi.hoisted(() => {
             return Promise.resolve();
         },
 
+        discardRecords() {
+            steps.push('discard records');
+
+            return Promise.resolve();
+        },
+
         shutdown: () => Promise.resolve(),
     };
 });
@@ -323,6 +329,26 @@ describe('clientTelemetryForThisApplication', () => {
             });
         });
 
+        // What separates this level from `off`: the one signal a level governs stops, at every severity there is, and
+        // the span and the measurements written beside it are recorded exactly as under any other level.
+        it('writes no log record where a deployment takes none, and goes on recording the rest', async () => {
+            const telemetry = clientTelemetryForThisApplication();
+
+            telemetry.exportFor(session, true, 'none');
+            telemetry.happened('session_started');
+            telemetry.renderFailed('application', new TypeError('A client nobody can use.'));
+            telemetry.navigated('mail', performance.timeOrigin + performance.now());
+
+            const [moved] = await written(() => spans.getFinishedSpans());
+            const counted = await recordedMeasurements();
+
+            expect(moved?.name).toBe('navigate mail');
+            expect(counted.map((measurement) => measurement.descriptor.name)).toContain(
+                'mailfathom.client.navigations',
+            );
+            expect(records.getFinishedLogRecords()).toEqual([]);
+        });
+
         // The switch is the stronger of the two, and this is what makes it so rather than a claim that it is: a
         // deployment asking for the whole stream gets none of it from somebody who declined, and the refusal reaches
         // the half of the client that holds no pipeline as well as the half that does.
@@ -582,6 +608,28 @@ describe('exportFor', () => {
 
         await vi.waitFor(() => {
             expect(pipeline.steps).toEqual(['discard', 'export Basic c2FtcGxl']);
+        });
+    });
+
+    // The order React produces when the deployment's answer arrives: the cleanup of the effect that ran on the level a
+    // client stands on meanwhile, then the body stating `none`. Holding flushes, and what it would flush is a log
+    // record written before the answer at a route that now refuses it, so those are thrown away first — and holding
+    // still runs, because the spans and the measurements of that same stretch are ones the deployment takes.
+    it('throws away the log records written before a deployment said it takes none, and flushes the rest', async () => {
+        const telemetry = clientTelemetryForThisApplication();
+
+        const stop = telemetry.exportFor(session, true, 'info');
+
+        stop();
+        telemetry.exportFor(session, true, 'none');
+
+        await vi.waitFor(() => {
+            expect(pipeline.steps).toEqual([
+                'export Basic c2FtcGxl',
+                'discard records',
+                'hold',
+                'export Basic c2FtcGxl',
+            ]);
         });
     });
 

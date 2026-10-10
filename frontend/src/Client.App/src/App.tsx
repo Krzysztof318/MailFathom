@@ -494,6 +494,7 @@ export function App({
     // is every cold start and every failed sign-in, which is exactly what the pipeline holds records for, so refusing
     // there would throw away the failures somebody cannot otherwise describe. Only `off`, which is a deployment
     // stating that it forwards nothing, stops it; and stopping it discards what was held rather than sending it.
+    // `none` does not: it is a level, under which no log record is written and the rest is recorded as before.
     //
     // The same answer carries how much this deployment asks for, which is the floor every record either half of the
     // client writes is held to. Until it has said, that is the level a collector keeps by default — so a cold start

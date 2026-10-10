@@ -49,11 +49,6 @@ internal sealed class UserAccountOptions : IValidatableObject
     private static readonly string PublishedLanguages =
         string.Join(" or ", Enum.GetValues<UserLanguage>().Select(language => $"'{language}'"));
 
-    /// <summary>Every level a client may be asked to record at, as one phrase a refusal ends with.</summary>
-    /// <remarks>Composed from the members for the reason <see cref="PublishedLanguages" /> is, and naming them as the deployment's own key takes them, because the two settings answer the same question and an operator moving one to a record must not have to guess at a second spelling.</remarks>
-    private static readonly string PublishedTelemetryLevels =
-        string.Join(", ", Enum.GetValues<ClientTelemetryLevel>().Select(level => $"'{level}'"));
-
     /// <summary>Gets or sets the language this deployment writes for this person in, named as it is spelled in English.</summary>
     /// <remarks>
     /// <para>
@@ -119,9 +114,10 @@ internal sealed class UserAccountOptions : IValidatableObject
     /// operator acts on an upgrade.
     /// </para>
     /// <para>
-    /// It raises and lowers what a client records rather than deciding whether it records at all. Both answers to that
-    /// are somebody else's: a deployment naming no collector asks for nothing whatever any record says, and a person
-    /// who declined on their own switch is recorded on by nothing whatever level they are served.
+    /// It raises and lowers how many log records a client writes, down to <c>None</c> of them, rather than deciding
+    /// whether it records at all — a person served <c>None</c> still sends their spans and measurements. Both answers
+    /// to the wider question are somebody else's: a deployment naming no collector asks for nothing whatever any record
+    /// says, and a person who declined on their own switch is recorded on by nothing whatever level they are served.
     /// </para>
     /// <para>
     /// Carried as the written name rather than as the resolved level, for the reason <see cref="Language" /> is: the
@@ -183,16 +179,10 @@ internal sealed class UserAccountOptions : IValidatableObject
     /// <remarks>
     /// Nothing rather than the deployment's level, for the reason <see cref="ReadingTimeZone" /> answers nothing: what
     /// resolves the two into one answer is the session route, and collapsing them here would leave nothing able to
-    /// tell a record that asked for the deployment's level from a record that asked for nothing. The comparison is
-    /// against the member names and is case-insensitive, so a record written by hand is read the way it was typed, and
-    /// a number is not a level however well it would have parsed.
+    /// tell a record that asked for the deployment's level from a record that asked for nothing. It is read the way the
+    /// deployment's own key is, by <see cref="ClientTelemetryLevels.Read" />, so the two take one spelling.
     /// </remarks>
-    internal ClientTelemetryLevel? ReadingClientTelemetryLevel => this.ClientTelemetryLevel is { } written
-        ? Enum.GetValues<ClientTelemetryLevel>()
-            .Where(level => string.Equals(level.ToString(), written, StringComparison.OrdinalIgnoreCase))
-            .Select(level => (ClientTelemetryLevel?)level)
-            .FirstOrDefault()
-        : null;
+    internal ClientTelemetryLevel? ReadingClientTelemetryLevel => ClientTelemetryLevels.Read(this.ClientTelemetryLevel);
 
     /// <inheritdoc />
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext) => this.FindRefusals();
@@ -310,7 +300,7 @@ internal sealed class UserAccountOptions : IValidatableObject
         if (!string.IsNullOrWhiteSpace(this.ClientTelemetryLevel) && this.ReadingClientTelemetryLevel is null)
         {
             yield return new ValidationResult(
-                $"{nameof(this.ClientTelemetryLevel)} states '{this.ClientTelemetryLevel}', which is not a level a client can be asked to record at. It takes {PublishedTelemetryLevels}, or none to be asked for whatever this deployment asks every client for.",
+                $"{nameof(this.ClientTelemetryLevel)} states '{this.ClientTelemetryLevel}', which is not a level a client can be asked to record at. It takes {ClientTelemetryLevels.WrittenNames}, or no value at all to be asked for whatever this deployment asks every client for.",
                 [nameof(this.ClientTelemetryLevel)]);
         }
     }
