@@ -200,7 +200,8 @@ internal static class LoginCommand
             credentialName,
             session,
             keyPair,
-            connection.Trust);
+            connection.Trust,
+            deploymentSession.User is { } user ? new StoredUser(user.Id, user.DisplayName) : null);
 
         // Named here rather than by the access seam every other command goes through, because a sign-in establishes a
         // profile instead of resolving one — so without this the command that gives a deployment its name is the one
@@ -208,7 +209,7 @@ internal static class LoginCommand
         context.Invocation.ReachedDeployment(storedName);
 
         context.Console.WriteLine(
-            $"Signed in to {endpoint.GetLeftPart(UriPartial.Authority)} as '{credentialName}' (MailFathom {deploymentSession.Version}), saved as profile '{storedName}' and selected.{DescribeTransport(connection.Trust)}");
+            $"Signed in to {endpoint.GetLeftPart(UriPartial.Authority)} as {DescribeCaller(deploymentSession, credentialName)} (MailFathom {deploymentSession.Version}), saved as profile '{storedName}' and selected.{DescribeTransport(connection.Trust)}");
 
         // Which of the two arrangements this machine offered, said at the one moment it is decided. A workstation with
         // a keyring and a jump host without one both keep working, and only the sentence tells them apart — so leaving
@@ -240,6 +241,11 @@ internal static class LoginCommand
 
         return CliExitCode.Success;
     }
+
+    /// <summary>Names who signed in: the user where the deployment named one, and the credential otherwise.</summary>
+    private static string DescribeCaller(AdminSession session, string credentialName) => session.User is { } user
+        ? user.Describe()
+        : $"'{credentialName}'";
 
     /// <summary>Says what the connection this profile was signed in over is not protected by, when it is not.</summary>
     /// <remarks>On the confirmation line rather than beside it, because it qualifies what just happened: the operator accepted something a moment ago and the line that reports success is where they read what it was.</remarks>

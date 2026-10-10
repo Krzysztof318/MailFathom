@@ -62,6 +62,12 @@ internal static class StatusCommand
         context.Console.WriteLine(
             $"'{profile.Name}' ({profile.Endpoint.GetLeftPart(UriPartial.Authority)}) accepts the stored credential as '{session.Credential}' (MailFathom {session.Version}).");
 
+        if (session.User is { } user)
+        {
+            context.Console.WriteLine($"Signed in as {user.Describe()}.");
+            context.Console.WriteLine(DescribeRoles(session.Roles));
+        }
+
         var narrowerScopes = (session.Scopes ?? []).Where(scope => scope.Target is not null).ToArray();
 
         context.Console.WriteLine(DescribeGrant(session.Permissions, narrowerScopes));
@@ -78,6 +84,19 @@ internal static class StatusCommand
 
         return CliExitCode.Success;
     }
+
+    /// <summary>States which roles the user holds and the scope each was assigned at.</summary>
+    /// <remarks>
+    /// Before the credential's own narrowing, which the lines after it state. It names where a permission came from
+    /// rather than what the endpoint admits: how much of a role held over one organization acts there is what that
+    /// scope's own line says.
+    /// </remarks>
+    private static string DescribeRoles(IReadOnlyList<AdminSessionRole>? roles) => roles switch
+    {
+        null => "The deployment did not state which roles the user holds.",
+        { Count: 0 } => "The user holds no role.",
+        _ => $"The user holds {string.Join(", ", roles.Select(role => role.Describe()))}.",
+    };
 
     /// <summary>States what the credential may do, which is what decides whether any other command will work.</summary>
     /// <remarks>

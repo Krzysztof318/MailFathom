@@ -233,19 +233,29 @@ that read before they write need together, and how a grant is written;
 deployment took them for and what they hold. `mfctl status` prints what that route reports, and is how an operator reads
 their own grant back. The caller is named by the user and the credential it presented, which is also how every
 administrative act, log scope, and audit record names it — a credential is what an operator revokes when the act was not
-the user's:
+the user's. Beside that, the route reports the user by identifier and display name, every role the user holds directly
+or through a group with the scope that assignment reaches — the deployment, or the organization or user it names by
+identifier — and what this request holds of them, which is those roles' administrative names narrowed by the credential
+presented:
 
 ```text
 'production' (https://mail.example.test:8443) accepts the stored credential as 'user 0198f0c4-… credential 41d7e2b0-…' (MailFathom 0.2.0).
+Signed in as Alice Example (0198f0c4-…).
+The user holds Administrator over the deployment, Auditor over organization 0199a1b2-….
 It holds mailfathom.admin.read, mailfathom.admin.operate.
 ```
 
+The roles say where each permission came from and the scope it was assigned at, before the credential narrows them;
+the lines after them are what this credential carries. A user holding no role is told so rather than shown an empty
+line.
+
 A caller of an endpoint naming no method is named `user <the default administrator> credential none`.
 
-The route reports the grant twice over. `permissions` names what the caller holds over the whole deployment, which is
-what every operation naming no target asks for. `scopes` names each scope the caller holds anything at — the deployment
-first, then each organization, then each user, by identifier — with the names held there, and with any name held there
-that [only the deployment scope grants](permissions.md#what-only-the-deployment-scope-grants) listed apart under
+The route reports the grant twice over, beside the `user` and the `roles` those two lines are printed from.
+`permissions` names what the caller holds over the whole deployment, which is what every operation naming no target
+asks for. `scopes` names each scope the caller holds anything at — the deployment first, then each organization, then
+each user, by identifier — with the names held there, and with any name held there that
+[only the deployment scope grants](permissions.md#what-only-the-deployment-scope-grants) listed apart under
 `reachingNothing`:
 
 ```json
@@ -261,7 +271,9 @@ that [only the deployment scope grants](permissions.md#what-only-the-deployment-
       "permissions": ["mailfathom.admin.read", "mailfathom.admin.operate"],
       "reachingNothing": ["mailfathom.admin.spend"]
     }
-  ]
+  ],
+  "user": { "id": "0198f0c4-…", "displayName": "Alice Example" },
+  "roles": [{ "role": "Operator", "scope": "organization", "target": "0198f0aa-…" }]
 }
 ```
 
@@ -463,7 +475,7 @@ and a request with none is refused as any other.
 
 | Route | Permission | What it does |
 | --- | --- | --- |
-| `GET /api/admin/session` | none | Reports the credential that authenticated, the running version, and what it holds at each scope. `login` and `status` report what it answers; every other command reads it first to [check the two versions against each other](#take-the-command-from-the-deployments-own-release-line). |
+| `GET /api/admin/session` | none | Reports the credential that authenticated, the user it belongs to and the roles they hold, the running version, and what the credential holds at each scope. `login` and `status` report what it answers; every other command reads it first to [check the two versions against each other](#take-the-command-from-the-deployments-own-release-line). |
 | `POST /api/admin/mailbox/refresh-token` | `mailfathom.admin.credentials.write` | Stores a mailbox refresh token for one configured account, sealed under the deployment's data-encryption key. This is what [`mfctl mailbox authorize --account`](mailbox-oauth.md#sending-the-token-to-the-deployment) sends. |
 | `GET /api/admin/mailbox/synchronization` | `mailfathom.admin.read` | Reports what synchronization is doing, per account and per mapped folder. This is what [`mfctl mailbox status`](#reading-what-synchronization-is-doing) asks. |
 | `GET /api/admin/mailbox/rewind` | `mailfathom.admin.read` | Reports how much mail discarding an account's synchronization progress would have fetched again, discarding nothing. |
@@ -2386,12 +2398,13 @@ with no browser on a redirect that can never arrive.
 ### With a password
 
 The first sign-in to a new deployment is the default administrator's, with the password `MAILFATHOM_ADMIN_PASSWORD`
-gave it — [the default administrator](#the-default-administrator) — so `--username` defaults to `admin`:
+gave it — [the default administrator](#the-default-administrator) — so `--username` defaults to `admin`. The
+confirmation names the user the deployment signed you in as, by display name and identifier:
 
 ```console
 $ mfctl login --endpoint http://127.0.0.1:8090 --name local --mode password
 Password for 'admin':
-Signed in to http://127.0.0.1:8090 as 'user 3f1d... credential 0198f0c4-...' (MailFathom 0.2.0), saved as profile 'local' and selected.
+Signed in to http://127.0.0.1:8090 as admin (3f1d...) (MailFathom 0.2.0), saved as profile 'local' and selected.
 ```
 
 Change a shipped password straight away, with the credential identifier `mfctl credential list --user <admin's id>`
@@ -2414,7 +2427,7 @@ protects it.
 ```console
 $ mfctl login --endpoint https://mail.example.test:8443 --name production
 Administrative credential (an API key, or an access token from the configured authorization server):
-Signed in to https://mail.example.test:8443 as 'user 3f1d... credential 41d7e2b0-...' (MailFathom 0.2.0), saved as profile 'production' and selected.
+Signed in to https://mail.example.test:8443 as Alice Example (3f1d...) (MailFathom 0.2.0), saved as profile 'production' and selected.
 ```
 
 The key is one provisioned with `--surface admin` for a user holding an administrative role; a key listing only the mail
@@ -2444,7 +2457,7 @@ Provision that public key as a credential of your user that lists `admin` —
 ```console
 $ mfctl login --endpoint https://mail.example.test:8443 --name production --mode keypair \
     --private-key ~/.config/MailFathom/production.key
-Signed in to https://mail.example.test:8443 as 'user 7a20... credential 5c3e91d2-...' (MailFathom 0.4.0), saved as profile 'production' and selected.
+Signed in to https://mail.example.test:8443 as Alice Example (7a20...) (MailFathom 0.4.0), saved as profile 'production' and selected.
 No credential was stored. Every command signs a short-lived assertion with the key at
 /home/you/.config/MailFathom/production.key, so keep that file readable by this account alone and the sign-in lasts as
 long as the deployment accepts its public half.
@@ -2473,7 +2486,7 @@ A browser has been opened for you. If it did not appear, open this address yours
   https://sso.example.test/realms/mailfathom/protocol/openid-connect/auth?client_id=mfctl&response_type=code&...
 
 Waiting for the sign-in to come back to http://127.0.0.1:8765/...
-Signed in to https://mail.example.test:8443 as 'user 5be8... credential 9e04a7c1-...' (MailFathom 0.2.0), saved as profile 'production' and selected.
+Signed in to https://mail.example.test:8443 as Alice Example (5be8...) (MailFathom 0.2.0), saved as profile 'production' and selected.
 The access token is renewed for you until the refresh token expires or is revoked, and the sign-in ends when it does.
 ```
 
@@ -2522,7 +2535,9 @@ rather than left polling.
 endpoint, and a host that answers with something that is not MailFathom all fail here rather than at some later command.
 
 `--name` is what the deployment is remembered as; without it the profile takes the host name. Signing in also selects
-the profile, because it is the deployment you just chose to work with.
+the profile, because it is the deployment you just chose to work with. **The profile records the user it signed in as**,
+by the identifier and display name the deployment reported, which is what `mfctl profiles` lists; `mfctl status` asks
+the deployment again rather than trusting that record.
 
 When a deployment issues a new credential, sign in again by profile name rather than by address — `mfctl login
 --endpoint production` — and the address it already holds is reused.
@@ -2553,7 +2568,7 @@ Accepting it stores this fingerprint on the profile. Every later command then ac
 so a deployment that renews or replaces its certificate is signed in to again rather than trusted silently.
 
 Trust this certificate for this profile? [y/N]: y
-Signed in to https://mail.internal.example:8443 as 'user 3f1d... credential 41d7e2b0-...' (MailFathom 0.5.0), saved as profile 'internal' and selected. The connection is protected by a pinned certificate rather than by a chain this machine trusts; the profile now accepts 3B:9A:1C:…:7F and refuses any other.
+Signed in to https://mail.internal.example:8443 as Alice Example (3f1d...) (MailFathom 0.5.0), saved as profile 'internal' and selected. The connection is protected by a pinned certificate rather than by a chain this machine trusts; the profile now accepts 3B:9A:1C:…:7F and refuses any other.
 ```
 
 Read the fingerprint against the deployment's own before answering — `openssl x509 -in server.crt -noout -fingerprint
@@ -2661,12 +2676,12 @@ Every profile is a deployment you are signed in to, and one of them is the one c
 
 ```console
 $ mfctl profiles
-In use  Profile     Endpoint                           Credential
-*       production  https://mail.example.test:8443     alice
-        staging     https://staging.example.test:8443  alice
+In use  Profile     Endpoint                           User           Credential
+*       production  https://mail.example.test:8443     Alice Example  user 3f1d... credential 41d7e2b0-...
+        staging     https://staging.example.test:8443  Alice Example  user 3f1d... credential 6b20c7d4-...
 
 $ mfctl switch staging
-Now acting on 'staging' (https://staging.example.test:8443) as 'user 3f1d... credential 41d7e2b0-...'.
+Now acting on 'staging' (https://staging.example.test:8443) as 'user 3f1d... credential 6b20c7d4-...'.
 ```
 
 `--endpoint` overrides the selection for one invocation without changing it, and takes either a profile name or an
@@ -2675,6 +2690,8 @@ address:
 ```console
 $ mfctl status --endpoint production
 'production' (https://mail.example.test:8443) accepts the stored credential as 'user 3f1d... credential 41d7e2b0-...' (MailFathom 0.2.0).
+Signed in as Alice Example (3f1d...).
+The user holds Administrator over the deployment.
 It holds mailfathom.admin.read, mailfathom.admin.operate.
 Documentation for that version: https://krzysztof318.github.io/MailFathom/docs/v0.2.0/
 ```
@@ -2728,8 +2745,10 @@ another, and two profiles at one deployment — an administrator's and a read-on
 the second sign-in overwriting the first. macOS is not covered because `mfctl` is not published for it.
 
 What `credentials.json` then records is what a profile *is* rather than what it can do: the address, the credential's
-reported name, a key-pair profile's key path, an OAuth session's endpoint, issuer, client identifier, resource, scopes,
-and expiry, and the transport trust you accepted. None of those is a secret and each was already in clear.
+reported name, the user the profile signed in as by identifier and display name, a key-pair profile's key path, an
+OAuth session's endpoint, issuer, client identifier, resource, scopes, and expiry, and the transport trust you
+accepted. None of those is a secret and each was already in clear, though the display name is the user's personal data
+and sits in that file for as long as the profile does.
 Three shapes are written, and the `keyPair` member is present in all of them — it is its value rather than
 its presence that tells them apart. **A profile with no `token` member and `"keyPair": null` is one whose
 secrets your operating system is holding.** One whose `keyPair` names a private-key path stores no secret anywhere,
@@ -2747,13 +2766,13 @@ moved between entries does not decrypt.
 
 ```console
 $ mfctl login --endpoint https://mail.example.test:8443
-Signed in to https://mail.example.test:8443 as 'user 3f1d... credential 41d7e2b0-...' (MailFathom 0.8.0), saved as profile 'production' and selected.
+Signed in to https://mail.example.test:8443 as Alice Example (3f1d...) (MailFathom 0.8.0), saved as profile 'production' and selected.
 The credential is held by the Windows Credential Manager.
 ```
 
 ```console
 $ mfctl login --endpoint https://mail.example.test:8443
-Signed in to https://mail.example.test:8443 as 'user 3f1d... credential 41d7e2b0-...' (MailFathom 0.8.0), saved as profile 'production' and selected.
+Signed in to https://mail.example.test:8443 as Alice Example (3f1d...) (MailFathom 0.8.0), saved as profile 'production' and selected.
 The credential is sealed in the credentials file under a key beside it, because this session has no D-Bus session bus, so no Secret Service provider can be reached.
 ```
 

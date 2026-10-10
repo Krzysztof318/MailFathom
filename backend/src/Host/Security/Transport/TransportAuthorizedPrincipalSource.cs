@@ -267,13 +267,18 @@ internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalS
             HeldOnAMailSurface(userGrant, narrowing));
 
     /// <summary>Names the administrator a request on the administrative surface acts as, or nobody where it was admitted as none.</summary>
+    /// <param name="context">A request the administrative surface serves.</param>
+    /// <returns>The administrator's user, or <see langword="null" /> for nobody.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="context" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// A credential names its user, and every scheme on this surface resolves one. A request that authenticated nothing
     /// is the default administrator where the surface authenticates nobody, and nobody where it does or where that user
-    /// was removed.
+    /// was removed. The session route reads it to say who the caller is, which the principal deliberately does not carry.
     /// </remarks>
-    private UserId? AdministratorActingIn(HttpContext context)
+    internal UserId? AdministratorActingIn(HttpContext context)
     {
+        ArgumentNullException.ThrowIfNull(context);
+
         if (TransportCallerIdentity.NameOf(context.User) is not null)
         {
             return TransportCallerUser.CarriedBy(context.User);

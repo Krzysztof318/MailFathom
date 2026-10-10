@@ -22,6 +22,8 @@ public sealed class LoginCommandTests : IDisposable
 
     private static readonly Uri EndpointAddress = new(Endpoint);
 
+    private static readonly Guid AdministratorUser = Guid.Parse("0199a1b2-0000-7000-8000-0000000ad001");
+
     private readonly string storeDirectory =
         Path.Combine(Path.GetTempPath(), $"mailfathom-cli-tests-{Guid.NewGuid():N}");
 
@@ -79,6 +81,27 @@ public sealed class LoginCommandTests : IDisposable
         Assert.Equal(
             "admin:not-a-real-password",
             Encoding.UTF8.GetString(Convert.FromBase64String(handler.LastAuthorization()!.Parameter!)));
+    }
+
+    /// <summary>The profile remembers who it signed in as, and the confirmation names that person rather than a credential identifier.</summary>
+    [Fact]
+    public async Task Login_ADeploymentNamingTheUser_RecordsTheUserOnTheProfileAndNamesThem()
+    {
+        // Arrange
+        var store = this.CreateStore();
+        using var handler = FakeAdminEndpoint.AcceptingAsUser("user-credential", AdministratorUser, "Ada Admin", "[]");
+        this.console.SecretToSupply = "not-a-real-password";
+
+        // Act
+        var exitCode = await RunAsync(this.Context(store, handler), "login", "--endpoint", Endpoint, "--mode", "password");
+
+        // Assert
+        Assert.Equal(0, exitCode);
+        Assert.Equal(new StoredUser(AdministratorUser, "Ada Admin"), store.Read().Profiles["mail.example.test"].User);
+        Assert.Contains(
+            this.console.Lines,
+            line => line.StartsWith("Signed in to", StringComparison.Ordinal)
+                && line.Contains($"Ada Admin ({AdministratorUser:D})", StringComparison.Ordinal));
     }
 
     /// <summary>A stored password is presented the way it was verified on every later command, rather than as a bearer credential the deployment would not recognize.</summary>
@@ -514,6 +537,51 @@ public sealed class LoginCommandTests : IDisposable
     }
 
     /// <summary>
+    /// Who the operator is and which roles they hold at which scope is what a refusal would otherwise have to teach,
+    /// so it is reported before one does.
+    /// </summary>
+    [Fact]
+    public async Task Status_ADeploymentNamingTheUserAndTheirRoles_ReportsTheUserAndEachRoleAtItsScope()
+    {
+        // Arrange
+        var store = this.CreateStore();
+        store.Save("production", EndpointAddress, "not-a-real-key", "workstation");
+        var organization = Guid.Parse("0199a1b2-0000-7000-8000-00000000c0de");
+        using var handler = FakeAdminEndpoint.AcceptingAsUser(
+            "workstation",
+            AdministratorUser,
+            "Ada Admin",
+            $$"""[{"role":"administrator","scope":"deployment"},{"role":"auditor","scope":"organization","target":"{{organization:D}}"}]""");
+
+        // Act
+        var exitCode = await RunAsync(this.Context(store, handler), "status");
+
+        // Assert
+        Assert.Equal(0, exitCode);
+        Assert.Contains($"Signed in as Ada Admin ({AdministratorUser:D}).", this.console.Lines);
+        Assert.Contains(
+            $"The user holds administrator over the deployment, auditor over organization {organization:D}.",
+            this.console.Lines);
+    }
+
+    /// <summary>A user assigned nothing still signs in, and saying so explains every refusal that follows.</summary>
+    [Fact]
+    public async Task Status_AUserHoldingNoRole_SaysSoRatherThanReportingAnEmptyLine()
+    {
+        // Arrange
+        var store = this.CreateStore();
+        store.Save("production", EndpointAddress, "not-a-real-key", "workstation");
+        using var handler = FakeAdminEndpoint.AcceptingAsUser("workstation", AdministratorUser, "Ada Admin", "[]");
+
+        // Act
+        var exitCode = await RunAsync(this.Context(store, handler), "status");
+
+        // Assert
+        Assert.Equal(0, exitCode);
+        Assert.Contains("The user holds no role.", this.console.Lines);
+    }
+
+    /// <summary>
     /// A credential granted nothing signs in exactly as one granted everything does, so saying so is the difference
     /// between an operator understanding what they hold and meeting a refusal on the next command.
     /// </summary>
@@ -651,7 +719,7 @@ public sealed class LoginCommandTests : IDisposable
         Assert.Empty(handler.RecordedRequests);
         // The name is read out of the Profile column rather than out of the row, so a value that arrived under the wrong
         // heading fails here instead of passing on a row-wide match.
-        var listing = DrawnListing.ReadFrom(this.console.Lines, "In use", "Profile", "Endpoint", "Credential");
+        var listing = DrawnListing.ReadFrom(this.console.Lines, "In use", "Profile", "Endpoint", "User", "Credential");
 
         Assert.Contains(
             listing.Rows,
@@ -659,6 +727,73 @@ public sealed class LoginCommandTests : IDisposable
         Assert.Contains(
             listing.Rows,
             row => row.StartsWith('*') && listing.Cell(row, "Profile") == "staging");
+    }
+
+    /// <summary>The user a profile signed in as is listed by what they are called, and by identifier where the deployment named them nothing.</summary>
+    [Fact]
+    public async Task Profiles_SomeStoredWithTheirUser_ListsTheDisplayNameOrTheIdentifier()
+    {
+        // Arrange
+        var store = this.CreateStore();
+        var unnamed = Guid.Parse("0199a1b2-0000-7000-8000-0000000ad002");
+        store.Save("production", EndpointAddress, "production-key", "workstation", user: new StoredUser(AdministratorUser, "Ada Admin"));
+        store.Save("staging", new Uri("https://staging.example.test:8443"), "staging-key", "workstation", user: new StoredUser(unnamed, null));
+        using var handler = FakeAdminEndpoint.Accepting("workstation");
+
+        // Act
+        var exitCode = await RunAsync(this.Context(store, handler), "profiles");
+
+        // Assert
+        Assert.Equal(0, exitCode);
+        var listing = DrawnListing.ReadFrom(this.console.Lines, "In use", "Profile", "Endpoint", "User", "Credential");
+
+        Assert.Contains(
+            listing.Rows,
+            row => listing.Cell(row, "Profile") == "production" && listing.Cell(row, "User") == "Ada Admin");
+        Assert.Contains(
+            listing.Rows,
+            row => listing.Cell(row, "Profile") == "staging" && listing.Cell(row, "User") == $"{unnamed:D}");
+    }
+
+    /// <summary>A display name and a role name are text the deployment supplied, so a control sequence in either never reaches the terminal.</summary>
+    [Fact]
+    public async Task Status_ADisplayNameAndARoleNameCarryingAControlSequence_PrintsThemReduced()
+    {
+        // Arrange
+        var store = this.CreateStore();
+        store.Save("production", EndpointAddress, "not-a-real-key", "workstation");
+        using var handler = FakeAdminEndpoint.AcceptingAsUser(
+            "workstation",
+            AdministratorUser,
+            "Ada\\u001b[31m Admin",
+            """[{"role":"Aud\u001b[2Jitor","scope":"deployment"}]""");
+
+        // Act
+        var exitCode = await RunAsync(this.Context(store, handler), "status");
+
+        // Assert
+        Assert.Equal(0, exitCode);
+        Assert.DoesNotContain(this.console.Lines, line => line.Contains('\u001b', StringComparison.Ordinal));
+        Assert.Contains(this.console.Lines, line => line.StartsWith("Signed in as Ada", StringComparison.Ordinal));
+        Assert.Contains(this.console.Lines, line => line.StartsWith("The user holds Aud", StringComparison.Ordinal));
+    }
+
+    /// <summary>A display name is stored as the deployment sent it, so the listing reduces it again every time it is printed.</summary>
+    [Fact]
+    public async Task Profiles_AStoredDisplayNameCarryingAControlSequence_ListsItReduced()
+    {
+        // Arrange
+        var store = this.CreateStore();
+        store.Save("production", EndpointAddress, "production-key", "workstation", user: new StoredUser(AdministratorUser, "Ada\u001b[31m Admin"));
+        using var handler = FakeAdminEndpoint.Accepting("workstation");
+
+        // Act
+        var exitCode = await RunAsync(this.Context(store, handler), "profiles");
+
+        // Assert
+        Assert.Equal(0, exitCode);
+        Assert.DoesNotContain(this.console.Lines, line => line.Contains('\u001b', StringComparison.Ordinal));
+        Assert.Contains(this.console.Lines, line => line.Contains("Ada", StringComparison.Ordinal));
     }
 
     [Fact]

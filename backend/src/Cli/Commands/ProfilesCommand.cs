@@ -36,7 +36,7 @@ internal static class ProfilesCommand
                 return CliExitCode.Success;
             }
 
-            CliTable listing = new("In use", "Profile", "Endpoint", "Credential");
+            CliTable listing = new("In use", "Profile", "Endpoint", "User", "Credential");
 
             foreach (var profile in stored.Profiles.OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase))
             {
@@ -46,6 +46,7 @@ internal static class ProfilesCommand
                     inUse ? "*" : string.Empty,
                     profile.Key,
                     $"{profile.Value.Endpoint}",
+                    profile.Value.User is { } user ? ConsoleSafeText.Sanitize(user.DisplayName) ?? $"{user.Id:D}" : string.Empty,
                     profile.Value.Credential);
             }
 

@@ -170,6 +170,14 @@ public interface IGrantStore
     /// <remarks>A stored name this build does not publish is granted to nobody, as <see cref="RolePermissions.Read" /> decides for every role.</remarks>
     Task<ScopedGrant> ReadGrantOfAsync(UserId user, CancellationToken cancellationToken);
 
+    /// <summary>Reads which roles one user holds, at which scopes, through the same assignments <see cref="ReadGrantOfAsync" /> reads.</summary>
+    /// <param name="user">The user.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>Each role at each scope once, ordered by role name and then by scope; empty for a user assigned nothing, and for nobody at all.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
+    /// <remarks>It answers who a user is to the deployment, which is what a person reads; what they may do is the grant, and the two are never derived from each other.</remarks>
+    Task<IReadOnlyList<HeldRole>> ReadRolesHeldByAsync(UserId user, CancellationToken cancellationToken);
+
     /// <summary>Revokes one assignment.</summary>
     /// <param name="assignmentId">The assignment.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
