@@ -2095,7 +2095,7 @@ A name this build does not publish and a pattern reaching nothing it publishes a
 refusal saying which of the two each entry was:
 
 ```text
-This build publishes no permission named 'mailfathom.admin.raed'. This build publishes nothing in the reach of the
+This build publishes no permission named 'mailfathom.admin.reads'. This build publishes nothing in the reach of the
 pattern 'mailfathom.calendar.*'. A role lists published names, and patterns reaching at least one of them, in which
 '*' is a whole dot-separated segment standing for one or more segments.
 ```
