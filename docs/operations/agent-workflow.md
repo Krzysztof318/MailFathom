@@ -1223,14 +1223,23 @@ Two things ask for a review anyway, whichever skip refused it:
   major that touches a workflow's inputs and is not worth doing for a version
   number the register already answers.
 
-An automatic review is bounded per pull request: once six automatic reviews by
+An automatic review is bounded per pull request: once nine automatic reviews by
 `fathom-reviewer[bot]` stand on it, the gate refuses and says so in the run log
-instead of starting a seventh. Every push to a published branch starts a review,
+instead of starting a tenth. Every push to a published branch starts a review,
 so a branch pushed to forty times would otherwise be reviewed forty times, and
 past some number of passes over the same change another one repeats what it
 already said. Six is where that begins: #811 took six rounds, and the last two of
 them each moved two findings that were corrections to earlier findings rather
 than anything the first pass had missed.
+
+The other three are for the pushes that answer no finding. The `main` ruleset
+merges only a branch that is current with its base, so with several pull requests
+open every merge leaves the others behind, and the rebase that brings one back is
+a push like any other and spends a pass. Counted against six alone, a pull request
+rebased twice while its findings are being answered runs out of reviews before it
+runs out of findings, and the push that needs a verdict is the one refused. Nine
+keeps the six and leaves room beside them, and it is still a ceiling: past it the
+work is answering the review rather than asking for another.
 
 The count is the App's own published reviews rather than a quota read from run
 history, because the runs endpoint cannot tell a run that decided not to review —
@@ -1701,7 +1710,7 @@ grow:
 - a fork's own pushes never start a review; a maintainer's label does;
 - the comment trigger requires an `OWNER`, `MEMBER`, or `COLLABORATOR` author, so
   nobody outside the project can spend the subscription by typing;
-- an automatic review is capped at six per pull request, as described above, and a
+- an automatic review is capped at nine per pull request, as described above, and a
   review somebody asked for is outside that count in both directions;
 - the model is `claude-sonnet-5-5` rather than the costlier Opus, which exactly two
   things reach: a review request asking for it by name, and the `security` label
@@ -1996,7 +2005,7 @@ model on every pass, and the severity written is still the one the defect has.
 
 The threshold is measured rather than chosen. Across the 60 most recently merged
 pull requests — 59 of them reviewed, 187 published reviews — 21 reached a fourth
-pass, 10 reached the ceiling, and 9 never received an approval at all. Of the 33
+pass, 10 reached a sixth, and 9 never received an approval at all. Of the 33
 reviews published at pass 4 or later, 31 withheld approval and 27 of those carried
 no P1 at all: a rule-owed P2 spent the round, at the point where the author is
 answering review rather than writing code. The findings sit the same way — 38 of the
