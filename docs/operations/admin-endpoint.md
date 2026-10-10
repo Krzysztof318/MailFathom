@@ -2133,7 +2133,7 @@ Saving what is already in force writes nothing and says so. A refused policy lea
 
 ```console
 $ mfctl policy edit --organization 0197c0de-0000-7000-8000-0000000000a1
-Users:Defaults names Languagee, which is not a property of a user's record. Remove it, or correct the spelling of the property it was meant to be.
+Users:Defaults names Dialect, which is not a property of a user's record. Remove it, or correct the spelling of the property it was meant to be.
 Users:Forced states DisplayName, which says who or which rather than how, so it takes no default and no forced value: one statement for many records could only be wrong. Remove it; Users:Editing may still say whether the person changes it.
 ```
 

@@ -283,7 +283,7 @@ public sealed class PolicyCommandTests : IDisposable
     public async Task Edit_APolicyTheDeploymentRefuses_FailsWithTheSentenceItGave()
     {
         // Arrange
-        const string refusal = "Users:Defaults:Langauge names no property of a user's record.";
+        const string refusal = "Users:Defaults:Dialect names no property of a user's record.";
 
         using var deployment = FakeSettingsPolicyDeployment.RefusingTheWrite(
             organization: null,
@@ -291,7 +291,7 @@ public sealed class PolicyCommandTests : IDisposable
             refusal,
             OneDefault);
 
-        this.harness.EditsTheBufferInto("""{"Users":{"Defaults":{"Langauge":"pl"}}}""");
+        this.harness.EditsTheBufferInto("""{"Users":{"Defaults":{"Dialect":"pl"}}}""");
 
         // Act
         var exitCode = await this.RunAsync(deployment, "policy", "edit", "--endpoint", Endpoint);

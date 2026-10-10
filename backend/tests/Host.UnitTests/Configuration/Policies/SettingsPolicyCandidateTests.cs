@@ -153,7 +153,7 @@ public sealed class SettingsPolicyCandidateTests
 
     /// <summary>A mistyped path is never a rule that silently governs nothing.</summary>
     [Theory]
-    [InlineData("""{"Users":{"Defaults":{"Languagee":"Polish"}}}""", "Users:Defaults names Languagee, which is not a property of a user's record.")]
+    [InlineData("""{"Users":{"Defaults":{"Dialect":"Polish"}}}""", "Users:Defaults names Dialect, which is not a property of a user's record.")]
     [InlineData("""{"Users":{"Forced":{"EndpointAccess":{"Imap":true}}}}""", "Users:Forced names EndpointAccess:Imap, which is not a property of a user's record.")]
     [InlineData("""{"MailAccounts":{"Forced":{"Delivery":{"Hots":"smtp.example.test"}}}}""", "MailAccounts:Forced names Delivery:Hots, which is not a property of a mail account.")]
     [InlineData("""{"MailAccounts":{"Defaults":{"EffectiveFolders":[]}}}""", "MailAccounts:Defaults names EffectiveFolders, which is not a property of a mail account.")]
@@ -421,7 +421,7 @@ public sealed class SettingsPolicyCandidateTests
     [InlineData("""{"Properties":["Language"]}""", "Users:Editing lists Properties and states no Mode")]
     [InlineData("""{"Mode":"AllExcept","Properties":"Language"}""", "Users:Editing:Properties is a list of property paths")]
     [InlineData("""{"Mode":"AllExcept","Properties":[1]}""", "Users:Editing:Properties is a list of property paths")]
-    [InlineData("""{"Mode":"AllExcept","Properties":["Languagee"]}""", "Users:Editing:Properties lists Languagee, which is not a property of a user's record.")]
+    [InlineData("""{"Mode":"AllExcept","Properties":["Dialect"]}""", "Users:Editing:Properties lists Dialect, which is not a property of a user's record.")]
     [InlineData("""{"Mode":"AllExcept","Properties":["a b"]}""", "which is not a property path")]
     [InlineData("""{"Mode":"AllExcept","Properties":[""]}""", "which is not a property path")]
     public void Judge_AnEditingRestrictionThatSaysNothingUsable_IsRefused(string editing, string expected)
@@ -439,8 +439,8 @@ public sealed class SettingsPolicyCandidateTests
 
     /// <summary>A mode that cannot be read does not hide a path beside it that names nothing.</summary>
     [Theory]
-    [InlineData("""{"Mode":"Open","Properties":["Languagee"]}""", "Users:Editing:Mode takes")]
-    [InlineData("""{"Properties":["Languagee"]}""", "states no Mode")]
+    [InlineData("""{"Mode":"Open","Properties":["Dialect"]}""", "Users:Editing:Mode takes")]
+    [InlineData("""{"Properties":["Dialect"]}""", "states no Mode")]
     public void Judge_AnEditingRestrictionWithAFaultyModeAndAFaultyPath_ReportsBoth(string editing, string expectedOfTheMode)
     {
         // Arrange
@@ -452,7 +452,7 @@ public sealed class SettingsPolicyCandidateTests
         // Assert
         Assert.Equal(2, candidate.Refusals.Count);
         Assert.Contains(candidate.Refusals, refusal => refusal.Contains(expectedOfTheMode, StringComparison.Ordinal));
-        Assert.Contains(candidate.Refusals, refusal => refusal.Contains("lists Languagee, which is not a property", StringComparison.Ordinal));
+        Assert.Contains(candidate.Refusals, refusal => refusal.Contains("lists Dialect, which is not a property", StringComparison.Ordinal));
     }
 
     [Theory]
@@ -544,7 +544,7 @@ public sealed class SettingsPolicyCandidateTests
         const string saved =
             """
             {
-              "Users": { "Defaults": { "Languagee": "Polish", "Portrait": "0197a3c0-0000-7000-8000-000000000001" } },
+              "Users": { "Defaults": { "Dialect": "Polish", "Portrait": "0197a3c0-0000-7000-8000-000000000001" } },
               "MailAccounts": { "Forced": { "Port": "many" }, "Editing": { "Mode": "Open" } }
             }
             """;

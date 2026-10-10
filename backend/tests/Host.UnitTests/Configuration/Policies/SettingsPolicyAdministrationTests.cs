@@ -291,7 +291,7 @@ public sealed class SettingsPolicyAdministrationTests
         // Act
         var outcome = await harness.Policies.ApplyAsync(
             organizationId: null,
-            """{"Users":{"Defaults":{"Languagee":"Polish"}}}""",
+            """{"Users":{"Defaults":{"Dialect":"Polish"}}}""",
             expectedVersion: 3,
             TestContext.Current.CancellationToken);
 
@@ -437,7 +437,7 @@ public sealed class SettingsPolicyAdministrationTests
 
     /// <summary>A write that moved nothing asks no replica to read anything again.</summary>
     [Theory]
-    [InlineData("""{"Users":{"Defaults":{"Languagee":"Polish"}}}""", 4)]
+    [InlineData("""{"Users":{"Defaults":{"Dialect":"Polish"}}}""", 4)]
     [InlineData(ForcingPolling, 4)]
     [InlineData(DefaultingPolish, 3)]
     public async Task ApplyAsync_AWriteThatMovedNothing_AnnouncesNothing(string saved, long composedOver)

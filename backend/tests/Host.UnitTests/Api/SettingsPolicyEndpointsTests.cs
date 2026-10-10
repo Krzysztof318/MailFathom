@@ -130,7 +130,7 @@ public sealed class SettingsPolicyEndpointsTests
 
     /// <summary>A refusal is an outcome the administrator corrects and continues from, so it arrives with a success status, a code, and the version to compose over.</summary>
     [Theory]
-    [InlineData("""{"Users":{"Defaults":{"Languagee":"Polish"}}}""", 2, 12007, "Users:Defaults names Languagee")]
+    [InlineData("""{"Users":{"Defaults":{"Dialect":"Polish"}}}""", 2, 12007, "Users:Defaults names Dialect")]
     [InlineData(ForcingPolling, 1, 12008, "version 2 is in force")]
     public async Task SaveOrganizationPolicyAsync_ARefusedWrite_AnswersTheCodeTheVersionInForceAndWhatToCorrect(
         string saved,
