@@ -20,11 +20,13 @@ namespace MailFathom.Host.Configuration.UserSettings;
 /// </para>
 /// <para>
 /// <see cref="MaximumUsersPerReading" /> rows are read per interval, in identifier order, and each reading starts
-/// past the user the one before it ended on, turning back to the first once a reading comes back short. So a backlog
-/// drains that many per interval, and a row that cannot be stamped — a record governed by a policy this build does
-/// not read, above all — is passed rather than read first again on every interval, where it would keep every row
-/// behind it waiting for as long as it stays that way. Where a reading ended is this replica's own and nothing
-/// rests on it: a replica that starts reads from the first row, and what it repeats is derived to the same switches.
+/// past the user the one before it ended on. A reading that passes the last trailing row with room left turns back
+/// to the first within the same interval and reads what is left of that many, so every trailing row is reached on
+/// each interval while no more than that many trail, wherever the last reading ended. A larger backlog drains that
+/// many per interval, and a row that cannot be stamped — a record governed by a policy this build does not read,
+/// above all — is passed rather than read first again on every interval, where it would keep every row behind it
+/// waiting for as long as it stays that way. Where a reading ended is this replica's own and nothing rests on it:
+/// a replica that starts reads from the first row, and what it repeats is derived to the same switches.
 /// </para>
 /// <para>
 /// Every replica runs it, and two that reach one row are told apart by the row's lock: the one that waited finds the
@@ -53,11 +55,7 @@ internal sealed partial class UserEndpointSwitchReconciliation(
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "One user whose switches cannot be derived is reported and stepped over, so the users behind them in identifier order are not held back by it on every interval.")]
     public async Task ReconcileAsync(CancellationToken cancellationToken)
     {
-        var trailing = await switches.ReadTrailingAsync(this.readingEndedOn, MaximumUsersPerReading, cancellationToken);
-
-        this.readingEndedOn = trailing.Count == MaximumUsersPerReading ? trailing[^1].Value : null;
-
-        foreach (var user in trailing)
+        foreach (var user in await this.ReadThisIntervalsUsersAsync(cancellationToken))
         {
             try
             {
@@ -72,6 +70,34 @@ internal sealed partial class UserEndpointSwitchReconciliation(
                 this.LogUserNotDerived(user.Value, failure);
             }
         }
+    }
+
+    /// <summary>Reads on from where the last interval's reading ended, and turns back to the first row where that leaves room.</summary>
+    /// <returns>No more than <see cref="MaximumUsersPerReading" /> users, each once.</returns>
+    /// <remarks>
+    /// Turning back inside the interval, rather than on the next one, is what keeps the documented bound: a row an
+    /// older build writes behind where the last reading ended would otherwise wait for a reading that came back
+    /// short and then for the one after it. The rows read from the first can repeat ones already read past the
+    /// position — nothing was derived between the two readings — so they are told apart here.
+    /// </remarks>
+    private async Task<IReadOnlyList<UserId>> ReadThisIntervalsUsersAsync(CancellationToken cancellationToken)
+    {
+        var startedPast = this.readingEndedOn;
+        var trailing = await switches.ReadTrailingAsync(startedPast, MaximumUsersPerReading, cancellationToken);
+
+        if (startedPast is null || trailing.Count == MaximumUsersPerReading)
+        {
+            this.readingEndedOn = trailing.Count == MaximumUsersPerReading ? trailing[^1].Value : null;
+
+            return trailing;
+        }
+
+        var room = MaximumUsersPerReading - trailing.Count;
+        var fromTheFirst = await switches.ReadTrailingAsync(after: null, room, cancellationToken);
+
+        this.readingEndedOn = fromTheFirst.Count == room ? fromTheFirst[^1].Value : null;
+
+        return [.. trailing, .. fromTheFirst.Except(trailing)];
     }
 
     /// <summary>Derives the switches a row is to carry by resolving the record through the policies governing it.</summary>

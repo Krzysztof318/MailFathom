@@ -26,8 +26,11 @@ internal sealed class InMemoryUserEndpointSwitchRows : IUserEndpointSwitchStore
     /// <summary>Gets or sets what another writer commits between a reading of the trailing rows and the first derivation after it.</summary>
     internal Action? AfterReading { get; set; }
 
-    /// <summary>Gets how many rows each reading was asked for, in the order the readings were made.</summary>
-    internal List<int> Readings { get; } = [];
+    /// <summary>Gets the user each reading was asked to read past and how many rows it was asked for, in the order the readings were made.</summary>
+    internal List<(Guid? After, int Limit)> Readings { get; } = [];
+
+    /// <summary>Gets the users a derivation was asked for, once per asking and in the order they were asked.</summary>
+    internal List<UserId> Derivations { get; } = [];
 
     /// <summary>States the policy of one organization as a derivation reads it inside its own write.</summary>
     /// <param name="organizationId">The organization.</param>
@@ -72,7 +75,7 @@ internal sealed class InMemoryUserEndpointSwitchRows : IUserEndpointSwitchStore
     /// <inheritdoc />
     public Task<IReadOnlyList<UserId>> ReadTrailingAsync(Guid? after, int limit, CancellationToken cancellationToken)
     {
-        this.Readings.Add(limit);
+        this.Readings.Add((after, limit));
 
         IReadOnlyList<UserId> trailing =
         [
@@ -94,6 +97,8 @@ internal sealed class InMemoryUserEndpointSwitchRows : IUserEndpointSwitchStore
         Func<GovernedUserRecord, UserEndpointAccess?> derive,
         CancellationToken cancellationToken)
     {
+        this.Derivations.Add(user);
+
         if (!this.rows.TryGetValue(user.Value, out var held) || !held.Trails)
         {
             return Task.FromResult(false);

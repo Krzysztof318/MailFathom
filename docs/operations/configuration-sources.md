@@ -460,10 +460,11 @@ inside that write, under the lock a policy write takes, so a policy committed in
 row is derived from or what rewrites it afterwards, and never what it is derived past.
 
 **The bound is one interval while no more than a hundred rows trail, and a hundred rows per interval beyond that**,
-whatever the replica count: each replica reads a hundred users per interval in identifier order, and carries on from
-where its last reading ended. For as long as an older replica runs it can undo a force again with each write it takes,
-and a newer one puts it back within that bound; once the rollout has finished, every row the older build touched is
-repaired without anybody writing the record or the policy again. A row whose record cannot be resolved, under policies
+whatever the replica count: each replica reads a hundred users per interval in identifier order, carries on from
+where its last reading ended, and turns back to the first within the same interval once it has passed the last. For as
+long as an older replica runs it can undo a force again with each write it takes, and a newer one puts it back within
+that bound; once the rollout has finished, every row the older build touched is repaired without anybody writing the
+record or the policy again. A row whose record cannot be resolved, under policies
 none of which forces a switch this build can read, is left as it stands and read again on a later interval.
 
 So a policy that closes an endpoint is a guarantee once every replica runs a build that knows policies and that backlog

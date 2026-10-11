@@ -203,8 +203,87 @@ public sealed class UserEndpointSwitchReconciliationTests
 
         // Assert
         Assert.Equal(UserEndpointSwitchReconciliation.MaximumUsersPerReading, afterOneInterval);
-        Assert.All(rows.Readings, limit => Assert.Equal(UserEndpointSwitchReconciliation.MaximumUsersPerReading, limit));
+        Assert.All(rows.Readings, reading => Assert.InRange(reading.Limit, 1, UserEndpointSwitchReconciliation.MaximumUsersPerReading));
         Assert.All(users, user => Assert.Equal(ClientOff, rows.SwitchesOf(user)));
+    }
+
+    /// <summary>
+    /// A full reading leaves the next one starting past its last row. A row an older build writes behind that
+    /// position must not wait for a reading that came back short and then for the one after it.
+    /// </summary>
+    [Fact]
+    public async Task ReconcileAsync_ARowWrittenBehindWhereTheLastReadingEnded_IsReachedOnTheNextIntervalByTurningBackToTheFirst()
+    {
+        // Arrange
+        var rows = new InMemoryUserEndpointSwitchRows { DeploymentPolicy = ForcingOffTheClient };
+        var users = Enumerable.Range(1, UserEndpointSwitchReconciliation.MaximumUsersPerReading).Select(User).ToArray();
+
+        foreach (var user in users)
+        {
+            rows.Hold(user, ServedEverywhere, ClientOff);
+            rows.WriteAsAnOlderBuild(user, ServedEverywhere, UserEndpointAccess.Everywhere);
+        }
+
+        var reconciliation = Reconciliation(rows);
+        await reconciliation.ReconcileAsync(TestContext.Current.CancellationToken);
+        rows.WriteAsAnOlderBuild(users[4], ServedEverywhere, UserEndpointAccess.Everywhere);
+        (Guid? After, int Limit)[] fromTheFirstAfterTurningBack =
+        [
+            (null, UserEndpointSwitchReconciliation.MaximumUsersPerReading),
+            (users[^1].Value, UserEndpointSwitchReconciliation.MaximumUsersPerReading),
+            (null, UserEndpointSwitchReconciliation.MaximumUsersPerReading),
+            (null, UserEndpointSwitchReconciliation.MaximumUsersPerReading),
+        ];
+
+        // Act
+        await reconciliation.ReconcileAsync(TestContext.Current.CancellationToken);
+        var reachedOnTheNextInterval = rows.IsStampedAsCurrent(users[4]);
+        await reconciliation.ReconcileAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(reachedOnTheNextInterval);
+        Assert.Equal(ClientOff, rows.SwitchesOf(users[4]));
+        Assert.Equal(fromTheFirstAfterTurningBack, rows.Readings);
+    }
+
+    /// <summary>
+    /// Turning back reads only what the interval has room left for, and nothing is derived between the two readings,
+    /// so the rows read past the position come back in the reading from the first and are asked for once all the same.
+    /// </summary>
+    [Fact]
+    public async Task ReconcileAsync_AShortReadingPastWhereTheLastEnded_ReadsTheRestFromTheFirstAndAsksForEachUserOnce()
+    {
+        // Arrange
+        var rows = new InMemoryUserEndpointSwitchRows { DeploymentPolicy = ForcingOffTheClient };
+        var users = Enumerable.Range(1, UserEndpointSwitchReconciliation.MaximumUsersPerReading + 30).Select(User).ToArray();
+        var ahead = users[UserEndpointSwitchReconciliation.MaximumUsersPerReading..];
+        var behind = users[..3];
+
+        foreach (var user in users)
+        {
+            rows.Hold(user, ServedEverywhere, ClientOff);
+            rows.WriteAsAnOlderBuild(user, ServedEverywhere, UserEndpointAccess.Everywhere);
+        }
+
+        var reconciliation = Reconciliation(rows);
+        await reconciliation.ReconcileAsync(TestContext.Current.CancellationToken);
+
+        foreach (var user in behind)
+        {
+            rows.WriteAsAnOlderBuild(user, ServedEverywhere, UserEndpointAccess.Everywhere);
+        }
+
+        rows.Derivations.Clear();
+        (Guid? After, int Limit) theRestFromTheFirst = (null, UserEndpointSwitchReconciliation.MaximumUsersPerReading - ahead.Length);
+        UserId[] eachUserOnce = [.. ahead, .. behind];
+
+        // Act
+        await reconciliation.ReconcileAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(theRestFromTheFirst, rows.Readings[^1]);
+        Assert.Equal(eachUserOnce, rows.Derivations);
+        Assert.All(users, user => Assert.True(rows.IsStampedAsCurrent(user)));
     }
 
     /// <summary>
