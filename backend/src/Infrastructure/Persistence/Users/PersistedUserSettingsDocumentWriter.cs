@@ -58,7 +58,9 @@ internal sealed class PersistedUserSettingsDocumentWriter(
     /// The cast is what turns the parameter into the column's own type, so the server parses the document and refuses
     /// text that is not JSON at all rather than storing something nothing can read back. The endpoint switches move in
     /// the same statement, so no request can find the row serving a user on an endpoint their committed record, read
-    /// through the policies governing it, keeps them off.
+    /// through the policies governing it, keeps them off. The stamp moves with them, to the version this statement
+    /// produces and the organization the row is held under, which is what tells this row apart from one a build that
+    /// does not know settings policies wrote.
     /// </remarks>
     private const string CommitRecord =
         """
@@ -67,7 +69,9 @@ internal sealed class PersistedUserSettingsDocumentWriter(
             "Version" = "Version" + 1,
             "UpdatedAt" = @updatedAt,
             "McpEndpointEnabled" = @mcpEndpoint,
-            "ClientEndpointEnabled" = @clientEndpoint
+            "ClientEndpointEnabled" = @clientEndpoint,
+            "EndpointSwitchesVersion" = "Version" + 1,
+            "EndpointSwitchesOrganizationId" = "OrganizationId"
         WHERE "Id" = @user AND "Version" = @expectedVersion
         RETURNING "Version";
         """;

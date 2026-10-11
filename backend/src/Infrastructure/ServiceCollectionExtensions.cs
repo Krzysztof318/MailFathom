@@ -178,6 +178,7 @@ using MailFathom.Infrastructure.Persistence.Tasks;
 using MailFathom.Infrastructure.Persistence.ThreadStates;
 using MailFathom.Infrastructure.Persistence.Users;
 using MailFathom.Infrastructure.Persistence.Users.AccountSettings;
+using MailFathom.Infrastructure.Persistence.Users.EndpointSwitches;
 using MailFathom.Infrastructure.Resilience;
 using MailFathom.Infrastructure.Secrets.Database;
 using MailFathom.Infrastructure.Secrets.References;
@@ -689,6 +690,12 @@ public static class ServiceCollectionExtensions
         // never administers a user still reads one on every start, and the two are granted separately in the
         // database.
         services.AddSingleton<IUserSettingsDocumentWriter, PersistedUserSettingsDocumentWriter>();
+        // The endpoint switches on that row which a build that does not know settings policies wrote past one, found
+        // and derived again. A singleton over the pool as the two above are, and reaching it on first use as the
+        // reader does, because the convergence worker that holds it is a hosted service too.
+        services.AddSingleton<IUserEndpointSwitchStore>(provider => new PersistedUserEndpointSwitches(
+            () => provider.GetRequiredService<NpgsqlDataSource>(),
+            provider.GetRequiredService<DatabaseCommandTimeout>()));
         // The mail accounts a deployment holds and who each is served to. Scoped rather than a singleton over the pool,
         // because an erasure of an account runs the same model-derived walk a user's erasure runs, in one of the
         // request's own transactions.

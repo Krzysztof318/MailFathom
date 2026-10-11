@@ -79,6 +79,33 @@ internal sealed class UserAccountEntity
     /// <summary>Whether this user is served on the client endpoint, whichever credential or session they present there.</summary>
     public bool ClientEndpointEnabled { get; set; } = true;
 
+    /// <summary>The <see cref="Version" /> of the record the two endpoint switches were derived from.</summary>
+    /// <remarks>
+    /// <para>
+    /// Half of the stamp
+    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0037-a-settings-policy-at-the-deployment-and-at-each-organization.md">ADR 0037</see>
+    /// § <em>How a value resolves</em> decides, and <see cref="EndpointSwitchesOrganizationId" /> is the other. A
+    /// write that derives the switches from the effective record sets both to what the row then holds, and a write
+    /// that moves the version and leaves the switches as they are moves this with it. A build that does not know
+    /// settings policies writes neither, so a record it wrote, or a user it moved, is a row whose stamp no longer
+    /// matches it — which is what the reconciliation on every replica's convergence interval looks for and derives
+    /// again.
+    /// </para>
+    /// <para>
+    /// No record version is zero, so a row inserted by a statement naming no stamp reads as one whose switches
+    /// nothing has derived yet.
+    /// </para>
+    /// </remarks>
+    public long EndpointSwitchesVersion { get; set; }
+
+    /// <summary>The organization whose policy the two endpoint switches were derived under, or <see langword="null" /> for none.</summary>
+    /// <remarks>
+    /// A stamp rather than a reference, so it carries no foreign key: it is compared with
+    /// <see cref="OrganizationId" /> and never followed, and a key that cleared it when an organization went would
+    /// turn a row derived under that organization into one that reads as derived under none.
+    /// </remarks>
+    public Guid? EndpointSwitchesOrganizationId { get; set; }
+
     /// <summary>The version a write is accepted against, so two writers cannot both commit over one document.</summary>
     public long Version { get; set; }
 

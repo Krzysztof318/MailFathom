@@ -27,6 +27,10 @@ namespace MailFathom.Host.Hosting.Workers;
 /// is conditional on the version each one read.
 /// </para>
 /// <para>
+/// It derives again, too, the endpoint switches of a user whose row a build that does not know settings policies wrote
+/// past one. That is the same kind of write, made by every replica and decided between them by the row's own lock.
+/// </para>
+/// <para>
 /// The grants this replica computed are forgotten on the same occasions, before anything is read, so a change to a
 /// role, an assignment, a group, or an organization reaches a request here within the same bound as a change to a
 /// setting. Forgetting cannot fail, which is why it is not one of the readings below.
@@ -40,7 +44,7 @@ namespace MailFathom.Host.Hosting.Workers;
 internal sealed partial class ConfigurationConvergenceWorker : BackgroundService
 {
     /// <summary>The longest a replica serves settings or a held user without comparing them against what PostgreSQL holds.</summary>
-    /// <remarks>A constant rather than a setting, because it is the bound the documentation promises an operator about how long a change takes to reach every replica. What it costs is one statement over the versions of the users this replica holds, one read of the deployment's document, and one read of the accounts whose settings columns trail their document per replica per interval — plus a short write transaction for each of up to <see cref="MailAccountSettingsReconciliation.MaximumAccountsPerReading" /> such accounts, which is nothing once a rolling upgrade has finished.</remarks>
+    /// <remarks>A constant rather than a setting, because it is the bound the documentation promises an operator about how long a change takes to reach every replica. What it costs is one statement over the versions of the users this replica holds, one read of the deployment's document, and one read of the accounts whose settings columns trail their document per replica per interval — plus a short write transaction for each of up to <see cref="MailAccountSettingsReconciliation.MaximumAccountsPerReading" /> such accounts — and one read of the users whose endpoint switches trail their stamp, plus a short write transaction for each of up to <see cref="UserEndpointSwitchReconciliation.MaximumUsersPerReading" /> of them. Both writes are nothing once a rolling upgrade has finished.</remarks>
     internal static readonly TimeSpan Interval = TimeSpan.FromSeconds(30);
 
     private readonly Channel<bool> announced = Channel.CreateBounded<bool>(
@@ -49,6 +53,7 @@ internal sealed partial class ConfigurationConvergenceWorker : BackgroundService
     private readonly ConfigurationChangeAnnouncements announcements;
     private readonly ServedUsers users;
     private readonly MailAccountSettingsReconciliation accountSettings;
+    private readonly UserEndpointSwitchReconciliation endpointSwitches;
     private readonly UserGrantCache grants;
     private readonly Func<RootSettingsReloader?> rootSettings;
     private readonly TimeProvider timeProvider;
@@ -58,6 +63,7 @@ internal sealed partial class ConfigurationConvergenceWorker : BackgroundService
     /// <param name="announcements">What another replica's change is heard through.</param>
     /// <param name="users">Brings the users this replica holds up to their records.</param>
     /// <param name="accountSettings">Brings the settings columns of an account an older build wrote up to its document.</param>
+    /// <param name="endpointSwitches">Brings the endpoint switches of a user an older build wrote past the settings policy back to what the policy resolves.</param>
     /// <param name="grants">The grants this replica computed, forgotten whenever the worker wakes.</param>
     /// <param name="rootSettings">Resolves what brings the persisted layer up to the deployment's document, answering <see langword="null" /> where the host composed no persisted layer.</param>
     /// <param name="timeProvider">What the interval is measured by.</param>
@@ -67,6 +73,7 @@ internal sealed partial class ConfigurationConvergenceWorker : BackgroundService
         ConfigurationChangeAnnouncements announcements,
         ServedUsers users,
         MailAccountSettingsReconciliation accountSettings,
+        UserEndpointSwitchReconciliation endpointSwitches,
         UserGrantCache grants,
         Func<RootSettingsReloader?> rootSettings,
         TimeProvider timeProvider,
@@ -75,6 +82,7 @@ internal sealed partial class ConfigurationConvergenceWorker : BackgroundService
         ArgumentNullException.ThrowIfNull(announcements);
         ArgumentNullException.ThrowIfNull(users);
         ArgumentNullException.ThrowIfNull(accountSettings);
+        ArgumentNullException.ThrowIfNull(endpointSwitches);
         ArgumentNullException.ThrowIfNull(grants);
         ArgumentNullException.ThrowIfNull(rootSettings);
         ArgumentNullException.ThrowIfNull(timeProvider);
@@ -83,6 +91,7 @@ internal sealed partial class ConfigurationConvergenceWorker : BackgroundService
         this.announcements = announcements;
         this.users = users;
         this.accountSettings = accountSettings;
+        this.endpointSwitches = endpointSwitches;
         this.grants = grants;
         this.rootSettings = rootSettings;
         this.timeProvider = timeProvider;
@@ -115,6 +124,7 @@ internal sealed partial class ConfigurationConvergenceWorker : BackgroundService
 
             await this.RunInIsolationAsync(this.users.ConvergeAsync, this.LogReadingFailed, stoppingToken);
             await this.RunInIsolationAsync(this.accountSettings.ReconcileAsync, this.LogReconciliationFailed, stoppingToken);
+            await this.RunInIsolationAsync(this.endpointSwitches.ReconcileAsync, this.LogEndpointSwitchReconciliationFailed, stoppingToken);
         }
     }
 
@@ -161,4 +171,9 @@ internal sealed partial class ConfigurationConvergenceWorker : BackgroundService
         Level = LogLevel.Warning,
         Message = "This replica could not read the accounts whose settings columns trail their document, and reads them again in {Interval}; every question asked of all accounts at once goes on answering from what those columns hold.")]
     private partial void LogReconciliationFailed(TimeSpan interval, Exception exception);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "This replica could not read the users whose endpoint switches trail their stamp, and reads them again in {Interval}; a row written past a settings policy goes on admitting requests by what it holds until then.")]
+    private partial void LogEndpointSwitchReconciliationFailed(TimeSpan interval, Exception exception);
 }

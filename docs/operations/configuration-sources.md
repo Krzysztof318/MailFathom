@@ -449,13 +449,26 @@ switch a policy forces is written regardless, because a force does not depend on
 where the organization's policy is one this build does not read: what the deployment's policy forces is still
 written, and what that organization's would have said is left as the row has it.
 
-**Every writer of that row has to know policies for it to hold.** While a rolling upgrade still runs a replica of a
-build older than settings policies, a record write or a move that reaches that replica writes the record's own
-switches onto the row, over whatever a policy forced or supplied — and the row keeps them until the next write of
-that record, of that user's organization, or of a default or a forced value in a policy governing them, each of which
-writes the row afresh from what the policies resolve. So state a policy that forces or
-defaults an endpoint switch once every replica runs a build that knows policies, and not during the upgrade that
-introduces them.
+**A row written past a policy is repaired.** While a rolling upgrade still runs a replica of a build older than
+settings policies, a record write or a move that reaches that replica writes the record's own switches onto the row,
+over whatever a policy forced or supplied. The row does not stay that way. It carries a stamp — the version of the
+record its switches were derived from, and the organization they were derived under — that only a build knowing
+policies writes, so the older replica's write leaves the stamp behind. Every replica that knows policies reads the rows
+whose stamp no longer matches them on the thirty-second interval it [compares everything else on](#what-reaches-every-replica),
+derives each one's switches again from the record as the policies resolve it, and stamps the row. It reads the policies
+inside that write, under the lock a policy write takes, so a policy committed in the same instant is either what the
+row is derived from or what rewrites it afterwards, and never what it is derived past.
+
+**The bound is one interval while no more than a hundred rows trail, and a hundred rows per interval beyond that**,
+whatever the replica count: each replica reads a hundred users per interval in identifier order, and carries on from
+where its last reading ended. For as long as an older replica runs it can undo a force again with each write it takes,
+and a newer one puts it back within that bound; once the rollout has finished, every row the older build touched is
+repaired without anybody writing the record or the policy again. A row whose record cannot be resolved, under policies
+none of which forces a switch this build can read, is left as it stands and read again on a later interval.
+
+So a policy that closes an endpoint is a guarantee once every replica runs a build that knows policies and that backlog
+has drained, and not before: state one during the upgrade that introduces them and a user can be found served on the
+endpoint it closed, for up to that bound after each write an older replica takes.
 
 ### How a settings policy resolves a user's record
 
@@ -635,7 +648,7 @@ Two further properties belong to Kubernetes rather than to the watcher: an updat
 
 ### What reaches every replica
 
-**A change committed through MailFathom reaches every replica within thirty seconds, without a restart.** That holds for both stores a program writes: the deployment's persisted document in `settings_root`, and each user's record in `settings_accounts` — recording a user, changing their record, and erasing them. The replica that committed the change takes it before the write answers. Every other replica compares the version it bound with the version the row holds every thirty seconds — for a user's record, only the users that replica is holding, because it reads a user when something first acts for them — and takes a newer one through the same path a write takes, so it is bound, validated, and refused by version exactly as it was on the replica that committed it. The interval is fixed rather than a setting, because it is the bound this page promises. The same interval reads again the [settings every account is asked about at once](../architecture/stored-email-schema.md#what-every-account-is-asked-about-at-once) for up to a hundred accounts whose document a build older than those settings wrote alone, which is what bounds how long such a write goes unseen by those answers during a rolling upgrade: one interval while no more than a hundred trail, and a hundred per interval beyond that.
+**A change committed through MailFathom reaches every replica within thirty seconds, without a restart.** That holds for both stores a program writes: the deployment's persisted document in `settings_root`, and each user's record in `settings_accounts` — recording a user, changing their record, and erasing them. The replica that committed the change takes it before the write answers. Every other replica compares the version it bound with the version the row holds every thirty seconds — for a user's record, only the users that replica is holding, because it reads a user when something first acts for them — and takes a newer one through the same path a write takes, so it is bound, validated, and refused by version exactly as it was on the replica that committed it. The interval is fixed rather than a setting, because it is the bound this page promises. The same interval reads again the [settings every account is asked about at once](../architecture/stored-email-schema.md#what-every-account-is-asked-about-at-once) for up to a hundred accounts whose document a build older than those settings wrote alone, which is what bounds how long such a write goes unseen by those answers during a rolling upgrade: one interval while no more than a hundred trail, and a hundred per interval beyond that. It derives again, too, the [endpoint switches](#which-endpoints-one-user-is-served-on) of up to a hundred users whose row a build older than settings policies wrote past one, under the same bound.
 
 **Where a [signal backplane](configuration-endpoints.md#signalbackplane) is declared, a change arrives sooner.** The committing replica announces it over the backplane, and every replica listening compares the versions straight away rather than on its next interval. The announcement carries nothing — no setting, no user, no version — and losing it costs only the wait: a replica that missed one, and every replica of a deployment that declares no backplane, still converges on the interval. [ADR 0032](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0032-reaching-a-client-from-any-replica-over-websockets-and-a-resp-backplane.md#amendment-2-a-configuration-change-is-announced-over-the-backplane) records that exception to what the backplane carries.
 

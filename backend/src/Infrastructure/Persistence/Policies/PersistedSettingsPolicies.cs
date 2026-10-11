@@ -269,7 +269,12 @@ internal sealed class PersistedSettingsPolicies(
         }
 
         // The rows alone, with no version moved: a record's version says the record changed, and what moved here is
-        // the policy, whose own version is what has every replica compose these users again.
+        // the policy, whose own version is what has every replica compose these users again. The stamp on the
+        // switches is left alone for the same reason — it names a version and an organization, and this write moves
+        // neither. A row whose stamp matched therefore still matches and now holds what the candidate resolves to.
+        // A row whose stamp trailed still trails, and has to: a build that does not know policies takes no lock this
+        // write holds, so a record it writes or a user it moves while this write is judging them is one this write
+        // read too early, and stamping the row here would mark that reading as current.
         foreach (var (served, rows) in GovernedUserJudgements.FindMovedSwitches(users, userJudgements))
         {
             await dbContext.UserAccounts

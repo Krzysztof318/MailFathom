@@ -354,7 +354,9 @@ internal sealed class PersistedOrganizations(
         try
         {
             // The version moves with the organization, because which policy governs somebody is part of what they are
-            // served and a replica learns that it has to compose a user again by their record's version moving.
+            // served and a replica learns that it has to compose a user again by their record's version moving. The
+            // stamp is written with the switches, naming the version this statement produces and the organization
+            // they were derived under.
             await dbContext.UserAccounts
                 .Where(record => record.Id == userId)
                 .ExecuteUpdateAsync(
@@ -362,6 +364,8 @@ internal sealed class PersistedOrganizations(
                         .SetProperty(record => record.OrganizationId, organizationId)
                         .SetProperty(record => record.McpEndpointEnabled, served.McpEndpoint)
                         .SetProperty(record => record.ClientEndpointEnabled, served.ClientEndpoint)
+                        .SetProperty(record => record.EndpointSwitchesVersion, record => record.Version + 1)
+                        .SetProperty(record => record.EndpointSwitchesOrganizationId, organizationId)
                         .SetProperty(record => record.Version, record => record.Version + 1)
                         .SetProperty(record => record.UpdatedAt, now),
                     cancellationToken);
@@ -522,7 +526,8 @@ internal sealed class PersistedOrganizations(
             }
 
             // Which policy governs a mailbox is part of what its users are served, and a replica learns that it has
-            // to compose a user again by their record's version moving.
+            // to compose a user again by their record's version moving. Their endpoint switches are left as they
+            // are, so the stamp on them moves with the version.
             var now = timeProvider.GetUtcNow();
 
             await dbContext.UserAccounts
@@ -531,6 +536,7 @@ internal sealed class PersistedOrganizations(
                 .ExecuteUpdateAsync(
                     setters => setters
                         .SetProperty(user => user.Version, user => user.Version + 1)
+                        .SetProperty(user => user.EndpointSwitchesVersion, user => user.EndpointSwitchesVersion + 1)
                         .SetProperty(user => user.UpdatedAt, now),
                     cancellationToken);
 
