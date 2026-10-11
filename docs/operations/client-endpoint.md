@@ -2037,7 +2037,7 @@ somebody's mail is not deciding which mailboxes are read for them.
 
 | Route | What it does |
 | --- | --- |
-| `GET /api/client/record` | Hands over the signed-in user's record as redacted JSON, with the version it was read at |
+| `GET /api/client/record` | Hands over the signed-in user's record as redacted JSON, with the version it was read at and each of its settings as [the settings policies governing them](configuration-sources.md#how-a-settings-policy-resolves-a-users-record) resolve it |
 | `POST /api/client/record` | Commits that record back edited, as one change against the version it was opened over |
 | `POST /api/client/record/mail-accounts` | Creates one more mailbox, assigned to the signed-in user alone |
 | `POST /api/client/record/mail-accounts/removal` | Ends the signed-in user's assignment to one mailbox, named by its identifier, and erases the mail stored for it |
@@ -2045,11 +2045,61 @@ somebody's mail is not deciding which mailboxes are read for them.
 | `POST /api/client/record/mail-accounts/folders/replacement` | States one folder afresh, in place of the one carrying an alias |
 | `POST /api/client/record/mail-accounts/folders/removal` | Stops the mailbox declaring one folder, named by its alias |
 
-**A user's record states which endpoints they are served on, and saving it here never changes that.** The record
-carries `EndpointAccess` once an administrator has written it, and a record committed back here may carry it through
-exactly as it stands; one moving either switch is refused naming the block, because
-[whether a person is served on an endpoint](admin-endpoint.md#users-and-their-records) is decided by whoever
-administers the deployment.
+**The record read answers what the person stated and, beside it, what they are served.** `document` is the record's
+own: what somebody wrote on it, which is what a save is composed over. A
+[settings policy](admin-endpoint.md#settings-policies) of the deployment or of the person's organization may force a
+value over the record's or supply one the record leaves out, and neither is ever written into the document, so
+`properties` carries one entry per setting of the record with the value in force:
+
+```json
+{
+  "user": "3f1d2c4e-…",
+  "displayName": "Ada Lovelace",
+  "version": 7,
+  "document": "{\"Language\":\"English\",\"TimeZone\":\"Europe/London\"}",
+  "properties": [
+    { "path": "ClientTelemetryLevel", "value": null, "source": "BuiltIn", "heldBy": null, "changeable": false },
+    { "path": "DisplayName", "value": "Ada Lovelace", "source": "Record", "heldBy": null, "changeable": true },
+    { "path": "EndpointAccess:ClientEndpoint", "value": true, "source": "BuiltIn", "heldBy": null, "changeable": false },
+    { "path": "EndpointAccess:McpEndpoint", "value": true, "source": "BuiltIn", "heldBy": null, "changeable": false },
+    { "path": "Language", "value": "English", "source": "Record", "heldBy": null, "changeable": true },
+    { "path": "Portrait", "value": null, "source": "Record", "heldBy": null, "changeable": true },
+    { "path": "TimeZone", "value": "Europe/Warsaw", "source": "OrganizationForced", "heldBy": "Organization", "changeable": false }
+  ],
+  "unresolved": null
+}
+```
+
+| Field | What it says |
+| --- | --- |
+| `path` | The setting, as the colon-separated path a policy and a configuration key name it by |
+| `value` | The value the person is served with, or `null` where nothing states one and the build takes none either. `DisplayName` is the name the person is recorded under: a column beside the record rather than a key of its document, written through [the name routes](#the-name-routes), of which a policy says only who may change it |
+| `source` | Which step of [the resolution order](configuration-sources.md#how-a-settings-policy-resolves-a-users-record) supplied the value: `DeploymentForced`, `OrganizationForced`, `Record`, `OrganizationDefault`, `DeploymentDefault`, or `BuiltIn` |
+| `heldBy` | `Deployment` or `Organization` where that scope's policy forces the setting or does not leave it to the person to change, and `null` where no policy holds it. A force is named before a restriction |
+| `changeable` | Whether the person may change the setting through this surface: `false` where a policy holds it, and for the two settings only an administrator writes, `EndpointAccess` and `ClientTelemetryLevel` |
+
+`unresolved` is `null` wherever the settings were resolved. Where a policy governing the person is one this replica's
+build does not read as a settings policy, `properties` is empty and `unresolved` carries the sentence naming which
+scope's policy it is — the replica does not serve that person's record on part of what governs it, and says so rather
+than answering an empty list as *no settings*.
+
+**A save may not move a setting that is held against the person, and it may carry one through.** Three things hold a
+setting against whoever is saving their own record: a policy forces its value, a policy's editing restriction does not
+leave it to the person, or it is one of the two settings only an administrator writes —
+[which endpoints a person is served on](admin-endpoint.md#users-and-their-records), and the level their client is
+asked to record at. A saved record moving such a setting is refused in a sentence naming the setting and who holds it:
+
+```
+TimeZone is held by the organization, whose settings policy forces its value, so nothing written on the record changes it. Leave it as the record states it, or change the policy.
+```
+
+A record that carries a held setting through passes, and *carried through* means stated as a read showed it: unchanged
+from the record's own value, or as the value `properties` answers for it. The second passes without being written, so
+the record's own value stays exactly as it was and is what comes back once the force is lifted. A save that names
+nothing but held settings carried through commits nothing and answers the version already in force.
+
+**`Language` is required of a saved record only where no policy supplies it.** A record whose organization or
+deployment states a default or a forced language may leave it out, and is refused for leaving it out everywhere else.
 
 **The three folder routes are the whole of what a client may do to a folder, and none of them touches a mail
 server.** Each is a change to the mapping the record declares: a declaration adds one and lets the account's next run
@@ -2189,9 +2239,17 @@ nothing resolves anybody by. A client reading the record alone would still have 
 why this is a route of its own rather than a key in that document.
 
 **The read says whether the write would be accepted, so the client never has to find out by trying.** `changeable` is
-false for somebody whose credential was not granted `mailfathom.mail.accounts.write`. It reports the answer rather than
-the reason: a client draws the same read-only field however the write would be refused, and naming the grant a
-credential lacks would report a deployment's own decisions back to a page holding a token.
+false for somebody whose credential was not granted `mailfathom.mail.accounts.write`, and for somebody whose
+organization's or deployment's [settings policy](admin-endpoint.md#settings-policies) does not leave `DisplayName` to
+them to change. It reports the answer rather than the reason: a client draws the same read-only field however the write
+would be refused, and naming the grant a credential lacks would report a deployment's own decisions back to a page
+holding a token.
+
+**A name a policy holds is refused naming who holds it, and the name already held passes.** The write of a different
+name is answered `400` with the sentence saying whether the organization or the deployment holds it; a request stating
+the name the person is already recorded under changes nothing and is answered with that name and `"changeable": false`.
+An administrator's relabel is not bound, because an editing restriction binds the person alone and a policy never
+forces a name.
 
 **The person that section supplies is refused, and told who to ask.** Their record is the operator's rather than
 theirs — the deployment states their mailboxes and MailFathom keeps the row — so the name on it is the operator's to
@@ -2232,10 +2290,17 @@ about a stretch of mail.
 **The zone is read here rather than sent with every request.** An operation resolving *this week* on somebody's behalf
 runs where the mail is, so the anchor it states has to be a value this deployment holds — an MCP caller asking
 `ask_mail` sends no browser and no clock, and a client that sent one would be a second answer to a question the record
-has already settled. `TimeZone` in [the user record](configuration-sources.md) is where it lives; a record stating none
-is read in `UTC`.
+has already settled. `TimeZone` in [the user record](configuration-sources.md) is where it lives, read as
+[the settings policies governing the person](configuration-sources.md#how-a-settings-policy-resolves-a-users-record)
+resolve it: a zone a policy forces is the zone answered whatever the record states, and a policy's default is the zone
+of a record stating none. A record no policy supplies a zone for, stating none itself, is read in `UTC`.
 
-**`isDefault` is stated rather than left to be inferred, and it says whether the record states a zone at all** — not
+**A zone a policy holds is refused naming who holds it.** Where the organization or the deployment forces the zone, or
+does not leave it to the person to change, a write naming another zone is answered `400` with the sentence saying
+which of the two holds it, and nothing is written. A write naming the zone in force passes and writes nothing.
+
+**`isDefault` is stated rather than left to be inferred, and it says whether anything states a zone at all** — the
+record or a policy above it, not
 whether the answer reads as `UTC`. What it decides is whether a client may propose the zone the browser reports for
 somebody who has never been asked, and a client comparing the identifier against `UTC` instead would propose over
 somebody who chose the coordinated zone deliberately. So a record stating nothing is answered `"UTC"` with
@@ -2419,6 +2484,11 @@ stored file of that same user under `Portrait`, and a write naming anybody else'
 name, so an absent portrait is an ordinary state of the screen rather than an error on it; `404` on this surface says
 a route or a record is not there, which is a different thing. A person this deployment no longer holds a record for is
 answered `404` on the upload, and `204` on the removal like anybody else.
+
+**A portrait a policy holds is refused naming who holds it.** Where the
+[settings policy](admin-endpoint.md#settings-policies) of the person's organization or of the deployment does not
+leave `Portrait` to them to change, an upload and a removal are each answered `400` with the sentence saying which of
+the two holds it. Nothing is stored for a refused upload, and the picture in force stays.
 
 **The served picture is named, and the client revalidates against that name.** The response carries an entity tag over
 the octets and `Cache-Control: private, no-cache`, so the second screen that draws the same portrait is answered `304`

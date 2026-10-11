@@ -6,6 +6,7 @@ using System.Text.Json.Nodes;
 using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Failures;
+using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Policies;
 using MailFathom.Host.Signals;
 using MailFathom.Host.UnitTests.TestDoubles;
@@ -571,6 +572,113 @@ public sealed class SettingsPolicyAdministrationTests
         Assert.Empty(heard);
     }
 
+    /// <summary>
+    /// A policy may not leave a record it governs unservable, so a write that takes away the language a record relied
+    /// on is refused naming the record and what it would be left without.
+    /// </summary>
+    [Fact]
+    public async Task ApplyAsync_APolicyThatWouldLeaveARecordWithoutWhatItReliesOn_IsRefusedNamingTheRecordAndWritesNothing()
+    {
+        // Arrange
+        var harness = PolicyHarness.ForTheDeploymentsAdministrator();
+        harness.Store.Holding(Organization, DefaultingPolish, version: 2);
+        harness.Store.HoldingUser(SyntheticUser.Deployment, "alex", Organization, "{}");
+
+        // Act
+        var outcome = await harness.Policies.ApplyAsync(
+            Organization,
+            "{}",
+            expectedVersion: 2,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
+        Assert.StartsWith("The saved policy would leave 1 of the 1 user records", outcome.Messages[0], StringComparison.Ordinal);
+        Assert.Contains("User 'alex'", outcome.Messages[1], StringComparison.Ordinal);
+        Assert.Contains("Language is not stated", outcome.Messages[1], StringComparison.Ordinal);
+        Assert.Equal(0, harness.Store.Commits);
+    }
+
+    /// <summary>
+    /// What a request authenticates against is a row, so a policy that moves the switches of the users it governs
+    /// rewrites their rows in its own commit, and leaves everybody it does not govern where they were.
+    /// </summary>
+    [Fact]
+    public async Task ApplyAsync_APolicyForcingAnEndpointSwitch_RewritesTheRowsOfTheUsersItGovernsAndNoOthers()
+    {
+        // Arrange
+        var harness = PolicyHarness.ForTheDeploymentsAdministrator();
+        harness.Store.HoldingUser(SyntheticUser.Deployment, "alex", Organization, """{"Language":"English"}""");
+        harness.Store.HoldingUser(SyntheticUser.Another, "sam", organizationId: null, """{"Language":"English"}""");
+
+        // Act
+        var outcome = await harness.Policies.ApplyAsync(
+            Organization,
+            """{"Users":{"Forced":{"EndpointAccess":{"McpEndpoint":false}}}}""",
+            expectedVersion: 0,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(outcome!.IsCommitted);
+        Assert.Equal(
+            new UserEndpointAccess(McpEndpoint: false, ClientEndpoint: true),
+            harness.Store.EndpointAccessOf(SyntheticUser.Deployment));
+        Assert.Equal(UserEndpointAccess.Everywhere, harness.Store.EndpointAccessOf(SyntheticUser.Another));
+    }
+
+    /// <summary>The judgement runs inside the write, so how many records one write judges is bounded and a write past the bound reads none.</summary>
+    [Fact]
+    public async Task ApplyAsync_APolicyGoverningMoreRecordsThanOneWriteJudges_IsRefusedNamingTheSettingThatRaisesTheBound()
+    {
+        // Arrange
+        var harness = PolicyHarness.ForTheDeploymentsAdministrator();
+        harness.Deployment.ReportReload(new DeploymentOptions { MaximumRecordsJudgedPerPolicyWrite = 1 });
+        harness.Store.HoldingUser(SyntheticUser.Deployment, "alex", organizationId: null, """{"Language":"English"}""");
+        harness.Store.HoldingUser(SyntheticUser.Another, "sam", organizationId: null, """{"Language":"English"}""");
+
+        // Act
+        var outcome = await harness.Policies.ApplyAsync(
+            organizationId: null,
+            DefaultingPolish,
+            expectedVersion: 0,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
+        Assert.Contains(
+            "Deployment:MaximumRecordsJudgedPerPolicyWrite",
+            Assert.Single(outcome.Messages),
+            StringComparison.Ordinal);
+        Assert.Equal(0, harness.Store.Commits);
+    }
+
+    /// <summary>
+    /// Only a default or a forced value for users can break a record or move a switch, so a write that changes
+    /// neither judges no record — an editing restriction and a statement about mail accounts among them.
+    /// </summary>
+    [Theory]
+    [InlineData(DefaultingPolish, true)]
+    [InlineData("""{"Users":{"Editing":{"Mode":"AllExcept","Properties":["TimeZone"]}}}""", false)]
+    [InlineData(ForcingPolling, false)]
+    public async Task ApplyAsync_AnyPolicy_JudgesTheRecordsItGovernsOnlyWhereItMovesADefaultOrAForcedValueForUsers(
+        string policy,
+        bool judged)
+    {
+        // Arrange
+        var harness = PolicyHarness.ForTheDeploymentsAdministrator();
+
+        // Act
+        var outcome = await harness.Policies.ApplyAsync(
+            organizationId: null,
+            policy,
+            expectedVersion: 0,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(outcome!.IsCommitted);
+        Assert.Equal(judged ? (int?)new DeploymentOptions().MaximumRecordsJudgedPerPolicyWrite : null, harness.Store.LastMaximumJudged);
+    }
+
     private sealed class PolicyHarness
     {
         internal PolicyHarness(AccessAuthorization authorization)
@@ -580,6 +688,7 @@ public sealed class SettingsPolicyAdministrationTests
             this.Policies = new SettingsPolicyAdministration(
                 authorization,
                 this.Store,
+                this.Deployment,
                 new ConfigurationChangeAnnouncements(
                     () => Task.FromResult(this.Backplane.Connect()),
                     new RecordingLogger<ConfigurationChangeAnnouncements>()));
@@ -588,7 +697,10 @@ public sealed class SettingsPolicyAdministrationTests
         internal SettingsPolicyAdministration Policies { get; }
 
         /// <summary>Gets the policies this deployment holds, which is none for either scope until a test says otherwise.</summary>
-        internal InMemorySettingsPolicies Store { get; } = new();
+        internal InMemorySettingsPolicies Store { get; } = InMemorySettingsPolicies.JudgingRecords();
+
+        /// <summary>Gets the deployment's own options, which bound how many records one policy write judges.</summary>
+        internal TestOptionsMonitor<DeploymentOptions> Deployment { get; } = new(new DeploymentOptions());
 
         /// <summary>Gets the backplane a commit is announced over, which nobody hears until a test listens.</summary>
         internal InMemoryBackplane Backplane { get; } = new();

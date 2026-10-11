@@ -18,11 +18,14 @@ namespace MailFathom.Host.Configuration.Policies;
 internal sealed class SettingsPolicySection
 {
     /// <summary>The section about a user's record, with the display name that is a column beside it.</summary>
+    /// <summary>The path a policy names the label a user is told apart by with, which is a column beside the record rather than a key of it.</summary>
+    internal const string UserDisplayNameColumn = "DisplayName";
+
     internal static readonly SettingsPolicySection Users = new(
         "Users",
         "a user's record",
         typeof(UserAccountOptions),
-        GovernableProperties.Of(typeof(UserAccountOptions), "DisplayName"),
+        GovernableProperties.Of(typeof(UserAccountOptions), UserDisplayNameColumn),
         record => ((UserAccountOptions)record).FindRefusals().Select(refusal => refusal.ErrorMessage).OfType<string>());
 
     /// <summary>The section about a mail account, with the address that is a column beside its declaration.</summary>

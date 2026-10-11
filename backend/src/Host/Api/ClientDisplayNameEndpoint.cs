@@ -101,9 +101,10 @@ internal static class ClientDisplayNameEndpoint
         }
 
         // A caller that just wrote the name holds what it takes to write it, so the answer says so rather than asking
-        // the deployment again for a fact this request has already proven.
+        // the deployment again for a fact this request has already proven. The one answer that proves nothing is a
+        // name a settings policy holds, sent back as it stands.
         return outcome.Recorded is { } recorded
-            ? TypedResults.Ok(new ClientDisplayNameResponse(recorded, Changeable: true))
+            ? TypedResults.Ok(new ClientDisplayNameResponse(recorded, Changeable: !outcome.IsHeld))
             : TypedResults.Problem(outcome.RefusalMessage, statusCode: StatusCodes.Status400BadRequest);
     }
 

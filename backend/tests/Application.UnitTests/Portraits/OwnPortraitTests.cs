@@ -132,7 +132,7 @@ public sealed class OwnPortraitTests
         var replaced = await portraits.ReplaceAsync(UserPortrait.Of(Png)!, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.True(replaced);
+        Assert.Equal(PortraitChange.Landed, replaced);
         Received.InOrder(() =>
         {
             _ = files.WriteAsync(SyntheticUser.Deployment, "image/png", Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>());
@@ -156,7 +156,7 @@ public sealed class OwnPortraitTests
         var replaced = await portraits.ReplaceAsync(UserPortrait.Of(Png)!, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.True(replaced);
+        Assert.Equal(PortraitChange.Landed, replaced);
         await files.DidNotReceive().RemoveAsync(Arg.Any<UserId>(), Arg.Any<StoredFileId>(), Arg.Any<CancellationToken>());
     }
 
@@ -196,7 +196,7 @@ public sealed class OwnPortraitTests
         var replaced = await portraits.ReplaceAsync(UserPortrait.Of(Png)!, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.False(replaced);
+        Assert.Equal(PortraitChange.NoSuchUser, replaced);
         await links.DidNotReceive().RelinkOwnPortraitAsync(Arg.Any<StoredFileId?>(), Arg.Any<CancellationToken>());
     }
 
@@ -214,7 +214,7 @@ public sealed class OwnPortraitTests
         var replaced = await portraits.ReplaceAsync(UserPortrait.Of(Png)!, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.False(replaced);
+        Assert.Equal(PortraitChange.NoSuchUser, replaced);
     }
 
     /// <summary>The write is the grant a signed-in person already holds, never the one that decides which mailboxes this deployment connects to.</summary>
@@ -282,6 +282,48 @@ public sealed class OwnPortraitTests
             () => portraits.RemoveAsync(TestContext.Current.CancellationToken));
 
         await links.DidNotReceive().RelinkOwnPortraitAsync(Arg.Any<StoredFileId?>(), Arg.Any<CancellationToken>());
+        await files.DidNotReceive().RemoveAsync(Arg.Any<UserId>(), Arg.Any<StoredFileId>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// A portrait the record does not leave to the person is refused in the record's own sentence, and the file the
+    /// upload wrote goes with the refusal rather than waiting for the sweep.
+    /// </summary>
+    [Fact]
+    public async Task ReplaceAsync_ALinkTheRecordHoldsAgainstThePerson_ReportsTheRefusalAndRemovesTheFileItWrote()
+    {
+        // Arrange
+        var files = FilesWriting(Written);
+        var links = Substitute.For<IUserRecordFileLinks>();
+        links.RelinkOwnPortraitAsync(Arg.Any<StoredFileId?>(), Arg.Any<CancellationToken>())
+            .Returns(new PortraitRelinking(UserHeld: true, Replaced: null) { Refusal = "Portrait is held by the organization." });
+
+        var portraits = ReachedBy(files, links, MailFathomPermission.MailRead);
+
+        // Act
+        var replaced = await portraits.ReplaceAsync(UserPortrait.Of(Png)!, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(new PortraitChange(UserHeld: true, "Portrait is held by the organization."), replaced);
+        await files.Received(1).RemoveAsync(SyntheticUser.Deployment, Written, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RemoveAsync_ALinkTheRecordHoldsAgainstThePerson_ReportsTheRefusalAndRemovesNothing()
+    {
+        // Arrange
+        var files = Substitute.For<IStoredFileStore>();
+        var links = Substitute.For<IUserRecordFileLinks>();
+        links.RelinkOwnPortraitAsync(Arg.Any<StoredFileId?>(), Arg.Any<CancellationToken>())
+            .Returns(new PortraitRelinking(UserHeld: true, Replaced: null) { Refusal = "Portrait is held by the organization." });
+
+        var portraits = ReachedBy(files, links, MailFathomPermission.MailRead);
+
+        // Act
+        var removed = await portraits.RemoveAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal("Portrait is held by the organization.", removed.Refusal);
         await files.DidNotReceive().RemoveAsync(Arg.Any<UserId>(), Arg.Any<StoredFileId>(), Arg.Any<CancellationToken>());
     }
 

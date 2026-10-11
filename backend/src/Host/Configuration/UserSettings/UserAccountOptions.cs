@@ -29,8 +29,12 @@ namespace MailFathom.Host.Configuration.UserSettings;
 /// asked to record at, the stored file they are drawn by, and which of the two mail-serving endpoints they are served
 /// on; the mail rules and the trusted senders join them as each moves out of the deployment's
 /// section, and each arrives as a property here rather than as a second document. What never belongs in it is a value
-/// the deployment set: there is no user configuration layer, so nothing here shadows a deployment setting, and a
-/// property that would need to is a deployment setting somebody put in the wrong document. What also never belongs in
+/// the deployment set in its own configuration: nothing here shadows a configuration key, and a property that would
+/// need to is a deployment setting somebody put in the wrong document. What a deployment or an organization states
+/// for the people it holds is a settings policy instead, which is a row rather than configuration: every property
+/// here is read through the two governing the user, in the order <c>GovernedRecordResolution</c> holds, so the value
+/// a person is served with is the record's only where no policy forces one and a policy's default only where the
+/// record states none. The document stays what somebody stated on it either way. What also never belongs in
 /// it is a setting of a mailbox — how mail is classified as spam, what it is scanned for, which folders are mirrored —
 /// because the mail is one copy and two people assigned one mailbox must not configure it apart; those are the account
 /// record's, and a record naming one of them is refused as a property nothing binds.
@@ -39,7 +43,8 @@ namespace MailFathom.Host.Configuration.UserSettings;
 /// The envelope is not repeated here. The user's identifier, the label they are told apart by, the version, and the
 /// marker saying whether this document has ever been written are relational columns, because authenticating a request
 /// and joining a user's mail must never depend on reading a document. The endpoint switches are the one value both
-/// places hold: stated here so every record write reaches them, and copied onto the row by the commit that writes them.
+/// places hold: stated here so every record write reaches them, and written onto the row as the policies resolve
+/// them by every commit that can move that answer.
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The configuration binder materializes this type when a user's document is read.")]

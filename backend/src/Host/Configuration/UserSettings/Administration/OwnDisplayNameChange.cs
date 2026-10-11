@@ -20,6 +20,9 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// </remarks>
 internal readonly record struct OwnDisplayNameChange(bool UserHeld, string? Recorded, string? RefusalMessage)
 {
+    /// <summary>Gets a value indicating whether a settings policy holds the name, so that it stands recorded only because what was sent is the name already held.</summary>
+    internal bool IsHeld { get; init; }
+
     /// <summary>Gets the outcome of a person this deployment holds no record for.</summary>
     internal static OwnDisplayNameChange NoSuchUser { get; } = new(UserHeld: false, Recorded: null, RefusalMessage: null);
 

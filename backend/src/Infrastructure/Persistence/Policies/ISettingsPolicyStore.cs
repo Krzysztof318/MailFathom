@@ -31,19 +31,40 @@ public interface ISettingsPolicyStore
     /// <param name="organizationId">The organization, or <see langword="null" /> for the deployment.</param>
     /// <param name="json">The candidate policy, as the JSON object the row will hold.</param>
     /// <param name="expectedVersion">The version the candidate was composed over, which is <see cref="SettingsPolicyDocument.UnwrittenVersion" /> for a scope that stored none.</param>
+    /// <param name="maximumUserRecordsJudged">
+    /// The most user records the write may judge, or <see langword="null" /> when the candidate changes no default
+    /// and no forced value a user's record is served on, in which case none is read.
+    /// </param>
     /// <param name="cancellationToken">Cancels the commit.</param>
-    /// <returns>The version the commit produced, or <see langword="null" /> when the policy had already moved past <paramref name="expectedVersion" /> or the deployment no longer holds the organization.</returns>
+    /// <returns>What the attempt did, carrying the version a commit produced.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="json" /> is <see langword="null" />, empty, white space, not a JSON object, or past <see cref="SettingsPolicyDocument.MaximumOctets" /> as the database would store it.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="expectedVersion" /> is negative.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="expectedVersion" /> is negative, or <paramref name="maximumUserRecordsJudged" /> is not positive.</exception>
+    /// <exception cref="SettingsPolicyUnreadableException">Thrown when a policy the write has to read is past <see cref="SettingsPolicyDocument.MaximumOctets" />.</exception>
     /// <remarks>
+    /// <para>
     /// A policy somebody else moved and an organization removed underneath the write are one answer, for the reason
     /// a user's record gives the same one: the statement distinguishes neither and a caller settles both by reading
     /// again, which reports the version now in force or that there is no organization to write for. The attempt
     /// that commits second is the one refused, whichever replica each reached.
+    /// </para>
+    /// <para>
+    /// Where the candidate changes what a user's record is served on, the write judges every user record the policy
+    /// governs through <see cref="IUserRecordPolicyJudge" /> before it commits — every user of the organization, or
+    /// every user of the deployment for the deployment's own policy. A record the candidate would leave unservable
+    /// refuses the whole write, and a governed set past <paramref name="maximumUserRecordsJudged" /> refuses it
+    /// before any record is read. What passes commits together with the endpoint switches of every user whose
+    /// effective access it moved, so a session or a token stops or resumes on its holder's next request on every
+    /// replica, including one that has not adopted the policy. No record's version moves.
+    /// </para>
+    /// <para>
+    /// The whole of it runs under the lock that excludes every write of a governed record, so a record written while
+    /// the policy is being judged is either judged with it or judged against it afterwards, never missed by both.
+    /// </para>
     /// </remarks>
-    Task<long?> CommitAsync(
+    Task<SettingsPolicyCommit> CommitAsync(
         Guid? organizationId,
         string json,
         long expectedVersion,
+        int? maximumUserRecordsJudged,
         CancellationToken cancellationToken);
 }

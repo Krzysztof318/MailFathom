@@ -103,8 +103,17 @@ internal static class ClientTimeZoneEndpoint
                 statusCode: StatusCodes.Status400BadRequest);
         }
 
+        var change = await records.ChangeOwnTimeZoneAsync(zone, cancellationToken);
+
+        // The same status a zone nobody knows is answered with, because to the person it is the same answer: this
+        // zone was not taken, and the sentence says why. What differs is that no other zone would be either.
+        if (change.RefusalMessage is { } held)
+        {
+            return TypedResults.Problem(held, statusCode: StatusCodes.Status400BadRequest);
+        }
+
         // Never the default afterwards, whichever zone was named: the record now states one because this person said so.
-        return await records.ChangeOwnTimeZoneAsync(zone, cancellationToken)
+        return change.UserHeld
             ? TypedResults.Ok(new ClientTimeZoneResponse(zone.Id, IsDefault: false))
             : TypedResults.NotFound(new ProblemDetails
             {

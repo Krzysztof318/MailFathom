@@ -187,6 +187,31 @@ public sealed class ClientTimeZoneEndpointTests
             Assert.IsType<ProblemHttpResult>(result.Result).StatusCode);
     }
 
+    /// <summary>A zone a settings policy holds is refused in the sentence naming who holds it, and nothing is written.</summary>
+    [Fact]
+    public async Task ChangeAsync_AZoneASettingsPolicyHolds_IsRefusedNamingWhoHoldsIt()
+    {
+        // Arrange
+        var deployment = Holding("""{"Language": "English"}""");
+        deployment.GovernedBy(
+            Person,
+            StatedPolicies.Governing(deployment: """{"Users":{"Forced":{"TimeZone":"Europe/Warsaw"}}}"""));
+
+        // Act
+        var result = await ClientTimeZoneEndpoint.ChangeAsync(
+            deployment.Records,
+            new ClientTimeZoneRequest("Asia/Tokyo"),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(result.Result);
+
+        Assert.Equal(StatusCodes.Status400BadRequest, refusal.StatusCode);
+        Assert.StartsWith("TimeZone is held by the deployment", refusal.ProblemDetails.Detail, StringComparison.Ordinal);
+        await deployment.Store.DidNotReceiveWithAnyArgs()
+            .CommitAsync(default, default!, default, default, TestContext.Current.CancellationToken);
+    }
+
     private static UserRecordDeployment Holding(string json)
     {
         var deployment = new UserRecordDeployment([MailFathomPermission.MailRead], Person);

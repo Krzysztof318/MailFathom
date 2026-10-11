@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
+using MailFathom.Host.Configuration.Policies;
 using MailFathom.Host.Configuration.Records;
 using MailFathom.Infrastructure.Persistence.Users;
 
@@ -31,6 +32,13 @@ namespace MailFathom.Host.Configuration.UserSettings;
 /// decides what to do about it — a start leaves that user unserved, and a convergence leaves them on the version they
 /// last bound.
 /// </para>
+/// <para>
+/// What is bound is the record as the settings policies governing the user resolve it rather than the document as
+/// its row holds it, so a forced value and a default reach everything that is served from the answer. A policy this
+/// build does not read as one costs the whole user for the same reason their own document does, and is answered the
+/// same way: a record is never served on part of what governs it, so it is held back and the caller keeps whatever
+/// it last composed.
+/// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this composition.")]
 internal sealed class ServedUserRecordComposition(UserAccountDocumentBinder binder)
@@ -44,8 +52,23 @@ internal sealed class ServedUserRecordComposition(UserAccountDocumentBinder bind
     {
         ArgumentNullException.ThrowIfNull(document);
 
+        if (SettingsPolicyLayers.Read(document.Policies, SettingsPolicySection.Users, out var unreadable) is not { } layers)
+        {
+            return new ServedUserRecord(
+                Record: null,
+                [
+                    new HeldBackRecord(
+                        HeldBackRecordKind.User,
+                        document.User.Value,
+                        document.DisplayName,
+                        document.Version,
+                        [SettingsPolicyLayers.DescribeUnreadable(unreadable)]),
+                ]);
+        }
+
+        var resolved = GovernedRecordResolution.Resolve(SettingsPolicySection.Users, layers, document.Json).EffectiveJson;
         var declared = document.MailAccounts.Where(MailAccountRecordComposition.IsServed).ToArray();
-        var whole = binder.Bind(MailAccountRecordComposition.Compose(document.Json, declared), arrival);
+        var whole = binder.Bind(MailAccountRecordComposition.Compose(resolved, declared), arrival);
 
         if (whole.User is { } bound)
         {
@@ -55,7 +78,7 @@ internal sealed class ServedUserRecordComposition(UserAccountDocumentBinder bind
         // A record declaring no account has nothing to narrow, so the one binding already made is the whole answer.
         var withoutAccounts = declared.Length == 0
             ? whole
-            : binder.Bind(MailAccountRecordComposition.Compose(document.Json, []), arrival);
+            : binder.Bind(MailAccountRecordComposition.Compose(resolved, []), arrival);
 
         if (withoutAccounts.User is null)
         {
@@ -73,12 +96,12 @@ internal sealed class ServedUserRecordComposition(UserAccountDocumentBinder bind
                 ]);
         }
 
-        return this.ComposeFromTheAccountsThatBind(document, arrival, declared, withoutAccounts.User);
+        return this.ComposeFromTheAccountsThatBind(resolved, arrival, declared, withoutAccounts.User);
     }
 
     /// <summary>Adds the declared accounts back one at a time, keeping those that still bind beside the ones before them.</summary>
     private ServedUserRecord ComposeFromTheAccountsThatBind(
-        UserSettingsDocument document,
+        string resolved,
         UserRecordArrival arrival,
         MailAccountRecord[] declared,
         UserAccountOptions withoutAccounts)
@@ -90,7 +113,7 @@ internal sealed class ServedUserRecordComposition(UserAccountDocumentBinder bind
         foreach (var account in declared)
         {
             var candidate = binder.Bind(
-                MailAccountRecordComposition.Compose(document.Json, [.. kept, account]),
+                MailAccountRecordComposition.Compose(resolved, [.. kept, account]),
                 arrival);
 
             if (candidate.User is { } withAccount)

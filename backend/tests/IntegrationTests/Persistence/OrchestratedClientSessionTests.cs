@@ -262,9 +262,10 @@ public sealed class OrchestratedClientSessionTests(MailFathomOrchestrationFixtur
             var committed = await host.InScopeAsync(
                 (scope, token) => scope.GetRequiredService<IUserSettingsDocumentWriter>().CommitAsync(
                     UserId.Create(user),
-                    """{"EndpointAccess":{"ClientEndpoint":"false"}}""",
-                    new UserEndpointAccess(McpEndpoint: true, ClientEndpoint: false),
                     expectedVersion: 1,
+                    _ => new UserRecordCandidate(
+                        """{"EndpointAccess":{"ClientEndpoint":"false"}}""",
+                        new UserEndpointAccess(McpEndpoint: true, ClientEndpoint: false)),
                     token),
                 cancellationToken);
 

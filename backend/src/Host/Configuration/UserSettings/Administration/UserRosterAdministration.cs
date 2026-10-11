@@ -7,8 +7,10 @@ using MailFathom.Application.Access;
 using MailFathom.Application.Paging;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
+using MailFathom.Host.Configuration.Policies;
 using MailFathom.Host.Hosting.Workers;
 using MailFathom.Host.Signals;
+using MailFathom.Infrastructure.Persistence.Policies;
 using MailFathom.Infrastructure.Persistence.Users;
 
 namespace MailFathom.Host.Configuration.UserSettings.Administration;
@@ -52,6 +54,7 @@ internal sealed partial class UserRosterAdministration(
     IMailAccountWorkQuiescing quiescing,
     WithheldMailAccounts withheldAccounts,
     IUserSettingsDocumentWriter documents,
+    UserAccountDocumentBinder binder,
     ServedUsers servedUsers,
     SeveralUserAdmission admission,
     ConfigurationChangeAnnouncements announcements,
@@ -62,7 +65,10 @@ internal sealed partial class UserRosterAdministration(
     /// A provisioning states no language, so one is chosen here rather than asked for: a record being written is
     /// required to name one, and provisioning the empty record instead would hand back a user whose own record could
     /// not be committed again until somebody guessed which line to add. English is the same answer the client reaches
-    /// when it can read no preference, and whoever records that user changes it in the same session.
+    /// when it can read no preference, and whoever records that user changes it in the same session. A user whose
+    /// organization or deployment supplies a language by settings policy is provisioned the empty record instead,
+    /// because a language written here would be the record's own and would stand in front of the default it was
+    /// provisioned under.
     /// </remarks>
     private const string ProvisionedLanguage = nameof(UserLanguage.English);
 
@@ -189,32 +195,70 @@ internal sealed partial class UserRosterAdministration(
                 : LabelTaken(label));
         }
 
+        UserAccountOptions? provisioned = null;
+        var governedBy = GoverningSettingsPolicies.Unwritten;
+
         // Committed rather than published from the insert alone, because the commit is what proves the row still
-        // stands and it answers the version the published record is composed over.
-        if (await documents.CommitAsync(
-                user,
-                ProvisionedRecord,
-                UserEndpointAccess.Everywhere,
-                ProvisionedVersion,
-                cancellationToken) is not { } committed)
+        // stands and it answers the version the published record is composed over. The record is composed inside the
+        // commit, under the policies in force there, since those decide whether it needs to name a language at all
+        // and which endpoints its user is served on.
+        var committed = await documents.CommitAsync(
+            user,
+            ProvisionedVersion,
+            policies =>
+            {
+                governedBy = policies;
+
+                if (this.ComposeFirstRecord(policies) is not { } first)
+                {
+                    return null;
+                }
+
+                provisioned = first.Bound;
+
+                return new UserRecordCandidate(first.Json, first.Bound.EndpointAccess.Access);
+            },
+            cancellationToken);
+
+        if (committed is not { } version || provisioned is null)
         {
-            // The envelope was written and the row is gone again, which is another administrator erasing this user
-            // between the two statements. Reporting the user as recorded would hand back an identifier nothing holds.
+            // Either the envelope was written and the row is gone again, which is another administrator erasing this
+            // user between the two statements, or no record could be composed under a settings policy this build does
+            // not read. Reporting the user as recorded would hand back an identifier nothing serves.
             return UserProvisioningOutcome.Refused(
-                "The user was recorded and then removed before their record could be written, so this deployment holds nobody under that label. Record them again.");
+                SettingsPolicyLayers.Read(governedBy, SettingsPolicySection.Users, out var unreadable) is null
+                    ? $"{SettingsPolicyLayers.DescribeUnreadable(unreadable)} The user's label was recorded and their record was not, so remove them with 'mfctl user remove' and record them again once the policy reads."
+                    : "The user was recorded and then removed before their record could be written, so this deployment holds nobody under that label. Record them again.");
         }
 
-        // The committed record names a language and declares nothing else, so the user it publishes holds no mailbox,
-        // classifies nothing, and reads the deployment's own scanning posture until an account is declared for them.
-        servedUsers.UserDocumentPublished(
-            user,
-            label,
-            new UserAccountOptions { Language = ProvisionedLanguage },
-            committed);
+        // The committed record declares no mailbox, so the user it publishes holds none, classifies nothing, and reads
+        // the deployment's own scanning posture until an account is declared for them.
+        servedUsers.UserDocumentPublished(user, label, provisioned, version, governedBy);
 
         this.LogUserProvisioned(label);
 
         return UserProvisioningOutcome.Provisioned(user);
+    }
+
+    /// <summary>Composes the record a user is provisioned with under the policies governing them.</summary>
+    /// <returns>The record and what it resolves to, or <see langword="null" /> where one of the policies is not one this build reads.</returns>
+    private (string Json, UserAccountOptions Bound)? ComposeFirstRecord(GoverningSettingsPolicies policies)
+    {
+        if (SettingsPolicyLayers.Read(policies, SettingsPolicySection.Users, out _) is not { } layers)
+        {
+            return null;
+        }
+
+        UserAccountOptions? Resolved(string json) =>
+            binder.Bind(
+                GovernedRecordResolution.Resolve(SettingsPolicySection.Users, layers, json).EffectiveJson,
+                UserRecordArrival.AlreadyHeld).User;
+
+        return Resolved(SettingsPolicyDocument.StatingNothing) is { } supplied && !supplied.FindMissingLanguageError().Any()
+            ? (SettingsPolicyDocument.StatingNothing, supplied)
+            : Resolved(ProvisionedRecord) is { } named
+                ? (ProvisionedRecord, named)
+                : null;
     }
 
     /// <summary>Puts a new label on a user this deployment already holds.</summary>

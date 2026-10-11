@@ -75,6 +75,35 @@ public sealed class ClientUserRecordEndpointTests
         Assert.DoesNotContain("not-theirs", record.Document, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// "Changeable" is the person's own answer on this surface, so a client draws a held setting as text: a setting
+    /// a policy holds is not theirs, and neither is one only an administrator writes.
+    /// </summary>
+    [Fact]
+    public async Task ReadAsync_ARecordUnderAPolicy_ReportsWhichPropertiesAreThePersonsToChange()
+    {
+        // Arrange
+        var deployment = SignedInAs(SyntheticUser.Deployment, MailFathomPermission.MailRead);
+        deployment.Holding(SyntheticUser.Deployment, EmptyRecord, version: 2);
+        deployment.GovernedBy(SyntheticUser.Deployment, StatedPolicies.Governing(deployment: """{"Users":{"Forced":{"TimeZone":"Europe/Warsaw"}}}"""));
+
+        // Act
+        var result = await ClientUserRecordEndpoint.ReadAsync(
+            deployment.Records,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var record = Assert.IsType<Ok<UserRecordResponse>>(result.Result).Value!;
+
+        Assert.Equal(
+            [("EndpointAccess:McpEndpoint", false), ("Language", true), ("TimeZone", false)],
+            record.Properties
+                .Where(property => property.Path is "TimeZone" or "Language" or "EndpointAccess:McpEndpoint")
+                .Select(property => (property.Path, property.Changeable))
+                .Order());
+        Assert.Equal("Deployment", record.Properties.Single(property => property.Path == "TimeZone").HeldBy);
+    }
+
     /// <summary>Reached where the row behind an authenticated caller has gone, which is a user erased under a credential that has not yet been withdrawn.</summary>
     [Fact]
     public async Task ReadAsync_ACallerWhoseRowHasGone_AnswersThatThereIsNoRecord()

@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace MailFathom.Cli.Administration.Users;
@@ -51,12 +52,39 @@ internal sealed record UserErasure(
 /// <param name="User">The user the record belongs to.</param>
 /// <param name="DisplayName">The label the user is recorded under.</param>
 /// <param name="Version">The version the record was read at, which the next write is composed over.</param>
-/// <param name="Document">The record, with every secret-bearing value replaced by the deployment's redaction marker.</param>
+/// <param name="Document">The record's own document, with every secret-bearing value replaced by the deployment's redaction marker.</param>
+/// <remarks>
+/// The document is what somebody stated on the record, which is what an editing session saves back. What the user is
+/// served with is carried beside it per property, because a settings policy may force a value over the record's or
+/// supply one the record leaves out.
+/// </remarks>
 internal sealed record UserRecord(
     [property: JsonPropertyName("user")] Guid User,
     [property: JsonPropertyName("displayName")] string? DisplayName,
     [property: JsonPropertyName("version")] long Version,
-    [property: JsonPropertyName("document")] string? Document);
+    [property: JsonPropertyName("document")] string? Document)
+{
+    /// <summary>Gets every property of the record as the settings policies governing the user resolve it, or <see langword="null" /> from a deployment that reports none.</summary>
+    [JsonPropertyName("properties")]
+    public IReadOnlyList<UserRecordProperty>? Properties { get; init; }
+
+    /// <summary>Gets the sentence saying which settings policy the deployment could not read, where the properties were not resolved.</summary>
+    [JsonPropertyName("unresolved")]
+    public string? Unresolved { get; init; }
+}
+
+/// <summary>One property of a user's record as the settings policies governing the user resolve it.</summary>
+/// <param name="Path">The property, as the colon-separated path a policy names it by.</param>
+/// <param name="Value">The value the user is served with, absent where nothing states one.</param>
+/// <param name="Source">Which step of the resolution order supplied the value.</param>
+/// <param name="HeldBy">Whose policy holds the property against the person the record is about, if any.</param>
+/// <param name="Changeable">Whether an administrator may change the property, which is false only where a policy forces it.</param>
+internal sealed record UserRecordProperty(
+    [property: JsonPropertyName("path")] string? Path,
+    [property: JsonPropertyName("value")] JsonElement? Value,
+    [property: JsonPropertyName("source")] string? Source,
+    [property: JsonPropertyName("heldBy")] string? HeldBy,
+    [property: JsonPropertyName("changeable")] bool Changeable);
 
 /// <summary>One user's record as an editing session saved it.</summary>
 /// <param name="Version">The version the buffer was opened over, which the commit is accepted against.</param>

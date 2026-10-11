@@ -919,8 +919,11 @@ move or an assignment is refused over, and when an organization cannot be remove
 deployment's in your editor and `mfctl policy edit --organization <id>` a company's, and `mfctl policy show` reads
 either: the defaults a person's record and a mail account start from, the values they are held to, and which of the
 rest the person may change. A save is checked whole and committed whole or not at all, naming every path to correct.
-A stored policy governs nothing until a record is read through it, and none is, so saving one changes what the scope
-states and nothing about what anybody is served. [Settings
+What a policy states for people takes effect when it is saved: each person's settings are read through the deployment's
+policy and their company's, a forced value wins over what their record says, and a default fills in what the record
+leaves out. A save that would leave somebody's record without something it needs — the language a default used to
+supply, say — is refused naming those people. `mfctl user show --effective` shows one person's settings as they are
+served, with what supplied each. What a policy states for mail accounts is stored and changes no mailbox. [Settings
 policies](../operations/admin-endpoint.md#settings-policies) holds what a policy may state and what a save is refused
 over.
 

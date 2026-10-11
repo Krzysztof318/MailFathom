@@ -32,9 +32,11 @@ namespace MailFathom.Host.Configuration.UserSettings;
 /// <see cref="UserRecordArrival" /> names the two rules that are not in it and why.
 /// </para>
 /// <para>
-/// Nothing here composes a configuration layer over the deployment's. The record is bound from the document alone, so
-/// no value in it shadows a setting the deployment made, and a user-level setting is only ever a property the record
-/// declares. The deployment's own section reaches this for one purpose and no other: to say what a record being
+/// Nothing here composes a configuration layer over the deployment's. The record is bound from the document it is
+/// handed alone, so no value in it shadows a setting the deployment made, and a user-level setting is only ever a
+/// property the record declares. That document is the record as the settings policies governing the user resolve
+/// it, which whoever reads or writes a record composes before it arrives; this binds what it is given and reads no
+/// policy. The deployment's own section reaches this for one purpose and no other: to say what a record being
 /// written may ask for. A scanning posture is refused there when it would switch off what the deployment requires or
 /// reach for an analyzer the deployment never stood up, which is a rule about the record rather than a value composed
 /// over it.

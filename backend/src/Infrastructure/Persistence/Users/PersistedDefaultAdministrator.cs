@@ -32,8 +32,14 @@ internal sealed class PersistedDefaultAdministrator(MailFathomDbContext dbContex
     /// <summary>The label it falls back to where somebody else is already called <see cref="DisplayName" />, since labels are unique.</summary>
     internal const string FallbackDisplayName = "admin (default administrator)";
 
-    /// <summary>The record a provisioned user starts with, which names their language and nothing else.</summary>
-    private const string ProvisionedRecord = """{"Language":"English"}""";
+    /// <summary>The record the administrator starts with, which names their language and holds both mail endpoint switches off.</summary>
+    /// <remarks>
+    /// The switches are stated on the record as well as written onto the row, because the row is what the record
+    /// resolves to: every commit that can move that answer writes it afresh, so a switch held off on the row alone
+    /// would be turned on by the first write of a settings policy governing the administrator.
+    /// </remarks>
+    internal const string ProvisionedRecord =
+        """{"Language":"English","EndpointAccess":{"McpEndpoint":"false","ClientEndpoint":"false"}}""";
 
     /// <inheritdoc />
     public async Task<DefaultAdministratorRecord> RecordOnceAsync(

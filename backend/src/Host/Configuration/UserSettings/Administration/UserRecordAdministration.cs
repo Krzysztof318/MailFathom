@@ -4,13 +4,16 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using MailFathom.Application.Access;
 using MailFathom.Application.Configuration;
 using MailFathom.Application.StoredFiles;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Failures;
 using MailFathom.Host.Configuration.Administration;
+using MailFathom.Host.Configuration.Policies;
 using MailFathom.Host.Signals;
+using MailFathom.Infrastructure.Persistence.Policies;
 using MailFathom.Infrastructure.Persistence.Users;
 using MailFathom.Infrastructure.Secrets.Discovery;
 using MailFathom.Infrastructure.Secrets.References;
@@ -43,9 +46,19 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// declared by whoever administers the deployment.
 /// </para>
 /// <para>
-/// Nothing here composes a configuration layer over the deployment's. A record is bound from the document alone, so no
-/// value in it shadows a setting the deployment made, and the shadowing question the deployment's own writes answer
-/// does not arise.
+/// A record is judged as the settings policies governing its user resolve it, and stored as what somebody stated on
+/// it. So the binder and every rule beside it read the effective record — a forced value in place of the record's
+/// own, a default where the record states nothing — while the row keeps the own value, which is what comes back when
+/// the force lifts. A change to a property a policy holds against whoever is writing is refused naming the property
+/// and whether the organization or the deployment holds it, and one that carries the property through as a read
+/// showed it passes. <see cref="GovernedRecordChange" /> holds that rule and <see cref="GovernedRecordResolution" />
+/// the order a value resolves in.
+/// </para>
+/// <para>
+/// Which policies govern a record is decided where the write commits rather than where it was read: the store hands
+/// the policies in force to the judgement inside its own transaction, under the lock a policy write excludes record
+/// writes with. A replica that has not yet adopted a policy change therefore cannot commit a record judged against
+/// the policy it still holds, nor project endpoint switches derived from it.
 /// </para>
 /// </remarks>
 [SuppressMessage(
@@ -160,7 +173,7 @@ internal sealed class UserRecordAdministration(
     /// <param name="mcpEndpoint">Whether they are served on the MCP endpoint from now on, or <see langword="null" /> to leave it.</param>
     /// <param name="clientEndpoint">Whether they are served on the client endpoint from now on, or <see langword="null" /> to leave it.</param>
     /// <param name="cancellationToken">Cancels the read and the commit.</param>
-    /// <returns>What the write did and the switches the record states afterwards, or <see langword="null" /> when this deployment holds no such user or the caller's scope does not cover them.</returns>
+    /// <returns>What the write did and the switches the user is served on afterwards, or <see langword="null" /> when this deployment holds no such user or the caller's scope does not cover them.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminConfigurationWrite" /> at every scope.</exception>
     /// <remarks>
@@ -173,6 +186,11 @@ internal sealed class UserRecordAdministration(
     /// The configuration grant rather than the erasing one, because it decides where the deployment serves somebody
     /// rather than disposing of anything they hold: no mail, credential, or session is removed, and a switch turned
     /// back on serves them again with what they already had.
+    /// </para>
+    /// <para>
+    /// A switch a settings policy forces is not an administrator's to move either, so asking for the other position is
+    /// refused naming who holds it. The switches answered are the ones the user is served on, which are the policy's
+    /// where it forces them and the record's everywhere else.
     /// </para>
     /// </remarks>
     internal async Task<UserEndpointAccessWrite?> SetEndpointAccessAsync(
@@ -209,47 +227,70 @@ internal sealed class UserRecordAdministration(
                 default);
         }
 
-        var requested = new UserEndpointAccess(
-            mcpEndpoint ?? standing.McpEndpoint,
-            clientEndpoint ?? standing.ClientEndpoint);
+        var resolved = ResolveUnderItsPolicies(inForce);
+        var served = resolved is null
+            ? standing
+            : UserEndpointAccessOptions.ReadFrom(RedactedDocumentSave.Flatten(resolved.EffectiveJson));
 
-        if (requested == standing)
+        // Asked against what the user is served on rather than what their record states. A switch a policy's default
+        // turns off is one the record never stated, and reading the record alone would call it already on.
+        var requested = new UserEndpointAccess(
+            mcpEndpoint ?? served.McpEndpoint,
+            clientEndpoint ?? served.ClientEndpoint);
+
+        if (requested == served)
         {
             return new UserEndpointAccessWrite(
                 UserRecordWriteOutcome.NothingToChange(
                     inForce.Version,
-                    $"The user's record already states these switches, so nothing was written and version {inForce.Version} stays in force."),
-                standing);
+                    $"The user is already served on these switches, so nothing was written and version {inForce.Version} stays in force."),
+                served);
         }
 
-        ConfigurationEdit[] edits =
+        (string Key, bool Asked)[] moved =
         [
-            .. new (bool? Value, string Key)[]
+            .. new (string Key, bool Asked, bool Served)[]
                 {
-                    (mcpEndpoint, UserEndpointAccessOptions.McpEndpointKey),
-                    (clientEndpoint, UserEndpointAccessOptions.ClientEndpointKey),
+                    (UserEndpointAccessOptions.McpEndpointKey, requested.McpEndpoint, served.McpEndpoint),
+                    (UserEndpointAccessOptions.ClientEndpointKey, requested.ClientEndpoint, served.ClientEndpoint),
                 }
-                .Where(named => named.Value is not null)
-                .Select(named => ConfigurationEdit.SetTo(named.Key, named.Value!.Value ? "true" : "false")),
+                .Where(named => named.Asked != named.Served)
+                .Select(named => (named.Key, named.Asked)),
         ];
 
-        var outcome = await this.JudgeAndCommitAsync(
+        // Refused here rather than left to the judgement of the document: a record already stating the position asked
+        // for carries it through unchanged, which would answer a switch a policy forces the other way as settled.
+        string[] held =
+        [
+            .. moved
+                .Select(named => resolved?.Find(named.Key).FindRefusal(byThePerson: false))
+                .OfType<string>(),
+        ];
+
+        if (held.Length > 0)
+        {
+            return new UserEndpointAccessWrite(UserRecordWriteOutcome.Held(inForce.Version, held), served);
+        }
+
+        var write = await this.JudgeAndCommitAsync(
             user,
             inForce,
-            SettingsDocumentPatch.Apply(inForce.Json, edits),
+            SettingsDocumentPatch.Apply(
+                inForce.Json,
+                [.. moved.Select(named => ConfigurationEdit.SetTo(named.Key, named.Asked ? "true" : "false"))]),
             UserRecordAuthority.Administrator,
             rewritesTheWholeRecord: false,
             cancellationToken);
 
-        return outcome is null
-            ? null
-            : new UserEndpointAccessWrite(outcome, outcome.IsCommitted ? requested : standing);
+        return write.Outcome is { } outcome
+            ? new UserEndpointAccessWrite(outcome, write.Committed?.EndpointAccess.Access ?? served)
+            : null;
     }
 
     /// <summary>Records the zone the signed-in person states their own days are read in.</summary>
     /// <param name="zone">The zone, already resolved against the zones this host knows.</param>
     /// <param name="cancellationToken">Cancels the reads and the commit.</param>
-    /// <returns><see langword="true" /> where the change was committed, <see langword="false" /> where this deployment holds no record for them.</returns>
+    /// <returns>Whether this deployment holds a record for them, and the sentence naming who holds the zone where a settings policy does not leave it to them.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="zone" /> is <see langword="null" />.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the record refused the zone for a reason a retry does not settle.</exception>
@@ -272,7 +313,7 @@ internal sealed class UserRecordAdministration(
     /// have every replica recompose that user for a change that changed nothing.
     /// </para>
     /// </remarks>
-    internal async Task<bool> ChangeOwnTimeZoneAsync(UserTimeZone zone, CancellationToken cancellationToken)
+    internal async Task<OwnSettingChange> ChangeOwnTimeZoneAsync(UserTimeZone zone, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(zone);
 
@@ -284,15 +325,15 @@ internal sealed class UserRecordAdministration(
         {
             if (await documents.ReadAsync(user, cancellationToken) is not { } inForce)
             {
-                return false;
+                return OwnSettingChange.NoSuchUser;
             }
 
             if (StatedTimeZoneIdOf(inForce.Json) == zone.Id)
             {
-                return true;
+                return OwnSettingChange.Settled;
             }
 
-            var outcome = await this.JudgeAndCommitAsync(
+            var outcome = (await this.JudgeAndCommitAsync(
                 user,
                 inForce,
                 SettingsDocumentPatch.Apply(
@@ -300,16 +341,21 @@ internal sealed class UserRecordAdministration(
                     [ConfigurationEdit.SetTo(nameof(UserAccountOptions.TimeZone), zone.Id)]),
                 UserRecordAuthority.User,
                 rewritesTheWholeRecord: false,
-                cancellationToken);
+                cancellationToken)).Outcome;
 
             if (outcome is null)
             {
-                return false;
+                return OwnSettingChange.NoSuchUser;
             }
 
             if (outcome.IsSettled)
             {
-                return true;
+                return OwnSettingChange.Settled;
+            }
+
+            if (outcome.IsHeld)
+            {
+                return OwnSettingChange.Refused(string.Join(" ", outcome.Messages));
             }
 
             if (outcome.Refusal != MailFathomErrorCode.ConfigurationVersionSuperseded || attempt == MaximumRelinkAttempts)
@@ -323,7 +369,7 @@ internal sealed class UserRecordAdministration(
     /// <summary>Points the signed-in user's record at one of their stored files as the portrait they are drawn by, or at none.</summary>
     /// <param name="portrait">The file to link, or <see langword="null" /> to link none.</param>
     /// <param name="cancellationToken">Cancels the reads and the commit.</param>
-    /// <returns>Whether the record was held, and the file the link displaced, if any.</returns>
+    /// <returns>Whether the record was held, the file the link displaced, if any, and the sentence naming who holds the portrait where a settings policy does not leave it to them.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the record refused the link for a reason a retry does not settle.</exception>
     /// <remarks>
@@ -367,13 +413,13 @@ internal sealed class UserRecordAdministration(
                 ? ConfigurationEdit.SetTo(nameof(UserAccountOptions.Portrait), linked.ToString())
                 : ConfigurationEdit.Removing(nameof(UserAccountOptions.Portrait));
 
-            var outcome = await this.JudgeAndCommitAsync(
+            var outcome = (await this.JudgeAndCommitAsync(
                 user,
                 inForce,
                 SettingsDocumentPatch.Apply(inForce.Json, [edit]),
                 UserRecordAuthority.User,
                 rewritesTheWholeRecord: false,
-                cancellationToken);
+                cancellationToken)).Outcome;
 
             if (outcome is null)
             {
@@ -385,6 +431,11 @@ internal sealed class UserRecordAdministration(
                 return new PortraitRelinking(UserHeld: true, Replaced: displaced);
             }
 
+            if (outcome.IsHeld)
+            {
+                return new PortraitRelinking(UserHeld: true, Replaced: null) { Refusal = string.Join(" ", outcome.Messages) };
+            }
+
             if (outcome.Refusal != MailFathomErrorCode.ConfigurationVersionSuperseded || attempt == MaximumRelinkAttempts)
             {
                 throw new InvalidOperationException(
@@ -393,14 +444,46 @@ internal sealed class UserRecordAdministration(
         }
     }
 
-    /// <summary>Reads one user's record, redacted.</summary>
-    private async Task<UserRecordReading?> ReadAsync(UserId user, CancellationToken cancellationToken) =>
-        await documents.ReadAsync(user, cancellationToken) is { } record
-            ? new UserRecordReading(
-                user,
-                record.DisplayName,
-                SettingRedaction.ApplyToDocument(record.Json),
-                record.Version)
+    /// <summary>Reads one user's record, redacted, with each of its properties as the policies governing the user resolve it.</summary>
+    /// <remarks>
+    /// The document answered stays the record's own, because that is what a save is composed over and what a lifted
+    /// force brings back. What the user is served with is answered beside it, per property.
+    /// </remarks>
+    private async Task<UserRecordReading?> ReadAsync(UserId user, CancellationToken cancellationToken)
+    {
+        if (await documents.ReadAsync(user, cancellationToken) is not { } record)
+        {
+            return null;
+        }
+
+        var layers = SettingsPolicyLayers.Read(record.Policies, SettingsPolicySection.Users, out var unreadable);
+
+        return new UserRecordReading(
+            user,
+            record.DisplayName,
+            SettingRedaction.ApplyToDocument(record.Json),
+            record.Version)
+        {
+            Properties = layers is null
+                ? []
+                :
+                [
+                    .. GovernedRecordResolution.Resolve(SettingsPolicySection.Users, layers, record.Json).Properties
+                        // The name is a column beside the document, so the resolution holds no value for it and
+                        // the envelope read with the record does.
+                        .Select(property => property.Property.Path == SettingsPolicySection.UserDisplayNameColumn
+                            ? property with { EffectiveValue = JsonValue.Create(record.DisplayName) }
+                            : property),
+                ],
+            Unresolved = layers is null ? SettingsPolicyLayers.DescribeUnreadable(unreadable) : null,
+        };
+    }
+
+    /// <summary>Resolves a record through the policies it was read with.</summary>
+    /// <returns>The record as it resolves, or <see langword="null" /> where a policy governing the user is not one this build reads.</returns>
+    private static ResolvedRecord? ResolveUnderItsPolicies(UserSettingsDocument record) =>
+        SettingsPolicyLayers.Read(record.Policies, SettingsPolicySection.Users, out _) is { } layers
+            ? GovernedRecordResolution.Resolve(SettingsPolicySection.Users, layers, record.Json)
             : null;
 
     /// <summary>Applies a saved record as the difference between what it says and what the row holds.</summary>
@@ -477,13 +560,13 @@ internal sealed class UserRecordAdministration(
                 $"The saved record composes the settings the user's record already carries, so nothing was written and version {inForce.Version} stays in force.");
         }
 
-        return await this.JudgeAndCommitAsync(
+        return (await this.JudgeAndCommitAsync(
             user,
             inForce,
             SettingsDocumentPatch.Apply(inForce.Json, edits),
             authority,
             rewritesTheWholeRecord: true,
-            cancellationToken);
+            cancellationToken)).Outcome;
     }
 
     /// <summary>Reads the record a change is composed over, and refuses a change authored over a version no longer in force.</summary>
@@ -511,15 +594,23 @@ internal sealed class UserRecordAdministration(
                 ]));
     }
 
-    /// <summary>Binds the candidate, judges it against what the deployment already serves, and commits it.</summary>
+    /// <summary>Judges the candidate against what the deployment already serves and the policies governing the user, and commits it.</summary>
     /// <remarks>
+    /// <para>
     /// The binder is the same one a start reads a record with, so what a write accepts is what the next start would
     /// read. What it cannot answer is asked beside it: the rule that is about the deployment rather than about the
     /// record, the rule that is about who is writing, and whether the secrets the record names can actually be
     /// retrieved — which the binder cannot ask because it resolves nothing, and which a start refuses for the whole
     /// deployment rather than for the user whose record carries the reference.
+    /// </para>
+    /// <para>
+    /// The candidate is judged twice where a policy moved in between. Once under the policies the record was read
+    /// with, because two of the questions here are asked of the database and of the secret stores and neither may be
+    /// asked inside a commit; and once more inside the commit, under the policies in force at that moment, which is
+    /// the judgement that decides. Where the two readings are the same policies the first judgement is the second.
+    /// </para>
     /// </remarks>
-    private async Task<UserRecordWriteOutcome?> JudgeAndCommitAsync(
+    private async Task<JudgedWrite> JudgeAndCommitAsync(
         UserId user,
         UserSettingsDocument inForce,
         string candidateJson,
@@ -527,59 +618,16 @@ internal sealed class UserRecordAdministration(
         bool rewritesTheWholeRecord,
         CancellationToken cancellationToken)
     {
-        // Judged with the accounts assigned to the user composed back in, because that is the record a start serves them
-        // from: a rule over the whole set — that two of their mailboxes cannot share a name, that a junk destination
-        // resolves within them — is only askable against it. The blocks themselves arrive as records the deployment
-        // already holds, because this route cannot write one — a saved record naming MailAccounts is refused above —
-        // so judging them here would refuse a user's own record over a posture or a language the account route is the
-        // only thing that could correct.
-        var binding = binder.Bind(
-            MailAccountRecordComposition.Compose(candidateJson, inForce.MailAccounts),
-            UserRecordArrival.AlreadyHeld);
+        var judged = this.Judge(user, inForce, candidateJson, authority, rewritesTheWholeRecord, inForce.Policies);
 
-        if (binding.User is not { } bound)
+        if (judged.Refusal is { } refusal)
         {
-            return UserRecordWriteOutcome.Refused(
-                MailFathomErrorCode.ConfigurationCandidateInvalid,
-                inForce.Version,
-                binding.Refusals);
+            return new JudgedWrite(refusal, Committed: null);
         }
 
-        // Asked of a record being rewritten and of no other write, because the document is then the one in front of
-        // whoever is saving and the line is theirs to add. A start and a convergence read records committed before the
-        // property existed, and refusing those would refuse the start itself through the surface the line would be
-        // added from; a switch or a portrait link is the deployment changing one value on such a record, and refusing
-        // that would keep a user off an endpoint over a rule that arrived after their record was accepted.
-        if (rewritesTheWholeRecord
-            && bound.FindMissingLanguageError().FirstOrDefault()?.ErrorMessage is { } missingLanguage)
+        if (judged.Bound is not { } bound)
         {
-            return UserRecordWriteOutcome.Refused(
-                MailFathomErrorCode.ConfigurationCandidateInvalid,
-                inForce.Version,
-                [missingLanguage]);
-        }
-
-        // Which endpoints somebody is served on is the deployment's decision about them, so a user saving their own
-        // record may carry the switches through unchanged and may not move either one.
-        if (authority == UserRecordAuthority.User
-            && bound.EndpointAccess.Access
-                != UserEndpointAccessOptions.ReadFrom(RedactedDocumentSave.Flatten(inForce.Json)))
-        {
-            return UserRecordWriteOutcome.Refused(
-                MailFathomErrorCode.ConfigurationCandidateInvalid,
-                inForce.Version,
-                [
-                    $"{UserEndpointAccessOptions.BlockName} states which endpoints this deployment serves you on, and whoever administers it decides that. Leave it as your record already states it.",
-                ]);
-        }
-
-        if (authority == UserRecordAuthority.User
-            && FindSecretsTheUserMayNotName(user, inForce.Json, candidateJson) is { Count: > 0 } introduced)
-        {
-            return UserRecordWriteOutcome.Refused(
-                MailFathomErrorCode.ConfigurationCandidateInvalid,
-                inForce.Version,
-                introduced);
+            return new JudgedWrite(NothingHeldMoves(inForce.Version), Committed: null);
         }
 
         // Asked of every write whoever makes it, because only the database can say whose a file is: a link to somebody
@@ -588,12 +636,14 @@ internal sealed class UserRecordAdministration(
             && (portraitLink == Guid.Empty
                 || !await files.HoldsAsync(user, StoredFileId.Create(portraitLink), cancellationToken)))
         {
-            return UserRecordWriteOutcome.Refused(
-                MailFathomErrorCode.ConfigurationCandidateInvalid,
-                inForce.Version,
-                [
-                    $"{nameof(UserAccountOptions.Portrait)} names '{portraitLink:D}', which is not a stored file of this user's, so nothing was written. A portrait is linked by uploading one, never by naming a file.",
-                ]);
+            return new JudgedWrite(
+                UserRecordWriteOutcome.Refused(
+                    MailFathomErrorCode.ConfigurationCandidateInvalid,
+                    inForce.Version,
+                    [
+                        $"{nameof(UserAccountOptions.Portrait)} names '{portraitLink:D}', which is not a stored file of this user's, so nothing was written. A portrait is linked by uploading one, never by naming a file.",
+                    ]),
+                Committed: null);
         }
 
         // Reported rather than refused. A user's own record carries no mail account, so a write to it cannot have
@@ -601,39 +651,154 @@ internal sealed class UserRecordAdministration(
         // making the next start any better. What it can do is say so, since the next start refuses the deployment.
         var unusable = await secrets.FindUserMailAccountErrorsAsync(RecordPath, bound.MailAccounts, cancellationToken);
 
-        UserRecordWriteOutcome? outcome;
+        var committedAs = judged;
+        var committedUnder = inForce.Policies;
 
-        if (await store.CommitAsync(
-                user,
-                candidateJson,
-                bound.EndpointAccess.Access,
-                inForce.Version,
-                cancellationToken) is { } committed)
+        var committed = await store.CommitAsync(
+            user,
+            inForce.Version,
+            policies =>
+            {
+                committedUnder = policies;
+                committedAs = policies == inForce.Policies
+                    ? judged
+                    : this.Judge(user, inForce, candidateJson, authority, rewritesTheWholeRecord, policies);
+
+                return committedAs is { Refusal: null, Bound: { } resolved }
+                    ? new UserRecordCandidate(committedAs.Json, resolved.EndpointAccess.Access)
+                    : null;
+            },
+            cancellationToken);
+
+        if (committed is { } version)
         {
-            servedUsers.UserDocumentPublished(user, inForce.DisplayName, bound, committed);
-            outcome = UserRecordWriteOutcome.Committed(committed, [.. unusable.Select(DescribeAsAlreadyHeld)]);
+            servedUsers.UserDocumentPublished(user, inForce.DisplayName, committedAs.Bound!, version, committedUnder);
+
+            await announcements.AnnounceAsync();
+
+            return new JudgedWrite(
+                UserRecordWriteOutcome.Committed(version, [.. unusable.Select(DescribeAsAlreadyHeld)]),
+                committedAs.Bound);
         }
-        else
+
+        // A policy that moved between the read and the commit refuses, or holds, what the earlier one let through.
+        if (committedAs.Refusal is { } refusedAtCommit)
         {
-            // The record moved while this candidate was being judged, or the user was erased under it. Which of the
-            // two is settled by reading rather than assumed, because the statement distinguishes neither.
-            outcome = await documents.ReadAsync(user, cancellationToken) is { } current
+            return new JudgedWrite(refusedAtCommit, Committed: null);
+        }
+
+        if (committedAs.Bound is null)
+        {
+            return new JudgedWrite(NothingHeldMoves(inForce.Version), Committed: null);
+        }
+
+        // The record moved while this candidate was being judged, or the user was erased under it. Which of the
+        // two is settled by reading rather than assumed, because the statement distinguishes neither.
+        return new JudgedWrite(
+            await documents.ReadAsync(user, cancellationToken) is { } current
                 ? UserRecordWriteOutcome.Refused(
                     MailFathomErrorCode.ConfigurationVersionSuperseded,
                     current.Version,
                     [
                         $"The change was composed over user record version {inForce.Version}, and version {current.Version} is in force. Read the record as it now stands and decide again against it.",
                     ])
-                : null;
-        }
-
-        if (outcome is { IsCommitted: true })
-        {
-            await announcements.AnnounceAsync();
-        }
-
-        return outcome;
+                : null,
+            Committed: null);
     }
+
+    /// <summary>Judges one candidate under one reading of the policies governing the user.</summary>
+    /// <remarks>Reads nothing and awaits nothing, which is what lets a commit ask it again inside its own transaction.</remarks>
+    private JudgedCandidate Judge(
+        UserId user,
+        UserSettingsDocument inForce,
+        string candidateJson,
+        UserRecordAuthority authority,
+        bool rewritesTheWholeRecord,
+        GoverningSettingsPolicies policies)
+    {
+        JudgedCandidate Refused(IReadOnlyList<string> messages) =>
+            new(
+                UserRecordWriteOutcome.Refused(MailFathomErrorCode.ConfigurationCandidateInvalid, inForce.Version, messages),
+                candidateJson,
+                Bound: null);
+
+        if (SettingsPolicyLayers.Read(policies, SettingsPolicySection.Users, out var unreadable) is not { } layers)
+        {
+            return Refused([$"{SettingsPolicyLayers.DescribeUnreadable(unreadable)} Nothing was written."]);
+        }
+
+        // Which endpoints somebody is served on and what their client is asked to record are the deployment's
+        // decisions about them, and a policy may hold anything else: a writer may carry a held property through as a
+        // read showed it and may not move it.
+        var change = GovernedRecordChange.Judge(
+            SettingsPolicySection.Users,
+            layers,
+            inForce.Json,
+            candidateJson,
+            byThePerson: authority == UserRecordAuthority.User);
+
+        if (change.Refusals.Count > 0)
+        {
+            return new JudgedCandidate(
+                UserRecordWriteOutcome.Held(inForce.Version, change.Refusals),
+                candidateJson,
+                Bound: null);
+        }
+
+        // Everything the candidate would have moved was a held property carried through, so the document is the one
+        // already in force and committing it would move the version, and recompose the user on every replica, for a
+        // change that changed nothing.
+        if (!ReferenceEquals(change.Json, candidateJson)
+            && SettingsDocumentTree.StateTheSame(
+                GovernedRecordResolution.ReadDocument(change.Json),
+                GovernedRecordResolution.ReadDocument(inForce.Json)))
+        {
+            return new JudgedCandidate(Refusal: null, change.Json, Bound: null);
+        }
+
+        // Judged as the policies resolve it and with the accounts assigned to the user composed back in, because that
+        // is the record a start serves them from: a rule over the whole set — that two of their mailboxes cannot share
+        // a name, that a junk destination resolves within them — is only askable against it. The blocks themselves
+        // arrive as records the deployment already holds, because this route cannot write one — a saved record naming
+        // MailAccounts is refused above — so judging them here would refuse a user's own record over a posture or a
+        // language the account route is the only thing that could correct.
+        var binding = binder.Bind(
+            MailAccountRecordComposition.Compose(
+                GovernedRecordResolution.Resolve(SettingsPolicySection.Users, layers, change.Json).EffectiveJson,
+                inForce.MailAccounts),
+            UserRecordArrival.AlreadyHeld);
+
+        if (binding.User is not { } bound)
+        {
+            return Refused(binding.Refusals);
+        }
+
+        // Asked of a record being rewritten and of no other write, because the document is then the one in front of
+        // whoever is saving and the line is theirs to add. A start and a convergence read records committed before the
+        // property existed, and refusing those would refuse the start itself through the surface the line would be
+        // added from; a switch or a portrait link is the deployment changing one value on such a record, and refusing
+        // that would keep a user off an endpoint over a rule that arrived after their record was accepted. It is asked
+        // of the record as resolved, so a language a policy supplies is one the record need not state.
+        if (rewritesTheWholeRecord
+            && bound.FindMissingLanguageError().FirstOrDefault()?.ErrorMessage is { } missingLanguage)
+        {
+            return Refused([missingLanguage]);
+        }
+
+        if (authority == UserRecordAuthority.User
+            && FindSecretsTheUserMayNotName(user, inForce.Json, change.Json) is { Count: > 0 } introduced)
+        {
+            return Refused(introduced);
+        }
+
+        return new JudgedCandidate(Refusal: null, change.Json, bound);
+    }
+
+    /// <summary>Answers a change every part of which is held where it stands.</summary>
+    private static UserRecordWriteOutcome NothingHeldMoves(long version) =>
+        UserRecordWriteOutcome.NothingToChange(
+            version,
+            $"Every setting the change names is held where it stands, so nothing was written and version {version} stays in force.");
 
     /// <summary>Says that a problem a committed record still carries was there before the write, and what clears it.</summary>
     internal static string DescribeAsAlreadyHeld(string problem) =>
@@ -802,6 +967,17 @@ internal sealed class UserRecordAdministration(
             throw new ArgumentException("A user record is administered for a named user.", nameof(user));
         }
     }
+
+    /// <summary>What judging one candidate under one reading of the policies answered.</summary>
+    /// <param name="Refusal">What refuses the candidate, or <see langword="null" /> where it may be committed.</param>
+    /// <param name="Json">The document to commit, with every held property the candidate carried through left as the record states it.</param>
+    /// <param name="Bound">The effective record the candidate binds to, or <see langword="null" /> where it was refused — or where everything it would have moved is held where it stands, which leaves nothing to commit and nothing refused.</param>
+    private sealed record JudgedCandidate(UserRecordWriteOutcome? Refusal, string Json, UserAccountOptions? Bound);
+
+    /// <summary>What one write did, and the effective record it committed.</summary>
+    /// <param name="Outcome">What the write did, or <see langword="null" /> when this deployment no longer holds the user.</param>
+    /// <param name="Committed">The record the user is served from after a commit, as the policies in force at the commit resolved it.</param>
+    private readonly record struct JudgedWrite(UserRecordWriteOutcome? Outcome, UserAccountOptions? Committed);
 
     /// <summary>The record a change was opened over, and the refusal that stopped it going further.</summary>
     /// <param name="Record">The record as the row holds it, which every refusal reports the version of.</param>

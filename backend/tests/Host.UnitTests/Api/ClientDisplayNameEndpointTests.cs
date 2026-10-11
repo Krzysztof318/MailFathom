@@ -7,6 +7,9 @@ using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Api;
 using MailFathom.Host.Configuration.UserSettings.Administration;
+using MailFathom.Host.UnitTests.TestDoubles;
+using MailFathom.Infrastructure.Persistence.Policies;
+using MailFathom.Infrastructure.Persistence.Users;
 using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -24,6 +27,8 @@ namespace MailFathom.Host.UnitTests.Api;
 /// </summary>
 public sealed class ClientDisplayNameEndpointTests
 {
+    private const string WithholdingTheName = """{"Users":{"Editing":{"Mode":"AllExcept","Properties":["DisplayName"]}}}""";
+
     [Fact]
     public async Task ReadAsync_APersonThisDeploymentHolds_HandsThemTheirNameAndWhetherTheyMayChangeIt()
     {
@@ -158,6 +163,52 @@ public sealed class ClientDisplayNameEndpointTests
         Assert.Equal("Ada King", request!.DisplayName);
     }
 
+    /// <summary>A name a settings policy holds is refused in the sentence naming who holds it.</summary>
+    [Fact]
+    public async Task ChangeAsync_ANameASettingsPolicyHolds_RefusesNamingWhoHoldsIt()
+    {
+        // Arrange
+        var deployment = SignedIn(MailFathomPermission.MailRead, MailFathomPermission.MailAccountsWrite);
+        deployment.Recording("Ada Lovelace");
+        deployment.GovernedBy(StatedPolicies.Governing(deployment: WithholdingTheName));
+
+        // Act
+        var result = await ClientDisplayNameEndpoint.ChangeAsync(
+            deployment.Names,
+            new ClientDisplayNameRequest("Ada King"),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(result.Result);
+
+        Assert.Equal(StatusCodes.Status400BadRequest, refusal.StatusCode);
+        Assert.StartsWith("DisplayName is held by the deployment", refusal.ProblemDetails.Detail, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A held name sent back as it stands passes, and the answer still says the name is not the caller's to change —
+    /// the one write whose success proves nothing about the next one.
+    /// </summary>
+    [Fact]
+    public async Task ChangeAsync_AHeldNameSentBackAsItStands_AnswersItAsUnchangeable()
+    {
+        // Arrange
+        var deployment = SignedIn(MailFathomPermission.MailRead, MailFathomPermission.MailAccountsWrite);
+        deployment.Recording("Ada Lovelace");
+        deployment.GovernedBy(StatedPolicies.Governing(deployment: WithholdingTheName));
+
+        // Act
+        var result = await ClientDisplayNameEndpoint.ChangeAsync(
+            deployment.Names,
+            new ClientDisplayNameRequest("Ada Lovelace"),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            new ClientDisplayNameResponse("Ada Lovelace", Changeable: false),
+            Assert.IsType<Ok<ClientDisplayNameResponse>>(result.Result).Value);
+    }
+
     /// <summary>How the transport reads a body, so the binding these assert is the one a request actually meets.</summary>
     private static JsonSerializerOptions WebFormat => new(JsonSerializerDefaults.Web);
 
@@ -182,8 +233,12 @@ public sealed class ClientDisplayNameEndpointTests
             this.Names = new OwnDisplayName(
                 AccessAuthorizations.ForUserGranted(SyntheticUser.Deployment, granted),
                 this.directory,
-                provisioning);
+                provisioning,
+                this.Documents);
         }
+
+        /// <summary>Gets the reader the person's record and the policies governing it are read from, which holds no record until a test says so.</summary>
+        internal IUserSettingsDocumentReader Documents { get; } = Substitute.For<IUserSettingsDocumentReader>();
 
         internal OwnDisplayName Names { get; }
 
@@ -192,5 +247,11 @@ public sealed class ClientDisplayNameEndpointTests
             this.directory
                 .ReadUserAsync(SyntheticUser.Deployment, Arg.Any<CancellationToken>())
                 .Returns(new UserRecord(SyntheticUser.Deployment, displayName));
+
+        /// <summary>States the settings policies the person's record is read under.</summary>
+        internal void GovernedBy(GoverningSettingsPolicies policies) =>
+            this.Documents
+                .ReadAsync(SyntheticUser.Deployment, Arg.Any<CancellationToken>())
+                .Returns(new UserSettingsDocument(SyntheticUser.Deployment, "ada", "{}", Version: 1) { Policies = policies });
     }
 }

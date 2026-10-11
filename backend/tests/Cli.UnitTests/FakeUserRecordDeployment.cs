@@ -211,6 +211,9 @@ internal static class FakeUserRecordDeployment
         CultureInfo.InvariantCulture,
         $$"""
           {"user":"{{(users.Length > 0 ? users[0] : Guid.Empty):D}}","displayName":"user-{{(users.Length > 0 ? users[0] : Guid.Empty):D}}",
-          "version":{{RecordVersion}},"document":{{JsonSerializer.Serialize(document)}}}
+          "version":{{RecordVersion}},"document":{{JsonSerializer.Serialize(document)}},
+          "properties":[
+            {"path":"Language","value":"Polish","source":"OrganizationForced","heldBy":"Organization","changeable":false},
+            {"path":"TimeZone","value":null,"source":"BuiltIn","heldBy":null,"changeable":true}]}
           """);
 }

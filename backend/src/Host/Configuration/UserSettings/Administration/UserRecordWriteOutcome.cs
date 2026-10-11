@@ -56,6 +56,14 @@ internal sealed record UserRecordWriteOutcome
     /// <summary>Gets whether a version was spent, which is false for a write that found the record already as asked.</summary>
     public bool IsCommitted { get; }
 
+    /// <summary>Gets whether the write was refused because it would move a setting held against whoever was writing.</summary>
+    /// <remarks>
+    /// Apart from every other refusal because the writer cannot correct their way past it: the setting is a settings
+    /// policy's or an administrator's, so a route that changes one setting answers it as a refusal of the request
+    /// rather than as a defect in the record.
+    /// </remarks>
+    public bool IsHeld { get; private init; }
+
     /// <summary>Reports a write that committed.</summary>
     /// <param name="version">The version the commit produced.</param>
     /// <param name="standingProblems">One sentence per problem the record carried before the write and still carries, which did not stop the commit because the write did not introduce it.</param>
@@ -86,6 +94,16 @@ internal sealed record UserRecordWriteOutcome
 
         return new UserRecordWriteOutcome(version, refusal: default, [message]);
     }
+
+    /// <summary>Reports that the write would have moved a setting held against whoever was writing, so the record is unchanged.</summary>
+    /// <param name="versionInForce">The version the user's record still stands at.</param>
+    /// <param name="messages">One sentence per held setting, each naming it and who holds it.</param>
+    /// <returns>The refused result.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="messages" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="messages" /> is empty.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="versionInForce" /> is negative.</exception>
+    public static UserRecordWriteOutcome Held(long versionInForce, IReadOnlyList<string> messages) =>
+        Refused(MailFathomErrorCode.ConfigurationCandidateInvalid, versionInForce, messages) with { IsHeld = true };
 
     /// <summary>Reports a write that changed nothing because it was refused.</summary>
     /// <param name="refusal">The code naming why.</param>

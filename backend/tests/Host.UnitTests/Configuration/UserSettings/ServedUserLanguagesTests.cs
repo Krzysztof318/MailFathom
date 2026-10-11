@@ -5,6 +5,7 @@
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.UnitTests.TestDoubles;
+using MailFathom.Infrastructure.Persistence.Policies;
 using MailFathom.TestSupport;
 using Xunit;
 
@@ -88,7 +89,8 @@ public sealed class ServedUserLanguagesTests
             SyntheticUser.Deployment,
             "alex",
             new UserAccountOptions { Language = nameof(UserLanguage.Polish) },
-            version: 2);
+            version: 2,
+            GoverningSettingsPolicies.Unwritten);
 
         // Assert
         Assert.Equal(UserLanguage.Polish, languages.LanguageOf(SyntheticUser.Deployment));

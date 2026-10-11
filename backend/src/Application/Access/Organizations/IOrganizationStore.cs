@@ -83,9 +83,14 @@ public interface IOrganizationStore
     /// <param name="user">The user being moved.</param>
     /// <param name="organizationId">The organization to move them into, or <see langword="null" /> to leave them in none.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
-    /// <returns><see cref="OrganizationWriteOutcome.Written" />, <see cref="OrganizationWriteOutcome.UnknownUser" />, <see cref="OrganizationWriteOutcome.UnknownOrganization" />, <see cref="OrganizationWriteOutcome.AssignmentsOutsideOrganization" /> carrying how many of their accounts stand outside the target, or <see cref="OrganizationWriteOutcome.UsernameTaken" /> carrying the colliding username where it could be read.</returns>
+    /// <returns><see cref="OrganizationWriteOutcome.Written" />, <see cref="OrganizationWriteOutcome.UnknownUser" />, <see cref="OrganizationWriteOutcome.UnknownOrganization" />, <see cref="OrganizationWriteOutcome.AssignmentsOutsideOrganization" /> carrying how many of their accounts stand outside the target, <see cref="OrganizationWriteOutcome.UsernameTaken" /> carrying the colliding username where it could be read, or <see cref="OrganizationWriteOutcome.RecordLeftInvalid" /> carrying what the target's settings policy would leave their record without.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
-    /// <remarks>Nothing is unassigned on the administrator's behalf: a user assigned an account the target would not admit stays where they are.</remarks>
+    /// <remarks>
+    /// Nothing is unassigned on the administrator's behalf: a user assigned an account the target would not admit stays
+    /// where they are. A move changes which settings policy governs the user, so the same commit writes the endpoint
+    /// switches their record resolves to under the target's policy and moves their record's version, which is what
+    /// has every replica compose them again; and nothing is rewritten on the record itself to make a move pass.
+    /// </remarks>
     Task<OrganizationWriteResult> SetUserOrganizationAsync(
         UserId user,
         Guid? organizationId,

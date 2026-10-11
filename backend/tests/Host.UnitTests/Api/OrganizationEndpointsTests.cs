@@ -171,6 +171,35 @@ public sealed class OrganizationEndpointsTests
         Assert.Contains("4 mail account", problem.ProblemDetails.Detail, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A move changes which settings policy governs the user, so one that would leave their record unservable is
+    /// refused with what the record would be missing, and nothing is rewritten on it to make the move pass.
+    /// </summary>
+    [Fact]
+    public async Task SetUserOrganizationAsync_AUserWhoseRecordTheTargetsPolicyWouldLeaveUnservable_IsAConflictNamingWhatItLacks()
+    {
+        // Arrange
+        var harness = new EndpointHarness(MailFathomPermission.AdminCredentialsWrite);
+        harness.Organizations.SetUserOrganizationAsync(SyntheticUser.Deployment, null, Arg.Any<CancellationToken>())
+            .Returns(new OrganizationWriteResult(OrganizationWriteOutcome.RecordLeftInvalid)
+            {
+                Corrections = ["Language is not stated."],
+            });
+
+        // Act
+        var result = await OrganizationEndpoints.SetUserOrganizationAsync(
+            SyntheticUser.Deployment.Value,
+            new UserOrganizationRequest(null, None: true),
+            harness.Administration,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var problem = Assert.IsType<ProblemHttpResult>(result.Result);
+        Assert.Equal(StatusCodes.Status409Conflict, problem.StatusCode);
+        Assert.Contains("Language is not stated.", problem.ProblemDetails.Detail, StringComparison.Ordinal);
+        Assert.Contains("they were not moved", problem.ProblemDetails.Detail, StringComparison.Ordinal);
+    }
+
     /// <summary>An account is not moved away from the users it is assigned to, and the refusal says how many stand in the way rather than unassigning them.</summary>
     [Fact]
     public async Task SetMailAccountOrganizationAsync_AnAccountAssignedToUsersOutsideTheTarget_IsAConflictNamingHowMany()

@@ -722,6 +722,36 @@ public sealed class UserCommandTests : IDisposable
         Assert.Contains(this.harness.Console.Lines, line => line.Contains("- AccountId: work", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// The effective view prints each setting as the user is served it, with the step that supplied it and who holds
+    /// it, in place of the record's own document.
+    /// </summary>
+    [Fact]
+    public async Task Show_TheEffectiveView_PrintsEachSettingWithWhereItCameFromAndWhoHoldsIt()
+    {
+        // Arrange
+        using var deployment = FakeUserRecordDeployment.HoldingRecords(User, OneMailAccount);
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "user",
+            "show",
+            "--user",
+            $"{User:D}",
+            "--effective",
+            "--endpoint",
+            Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Contains(
+            "  Language: Polish  [OrganizationForced, held by the organization, not changeable while the policy forces it]",
+            this.harness.Console.Lines);
+        Assert.Contains("  TimeZone: (nothing stated)  [BuiltIn]", this.harness.Console.Lines);
+        Assert.DoesNotContain(this.harness.Console.Lines, line => line.Contains("AccountId", StringComparison.Ordinal));
+    }
+
     /// <summary>Nothing is opened without an editor to open it in, and nothing about one person's mailboxes is fetched for a session that cannot start.</summary>
     [Fact]
     public async Task Edit_NoEditorNamedByTheShell_FailsWithoutReadingTheRecord()

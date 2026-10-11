@@ -7,6 +7,7 @@ using MailFathom.Application.Access.Organizations;
 using MailFathom.Application.Paging;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Access;
+using MailFathom.Infrastructure.Persistence.Policies;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -29,7 +30,11 @@ namespace MailFathom.Infrastructure.Persistence.Users;
 /// </para>
 /// </remarks>
 [RequiresIntegrationCoverage]
-internal sealed class PersistedOrganizations(MailFathomDbContext dbContext, IGrantChangeAnnouncer grantChanges)
+internal sealed class PersistedOrganizations(
+    MailFathomDbContext dbContext,
+    IGrantChangeAnnouncer grantChanges,
+    IUserRecordPolicyJudge judge,
+    TimeProvider timeProvider)
     : IOrganizationStore
 {
     /// <inheritdoc />
@@ -266,6 +271,13 @@ internal sealed class PersistedOrganizations(MailFathomDbContext dbContext, IGra
     /// new organization. The collision is read under the same lock and named before anything is written, so an
     /// administrator is told which username stands in the way. A credential provisioned in the target scope for somebody else in the same instant
     /// is refused by the lookup index instead, and is answered as the same refusal without the name.
+    /// <para>
+    /// A move changes which settings policy governs the user, so it is a write of a governed record: it holds the
+    /// lock a policy write excludes those with, reads the policies of where the user is and of where they are going
+    /// inside its own transaction, and has the record judged under both. The switches the record resolves to under
+    /// the target's policy are written with the organization, so a request authenticates against the policy the user
+    /// now stands under from the commit onwards.
+    /// </para>
     /// </remarks>
     public async Task<OrganizationWriteResult> SetUserOrganizationAsync(
         UserId user,
@@ -281,6 +293,11 @@ internal sealed class PersistedOrganizations(MailFathomDbContext dbContext, IGra
         var password = UserCredentialMethod.Password.Name;
 
         await using var move = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+        // Before the row, so a move waiting behind a policy write holds nothing that write needs.
+        await dbContext.Database.ExecuteSqlRawAsync(
+            GoverningSettingsPolicyStatements.HoldBesideRecordWrites,
+            cancellationToken);
 
         await dbContext.Database.ExecuteSqlAsync(
             $"""SELECT 1 FROM settings_accounts WHERE "Id" = {userId} FOR UPDATE""",
@@ -311,12 +328,39 @@ internal sealed class PersistedOrganizations(MailFathomDbContext dbContext, IGra
             return new OrganizationWriteResult(OrganizationWriteOutcome.UsernameTaken, CollidingUsername: colliding);
         }
 
+        var held = await GovernedUserRows.Of(dbContext).SingleAsync(row => row.Id == userId, cancellationToken);
+
+        var judgement = judge.Judge(
+        [
+            new GovernedUserRecord(
+                user,
+                held.DisplayName,
+                held.Document,
+                await PersistedSettingsPolicies.ReadGoverningAsync(dbContext, held.OrganizationId, cancellationToken),
+                await PersistedSettingsPolicies.ReadGoverningAsync(dbContext, organizationId, cancellationToken)),
+        ])[0];
+
+        if (judgement.Refusals.Count > 0)
+        {
+            return new OrganizationWriteResult(OrganizationWriteOutcome.RecordLeftInvalid) { Corrections = judgement.Refusals };
+        }
+
+        var served = judgement.EndpointAccess ?? new UserEndpointAccess(held.McpEndpointEnabled, held.ClientEndpointEnabled);
+        var now = timeProvider.GetUtcNow();
+
         try
         {
+            // The version moves with the organization, because which policy governs somebody is part of what they are
+            // served and a replica learns that it has to compose a user again by their record's version moving.
             await dbContext.UserAccounts
                 .Where(record => record.Id == userId)
                 .ExecuteUpdateAsync(
-                    setters => setters.SetProperty(record => record.OrganizationId, organizationId),
+                    setters => setters
+                        .SetProperty(record => record.OrganizationId, organizationId)
+                        .SetProperty(record => record.McpEndpointEnabled, served.McpEndpoint)
+                        .SetProperty(record => record.ClientEndpointEnabled, served.ClientEndpoint)
+                        .SetProperty(record => record.Version, record => record.Version + 1)
+                        .SetProperty(record => record.UpdatedAt, now),
                     cancellationToken);
 
             await dbContext.UserCredentials

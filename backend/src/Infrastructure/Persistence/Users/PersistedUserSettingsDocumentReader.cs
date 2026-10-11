@@ -7,6 +7,7 @@ using System.Globalization;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Access;
 using MailFathom.Infrastructure.Persistence.Connections;
+using MailFathom.Infrastructure.Persistence.Policies;
 using Npgsql;
 
 namespace MailFathom.Infrastructure.Persistence.Users;
@@ -64,18 +65,30 @@ internal sealed class PersistedUserSettingsDocumentReader(
             "DisplayName",
             octet_length("Document"::text) AS "Length",
             CASE WHEN octet_length("Document"::text) <= @maximumOctets THEN "Document"::text END AS "Document",
-            "Version"
+            "Version",
+            "OrganizationId"
         FROM settings_accounts
         WHERE "Id" = @user;
         """;
 
     /// <summary>Reads the first rows' versions and nothing else, in the order the users were recorded in.</summary>
+    /// <remarks>
+    /// The versions of the two policies that govern each user are read in the same statement, because a composition
+    /// is as stale when one of those moved as when the record did, and a second statement would read them at another
+    /// moment. Each policy is at most one row, so neither join multiplies a user.
+    /// </remarks>
     private const string SelectVersions =
         """
-        SELECT "Id", "Version"
-        FROM settings_accounts
-        WHERE (@everyUser AND ("McpEndpointEnabled" OR "ClientEndpointEnabled")) OR "Id" = ANY(@users)
-        ORDER BY "CreatedAt", "Id"
+        SELECT
+            account."Id",
+            account."Version",
+            COALESCE(deployment."Version", 0) AS "DeploymentPolicyVersion",
+            COALESCE(organization."Version", 0) AS "OrganizationPolicyVersion"
+        FROM settings_accounts AS account
+        LEFT JOIN settings_policies AS deployment ON deployment."OrganizationId" IS NULL
+        LEFT JOIN settings_policies AS organization ON organization."OrganizationId" = account."OrganizationId"
+        WHERE (@everyUser AND (account."McpEndpointEnabled" OR account."ClientEndpointEnabled")) OR account."Id" = ANY(@users)
+        ORDER BY account."CreatedAt", account."Id"
         LIMIT @limit;
         """;
 
@@ -150,9 +163,11 @@ internal sealed class PersistedUserSettingsDocumentReader(
 
                 while (await reader.ReadAsync(cancellationToken))
                 {
-                    versions.Add(new UserSettingsDocumentVersion(
-                        UserId.Create(reader.GetGuid(0)),
-                        reader.GetInt64(1)));
+                    versions.Add(new UserSettingsDocumentVersion(UserId.Create(reader.GetGuid(0)), reader.GetInt64(1))
+                    {
+                        DeploymentPolicyVersion = reader.GetInt64(2),
+                        OrganizationPolicyVersion = reader.GetInt64(3),
+                    });
                 }
 
                 return versions;
@@ -289,10 +304,22 @@ internal sealed class PersistedUserSettingsDocumentReader(
                         user,
                         reader.GetString(0),
                         reader.GetString(2),
-                        reader.GetInt64(3));
+                        reader.GetInt64(3))
+                    {
+                        OrganizationId = await reader.IsDBNullAsync(4, cancellationToken) ? null : reader.GetGuid(4),
+                    };
                 }
 
-                return record with { MailAccounts = await this.ReadAssignedAccountsAsync(connection, user, cancellationToken) };
+                return record with
+                {
+                    MailAccounts = await this.ReadAssignedAccountsAsync(connection, user, cancellationToken),
+                    Policies = await GoverningSettingsPolicyStatements.ReadAsync(
+                        connection,
+                        transaction: null,
+                        record.OrganizationId,
+                        (int)commandTimeout.Value.TotalSeconds,
+                        cancellationToken),
+                };
             }
             catch (NpgsqlException exception)
             {

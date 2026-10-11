@@ -150,7 +150,10 @@ which user an entry was is the operator's to say.
 ### The default administrator
 
 **The first start records a user named `admin`**, in no organization, holding the seeded `Administrator` role at
-deployment scope, with both of its mail endpoint switches off so no MCP or client caller is ever `admin`. It happens once
+deployment scope, with both of its mail endpoint switches off so no MCP or client caller is ever `admin`. Its record
+states both switches off, so a later write of that record leaves them off and so does a
+[settings policy](#settings-policies) that defaults one on; turning one on is a decision somebody takes, with
+`mfctl user endpoints` or by forcing it in a policy. It happens once
 per deployment, whichever replica starts first. Removing `admin` afterwards is final: no later start records it again,
 because a deployment whose operator removed the default account and then found it back with a known password would be
 worse off than one that never had it.
@@ -1803,7 +1806,7 @@ such user exists rather than editing somebody else's mailboxes.
 | --- | --- |
 | `mfctl user list` | Reads who this deployment holds, where each one's mail accounts come from, whether the running process serves them, and which of the MCP and client endpoints each one is served on |
 | `mfctl user add --display-name <name>` | Records a user this deployment did not hold, and reports the identifier they were minted under |
-| `mfctl user show [--format json\|yaml]` | Reads one user's record as this deployment holds it, secrets redacted, as JSON or as YAML |
+| `mfctl user show [--format json\|yaml] [--effective]` | Reads one user's record as this deployment holds it, secrets redacted, as JSON or as YAML — or with `--effective`, each setting as the user is served it, with what supplied it and who holds it |
 | `mfctl user edit [--format json\|yaml]` | Opens that record in your `$VISUAL` or `$EDITOR`, as JSON or as YAML, and commits what you saved as one change |
 | `mfctl user rename --display-name <name>` | Replaces the label that user is told apart by |
 | `mfctl user endpoints [--mcp true\|false] [--client true\|false]` | Keeps that user off the MCP endpoint, the client endpoint, or both, or lets them back on |
@@ -1892,7 +1895,8 @@ are on when a user is recorded, and a record that states neither reads as both o
 keeps a person who only reads mail off the MCP endpoint, so no agent can act for them, and `--client false` keeps an
 automation account out of the mail client; a switch the command does not name stays where it is. The route beneath it
 is `PUT /api/admin/users/{userId}/endpoint-access` with `{"mcpEndpoint": false}`, `{"clientEndpoint": false}`, or both,
-it takes `mailfathom.admin.configuration.write`, and it answers both switches as the record now states them. The
+it takes `mailfathom.admin.configuration.write`, and it answers both switches as the user is now served — the record's
+own, except where [a settings policy](#settings-policies) forces one or supplies one the record leaves out. The
 switches are the record's `EndpointAccess:McpEndpoint` and `EndpointAccess:ClientEndpoint`, so `mfctl user edit`
 changes them too, and `mfctl user show` reads them back once either has been written:
 
@@ -1900,9 +1904,10 @@ changes them too, and `mfctl user show` reads them back once either has been wri
 { "EndpointAccess": { "McpEndpoint": "false" } }
 ```
 
-Whichever of the two writes them, the commit that stores the record copies both onto the user's row in the same
-statement, and that row is what a request reads — authentication never reads a document. A user saving their own
-record over the client endpoint may carry the switches through as they stand and is refused a change to either.
+Whichever of the two writes them, the commit that stores the record writes the switches the user is served on onto the
+user's row in the same statement, and that row is what a request reads — authentication never reads a document. A user
+saving their own record over the client endpoint may carry the switches through as they stand and is refused a change
+to either.
 
 A user kept off an endpoint is refused there whichever credential they present, exactly as an unknown credential is,
 and a session or a token they already hold stops working there on their next request, on every replica. Nothing is
@@ -1963,6 +1968,46 @@ mail in it](configuration-mail.md#scanning-this-accounts-mail--sensitivecontent)
 those is refused with what to correct rather than committed and discovered at the next restart. A scanning refusal
 names the deployment setting behind it and never quotes the record. A record another writer moved on in the meantime is refused as superseded, so nothing silently
 overwrites a change made from the client or from another terminal.
+
+**A record is read with each setting as the user is served it beside it.** `GET /api/admin/users/{userId}/record`
+answers the record's own `document` — what somebody stated on it, which is what a save is composed over — and a
+`properties` list resolving every setting of the record through
+[the settings policies governing the user](configuration-sources.md#how-a-settings-policy-resolves-a-users-record):
+
+| Field | What it holds |
+| --- | --- |
+| `path` | The setting, as the colon-separated path a policy names it by, such as `EndpointAccess:McpEndpoint` |
+| `value` | The value the user is served with, or `null` where nothing states one and the build takes none |
+| `source` | Which step supplied it: `DeploymentForced`, `OrganizationForced`, `Record`, `OrganizationDefault`, `DeploymentDefault`, or `BuiltIn` |
+| `heldBy` | `Deployment` or `Organization` where that scope's policy forces the setting or withholds it from the person, otherwise `null` |
+| `changeable` | Whether an administrator may change it, which is `false` only where a policy forces it |
+
+Where a policy governing the user is one this build does not read, `properties` is empty and `unresolved` carries the
+sentence naming which. `mfctl user show --effective` prints the list in place of the document, one setting a line:
+
+```console
+$ mfctl user show --effective
+alex (3f1d...)
+  version: 7
+  ClientTelemetryLevel: (nothing stated)  [BuiltIn]
+  DisplayName: alex  [Record]
+  EndpointAccess:ClientEndpoint: true  [BuiltIn]
+  EndpointAccess:McpEndpoint: false  [DeploymentForced, held by the deployment, not changeable while the policy forces it]
+  Language: Polish  [OrganizationDefault]
+  Portrait: (nothing stated)  [BuiltIn]
+  TimeZone: Europe/Warsaw  [Record, held by the organization]
+```
+
+**A forced value binds an administrator, and an editing restriction does not.** A save that states another value for
+a setting a policy forces is refused under `12007`, naming the setting and whether the organization or the deployment
+holds it, and commits nothing; `mfctl user endpoints` asking for the other position of a forced switch is refused the
+same way. A save that carries a forced setting through — unchanged from the record's own value, or as the value in
+force — passes and leaves the record's own value where it was. What a policy's `Editing` block withholds, it withholds
+from the person the record is about: an administrator writes those settings as before.
+
+```
+EndpointAccess:McpEndpoint is held by the deployment, whose settings policy forces its value, so nothing written on the record changes it. Leave it as the record states it, or change the policy.
+```
 
 **Every secret reference is resolved before a commit, and a change is not refused over what an account already
 carried.** A user record's save never touches an account, so a reference that stopped resolving in one of that user's
@@ -2031,7 +2076,22 @@ The mail account belongs to organization '0197c0de-0000-7000-8000-0000000000a1' 
 An account created for a user is created in that user's organization, so creating one never straddles two. What an
 organization narrows is who an account may be assigned to and nothing else: an assigned user reads and acts on the
 account exactly as anybody assigned it does. What an organization states for its members and accounts is its
-[settings policy](#settings-policies), which is stored and governs no record yet.
+[settings policy](#settings-policies): what it states for users governs every member's record, and what it states for
+mail accounts is stored and governs no account.
+
+**Moving a user changes which settings policy governs them, and a move that would leave their record unservable is
+refused.** The record is judged under the policies it would stand under — the deployment's, and the target
+organization's or none — inside the transaction that moves the user. A record the policy being left kept servable and
+the one being joined would not is refused with `409`, naming what the record would be left without, and nothing is
+written onto the record to make the move pass:
+
+```
+The move would change which settings policy governs this user, and under the one they would move to their record is not one this deployment could serve, so they were not moved: Language is not stated, and every user record names the language MailFathom writes for that person in — the card beside a contact of theirs, a message that answers no correspondence. State 'English' or 'Polish'. Correct the record first, or have the policy they would move under supply what it is missing.
+```
+
+A record that was already unservable before the move refuses nothing, because the move did not break it. A move that
+commits rewrites [the endpoint switches on the user's row](configuration-sources.md#which-endpoints-one-user-is-served-on)
+to what the policies now governing them resolve, in the same transaction.
 
 **A mail account in no organization is one person's.** Sharing a mailbox is something an organization does: an account
 in an organization is assigned to any number of that organization's members, and an account in none to at most one
@@ -2078,10 +2138,12 @@ assignable only within an organization that is gone.
 
 A settings policy is what one scope states once for the records beneath it: the defaults a user's record and a mail
 account start from, the values they are held to, and which of the rest the person may change. The deployment holds
-one, and each [organization](#organizations) holds one of its own. **A stored policy governs nothing until a record is
-read through it, and no record is read through one**: these commands and routes change what a scope states and nothing
-about what any user or mail account is served, so saving a policy alters no record, no synchronization, and no
-sign-in.
+one, and each [organization](#organizations) holds one of its own. **What a policy states for users governs every
+user's record in its scope from the commit that stores it**: [how a settings policy resolves a user's
+record](configuration-sources.md#how-a-settings-policy-resolves-a-users-record) holds the order the two policies and
+the record are read in, and saving one never rewrites a record's own document. **What a policy states for mail
+accounts is stored and governs no account**: no mail account is read through a policy, so that section changes no
+synchronization and no delivery.
 
 | Command | What it does |
 | --- | --- |
@@ -2158,6 +2220,36 @@ submission host, say — has nothing to be asked of: forcing `Delivery:Enabled` 
 that account. The same holds for a bound that validator checks on one property in the course of reading the record,
 rather than the property declaring it: a submission port, an audit trail's retention window, and the thresholds of
 contact collection are held to their bounds when a record is written, and not when a policy states them.
+
+**A policy may not leave a user's record it governs unservable.** A save that changes a default or a forced value for
+users is judged against every user record the policy governs — every user for the deployment's, the members for an
+organization's — inside the transaction that stores it: each record is resolved under the policy as saved and held to
+what a record is held to. A record the policy in force kept servable and the saved one would not refuses the save
+under `12007`, naming how many records stand in the way and the first ten of them by label and identifier, each with
+what it would be left without. A record that was already unservable refuses nothing, because the save did not break
+it:
+
+```console
+$ mfctl policy edit --organization 0197c0de-0000-7000-8000-0000000000a1
+The saved policy would leave 1 of the 14 user records it governs a record this deployment could not serve, so nothing was written. Correct those records first, or keep what they rely on in the policy. Each is named below.
+User 'alex' (0197a3c0-0000-7000-8000-000000000001): Language is not stated, and every user record names the language MailFathom writes for that person in — the card beside a contact of theirs, a message that answers no correspondence. State 'English' or 'Polish'.
+```
+
+A save that changes only an editing restriction, or only what the policy states for mail accounts, judges no record:
+neither can make a user's record unservable.
+
+**One save judges at most [`Deployment:MaximumRecordsJudgedPerPolicyWrite`](configuration-runtime.md#deployment)
+records, 10000 unless set.** The judgement runs inside the write, and a save of any record it judges waits for it, so
+the bound is what keeps one policy write from holding every record write of a large deployment behind it. A save
+governing more is refused under `12007` before any record is read, naming the setting that raises the bound.
+
+**The same commit rewrites the endpoint switches of every user whose switches it moves.** A request authenticates
+against [the switches on a user's row](configuration-sources.md#which-endpoints-one-user-is-served-on) and never
+against a policy, so a policy that forces `EndpointAccess:McpEndpoint` off, supplies a default a record leaves out, or
+lifts either writes the resolved switches onto the rows of the users it governs as it commits. A session or a token
+therefore stops or resumes on its holder's next request on every replica, and the rest of what those users are served
+— their language, zone, and telemetry level —
+[follows within thirty seconds](configuration-sources.md#what-reaches-every-replica).
 
 **Reading is `mailfathom.admin.read` and saving is `mailfathom.admin.configuration.write`.** The deployment's policy
 takes the permission held at the deployment, and a caller holding it only below that is

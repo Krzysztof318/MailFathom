@@ -17,8 +17,9 @@ namespace MailFathom.Host.Api;
 /// A settings policy is what one scope says about the records it governs: the defaults a user's record and a mail
 /// account start from, the values they are held to, and which of the rest the person may change. It is read and
 /// saved the way a user's record is — the whole document, against the version it was read at — so there is one habit
-/// for both. A stored policy governs nothing yet: no record is read through one, so these routes change what a scope
-/// states and nothing about what anybody is served.
+/// for both. What a policy states for users governs every user's record in its scope from the commit that stores
+/// it, which is why a save may be refused over the records it would leave unservable; what it states for mail
+/// accounts is stored and governs no account.
 /// </para>
 /// <para>
 /// Reading is <see cref="MailFathomPermission.AdminRead" /> and writing

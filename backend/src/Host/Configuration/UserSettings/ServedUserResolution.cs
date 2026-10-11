@@ -6,6 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.Records;
+using MailFathom.Infrastructure.Persistence.Policies;
 using MailFathom.Infrastructure.Persistence.Users;
 
 namespace MailFathom.Host.Configuration.UserSettings;
@@ -46,7 +47,9 @@ internal sealed partial class ServedUserResolution(
     /// build binds; or <see langword="null" /> as a whole where this deployment holds no such user.
     /// </returns>
     /// <exception cref="UserSettingsUnreadableException">Thrown when the record could not be read.</exception>
-    internal async Task<(ServedUser? User, long Version)?> ResolveAsync(UserId user, CancellationToken cancellationToken)
+    internal async Task<(ServedUser? User, long Version, GoverningSettingsPolicies Policies)?> ResolveAsync(
+        UserId user,
+        CancellationToken cancellationToken)
     {
         if (await documents.ReadAsync(user, cancellationToken) is not { } document)
         {
@@ -69,7 +72,7 @@ internal sealed partial class ServedUserResolution(
         {
             this.PublishHeldBack(user, heldBack);
 
-            return (null, document.Version);
+            return (null, document.Version, document.Policies);
         }
 
         var usable = await this.MailAccountsWithUsableSecretsAsync(document, bound.MailAccounts, heldBack, cancellationToken);
@@ -86,7 +89,7 @@ internal sealed partial class ServedUserResolution(
             ClientTelemetryLevel = bound.ReadingClientTelemetryLevel,
         };
 
-        return (served, document.Version);
+        return (served, document.Version, document.Policies);
     }
 
     /// <summary>Sorts one user's mail accounts into those the secret errors name and those they leave alone.</summary>

@@ -2,9 +2,9 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.Globalization;
 using MailFathom.Domain.Access;
 using MailFathom.Infrastructure.Persistence.Connections;
+using MailFathom.Infrastructure.Persistence.Policies;
 using MailFathom.Infrastructure.Persistence.Users;
 using Microsoft.Extensions.Time.Testing;
 using Npgsql;
@@ -14,9 +14,9 @@ namespace MailFathom.Infrastructure.UnitTests.Persistence.Users;
 
 /// <summary>
 /// Covers the decisions this writer takes before it reaches a database. Everything else it does needs a real server and
-/// is proved by the integration suite, but each of these refuses a candidate no statement should be issued for — and
-/// none of them would fail there in a way anybody could act on: the column would take a document whose root is not an
-/// object, and the next read would then refuse a row nobody could correct through this port.
+/// is proved by the integration suite — including what it refuses of the record itself, which is composed inside the
+/// write's transaction under the policies read there and so cannot be judged before one is open.
+/// <see cref="UserSettingsCommitRulesTests" /> covers those rules on their own.
 /// </summary>
 public sealed class PersistedUserSettingsDocumentWriterTests
 {
@@ -27,87 +27,25 @@ public sealed class PersistedUserSettingsDocumentWriterTests
     public async Task CommitAsync_AUserNamingNobody_IsRejectedAsAnArgument()
     {
         // Act
-        var rejected = await CommitAsync(default, "{}", expectedVersion: 1);
+        var rejected = await CommitAsync(default, expectedVersion: 1, ComposeNothing);
 
         // Assert
-        AssertRefusedBeforeTheDatabase(rejected, "user");
+        var argument = Assert.IsType<ArgumentException>(rejected);
+
+        Assert.Equal("user", argument.ParamName);
     }
 
-    [Theory]
-    [InlineData("")]
-    [InlineData("   ")]
-    public async Task CommitAsync_ACandidateThatIsNoDocumentAtAll_IsRejectedAsAnArgument(string json)
-    {
-        // Act
-        var rejected = await CommitAsync(SyntheticUser, json, expectedVersion: 1);
-
-        // Assert
-        AssertRefusedBeforeTheDatabase(rejected, "json");
-    }
-
+    /// <summary>A write that states no way to compose its record has nothing to commit, and saying so is this side's to do rather than a null dereference inside a transaction.</summary>
     [Fact]
-    public async Task CommitAsync_NoCandidateAtAll_IsRejectedAsAnArgument()
+    public async Task CommitAsync_NoComposition_IsRejectedAsAnArgument()
     {
         // Act
-        var rejected = await CommitAsync(SyntheticUser, json: null!, expectedVersion: 1);
+        var rejected = await CommitAsync(SyntheticUser, expectedVersion: 1, compose: null!);
 
         // Assert
         var argument = Assert.IsType<ArgumentNullException>(rejected);
 
-        Assert.Equal("json", argument.ParamName);
-        Assert.IsNotType<UserSettingsUnwritableException>(rejected);
-    }
-
-    /// <summary>The column's own jsonb cast refuses exactly this, and the refusal belongs on the side that composed the document.</summary>
-    [Fact]
-    public async Task CommitAsync_ACandidateThatIsNotJson_IsRejectedWithoutIssuingAStatement()
-    {
-        // Act
-        var rejected = await CommitAsync(SyntheticUser, "not json", expectedVersion: 1);
-
-        // Assert
-        var argument = AssertRefusedBeforeTheDatabase(rejected, "json");
-
-        Assert.Contains("not JSON", argument.Message, StringComparison.Ordinal);
-    }
-
-    /// <summary>The column would store it and the next read would refuse it, so only this side can stop the row being written.</summary>
-    [Theory]
-    [InlineData("[]")]
-    [InlineData("\"a record\"")]
-    [InlineData("42")]
-    public async Task CommitAsync_ACandidateWhoseRootIsNotAnObject_IsRejectedWithoutIssuingAStatement(string json)
-    {
-        // Act
-        var rejected = await CommitAsync(SyntheticUser, json, expectedVersion: 1);
-
-        // Assert
-        var argument = AssertRefusedBeforeTheDatabase(rejected, "json");
-
-        Assert.Contains("root is not an object", argument.Message, StringComparison.Ordinal);
-    }
-
-    /// <summary>
-    /// The bound is measured as the database stores the document rather than as the candidate was composed, because a
-    /// write permitted past what the bind accepts would persist a record the next read refuses — and the user would be
-    /// locked out by a change that had been accepted.
-    /// </summary>
-    [Fact]
-    public async Task CommitAsync_ACandidatePastWhatTheNextReadWouldBind_IsRejectedNamingBothMeasurements()
-    {
-        // Arrange
-        var oversized = DocumentOccupying(UserSettingsDocument.MaximumOctets);
-
-        // Act
-        var rejected = await CommitAsync(SyntheticUser, oversized, expectedVersion: 1);
-
-        // Assert
-        var argument = AssertRefusedBeforeTheDatabase(rejected, "json");
-
-        Assert.Contains(
-            UserSettingsDocument.MaximumOctets.ToString(CultureInfo.InvariantCulture),
-            argument.Message,
-            StringComparison.Ordinal);
+        Assert.Equal("compose", argument.ParamName);
     }
 
     /// <summary>A version no row can stand at is a candidate this build composed wrongly rather than anything the database has an opinion about.</summary>
@@ -115,26 +53,22 @@ public sealed class PersistedUserSettingsDocumentWriterTests
     public async Task CommitAsync_ANegativeExpectedVersion_IsRejectedAsAnArgument()
     {
         // Act
-        var rejected = await CommitAsync(SyntheticUser, "{}", expectedVersion: -1);
+        var rejected = await CommitAsync(SyntheticUser, expectedVersion: -1, ComposeNothing);
 
         // Assert
         Assert.IsType<ArgumentOutOfRangeException>(rejected);
-        Assert.IsNotType<UserSettingsUnwritableException>(rejected);
     }
 
     /// <summary>A user this suite writes for, which no statement here ever reaches.</summary>
     private static UserId SyntheticUser { get; } =
         UserId.Create(new Guid("11111111-1111-1111-1111-111111111111"));
 
-    /// <summary>Composes a document whose stored rendering is past the bound, which is what the rule measures.</summary>
-    /// <remarks>The compact form is smaller than the rendering, so the padding is sized against the bound itself rather than against what this string occupies.</remarks>
-    private static string DocumentOccupying(int octets) =>
-        $$"""{"Padding":"{{new string('a', octets)}}"}""";
+    private static UserRecordCandidate? ComposeNothing(GoverningSettingsPolicies policies) => null;
 
     private static async Task<Exception?> CommitAsync(
         UserId user,
-        string json,
-        long expectedVersion)
+        long expectedVersion,
+        Func<GoverningSettingsPolicies, UserRecordCandidate?> compose)
     {
         await using var dataSource = NpgsqlDataSource.Create(UnreachedDatabase);
 
@@ -146,23 +80,8 @@ public sealed class PersistedUserSettingsDocumentWriterTests
         return await Record.ExceptionAsync(
             () => writer.CommitAsync(
                 user,
-                json,
-                UserEndpointAccess.Everywhere,
                 expectedVersion,
+                compose,
                 TestContext.Current.CancellationToken));
-    }
-
-    /// <summary>
-    /// Asserts the guard ran rather than the database. The connection string points at a port nothing listens on, so
-    /// anything that reached it would have come back as the write's own exception instead.
-    /// </summary>
-    private static ArgumentException AssertRefusedBeforeTheDatabase(Exception? rejected, string parameter)
-    {
-        var argument = Assert.IsType<ArgumentException>(rejected);
-
-        Assert.Equal(parameter, argument.ParamName);
-        Assert.IsNotType<UserSettingsUnwritableException>(rejected);
-
-        return argument;
     }
 }

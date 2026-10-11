@@ -26,6 +26,9 @@ public sealed class ClientPortraitEndpointTests
     private static readonly byte[] Png =
         [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x0D, 0x0A];
 
+    private const string HeldByTheOrganization =
+        "Portrait is held by the organization, whose settings policy does not leave it to you to change.";
+
     private static readonly byte[] Jpeg = [0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10];
 
     [Fact]
@@ -278,7 +281,7 @@ public sealed class ClientPortraitEndpointTests
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(StatusCodes.Status204NoContent, result.StatusCode);
+        Assert.IsType<NoContent>(result.Result);
         Assert.Empty(held.Files);
         Assert.Null(held.Portrait);
     }
@@ -293,7 +296,46 @@ public sealed class ClientPortraitEndpointTests
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(StatusCodes.Status204NoContent, result.StatusCode);
+        Assert.IsType<NoContent>(result.Result);
+    }
+
+    /// <summary>
+    /// A portrait a settings policy holds is refused naming who holds it, and the octets the upload wrote are removed
+    /// rather than left as a file nothing links.
+    /// </summary>
+    [Fact]
+    public async Task ReplaceAsync_APortraitASettingsPolicyHolds_IsRefusedNamingWhoHoldsItAndKeepsNoFile()
+    {
+        // Arrange
+        var held = new HeldPortrait { Withheld = HeldByTheOrganization };
+
+        // Act
+        var result = await ClientPortraitEndpoint.ReplaceAsync(
+            SignedIn(held),
+            Uploading(Png),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(result.Result);
+
+        Assert.Equal(StatusCodes.Status400BadRequest, refusal.StatusCode);
+        Assert.Equal(HeldByTheOrganization, refusal.ProblemDetails.Detail);
+        Assert.Empty(held.Files);
+    }
+
+    [Fact]
+    public async Task RemoveAsync_APortraitASettingsPolicyHolds_IsRefusedNamingWhoHoldsIt()
+    {
+        // Act
+        var result = await ClientPortraitEndpoint.RemoveAsync(
+            SignedIn(new HeldPortrait { Withheld = HeldByTheOrganization }),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(result.Result);
+
+        Assert.Equal(StatusCodes.Status400BadRequest, refusal.StatusCode);
+        Assert.Equal(HeldByTheOrganization, refusal.ProblemDetails.Detail);
     }
 
     private static string TagOf(IResult served) =>
@@ -330,6 +372,9 @@ public sealed class ClientPortraitEndpointTests
     private sealed class HeldPortrait : IStoredFileStore, IUserRecordFileLinks
     {
         internal bool UserHeld { get; init; } = true;
+
+        /// <summary>Gets the sentence a settings policy refuses every relink with, or <see langword="null" /> where none holds the portrait.</summary>
+        internal string? Withheld { get; init; }
 
         internal List<HeldFile> Files { get; } = [];
 
@@ -392,6 +437,11 @@ public sealed class ClientPortraitEndpointTests
 
         public Task<PortraitRelinking> RelinkOwnPortraitAsync(StoredFileId? portrait, CancellationToken cancellationToken)
         {
+            if (this.Withheld is { } refusal)
+            {
+                return Task.FromResult(new PortraitRelinking(UserHeld: true, Replaced: null) { Refusal = refusal });
+            }
+
             var displaced = this.Portrait;
             this.Portrait = portrait;
 

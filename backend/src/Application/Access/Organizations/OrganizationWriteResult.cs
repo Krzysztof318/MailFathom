@@ -19,6 +19,9 @@ public sealed record OrganizationWriteResult(
     int RemainingMailAccounts = 0,
     int StandingAssignments = 0)
 {
+    /// <summary>Gets one sentence per property the settings policy of the target would leave a moved user's record without, each naming it; empty for every outcome but <see cref="OrganizationWriteOutcome.RecordLeftInvalid" />.</summary>
+    public IReadOnlyList<string> Corrections { get; init; } = [];
+
     /// <summary>Gets the result of an act that changed nothing because of the outcome given.</summary>
     /// <param name="outcome">What the act did.</param>
     /// <returns>The result.</returns>

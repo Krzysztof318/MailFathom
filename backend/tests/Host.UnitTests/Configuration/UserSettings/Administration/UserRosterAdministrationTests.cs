@@ -7,7 +7,9 @@ using MailFathom.Application.Access;
 using MailFathom.Application.Paging;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
+using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Endpoints;
+using MailFathom.Host.Configuration.SensitiveContent;
 using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.Configuration.UserSettings.Administration;
 using MailFathom.Host.Hosting.Workers;
@@ -17,6 +19,7 @@ using MailFathom.Infrastructure.Persistence.Users;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Xunit;
@@ -281,6 +284,53 @@ public sealed class UserRosterAdministrationTests
         await harness.Documents.DidNotReceiveWithAnyArgs()
             .CommitAsync(default, default!, default, default, TestContext.Current.CancellationToken);
         Assert.Equal(0, harness.CountsRead());
+    }
+
+    /// <summary>
+    /// A user is provisioned the record the policies governing them leave it to state: nothing where a policy
+    /// supplies the language a record must otherwise name, and the row carries the switches those policies resolve.
+    /// </summary>
+    [Theory]
+    [InlineData("""{"Users":{"Defaults":{"Language":"Polish"}}}""", "{}", true)]
+    [InlineData("""{"Users":{"Forced":{"EndpointAccess":{"McpEndpoint":false}}}}""", """{"Language":"English"}""", false)]
+    public async Task ProvisionAsync_AUserGovernedByAPolicy_IsProvisionedWhatThePolicyLeavesTheirRecordToState(
+        string deploymentPolicy,
+        string provisioned,
+        bool servedOnTheMcpEndpoint)
+    {
+        // Arrange
+        var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
+        harness.Writer.Otherwise = StatedPolicies.Governing(deployment: deploymentPolicy);
+
+        // Act
+        var outcome = await harness.Roster.ProvisionAsync("alex", organizationId: null, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(outcome.IsProvisioned);
+        await harness.Documents.Received(1).CommitAsync(
+            outcome.User,
+            provisioned,
+            new UserEndpointAccess(servedOnTheMcpEndpoint, ClientEndpoint: true),
+            1,
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A record is never composed under part of what governs it, so a policy this build does not read refuses the provisioning and says what to do with the label it left.</summary>
+    [Fact]
+    public async Task ProvisionAsync_AUserGovernedByAPolicyThisBuildDoesNotRead_IsRefusedNamingThePolicy()
+    {
+        // Arrange
+        var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
+        harness.Writer.Otherwise = StatedPolicies.Governing(deployment: """{"Users":{"Forced":{"Dialect":"Silesian"}}}""");
+
+        // Act
+        var outcome = await harness.Roster.ProvisionAsync("alex", organizationId: null, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(outcome.IsProvisioned);
+        Assert.StartsWith("The settings policy of the deployment", outcome.RefusalMessage, StringComparison.Ordinal);
+        await harness.Documents.DidNotReceiveWithAnyArgs()
+            .CommitAsync(default, default!, default, default, TestContext.Current.CancellationToken);
     }
 
     /// <summary>
@@ -1078,7 +1128,8 @@ public sealed class UserRosterAdministrationTests
             this.Erasure.EraseAsync(Arg.Any<UserId>(), Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>())
                 .Returns(new UserErasureOutcome(false, null));
 
-            this.Documents = Substitute.For<IUserSettingsDocumentWriter>();
+            this.Documents = Substitute.For<IRecordedUserRecordCommits>();
+            this.Writer = new ComposingUserRecordWriter(this.Documents);
             this.Documents
                 .CommitAsync(
                     Arg.Any<UserId>(),
@@ -1102,7 +1153,11 @@ public sealed class UserRosterAdministrationTests
                 this.MailAccountRecords,
                 this.Quiescing,
                 this.WithheldAccounts,
-                this.Documents,
+                this.Writer,
+                new UserAccountDocumentBinder(
+                    new PersistedSecretMaterial(DeclaredSecretScheme.Registered),
+                    new FakeTimeProvider(),
+                    Options.Create(new SensitiveContentOptions())),
                 this.ServedUsers,
                 new SeveralUserAdmission(
                     Options.Create(new McpEndpointOptions()),
@@ -1124,7 +1179,11 @@ public sealed class UserRosterAdministrationTests
 
         internal IUserErasure Erasure { get; }
 
-        internal IUserSettingsDocumentWriter Documents { get; }
+        /// <summary>Gets what each commit was composed to, which is what a test arranges an answer on and asserts against.</summary>
+        internal IRecordedUserRecordCommits Documents { get; }
+
+        /// <summary>Gets the writer the roster commits through, which composes each commit under the policies a test states.</summary>
+        internal ComposingUserRecordWriter Writer { get; }
 
         /// <summary>Gets the accounts and assignments an erasure reads the mailboxes it has to stop out of.</summary>
         internal InMemoryMailAccountRecordStore MailAccountRecords { get; } = new();

@@ -405,6 +405,35 @@ public sealed class UserRecordEndpointsTests
         Assert.Equal(3, record.Version);
     }
 
+    /// <summary>
+    /// The read reports each property as the user is served it beside the record's own document, and "changeable"
+    /// is an administrator's answer: a forced value binds them, and the settings only they write are theirs.
+    /// </summary>
+    [Fact]
+    public async Task ReadRecordAsync_ARecordUnderAPolicy_ReportsEachPropertysValueSourceHolderAndWhetherAnAdministratorMayChangeIt()
+    {
+        // Arrange
+        var deployment = new UserRecordDeployment([MailFathomPermission.AdminRead]);
+        deployment.Holding(SyntheticUser.Deployment, """{"TimeZone":"Europe/Paris"}""", version: 3);
+        deployment.GovernedBy(SyntheticUser.Deployment, StatedPolicies.Governing(organization: """{"Users":{"Forced":{"TimeZone":"Europe/Warsaw"}}}"""));
+
+        // Act
+        var result = await UserRecordEndpoints.ReadRecordAsync(
+            SyntheticUser.Deployment.Value,
+            deployment.Records,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var record = Assert.IsType<Ok<UserRecordResponse>>(result.Result).Value!;
+        var zone = record.Properties.Single(property => property.Path == "TimeZone");
+        var mcp = record.Properties.Single(property => property.Path == "EndpointAccess:McpEndpoint");
+
+        Assert.Contains("Europe/Paris", record.Document, StringComparison.Ordinal);
+        Assert.Equal("Europe/Warsaw", zone.Value!.GetValue<string>());
+        Assert.Equal(("OrganizationForced", "Organization", false), (zone.Source, zone.HeldBy, zone.Changeable));
+        Assert.Equal(("BuiltIn", (string?)null, true), (mcp.Source, mcp.HeldBy, mcp.Changeable));
+    }
+
     /// <summary>The same answer a user this deployment genuinely does not hold receives, which is what keeps a caller from learning which identifiers exist by asking about them.</summary>
     [Fact]
     public async Task ReadRecordAsync_AUserThisDeploymentDoesNotHold_AnswersWithoutSayingAnythingAboutTheIdentifier()

@@ -6353,6 +6353,7 @@
         "type": "object"
       },
       "JsonElement": {},
+      "JsonNode": {},
       "MailAccountAssignmentRequest": {
         "properties": {
           "userId": {
@@ -11391,6 +11392,43 @@
         ],
         "type": "object"
       },
+      "UserRecordPropertyResponse": {
+        "properties": {
+          "changeable": {
+            "type": "boolean"
+          },
+          "heldBy": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "path": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "value": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/JsonNode"
+              }
+            ]
+          }
+        },
+        "required": [
+          "path",
+          "value",
+          "source",
+          "heldBy",
+          "changeable"
+        ],
+        "type": "object"
+      },
       "UserRecordResponse": {
         "properties": {
           "displayName": {
@@ -11398,6 +11436,18 @@
           },
           "document": {
             "type": "string"
+          },
+          "properties": {
+            "items": {
+              "$ref": "#/components/schemas/UserRecordPropertyResponse"
+            },
+            "type": "array"
+          },
+          "unresolved": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "user": {
             "format": "uuid",
