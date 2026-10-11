@@ -99,7 +99,7 @@ public sealed class UserEndpointSwitchReconciliationTests
     /// the row was found and before it is written is the one the row ends up holding.
     /// </summary>
     [Fact]
-    public async Task ReconcileAsync_APolicyWriteLandingBetweenTheReadingAndTheWrite_LeavesTheRowHoldingTheNewPolicysValue()
+    public async Task ReconcileAsync_APolicyWriteLandingBetweenTheReadingAndTheWrite_LeavesTheRowHoldingTheValueOfTheNewPolicy()
     {
         // Arrange
         var rows = new InMemoryUserEndpointSwitchRows { DeploymentPolicy = ForcingOffTheClient };
