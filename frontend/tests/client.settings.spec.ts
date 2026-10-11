@@ -106,10 +106,11 @@ test('states the whole preferences document to the deployment when one of them i
 
     // Only a browser proves this: what a screen hands the transport is one thing, and what `fetch` actually puts on
     // the wire is another — an adapter dropping the body would leave every assertion above green while the deployment
-    // stored an empty document over somebody's telemetry decision.
+    // stored an empty document over somebody's other answers. The telemetry switch is the one value stated as nothing:
+    // the person did not move it, so the client has no answer of theirs to send and the deployment keeps what it holds.
     await expect.poll(() => stated).toHaveLength(1);
     expect(JSON.parse(stated[0] ?? '')).toStrictEqual({
-        telemetryEnabled: true,
+        telemetryEnabled: null,
         theme: 'dark',
         openMailInTabs: false,
         markReadOnOpen: true,

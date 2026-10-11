@@ -14,6 +14,7 @@ using MailFathom.Domain.Access;
 using MailFathom.Host.Api;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Configuration.Mail;
+using MailFathom.Host.Configuration.Policies;
 using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.Observability.ClientTelemetry;
 using MailFathom.Host.Security.Endpoints;
@@ -1034,6 +1035,63 @@ public sealed class ClientApiEndpointsTests
         Assert.Null(ClientApiEndpoints.StatedTelemetryLevelOf(
             ResolvedServedUsers.Serving(),
             ActingFor(SyntheticUser.Deployment)));
+
+    /// <summary>
+    /// What has the session route agree with the telemetry routes: a policy holding the switch off is read from the
+    /// composition those routes refuse by, so a client is told nothing is taken rather than finding out batch by batch.
+    /// </summary>
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public void TakesNoTelemetryFrom_AUserWhoseSwitchAPolicyForces_AnswersWhetherItIsForcedOff(bool forcedTo, bool expected)
+    {
+        // Arrange
+        var roster = ResolvedServedUsers.Serving(new ServedUser(SyntheticUser.Deployment, "alex", [])
+        {
+            ForcedClientTelemetry = new ForcedClientTelemetry(forcedTo, SettingsPolicyScope.Organization),
+        });
+
+        // Act
+        var refused = ClientApiEndpoints.TakesNoTelemetryFrom(roster, ActingFor(SyntheticUser.Deployment));
+
+        // Assert
+        Assert.Equal(expected, refused);
+    }
+
+    /// <summary>
+    /// Somebody this replica holds no composition of may be governed by a force it cannot read, and the telemetry
+    /// routes refuse them for it. The session answers as it does for a force known to be off, so the two stay one
+    /// decision instead of a level answered to a client whose every batch is refused.
+    /// </summary>
+    [Fact]
+    public void TakesNoTelemetryFrom_AUserThisReplicaHoldsNoCompositionOf_AnswersThatNothingIsTaken() =>
+        Assert.True(ClientApiEndpoints.TakesNoTelemetryFrom(
+            ResolvedServedUsers.Serving(),
+            ActingFor(SyntheticUser.Deployment)));
+
+    /// <summary>Telemetry is taken where no policy forces the switch, where the request names no user, and where it established no principal at all.</summary>
+    [Fact]
+    public void TakesNoTelemetryFrom_NobodyWhoseSwitchIsForcedOff_AnswersThatItIsTaken()
+    {
+        // Arrange
+        var roster = ResolvedServedUsers.Serving(
+            new ServedUser(SyntheticUser.Deployment, "alex", []),
+            new ServedUser(SyntheticUser.Another, "sam", [])
+            {
+                ForcedClientTelemetry = new ForcedClientTelemetry(Enabled: false, SettingsPolicyScope.Organization),
+            });
+
+        // Act
+        bool[] refused =
+        [
+            ClientApiEndpoints.TakesNoTelemetryFrom(roster, ActingFor(SyntheticUser.Deployment)),
+            ClientApiEndpoints.TakesNoTelemetryFrom(roster, AuthorizedPrincipal.Caller("reader", [MailFathomPermission.MailRead])),
+            ClientApiEndpoints.TakesNoTelemetryFrom(roster, principal: null),
+        ];
+
+        // Assert
+        Assert.Equal([false, false, false], refused);
+    }
 
     /// <summary>Builds the roster entry of a person an operator raised, which is the one shape the reading above is about.</summary>
     private static ServedUser RaisedTo(ClientTelemetryLevel level) =>

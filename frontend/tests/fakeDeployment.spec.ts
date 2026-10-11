@@ -785,3 +785,20 @@ test('writes a refused change down as one the account stopped retrying and leave
 
     expect(counts(deployment, 'INBOX')).toStrictEqual({ stored: before.stored, unread: before.unread - 1 });
 });
+
+test('keeps the telemetry answer it holds through a preferences write that states none', () => {
+    const deployment = new FakeDeployment('0.0.0');
+
+    ask(deployment, 'POST', '/preferences', { ...fixtures.clientPreferences, telemetryEnabled: false });
+
+    // What the client sends in every write the person did not move the switch in. The route keeps the stored answer,
+    // and a fake echoing the nothing back would hand the client a document it refuses to read.
+    const written = ask(deployment, 'POST', '/preferences', {
+        ...fixtures.clientPreferences,
+        telemetryEnabled: null,
+        theme: 'dark',
+    });
+
+    expect(written).toMatchObject({ telemetryEnabled: false, theme: 'dark' });
+    expect(ask(deployment, 'GET', '/preferences')).toMatchObject({ telemetryEnabled: false, theme: 'dark' });
+});

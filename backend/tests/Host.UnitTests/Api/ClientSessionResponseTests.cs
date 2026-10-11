@@ -238,4 +238,22 @@ public sealed class ClientSessionResponseTests
                     ClientTelemetryLevel.Info,
                     level).Telemetry)
                 .Distinct());
+
+    /// <summary>
+    /// Somebody the telemetry routes take nothing from — a settings policy holds their switch off, or this replica
+    /// holds no composition of them — is, for them, on a deployment that takes nothing: every batch they send is
+    /// refused, so the session answers <c>off</c> whatever level the deployment or their own record asks for.
+    /// </summary>
+    [Fact]
+    public void For_APersonTheTelemetryRoutesTakeNothingFrom_ReportsOffWhateverLevelIsAskedFor() =>
+        Assert.Equal(
+            ["off"],
+            Enum.GetValues<ClientTelemetryLevel>()
+                .Select(level => ClientSessionResponse.For(
+                    AuthorizedPrincipal.Caller("reader", [MailFathomPermission.MailRead]),
+                    forwardsTelemetry: true,
+                    ClientTelemetryLevel.Info,
+                    level,
+                    telemetryRefused: true).Telemetry)
+                .Distinct());
 }

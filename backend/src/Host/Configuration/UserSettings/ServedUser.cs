@@ -4,6 +4,7 @@
 
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Mail;
+using MailFathom.Host.Configuration.Policies;
 using MailFathom.Host.Observability.ClientTelemetry;
 
 namespace MailFathom.Host.Configuration.UserSettings;
@@ -44,4 +45,13 @@ internal sealed record ServedUser(
     /// nothing could tell a person who asked for the deployment's level from a person nobody has raised.
     /// </remarks>
     public ClientTelemetryLevel? ClientTelemetryLevel { get; init; }
+
+    /// <summary>Gets what a settings policy governing this person forces their client's telemetry switch to, or <see langword="null" /> where none forces it.</summary>
+    /// <remarks>
+    /// Held here although it is no property of the record, because it is resolved from the same policies the record
+    /// is and moves when they do: a user is composed again when a policy governing them moves, so whatever asks here
+    /// is answered the force every other served value was resolved under. The person's own stored answer is not here,
+    /// and is read where it is needed — it is theirs, and no composition of their record holds it.
+    /// </remarks>
+    public ForcedClientTelemetry? ForcedClientTelemetry { get; init; }
 }

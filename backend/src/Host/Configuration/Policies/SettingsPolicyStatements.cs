@@ -32,17 +32,19 @@ internal sealed class SettingsPolicyStatements
         JsonObject defaults,
         JsonObject forced,
         SettingsPolicyEditingMode editingMode,
-        IReadOnlyList<string> editingPaths)
+        IReadOnlyList<string> editingPaths,
+        bool? forcedClientTelemetry)
     {
         this.Defaults = defaults;
         this.Forced = forced;
         this.EditingMode = editingMode;
         this.EditingPaths = editingPaths;
+        this.ForcedClientTelemetry = forcedClientTelemetry;
     }
 
     /// <summary>Gets the statements of a scope that says nothing about the record.</summary>
     internal static SettingsPolicyStatements Nothing { get; } =
-        new([], [], SettingsPolicyEditingMode.AllExcept, []);
+        new([], [], SettingsPolicyEditingMode.AllExcept, [], forcedClientTelemetry: null);
 
     /// <summary>Gets the defaults, as a sparse document in the shape of the governed record.</summary>
     internal JsonObject Defaults { get; }
@@ -55,6 +57,10 @@ internal sealed class SettingsPolicyStatements
 
     /// <summary>Gets the property paths the editing restriction lists.</summary>
     internal IReadOnlyList<string> EditingPaths { get; }
+
+    /// <summary>Gets what this scope forces a person's telemetry switch to, or <see langword="null" /> where it forces nothing about it.</summary>
+    /// <remarks>Read beside the forced values rather than among them, for the reason <see cref="RecordStatementsOf" /> leaves it out of those: it is no property of the record.</remarks>
+    internal bool? ForcedClientTelemetry { get; }
 
     /// <summary>Reads what a stored policy says about one kind of record.</summary>
     /// <param name="policyJson">The policy as its row holds it.</param>
@@ -88,7 +94,11 @@ internal sealed class SettingsPolicyStatements
                 : SettingsPolicyEditingMode.AllExcept,
             editing is not null && SettingsDocumentTree.Find(editing, EditingPropertiesKey) is JsonArray listed
                 ? [.. listed.Select(path => path!.GetValue<string>())]
-                : []);
+                : [],
+            SettingsDocumentTree.Find(stated, $"{ForcedKey}:{nameof(ClientPreferences)}:{nameof(ClientPreferences.TelemetryEnabled)}") is JsonValue held
+            && held.TryGetValue<bool>(out var enabled)
+                ? enabled
+                : null);
     }
 
     /// <summary>Reports whether the editing restriction withholds a property from the person the record is about.</summary>

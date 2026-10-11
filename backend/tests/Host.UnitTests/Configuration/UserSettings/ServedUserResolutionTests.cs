@@ -6,6 +6,7 @@ using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Mail;
+using MailFathom.Host.Configuration.Policies;
 using MailFathom.Host.Configuration.Records;
 using MailFathom.Host.Configuration.SensitiveContent;
 using MailFathom.Host.Configuration.UserSettings;
@@ -338,6 +339,40 @@ public sealed class ServedUserResolutionTests
 
         // Assert
         Assert.Null(served.ClientTelemetryLevel);
+    }
+
+    /// <summary>
+    /// What a policy forces a person's telemetry switch to is no property of their record, and is served with them all
+    /// the same: it is read from the policies the record was resolved through, so it moves when they do.
+    /// </summary>
+    [Fact]
+    public async Task ResolveAsync_AUserWhoseOrganizationForcesTheirTelemetrySwitch_ServesTheForceWithThem()
+    {
+        // Arrange
+        this.Holding(Record(Recorded, EmptyRecord, AlexWork) with
+        {
+            Policies = StatedPolicies.Governing(
+                organization: """{"Users":{"Forced":{"ClientPreferences":{"TelemetryEnabled":false}}}}"""),
+        });
+
+        // Act
+        var served = await this.ResolveServedAsync(Recorded);
+
+        // Assert
+        Assert.Equal(new ForcedClientTelemetry(Enabled: false, SettingsPolicyScope.Organization), served.ForcedClientTelemetry);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_AUserNoPolicyForcesTheTelemetrySwitchOf_ServesNoForce()
+    {
+        // Arrange
+        this.Holding(Record(Recorded, EmptyRecord, AlexWork));
+
+        // Act
+        var served = await this.ResolveServedAsync(Recorded);
+
+        // Assert
+        Assert.Null(served.ForcedClientTelemetry);
     }
 
     /// <summary>The language an account's declaration states reaches the served mailbox, which is where every derivation reads it from.</summary>

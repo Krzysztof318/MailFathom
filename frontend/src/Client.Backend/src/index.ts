@@ -52,6 +52,7 @@ export {
     type ClientMessageView,
     type ClientPreferences,
     type ClientThemePreference,
+    type StatedClientPreferences,
 } from './clientPreferences';
 export {
     contactCorrespondenceRoute,

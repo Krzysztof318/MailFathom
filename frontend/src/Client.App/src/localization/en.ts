@@ -569,8 +569,7 @@ export const en = {
     'configuration.whereItIsStated':
         'Both settings are read from the arguments MailFathom was started with, from its environment, and from client.conf beside its own configuration, in that order.',
 
-    'preferences.notStated':
-        'That change was not saved to the deployment, so it holds on this machine alone until the next one succeeds.',
+    'preferences.notStated': 'That change was not saved to the deployment.',
 
     'settings.title': 'Settings',
     'settings.close': 'Close settings',
@@ -636,7 +635,7 @@ export const en = {
     'settings.telemetryDestination':
         'Sent to {address}, which forwards it to whichever collector it is configured with. It carries which screens you opened and how long they took, never your mail, your addresses, your folders, or your password.',
     'settings.telemetryNotForwarded':
-        'This deployment forwards no telemetry, so this client sends none and there is nothing to turn off.',
+        'This deployment takes no telemetry from this client, so it sends none and there is nothing to turn off.',
     'settings.telemetryUnanswered':
         'Waiting for this deployment to say whether it forwards telemetry. Until it answers, your own decision is what holds.',
 

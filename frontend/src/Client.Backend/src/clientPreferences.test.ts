@@ -202,6 +202,17 @@ describe('writeClientPreferences', () => {
         expect(JSON.parse(requests[0]?.body ?? '')).toStrictEqual(stored);
     });
 
+    // The one preference a write may leave unstated, and how it travels: a switch the caller holds no answer of the
+    // person's own for is sent as `null`, which the deployment reads as saying nothing and answers by keeping what it
+    // holds for them.
+    it('states no answer to the telemetry switch where the caller holds none of the person’s own', async () => {
+        const { transport, requests } = recording({ status: 200, body: storedBody });
+
+        await writeClientPreferences(session, transport, { ...stored, telemetryEnabled: null });
+
+        expect(JSON.parse(requests[0]?.body ?? '')).toStrictEqual({ ...stored, telemetryEnabled: null });
+    });
+
     it('answers with what is now stored', async () => {
         const answer = await writeClientPreferences(
             session,

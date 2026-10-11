@@ -329,8 +329,15 @@ function answerFor(
     }
 
     if (route === '/preferences') {
-        if (request.method === 'POST') {
-            state.preferences = recordIn(request.body) ?? state.preferences;
+        const stated = request.method === 'POST' ? recordIn(request.body) : null;
+
+        // As the route does: a body stating nothing about the telemetry switch leaves the answer the deployment
+        // holds, which is what the client sends in every write the person did not move it in.
+        if (stated !== null) {
+            state.preferences = {
+                ...stated,
+                telemetryEnabled: stated['telemetryEnabled'] ?? state.preferences['telemetryEnabled'],
+            };
         }
 
         return answering(state.preferences);

@@ -6,6 +6,7 @@ using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Failures;
 using MailFathom.Host.Configuration.Mail;
+using MailFathom.Host.Configuration.Policies;
 using MailFathom.Host.Configuration.Records;
 using MailFathom.Host.Configuration.Spam;
 using MailFathom.Host.Configuration.UserSettings;
@@ -407,6 +408,27 @@ public sealed class ServedUsersTests
 
         // Assert
         Assert.Equal(ClientTelemetryLevel.Debug, servedUsers.Peek(Alex)?.ClientTelemetryLevel);
+    }
+
+    /// <summary>A record committed on this replica is held with what the policies it was resolved through force its holder's telemetry switch to.</summary>
+    [Fact]
+    public void UserDocumentPublished_ARecordGovernedByAPolicyForcingTheTelemetrySwitch_ServesThatUserUnderTheForce()
+    {
+        // Arrange
+        var servedUsers = this.Cache();
+
+        // Act
+        servedUsers.UserDocumentPublished(
+            Alex,
+            "user",
+            new UserAccountOptions(),
+            2,
+            StatedPolicies.Governing(deployment: """{"Users":{"Forced":{"ClientPreferences":{"TelemetryEnabled":true}}}}"""));
+
+        // Assert
+        Assert.Equal(
+            new ForcedClientTelemetry(Enabled: true, SettingsPolicyScope.Deployment),
+            servedUsers.Peek(Alex)?.ForcedClientTelemetry);
     }
 
     /// <summary>

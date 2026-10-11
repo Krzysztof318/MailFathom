@@ -1358,9 +1358,14 @@ five counters are the whole of what an operator reads it by.
 
 All five carry `mailfathom.client_telemetry.signal`, whose values are `traces`, `metrics`, and `logs`. A refusal
 carries `mailfathom.client_telemetry.refusal` as well — `unsupported_media_type`, `rate_limited`, `too_large`,
-`too_many_records`, `malformed`, or `level_none`, which is this endpoint's own closed vocabulary for the bounds it
-enforces. `level_none` is a batch of log records from a caller whose level resolved to
-[`None`](client-endpoint.md#the-telemetry-routes), so it is only ever counted under the `logs` signal. A
+`too_many_records`, `malformed`, `level_none`, or `switched_off`, which is this endpoint's own closed vocabulary for
+what it refuses. `level_none` is a batch of log records from a caller whose level resolved to
+[`None`](client-endpoint.md#the-telemetry-routes), so it is only ever counted under the `logs` signal.
+`switched_off` is a batch of any signal from somebody whose
+[telemetry switch](client-endpoint.md#a-settings-policy-may-hold-the-telemetry-switch) is off, whether they turned it
+off or a settings policy holds it off, and from somebody whose record the replica does not serve, since what a policy
+forces for them cannot be known there; a client honouring the switch and the session answer sends none, so a steady
+count of it is a client that does not. A
 failure carries `mailfathom.client_telemetry.condition`, written as a past participle like every other outcome here:
 `refused` for a destination that will never take the batch, and `throttled`, `unavailable`, `timed_out`, `unreachable`,
 or `cancelled` for one that might.
@@ -1400,7 +1405,7 @@ the user attributes itself, from the credential the export presented, replacing 
 
 **Whoever is reading decides whether any of it is recorded, and the switch is on the client's settings screen.** It is
 held by the deployment rather than by the browser profile or the desktop install it was moved in — it is
-[one of the four client preferences](client-endpoint.md#the-preferences-routes), so declining once holds on every
+[one of the eight client preferences](client-endpoint.md#the-preferences-routes), so declining once holds on every
 machine that person signs in from — and the client keeps the last answer it was given on the device as well, so a
 restart honours a decision before the first read comes back rather than recording for the second it takes. That cache
 is not a second opinion: nothing writes it but the deployment's answer and the switch itself, and a client holding that
@@ -1409,16 +1414,41 @@ same tab, reads it again — and reads it **under that person's own name**, beca
 than per machine: two people sharing a machine hold two answers, and one of them being a refusal is exactly why a
 single name for both would be a defect rather than a saving.
 
+**An organization or the deployment may hold the switch, and then the answer applied is not the person's own.** A
+[settings policy](admin-endpoint.md#settings-policies) may force it on or off for everybody it governs — the
+deployment's for every person, an organization's for its members, and the deployment's over the organization's where
+both do. While one does, the person's own answer is kept exactly as they gave it and decides nothing, and it applies
+again once no policy forces the switch. Forced **off**, the client records nothing and the deployment refuses whatever
+is sent anyway. Forced **on**, the client is asked to record and report whatever that person answered: which screens
+they opened and how long those took are reported although they declined. That takes a decision about what may be said
+about a person away from the person, so
+[the preferences read names who holds the switch](client-endpoint.md#a-settings-policy-may-hold-the-telemetry-switch),
+and whoever holds the policy — an organization for its members, an operator for everybody — is who took the decision
+and who owes whatever basis it needs.
+[ADR 0037](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0037-a-settings-policy-at-the-deployment-and-at-each-organization.md)
+records what MailFathom owes that person in return. A force changes nothing else: it raises no level, and a
+deployment that forwards no telemetry receives none whatever a policy forces.
+
+**The deployment keeps a refusal itself.** [The telemetry routes](client-endpoint.md#the-telemetry-routes) refuse every
+batch from somebody whose switch is off, their own or a forced one, so the answer does not depend on the client in
+front of them honouring it.
+
 **Off means nothing is recorded, not that records are dropped on the way out.** The switch stops the writing, so a
 person who declined pays nothing to run the client instead of paying for everything but the upload. What was recorded
 before the answer arrived is thrown away rather than flushed: a client that has never been told stands on the unset
 answer and records into the buffer described below, so an answer of off empties that buffer without ever addressing
 it. Turning it back on begins at that moment and reaches back over nothing.
 
-**A deployment that forwards no telemetry offers no switch.** It answers
-[`"telemetry": "off"` on the session route](client-endpoint.md#the-session-route); the client stops recording the moment
-it reads that and throws away what it had held, and the settings screen says so in place of a control that would decide
-nothing. Until a deployment has said either way the client records, because a deployment nobody has reached yet is
+**A deployment that takes no telemetry from a client offers no switch.** That is one that forwards none at all, one
+whose settings policy holds this person's switch off, and one that cannot say on this replica what governs them. Each
+answers [`"telemetry": "off"` on the session route](client-endpoint.md#the-session-route); the client stops recording
+the moment it reads that and throws away what it had held, and the settings screen says, in place of a control that
+would decide nothing, that this deployment takes no telemetry from this client. It is one sentence for all three and
+names none of them: which one applies is not on the session answer, and who holds a forced switch is on
+[the preferences read](client-endpoint.md#a-settings-policy-may-hold-the-telemetry-switch), which the client does not
+draw yet. A switch held **on** is still drawn as the person's own for the same reason: moving it is refused, the
+account menu says the change was not saved, and the client reads the preferences again, so the switch returns to the
+answer in force and the next change somebody makes is not refused with it. Until a deployment has said either way the client records, because a deployment nobody has reached yet is
 every cold start and every failed sign-in — which is what the buffer below exists to keep. The screen says that too,
 in place of either of the other two: a deployment that has not answered has not refused, so drawing the sentence above
 over that state would tell somebody nothing is being sent at the one moment something is.

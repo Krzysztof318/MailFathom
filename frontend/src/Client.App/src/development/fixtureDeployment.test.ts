@@ -154,6 +154,28 @@ describe('fixtureAnswer', () => {
         expect(held === null ? null : stated(held)['theme']).toBe('dark');
     });
 
+    // What the route does and what the client now relies on: every write the person did not move the telemetry switch
+    // in states it as nothing, and an answer echoing that back would be one the client refuses to read.
+    it('keeps the telemetry answer it holds through a write that states none', () => {
+        const state = fixtureDeploymentState();
+
+        fixtureAnswer(
+            asking('/preferences', 'POST', JSON.stringify({ telemetryEnabled: false, theme: 'dark' })),
+            fixtureDeploymentDefaults,
+            1,
+            state,
+        );
+
+        const held = fixtureAnswer(
+            asking('/preferences', 'POST', JSON.stringify({ telemetryEnabled: null, theme: 'light' })),
+            fixtureDeploymentDefaults,
+            1,
+            state,
+        );
+
+        expect(held === null ? null : stated(held)).toMatchObject({ telemetryEnabled: false, theme: 'light' });
+    });
+
     // The collected book's path has the asserted one's as a prefix, which is the ordering every route table here is
     // written in and the one thing a contacts route can get wrong without anything else noticing.
     it('tells the two address books apart rather than answering the collected one with the asserted page', () => {

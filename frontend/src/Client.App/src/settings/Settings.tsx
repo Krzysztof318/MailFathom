@@ -743,8 +743,10 @@ function PictureNotice({
 // Three things stand beside the switch that the design does not draw, all of them the acceptance of #1232 and
 // all about the same thing — that a decision is only a decision if what is being decided is stated. Where the records
 // go is named, because "telemetry" says nothing about who ends up holding it, and this client sends to the deployment
-// somebody signed in to rather than anywhere else. A deployment that forwards none is said out loud instead of being
-// drawn as a switch: there is nothing behind it there, so moving it would decide nothing. And a deployment that has
+// somebody signed in to rather than anywhere else. A deployment that takes none from this client is said out loud
+// instead of being drawn as a switch: there is nothing behind it there, so moving it would decide nothing. The
+// sentence names no cause, because the session answers `off` both where the deployment forwards nothing at all and
+// where a settings policy holds this person's switch off, and it does not say which. And a deployment that has
 // not answered yet says that instead of either, because the frame records under the person's own answer while it
 // waits — so drawing "nothing to turn off" over that state would be telling somebody nothing is being sent at exactly
 // the moment something is.

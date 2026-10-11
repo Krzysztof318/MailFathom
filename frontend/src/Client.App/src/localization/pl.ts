@@ -578,8 +578,7 @@ export const pl: Catalogue = {
     'configuration.whereItIsStated':
         'Oba ustawienia są odczytywane z argumentów uruchomienia MailFathom, z jego środowiska oraz z pliku client.conf obok jego własnej konfiguracji — w tej kolejności.',
 
-    'preferences.notStated':
-        'Ta zmiana nie została zapisana na wdrożeniu, więc obowiązuje tylko na tym urządzeniu do czasu, aż kolejna się powiedzie.',
+    'preferences.notStated': 'Ta zmiana nie została zapisana na wdrożeniu.',
 
     'settings.title': 'Ustawienia',
     'settings.close': 'Zamknij ustawienia',
@@ -647,7 +646,7 @@ export const pl: Catalogue = {
     'settings.telemetryDestination':
         'Wysyłane do {address}, które przekazuje je dalej do skonfigurowanego kolektora. Zawierają to, które ekrany otwierasz i jak długo się otwierały — nigdy Twojej poczty, adresów, folderów ani hasła.',
     'settings.telemetryNotForwarded':
-        'To wdrożenie nie przekazuje telemetrii, więc ten klient jej nie wysyła i nie ma czego wyłączać.',
+        'To wdrożenie nie przyjmuje telemetrii od tego klienta, więc klient jej nie wysyła i nie ma czego wyłączać.',
     'settings.telemetryUnanswered':
         'Czekamy, aż to wdrożenie powie, czy przekazuje telemetrię. Dopóki nie odpowie, obowiązuje Twoja własna decyzja.',
 

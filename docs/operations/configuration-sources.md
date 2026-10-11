@@ -486,6 +486,13 @@ is composed over, what `mfctl user show` prints as the document, and what comes 
 `mfctl user show --effective` and the `properties` of
 [a record read](admin-endpoint.md#users-and-their-records) answer the value in force and which step supplied it.
 
+**One forced value is resolved the same way and is not on the record: the person's telemetry switch.** A policy may
+force `ClientPreferences:TelemetryEnabled`, which is a [client preference](client-endpoint.md#the-preferences-routes)
+rather than a setting of the record, and nothing else about any preference. It resolves through steps 1 and 2 alone —
+the deployment's force, then the organization's — and where neither states it the person's own stored answer stands,
+because it takes no default. [What that does on the client
+surface](client-endpoint.md#a-settings-policy-may-hold-the-telemetry-switch) is on that page.
+
 **A write may not move a held setting, and may carry it through.** A policy holds a setting against a writer in one of
 two ways. A forced value binds everybody, an administrator included: a write stating another value is refused naming
 the setting and whether the organization or the deployment holds it. An editing restriction — the policy's `Editing`

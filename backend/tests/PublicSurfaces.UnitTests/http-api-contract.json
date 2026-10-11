@@ -4138,6 +4138,12 @@
           "telemetryEnabled": {
             "type": "boolean"
           },
+          "telemetryHeldBy": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "theme": {
             "type": "string"
           }

@@ -4,8 +4,11 @@
 
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using MailFathom.Application.Access;
 using MailFathom.Application.Preferences;
 using MailFathom.Domain.Access;
+using MailFathom.Host.Configuration.Policies;
+using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.Security.Endpoints;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
@@ -32,9 +35,20 @@ namespace MailFathom.Host.Api;
 /// </para>
 /// <para>
 /// A write states the whole document, which is what makes it a closed set rather than a patch: a preference the body
-/// omits is stored as its own unset answer rather than left at whatever the row held. It carries no version and is
+/// omits is stored as its own unset answer rather than left at whatever the row held — every one but the telemetry
+/// switch, whose omission leaves the stored answer as it was. It carries no version and is
 /// last-write-wins, because the only writers are one person's own devices and a conflict screen over a checkbox would
 /// be a worse answer than the second device winning.
+/// </para>
+/// <para>
+/// <b>One of the eight may be held by a settings policy, and it is the telemetry switch.</b> Where the deployment's
+/// policy or the person's organization's forces it, the read answers the forced value and names who holds it, and a
+/// write stating the other answer is refused in a sentence naming both. What the person stored as their own answer is
+/// neither applied nor replaced while the switch is held — a write that passes commits the other seven and carries
+/// it forward — so it is in force again the moment no policy forces it. A write for somebody this replica holds no
+/// composition of carries it forward as well, since whether a policy holds their switch cannot be known here.
+/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0037-a-settings-policy-at-the-deployment-and-at-each-organization.md">ADR 0037</see>
+/// holds why this preference and no other.
 /// </para>
 /// </remarks>
 internal static class ClientPreferencesEndpoint
@@ -69,18 +83,40 @@ internal static class ClientPreferencesEndpoint
 
     /// <summary>Hands the acting person what they set about their own client.</summary>
     /// <param name="preferences">The acting person's own preferences.</param>
+    /// <param name="authorization">Names the acting person, whose served composition holds what a policy forces.</param>
+    /// <param name="servedUsers">The served-user cache this request's acting person was read into when its scope was prepared.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
     /// <returns><c>200</c> with the preferences, the unset answers where they have set nothing, or <c>400</c> when the stored row is not a document of preferences.</returns>
-    /// <remarks>Setting nothing is answered with the defaults rather than with a refusal, because a first run draws a screen and an empty store is not an error. A person this deployment no longer holds is answered the same way, since the answer carries nothing of theirs to withhold.</remarks>
+    /// <remarks>
+    /// <para>
+    /// Setting nothing is answered with the defaults rather than with a refusal, because a first run draws a screen
+    /// and an empty store is not an error. A person this deployment no longer holds is answered the same way, since
+    /// the answer carries nothing of theirs to withhold. The telemetry switch is answered as it is applied: forced
+    /// where a settings policy holds it, and the person's own answer otherwise.
+    /// </para>
+    /// <para>
+    /// One caller is answered what they stored although it is not what is applied: somebody this replica holds no
+    /// composition of. The telemetry routes take nothing from them and the session route answers them <c>off</c>,
+    /// which is what stops their client, but that is this replica not knowing what governs them rather than an
+    /// answer of theirs or of a policy. A client writes back the document it read, so answering off here would
+    /// reach a replica that does serve them as their own refusal and outlast the condition that caused it.
+    /// </para>
+    /// </remarks>
     internal static async Task<Results<Ok<ClientPreferencesResponse>, ProblemHttpResult>> ReadAsync(
         [FromServices] OwnClientPreferences preferences,
+        [FromServices] AccessAuthorization authorization,
+        [FromServices] ServedUsers servedUsers,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(preferences);
+        ArgumentNullException.ThrowIfNull(authorization);
+        ArgumentNullException.ThrowIfNull(servedUsers);
 
         try
         {
-            return TypedResults.Ok(ClientPreferencesResponse.For(await preferences.ReadAsync(cancellationToken)));
+            var own = await preferences.ReadAsync(cancellationToken);
+
+            return TypedResults.Ok(ClientPreferencesResponse.For(own, HeldTelemetryOf(authorization, servedUsers)));
         }
         catch (JsonException)
         {
@@ -93,15 +129,45 @@ internal static class ClientPreferencesEndpoint
 
     /// <summary>Takes back what the acting person set about their own client.</summary>
     /// <param name="preferences">The acting person's own preferences.</param>
-    /// <param name="request">The whole document, with an omitted preference stored as its unset answer.</param>
+    /// <param name="authorization">Names the acting person, whose served composition holds what a policy forces.</param>
+    /// <param name="servedUsers">The served-user cache this request's acting person was read into when its scope was prepared.</param>
+    /// <param name="request">The whole document, with an omitted preference stored as its unset answer and an omitted telemetry switch left as it was stored.</param>
     /// <param name="cancellationToken">Cancels the commit.</param>
-    /// <returns><c>200</c> with what is now stored, <c>404</c> when this deployment holds no record for the caller, or <c>400</c> when the body names a theme or a message view this build does not publish, or a notification time outside the bound.</returns>
+    /// <returns>
+    /// <c>200</c> with what is now in force, <c>404</c> when this deployment holds no record for the caller, or
+    /// <c>400</c> when the body names a theme or a message view this build does not publish, a notification time
+    /// outside the bound, or an answer to the telemetry switch other than the one a settings policy forces.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// While a policy holds the telemetry switch, a body stating the forced answer and a body stating none both pass,
+    /// and neither writes the switch: the write is the whole document, so committing what the body said would replace
+    /// the person's own answer with the policy's and leave them opted in or out after the policy is gone.
+    /// </para>
+    /// <para>
+    /// A write for somebody this replica holds no composition of does not write the switch either. Whether a policy
+    /// holds it cannot be known here, and the body may be stating a forced answer another replica read to their
+    /// client, so the other seven are committed and the stored answer is left as it was.
+    /// </para>
+    /// <para>
+    /// A body stating no answer to the switch never writes it, whoever sends it and whether or not a policy holds it.
+    /// It is the one preference whose omission is not its unset answer, and both halves of that are about the person:
+    /// the unset answer is on, so a writer with nothing to say about telemetry would otherwise opt them in, and a
+    /// client that read a forced value has no answer of theirs to state — restating what it read would store the
+    /// policy's answer as the person's once the policy is gone. A client therefore states the switch only when the
+    /// person moved it.
+    /// </para>
+    /// </remarks>
     internal static async Task<Results<Ok<ClientPreferencesResponse>, NotFound<ProblemDetails>, ProblemHttpResult>> SaveAsync(
         [FromServices] OwnClientPreferences preferences,
+        [FromServices] AccessAuthorization authorization,
+        [FromServices] ServedUsers servedUsers,
         [FromBody] ClientPreferencesRequest request,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(preferences);
+        ArgumentNullException.ThrowIfNull(authorization);
+        ArgumentNullException.ThrowIfNull(servedUsers);
         ArgumentNullException.ThrowIfNull(request);
 
         if (request.NotificationSeconds is { } seconds && !ClientPreferences.IsUsableNotificationTime(seconds))
@@ -117,8 +183,21 @@ internal static class ClientPreferencesEndpoint
             return Refusal(request.Unpublished());
         }
 
+        var served = servedUsers.Peek(authorization.RequireUser());
+        var held = served?.ForcedClientTelemetry;
+
+        if (held is not null && request.TelemetryEnabled is { } answer && answer != held.Enabled)
+        {
+            return Refusal(held.DescribeRefusal());
+        }
+
+        if (served is null || held is not null || request.TelemetryEnabled is null)
+        {
+            stated = stated with { TelemetryEnabled = await OwnTelemetryAnswerAsync(preferences, cancellationToken) };
+        }
+
         return await preferences.SaveAsync(stated, cancellationToken)
-            ? TypedResults.Ok(ClientPreferencesResponse.For(stated))
+            ? TypedResults.Ok(ClientPreferencesResponse.For(stated, held))
             : TypedResults.NotFound(new ProblemDetails
             {
                 Status = StatusCodes.Status404NotFound,
@@ -126,12 +205,37 @@ internal static class ClientPreferencesEndpoint
             });
     }
 
+    /// <summary>Reads what a settings policy governing the acting person forces their telemetry switch to.</summary>
+    /// <returns>The forced answer and who holds it, or <see langword="null" /> where no policy forces the switch or this replica holds no composition of the person.</returns>
+    private static ForcedClientTelemetry? HeldTelemetryOf(AccessAuthorization authorization, ServedUsers servedUsers) =>
+        servedUsers.Peek(authorization.RequireUser())?.ForcedClientTelemetry;
+
+    /// <summary>Reads the answer the person stored for the telemetry switch, which a write that may not decide the switch carries forward unchanged.</summary>
+    /// <remarks>
+    /// A row that is not a document of preferences holds no answer to keep, and the write replacing it states a
+    /// refusal rather than the unset answer, which is on. That is how the telemetry routes read the same row, and
+    /// storing on would leave its holder opted in, once the policy is gone, by a write made while it held the switch.
+    /// </remarks>
+    private static async Task<bool> OwnTelemetryAnswerAsync(
+        OwnClientPreferences preferences,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return (await preferences.ReadAsync(cancellationToken)).TelemetryEnabled;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
     private static ProblemHttpResult Refusal(string detail) =>
         TypedResults.Problem(detail, statusCode: StatusCodes.Status400BadRequest);
 }
 
 /// <summary>What a person states about their own client.</summary>
-/// <param name="TelemetryEnabled">Whether this deployment may be told what their client is doing, or nothing to say what an unset switch says.</param>
+/// <param name="TelemetryEnabled">Whether this deployment may be told what their client is doing, or nothing to leave the answer they stored as it is.</param>
 /// <param name="Theme">The name of what the client is painted in, or nothing to follow the machine.</param>
 /// <param name="OpenMailInTabs">Whether opening a message opens a tab, or nothing for the unset answer.</param>
 /// <param name="MarkReadOnOpen">Whether opening a message marks it read on their mail server, or nothing for the unset answer.</param>
@@ -144,7 +248,8 @@ internal static class ClientPreferencesEndpoint
 /// Bound strictly: a key nothing here binds fails the bind rather than being stored, which is what keeps the document
 /// closed — it holds eight preferences because eight is what a client can state, not because a writer happened to send
 /// eight. Every one of them is optional, and an omitted one is committed as its unset answer rather than left at
-/// whatever the row held.
+/// whatever the row held. The telemetry switch is the exception, for the reason
+/// <see cref="ClientPreferencesEndpoint.SaveAsync" /> gives: stating nothing about it leaves the stored answer alone.
 /// </para>
 /// <para>
 /// The theme travels as its name rather than as <see cref="ClientThemeChoice" /> itself, for the reason the
@@ -165,7 +270,7 @@ internal sealed record ClientPreferencesRequest(
     int? NotificationSeconds = null)
 {
     /// <summary>Reads the request as the whole set the write commits.</summary>
-    /// <returns>The preferences, with every one the body omitted answered as unset, or <see langword="null" /> when the body names a theme or a message view this build does not publish.</returns>
+    /// <returns>The preferences, with every one the body omitted answered as unset — the telemetry switch included, which the write then replaces with the stored answer — or <see langword="null" /> when the body names a theme or a message view this build does not publish.</returns>
     internal ClientPreferences? Stated()
     {
         var theme = ClientPreferences.Unset.Theme;
@@ -214,11 +319,22 @@ internal sealed record ClientPreferencesRequest(
 /// <param name="MessageView">The name of which of the three renderings an open message is drawn on.</param>
 /// <param name="AiFiltersShown">Whether the folder tree carries the standing views of what a derivation read in the mail.</param>
 /// <param name="NotificationSeconds">How long one of the client's own notifications stands before it takes itself away.</param>
+/// <param name="TelemetryHeldBy">Whose settings policy forces <paramref name="TelemetryEnabled" /> — <c>Deployment</c> or <c>Organization</c> — or <see langword="null" /> where the answer is the person's own.</param>
 /// <remarks>
+/// <para>
 /// Every preference is answered, whether or not the person ever set it, so a client renders one screen rather than one
 /// per combination of what happens to be stored. What it does not report is when anything was set or from where: this
 /// deployment keeps no record of the machines somebody signed in from, and a response saying when a switch last moved
 /// would be the beginning of one.
+/// </para>
+/// <para>
+/// The telemetry switch is answered as it is applied rather than as it is stored, and who holds it travels beside it,
+/// so a person learns that their own answer is not the one in force from the read rather than from a refused write.
+/// The answer they stored is deliberately not reported beside the forced one: a client applies one value, and two
+/// would be a way to apply the wrong one. The one caller answered what they stored while something else is applied
+/// is somebody the answering replica holds no composition of, for the reason
+/// <see cref="ClientPreferencesEndpoint.ReadAsync" /> gives.
+/// </para>
 /// </remarks>
 internal sealed record ClientPreferencesResponse(
     bool TelemetryEnabled,
@@ -228,24 +344,27 @@ internal sealed record ClientPreferencesResponse(
     bool ExpandWholeThread,
     string MessageView,
     bool AiFiltersShown,
-    int NotificationSeconds)
+    int NotificationSeconds,
+    string? TelemetryHeldBy = null)
 {
     /// <summary>Describes one person's preferences on the wire.</summary>
     /// <param name="preferences">What they set.</param>
+    /// <param name="heldTelemetry">What a settings policy forces their telemetry switch to, or <see langword="null" /> where none does.</param>
     /// <returns>The response body.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="preferences" /> is <see langword="null" />.</exception>
-    internal static ClientPreferencesResponse For(ClientPreferences preferences)
+    internal static ClientPreferencesResponse For(ClientPreferences preferences, ForcedClientTelemetry? heldTelemetry = null)
     {
         ArgumentNullException.ThrowIfNull(preferences);
 
         return new ClientPreferencesResponse(
-            preferences.TelemetryEnabled,
+            heldTelemetry?.Enabled ?? preferences.TelemetryEnabled,
             preferences.Theme.Name,
             preferences.OpenMailInTabs,
             preferences.MarkReadOnOpen,
             preferences.ExpandWholeThread,
             preferences.MessageView.Name,
             preferences.AiFiltersShown,
-            preferences.NotificationSeconds);
+            preferences.NotificationSeconds,
+            heldTelemetry?.HeldBy.Name);
     }
 }

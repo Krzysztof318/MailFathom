@@ -576,10 +576,20 @@ export class FakeDeployment {
                 return answering({ ...deployment.sessionAnswer, version: this.version, permissions: this.permissions });
             case 'GET /preferences':
                 return answering(this.preferences);
-            case 'POST /preferences':
-                this.preferences = recordIn(request.body) ?? this.preferences;
+            case 'POST /preferences': {
+                const stated = recordIn(request.body);
+
+                // As the route does: a body stating nothing about the telemetry switch leaves the answer the
+                // deployment holds, which is what a client sends in every write the person did not move it in.
+                if (stated !== null) {
+                    this.preferences = {
+                        ...stated,
+                        telemetryEnabled: stated['telemetryEnabled'] ?? this.preferences['telemetryEnabled'],
+                    };
+                }
 
                 return answering(this.preferences);
+            }
             case 'GET /display-name':
                 return answering(this.displayName);
             case 'POST /display-name': {
