@@ -763,6 +763,8 @@ the calendar, the notification centre, and the profile beside it; and one that r
 holds `mailfathom.profile.write`. A role's pattern is carried by what it reached, so the names a role held through one
 are written out wherever its list no longer reaches them, and a role listing `*` alone gained no row. It treats every
 role alike, seeded or not, because what it carries is the reach of a name rather than anybody's decision about a role.
+It carries what was stored when it ran and nothing written afterwards, so a list a replica of the build before it wrote
+during a rolling upgrade — a session signed in there, above all — holds the names that build knew until it is replaced.
 
 The migration that moved mail grants from credentials onto users, `HoldMailGrantsOnUsers`, gave every user who held no
 assignment one at their own scope reproducing the union of what their credentials listed: `Mail user` where that union

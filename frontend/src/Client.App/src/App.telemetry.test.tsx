@@ -114,7 +114,10 @@ describe('App telemetry', () => {
         renderApp(
             servedFrom,
             heldSession,
-            deploymentAnswering(undefined, sessionAnswering(['mailfathom.mail.read', 'mailfathom.assistant.use', ...keptBesideTheMailbox], 'off')),
+            deploymentAnswering(
+                undefined,
+                sessionAnswering(['mailfathom.mail.read', 'mailfathom.assistant.use', ...keptBesideTheMailbox], 'off'),
+            ),
             storeKeeping(),
             recording.telemetry,
         );
@@ -138,7 +141,13 @@ describe('App telemetry', () => {
         renderApp(
             servedFrom,
             heldSession,
-            deploymentAnswering(undefined, sessionAnswering(['mailfathom.mail.read', 'mailfathom.assistant.use', ...keptBesideTheMailbox], 'trace')),
+            deploymentAnswering(
+                undefined,
+                sessionAnswering(
+                    ['mailfathom.mail.read', 'mailfathom.assistant.use', ...keptBesideTheMailbox],
+                    'trace',
+                ),
+            ),
             storeKeeping(),
             recording.telemetry,
         );

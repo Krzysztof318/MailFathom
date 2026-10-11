@@ -78,8 +78,8 @@ internal sealed class UserRecordAdministration(
     /// <summary>How many times a one-property edit is composed again over a record another write moved underneath it.</summary>
     private const int MaximumRelinkAttempts = 3;
 
-    /// <summary>The properties a person changes through a route of their own, which the grant that read the record already reaches.</summary>
-    private static readonly string[] WrittenUnderTheReadGrant =
+    /// <summary>The properties of the record a person also changes through a route of their own, under <see cref="MailFathomPermission.ProfileWrite" />.</summary>
+    private static readonly string[] WrittenThroughAProfileRoute =
     [
         nameof(UserAccountOptions.TimeZone),
         nameof(UserAccountOptions.Portrait),
@@ -126,12 +126,21 @@ internal sealed class UserRecordAdministration(
         authorization.RequirePermission(MailFathomPermission.MailRead);
 
         var writesTheRecord = authorization.Permits(MailFathomPermission.MailAccountsWrite);
+        var writesTheirProfile = authorization.Permits(MailFathomPermission.ProfileWrite);
 
         return this.ReadAsync(
             authorization.RequireUser(),
-            property => property.IsThePersonsToChange
-                && (writesTheRecord || WrittenUnderTheReadGrant.Contains(property.Property.Path)),
+            property => property.IsThePersonsToChange && IsWrittenUnder(property.Property.Path),
             cancellationToken);
+
+        // A property is reported as the reader's to change where some route would accept the change from them. The
+        // name is a column no save of the record writes, so its own route's grant decides it alone; the zone and the
+        // portrait are written by a save and by a route of their own, so either grant reaches them; and everything
+        // else is the record's.
+        bool IsWrittenUnder(string path) =>
+            string.Equals(path, SettingsPolicySection.UserDisplayNameColumn, StringComparison.Ordinal)
+                ? writesTheirProfile
+                : writesTheRecord || (writesTheirProfile && WrittenThroughAProfileRoute.Contains(path));
     }
 
     /// <summary>Applies a whole edited record to one user.</summary>

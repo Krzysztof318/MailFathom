@@ -61,6 +61,7 @@ function renderSettings({
     profile = named,
     preferences = settings,
     telemetryForwarding = forwardedTo,
+    writesProfile = true,
     deploymentVersion = '0.9.0',
     onClose = () => undefined,
     head = raisesNothing,
@@ -69,6 +70,7 @@ function renderSettings({
     readonly profile?: OwnProfileInForce;
     readonly preferences?: ClientPreferencesInForce;
     readonly telemetryForwarding?: TelemetryForwarding;
+    readonly writesProfile?: boolean;
     readonly deploymentVersion?: string | null;
     readonly onClose?: () => void;
 
@@ -85,6 +87,7 @@ function renderSettings({
                         profile={profile}
                         preferences={preferences}
                         telemetryForwarding={telemetryForwarding}
+                        writesProfile={writesProfile}
                         deploymentVersion={deploymentVersion}
                         onClose={onClose}
                     />
@@ -255,6 +258,7 @@ describe('Settings', () => {
                             profile={{ ...named }}
                             preferences={settings}
                             telemetryForwarding={forwardedTo}
+                            writesProfile
                             deploymentVersion="0.9.0"
                             onClose={() => undefined}
                         />
@@ -282,7 +286,45 @@ describe('Settings', () => {
         expect(screen.getByText(/keeps your name/u)).toBeDefined();
     });
 
-    it('still offers the picture, which this deployment grants on reading mail rather than on the name', () => {
+    // Reading a profile and changing one are two grants, so a credential holding the first is shown everything and
+    // offered nothing the deployment would refuse.
+    it('shows a profile without offering a change of it where this credential may not change one', () => {
+        renderSettings({
+            profile: { ...named, changeable: false, picture: 'data:image/png;base64,AA==' },
+            writesProfile: false,
+        });
+
+        expect(screen.getByRole('textbox', { name: 'Full name' })).toHaveProperty('readOnly', true);
+        expect(screen.getByRole('combobox', { name: /^Time zone/u })).toHaveProperty('disabled', true);
+        expect(screen.queryByLabelText('Picture')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Remove' })).toBeNull();
+        expect(screen.getByText(/may read what the deployment holds about you/u)).toBeDefined();
+        expect(screen.queryByText(/keeps your name/u)).toBeNull();
+    });
+
+    // What follows the person is the deployment's to take a change of; the language is this machine's and is asked of
+    // nobody, so it stays a live control beside rows that are not.
+    it('withdraws the settings that follow the person and keeps the language, where this credential may not change them', () => {
+        renderSettings({ writesProfile: false });
+        openApplication();
+
+        expect(screen.getByText(/may not change the settings that follow you/u)).toBeDefined();
+        expect(
+            screen.getByRole('switch', { name: /^Expand the whole thread automatically/u }).matches(':disabled'),
+        ).toBe(true);
+        expect(screen.getByRole('switch', { name: /^Do not send telemetry/u }).matches(':disabled')).toBe(true);
+        expect(screen.getByRole('radio', { name: 'Polski' }).matches(':disabled')).toBe(false);
+    });
+
+    it('offers every setting that follows the person where this credential may change them', () => {
+        renderSettings();
+        openApplication();
+
+        expect(screen.queryByText(/may not change the settings that follow you/u)).toBeNull();
+        expect(screen.getByRole('switch', { name: /^Do not send telemetry/u }).matches(':disabled')).toBe(false);
+    });
+
+    it('still offers the picture, which this deployment grants on changing a profile rather than on the name', () => {
         const choosePicture = vi.fn();
         renderSettings({
             profile: { ...named, changeable: false, picture: 'data:image/png;base64,AA==', choosePicture },

@@ -391,6 +391,7 @@ export function App({
         offers(deploymentSession, 'writeNotifications');
     const hearsChanges = readsMail && offers(deploymentSession, 'readNotifications');
     const readsCalendar = deploymentSession !== null && offers(deploymentSession, 'readCalendar');
+    const writesCalendar = deploymentSession !== null && offers(deploymentSession, 'writeCalendar');
 
     // The address book is read under a grant of its own and changed under a second, which is what draws the People
     // space at all and what decides whether it is a book somebody may only read. The first is what the space is
@@ -1263,37 +1264,49 @@ export function App({
                                                                                                 // questions: whether this
                                                                                                 // credential may ask and may
                                                                                                 // read the calendar the
-                                                                                                // arrangement is laid
-                                                                                                // around, which is this, and
+                                                                                                // arrangement is laid around
+                                                                                                // and write what applying it
+                                                                                                // puts there, which is this, and
                                                                                                 // whether the deployment
                                                                                                 // arranges one, which the
                                                                                                 // screen asks the capability
                                                                                                 // route.
                                                                                                 asksDeployment={
                                                                                                     asksMail &&
+                                                                                                    readsCalendar &&
+                                                                                                    writesCalendar
+                                                                                                }
+                                                                                                readsCalendar={
                                                                                                     readsCalendar
                                                                                                 }
-                                                                                                onOpenMessage={(
-                                                                                                    messageId,
-                                                                                                ) => {
-                                                                                                    // A task cites a message
-                                                                                                    // and mail is read in the
-                                                                                                    // Mail space, so it is
-                                                                                                    // opened there and the
-                                                                                                    // address follows it —
-                                                                                                    // exactly as a person's
-                                                                                                    // page cites one. It is
-                                                                                                    // opened with no subject,
-                                                                                                    // a task carrying none.
-                                                                                                    openTabs.openMail(
-                                                                                                        messageId,
-                                                                                                        null,
-                                                                                                    );
-                                                                                                    window.location.hash =
-                                                                                                        addressOf(
-                                                                                                            'mail',
-                                                                                                        );
-                                                                                                }}
+                                                                                                writesCalendar={
+                                                                                                    writesCalendar
+                                                                                                }
+                                                                                                onOpenMessage={
+                                                                                                    !readsMail
+                                                                                                        ? undefined
+                                                                                                        : (
+                                                                                                              messageId,
+                                                                                                          ) => {
+                                                                                                              // A task cites a message
+                                                                                                              // and mail is read in the
+                                                                                                              // Mail space, so it is
+                                                                                                              // opened there and the
+                                                                                                              // address follows it —
+                                                                                                              // exactly as a person's
+                                                                                                              // page cites one. It is
+                                                                                                              // opened with no subject,
+                                                                                                              // a task carrying none.
+                                                                                                              openTabs.openMail(
+                                                                                                                  messageId,
+                                                                                                                  null,
+                                                                                                              );
+                                                                                                              window.location.hash =
+                                                                                                                  addressOf(
+                                                                                                                      'mail',
+                                                                                                                  );
+                                                                                                          }
+                                                                                                }
                                                                                             />
                                                                                         )
                                                                                     }
@@ -1368,27 +1381,31 @@ export function App({
                                                                                             <CalendarSpace
                                                                                                 session={session}
                                                                                                 transport={readMail}
-                                                                                                onOpenMessage={(
-                                                                                                    messageId,
-                                                                                                ) => {
-                                                                                                    // An event read out of
-                                                                                                    // mail cites the message
-                                                                                                    // it came from, and mail
-                                                                                                    // is read in the Mail
-                                                                                                    // space: the message is
-                                                                                                    // opened and the address
-                                                                                                    // follows it, exactly as
-                                                                                                    // a person's page does
-                                                                                                    // with what it cites.
-                                                                                                    openTabs.openMail(
-                                                                                                        messageId,
-                                                                                                        null,
-                                                                                                    );
-                                                                                                    window.location.hash =
-                                                                                                        addressOf(
-                                                                                                            'mail',
-                                                                                                        );
-                                                                                                }}
+                                                                                                onOpenMessage={
+                                                                                                    !readsMail
+                                                                                                        ? undefined
+                                                                                                        : (
+                                                                                                              messageId,
+                                                                                                          ) => {
+                                                                                                              // An event read out of
+                                                                                                              // mail cites the message
+                                                                                                              // it came from, and mail
+                                                                                                              // is read in the Mail
+                                                                                                              // space: the message is
+                                                                                                              // opened and the address
+                                                                                                              // follows it, exactly as
+                                                                                                              // a person's page does
+                                                                                                              // with what it cites.
+                                                                                                              openTabs.openMail(
+                                                                                                                  messageId,
+                                                                                                                  null,
+                                                                                                              );
+                                                                                                              window.location.hash =
+                                                                                                                  addressOf(
+                                                                                                                      'mail',
+                                                                                                                  );
+                                                                                                          }
+                                                                                                }
                                                                                             />
                                                                                         )
                                                                                     }
@@ -1498,6 +1515,13 @@ export function App({
                                                                                         deploymentSession,
                                                                                         baseAddress,
                                                                                     )}
+                                                                                    writesProfile={
+                                                                                        deploymentSession !== null &&
+                                                                                        offers(
+                                                                                            deploymentSession,
+                                                                                            'writeProfile',
+                                                                                        )
+                                                                                    }
                                                                                     preferences={preferences}
                                                                                     profile={profile}
                                                                                     onSignOut={signOut}

@@ -163,9 +163,9 @@ public sealed class OwnNotifications
     /// <exception cref="ArgumentOutOfRangeException">Thrown when more than <see cref="MaximumErasedAtOnce" /> are named.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.NotificationsWrite" />.</exception>
     /// <remarks>
-    /// It is the person's own centre being tidied rather than mail being removed, so it is admitted under the same
-    /// grant every other act here is: nothing leaves a mailbox, and the record erased is one this deployment derived
-    /// about mail the caller can already read.
+    /// It is the person's own centre being tidied rather than mail being removed, so it is admitted under the grant
+    /// that changes the centre and never under one that removes mail: nothing leaves a mailbox, and the record erased
+    /// is one this deployment derived.
     /// </remarks>
     public Task<int> EraseAsync(
         IReadOnlyCollection<NotificationId> notifications,

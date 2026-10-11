@@ -125,6 +125,39 @@ public sealed class AgentConversationToolsTests : IAsyncDisposable
         Assert.Equal(["suggest_follow_ups"], names);
     }
 
+    /// <summary>Which mailboxes somebody has is mail's to read, so a model answering a caller who reads none is not told their names.</summary>
+    [Fact]
+    public void NamedAccounts_AGrantThatReadsNoMailAndProposesNone_NamesNoAccount()
+    {
+        // Act
+        var named = this.Tools(MailFathomPermission.AssistantUse, MailFathomPermission.CalendarRead, MailFathomPermission.TasksWrite).NamedAccounts;
+
+        // Assert
+        Assert.Empty(named);
+    }
+
+    /// <summary>A reader of mail is offered tools that take an account, so the model is told which the person has.</summary>
+    [Fact]
+    public void NamedAccounts_AGrantThatReadsMail_NamesThePersonsAccounts()
+    {
+        // Act
+        var named = this.Tools(MailFathomPermission.MailRead).NamedAccounts;
+
+        // Assert
+        Assert.Equal([Primary], named);
+    }
+
+    /// <summary>A message is proposed from an account, so a grant that may only draft and send is still told which there are.</summary>
+    [Fact]
+    public void NamedAccounts_AGrantThatSendsButDoesNotRead_NamesThePersonsAccounts()
+    {
+        // Act
+        var named = this.Tools(MailFathomPermission.MailDraftsWrite, MailFathomPermission.MailSend).NamedAccounts;
+
+        // Assert
+        Assert.Equal([Primary], named);
+    }
+
     /// <summary>A grant that drafts and sends but reads nothing may propose a new message and cannot answer one it could not read.</summary>
     [Fact]
     public void Create_AGrantThatSendsButDoesNotRead_OffersOnlyANewMessage()

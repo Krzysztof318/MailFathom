@@ -111,6 +111,7 @@ internal static class ClientDiscoveryRunEndpoints
 
     /// <summary>Starts a run over the question, or reports what was wrong with it.</summary>
     /// <param name="request">The question and the mail it may be answered from.</param>
+    /// <param name="authorization">Answers whether the caller may read the mail a run answers from, before one is opened.</param>
     /// <param name="scopeResolver">Resolves which accounts and folders the answer may be drawn from, and names the acting user.</param>
     /// <param name="userClock">Reads the instant the acting person is standing on, which every relative period in the question is resolved against.</param>
     /// <param name="principals">Reports the principal the transport admitted, which the run executes under.</param>
@@ -118,8 +119,14 @@ internal static class ClientDiscoveryRunEndpoints
     /// <param name="timeProvider">Stamps the run, which its retention and its ceiling are measured from.</param>
     /// <param name="launcher">Puts the run on a scope of its own and starts it.</param>
     /// <param name="cancellationToken">Cancels opening the run, which is the one part of this a caller waits for.</param>
-    /// <returns><c>202</c> naming the run, <c>400</c> naming what was wrong with the question or its scope, <c>429</c> where this person is already running as many as they may, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.assistant.use</c>.</returns>
+    /// <returns><c>202</c> naming the run, <c>400</c> naming what was wrong with the question or its scope, <c>429</c> where this person is already running as many as they may, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.assistant.use</c> and <c>mailfathom.mail.read</c>.</returns>
+    /// <exception cref="PrincipalNotAuthorizedException">The caller's grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
     /// <remarks>
+    /// <para>
+    /// The route is published under the asking grant, and the reading one is asked here rather than left to the run,
+    /// which asks for both again: a run is opened before it executes, so a caller it would refuse would otherwise be
+    /// answered <c>202</c>, hold one of their concurrent runs, and learn only that the run failed.
+    /// </para>
     /// <para>
     /// The question and the scope are validated here rather than in the run, so a mistake in either is a refusal a
     /// person can act on instead of a run that opens and immediately fails. Everything after that — whether this
@@ -134,6 +141,7 @@ internal static class ClientDiscoveryRunEndpoints
     /// </remarks>
     internal static async Task<Results<Accepted<ClientDiscoveryRunResponse>, ProblemHttpResult>> Start(
         [FromBody] ClientDiscoveryRunRequest? request,
+        [FromServices] AccessAuthorization authorization,
         [FromServices] MailboxScopeResolver scopeResolver,
         [FromServices] UserClock userClock,
         [FromServices] IAuthorizedPrincipalSource principals,
@@ -142,6 +150,7 @@ internal static class ClientDiscoveryRunEndpoints
         [FromServices] DiscoveryRunLauncher launcher,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(authorization);
         ArgumentNullException.ThrowIfNull(scopeResolver);
         ArgumentNullException.ThrowIfNull(userClock);
         ArgumentNullException.ThrowIfNull(principals);
@@ -153,6 +162,8 @@ internal static class ClientDiscoveryRunEndpoints
         {
             return Refuse("A run is asked for by a caller this deployment admitted.");
         }
+
+        authorization.RequirePermission(MailFathomPermission.MailRead);
 
         MailQuestion question;
         try

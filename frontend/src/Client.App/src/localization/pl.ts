@@ -588,6 +588,10 @@ export const pl: Catalogue = {
     'settings.name': 'Imię i nazwisko',
     'settings.nameNotYours':
         'Twoje imię i nazwisko prowadzi ten, kto zarządza tym wdrożeniem, więc jest tu pokazane, a nie oddane do zmiany.',
+    'settings.profileNotYours':
+        'To logowanie może odczytać to, co wdrożenie przechowuje o Tobie, ale nie może tego zmienić, więc imię i nazwisko, zdjęcie i strefa czasowa są tu pokazane, a nie oddane do zmiany.',
+    'settings.preferencesNotYours':
+        'To logowanie nie może zmieniać ustawień, które idą za Tobą między maszynami, więc są tu pokazane w obecnym stanie. Język i to, co robi ta maszyna, nadal ustawiasz samodzielnie.',
     'settings.nameNotAcceptable':
         'To imię i nazwisko nie zostało przyjęte. Nie może być puste ani dłuższe niż 128 znaków i nie może być takie, jakim posługuje się już ktoś inny na tym wdrożeniu.',
     'settings.nameNotStored':

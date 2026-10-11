@@ -155,8 +155,8 @@ public readonly record struct MailFathomPermission
     /// <remarks>
     /// <para>
     /// The one grant on this surface that changes what the deployment reads for a person: the settings their own
-    /// record states, the name they are recorded under, and which folders of a mailbox assigned to them are mirrored.
-    /// It declares no mailbox and ends no assignment to one — which mailboxes a person has is decided under
+    /// record states, and which folders of a mailbox assigned to them are mirrored. The name they are recorded under
+    /// is not among them, which is <see cref="ProfileWrite" />. It declares no mailbox and ends no assignment to one — which mailboxes a person has is decided under
     /// <see cref="AdminConfigurationWrite" /> and <see cref="AdminErase" />. It follows from nothing —
     /// <see cref="MailRead" /> is a person reading their own mail, and nothing about reading implies deciding what is
     /// read out of a mailbox.

@@ -97,7 +97,8 @@ export function TaskRow({
     /** Opens what announces this task, or `undefined` for one nobody dated, which can announce nothing. */
     readonly onReminders: (() => void) | undefined;
 
-    readonly onSchedule: () => void;
+    /** Puts this task in the calendar, or `undefined` where this credential may not change one. */
+    readonly onSchedule: (() => void) | undefined;
 
     /** Opens this row's own menu at the point the gesture happened. */
     readonly onPress: (at: MenuPoint) => void;
@@ -267,7 +268,7 @@ export function TaskRow({
                     <Control label={translate('tasks.accept')} icon="check" shape="primary" onPress={onAccept} />
                 )}
 
-                {task.dueOn === null || completed ? null : scheduled ? (
+                {task.dueOn === null || completed || onSchedule === undefined ? null : scheduled ? (
                     <span
                         ref={chip}
                         tabIndex={-1}

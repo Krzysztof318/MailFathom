@@ -159,8 +159,17 @@ function drawSpace(
     transport: MailFathomTransport,
     {
         asksDeployment = true,
+        readsCalendar = true,
+        writesCalendar = true,
+        readsMail = true,
         onOpenMessage = vi.fn(),
-    }: { asksDeployment?: boolean; onOpenMessage?: (id: string) => void } = {},
+    }: {
+        asksDeployment?: boolean;
+        readsCalendar?: boolean;
+        writesCalendar?: boolean;
+        readsMail?: boolean;
+        onOpenMessage?: (id: string) => void;
+    } = {},
 ): void {
     render(
         <LocalizationProvider>
@@ -168,7 +177,9 @@ function drawSpace(
                 session={session}
                 transport={transport}
                 asksDeployment={asksDeployment}
-                onOpenMessage={onOpenMessage}
+                readsCalendar={readsCalendar}
+                writesCalendar={writesCalendar}
+                onOpenMessage={readsMail ? onOpenMessage : undefined}
             />
         </LocalizationProvider>,
     );
@@ -680,6 +691,38 @@ describe('TasksSpace', () => {
         fireEvent.click(await screen.findByRole('button', { name: 'Open the message this came from' }));
 
         expect(onOpenMessage).toHaveBeenCalledWith('message');
+    });
+
+    // The calendar is a record of its own beside the task list, read under its own grant. A credential holding the
+    // task list alone therefore meets the list, with no day beside it and no request the deployment would refuse.
+    it('draws the list alone and asks nothing of the calendar where this credential reads no calendar', async () => {
+        const { transport, sent } = deployment();
+
+        drawSpace(transport, { readsCalendar: false, writesCalendar: false, asksDeployment: false });
+
+        expect(await screen.findByText('Answer the tender')).toBeDefined();
+        expect(screen.queryByText("Today's calendar")).toBeNull();
+        expect(sent().some((request) => request.path.includes('/calendar'))).toBe(false);
+    });
+
+    it('offers no way to put a task in the calendar where this credential may not change one', async () => {
+        const { transport } = deployment();
+
+        drawSpace(transport, { writesCalendar: false });
+
+        expect(await screen.findByText('Answer the tender')).toBeDefined();
+        expect(screen.queryByRole('button', { name: 'Schedule' })).toBeNull();
+    });
+
+    it('cites no message where this credential reads no mail', async () => {
+        const { transport } = deployment({
+            committed: [taskCalled('a', 'Answer the tender', { sourceMessageId: 'message' })],
+        });
+
+        drawSpace(transport, { readsMail: false });
+
+        expect(await screen.findByText('Answer the tender')).toBeDefined();
+        expect(screen.queryByRole('button', { name: 'Open the message this came from' })).toBeNull();
     });
 
     it('offers the way to write a task down at a phone width too, where the toolbar has nowhere to stand', async () => {

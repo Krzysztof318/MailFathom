@@ -579,6 +579,10 @@ export const en = {
     'settings.name': 'Full name',
     'settings.nameNotYours':
         'Whoever runs this deployment keeps your name, so it is shown here rather than offered for you to change.',
+    'settings.profileNotYours':
+        'This sign-in may read what the deployment holds about you and may not change it, so your name, your picture, and your time zone are shown here rather than offered for you to change.',
+    'settings.preferencesNotYours':
+        'This sign-in may not change the settings that follow you between machines, so they are shown here as they stand. The language and what this machine does are still yours to set.',
     'settings.nameNotAcceptable':
         'That name was not accepted. It cannot be blank or longer than 128 characters, and it cannot be one somebody else on this deployment already goes by.',
     'settings.nameNotStored': 'That name was not saved to the deployment, so it still holds you under the old one.',

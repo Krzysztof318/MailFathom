@@ -19,6 +19,7 @@ using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -117,7 +118,7 @@ internal sealed class AgentConversationAgent : IAgentAnswerComposer
             this.egressGuard,
             brief.Question.AskedAt);
         var tools = new AgentConversationTools(journal, retrieval, this.readers, this.egressGuard, scope.AccountIds);
-        var messages = ComposeMessages(brief, scope);
+        var messages = ComposeMessages(brief, tools.NamedAccounts);
         var stickySession = StickySessionOf(brief.Question.Conversation);
 
         var answer = await ChatModelFallThrough.RunAsync(
@@ -166,16 +167,16 @@ internal sealed class AgentConversationAgent : IAgentAnswerComposer
 
     /// <summary>Composes what the model is sent: every earlier turn of the conversation, then the question's own turn.</summary>
     /// <param name="brief">The question, the language it is answered in, and the conversation before it.</param>
-    /// <param name="scope">The mailbox the run reads, whose accounts the turn names.</param>
+    /// <param name="accounts">The accounts the turn names, which are the ones a tool the model is offered takes.</param>
     /// <returns>The conversation, oldest turn first.</returns>
-    internal static IReadOnlyList<ChatMessage> ComposeMessages(AgentAnswerBrief brief, MailboxScope scope) =>
+    internal static IReadOnlyList<ChatMessage> ComposeMessages(AgentAnswerBrief brief, IReadOnlyList<MailAccountId> accounts) =>
     [
         .. brief.History.Select(static turn => new ChatMessage(
             turn.Author is AgentMessageAuthor.Person ? ChatRole.User : ChatRole.Assistant,
             turn.Text)),
         new ChatMessage(
             ChatRole.User,
-            AgentConversationComposition.ComposeTurn(brief.Question.AskedAt, scope.AccountIds, brief.Question.Scope, brief.Question.Text.Value)),
+            AgentConversationComposition.ComposeTurn(brief.Question.AskedAt, accounts, brief.Question.Scope, brief.Question.Text.Value)),
     ];
 
     /// <summary>Derives the sticky session every request of one conversation is routed by.</summary>

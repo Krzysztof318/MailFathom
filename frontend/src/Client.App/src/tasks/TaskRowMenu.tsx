@@ -49,7 +49,8 @@ export function TaskRowMenu({
     /** Opens what announces this task, or `undefined` for one nobody dated, which can announce nothing. */
     readonly onReminders: (() => void) | undefined;
 
-    readonly onSchedule: () => void;
+    /** Puts this task in the calendar, or `undefined` where this credential may not change one. */
+    readonly onSchedule: (() => void) | undefined;
 
     /** Opens the message this task cites, or `undefined` where it cites none. */
     readonly onOpenSource: (() => void) | undefined;
@@ -78,7 +79,7 @@ export function TaskRowMenu({
         items.push({ icon: 'notifications_active', label: translate('reminders.title'), choose: onReminders });
     }
 
-    if (task.dueOn !== null) {
+    if (task.dueOn !== null && onSchedule !== undefined) {
         items.push({ icon: 'calendar_month', label: translate('tasks.scheduleInCalendar'), choose: onSchedule });
     }
 

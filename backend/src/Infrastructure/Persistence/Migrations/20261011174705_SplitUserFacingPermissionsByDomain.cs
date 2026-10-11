@@ -21,8 +21,17 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
     /// Every stored list is carried so that nobody is refused after the upgrade something the list let them do before
     /// it: a renamed name is rewritten where it stands, a list that reached <c>mailfathom.mail.read</c> gains the
     /// eight names split out of it, and one that reached <c>mailfathom.mail.accounts.write</c> gains
-    /// <c>mailfathom.profile.write</c>. Nothing else is added. A list that asked the assistant without reading mail
-    /// keeps the asking name alone, because adding the reading one would hand its holder mail they were never granted.
+    /// <c>mailfathom.profile.write</c>. No other name is written into a list. A list that asked the assistant without
+    /// reading mail keeps the asking name alone, because adding the reading one would hand its holder mail they were
+    /// never granted.
+    /// </para>
+    /// <para>
+    /// Two lists come out reaching more than they did, and neither is something a rewrite of names can avoid. Changing
+    /// a display name is now one act of <c>mailfathom.profile.write</c> among four, so a list that held
+    /// <c>mailfathom.mail.accounts.write</c> without the reading name is carried to the whole of it — the alternative
+    /// is taking away the one act it had. And a pattern reaches whatever is published under it, as it does for every
+    /// name a later release publishes: one written as <c>mailfathom.*.write</c> reaches the new writing names whether
+    /// or not its role read mail.
     /// </para>
     /// <para>
     /// A role may list a pattern, and a pattern is carried by what it reached rather than by how it is written: the
@@ -63,7 +72,9 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
             // One statement, so that what each role held is read from the lists as they stood before any of them was
             // rewritten. A pattern is matched the way a grant is computed from one: a wildcard is a whole segment
             // standing for one or more, which is the expression each pattern is turned into below. An entry that is
-            // neither a name nor a pattern is matched against nothing, exactly as it grants nothing.
+            // neither a name nor a pattern is matched against nothing, exactly as it grants nothing — and it is given
+            // no expression at all rather than one a condition is trusted to skip, because the order two halves of a
+            // condition are evaluated in is the planner's, and an entry nobody validated need not be an expression.
             migrationBuilder.Sql(
                 $$"""
                 WITH carried(old_name, new_name) AS (
@@ -81,14 +92,25 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                            END AS rewritten
                     FROM role_permissions AS entry
                 ),
-                matched AS (
+                shaped AS (
                     SELECT listed.role_id,
                            listed.written,
                            listed.rewritten,
-                           listed.written ~ '^(\*|[a-z0-9_]+)(\.(\*|[a-z0-9_]+))*$' AND listed.written LIKE '%*%' AS is_pattern,
-                           '^' || replace(replace(listed.written, '.', '\.'), '*', '[^.]+(\.[^.]+)*') || '$' AS reaches_before,
-                           '^' || replace(replace(listed.rewritten, '.', '\.'), '*', '[^.]+(\.[^.]+)*') || '$' AS reaches_after
+                           listed.written ~ '^(\*|[a-z0-9_]+)(\.(\*|[a-z0-9_]+))*$' AND listed.written LIKE '%*%' AS is_pattern
                     FROM listed
+                ),
+                matched AS (
+                    SELECT shaped.role_id,
+                           shaped.written,
+                           shaped.rewritten,
+                           shaped.is_pattern,
+                           CASE WHEN shaped.is_pattern
+                               THEN '^' || replace(replace(shaped.written, '.', '\.'), '*', '[^.]+(\.[^.]+)*') || '$'
+                           END AS reaches_before,
+                           CASE WHEN shaped.is_pattern
+                               THEN '^' || replace(replace(shaped.rewritten, '.', '\.'), '*', '[^.]+(\.[^.]+)*') || '$'
+                           END AS reaches_after
+                    FROM shaped
                 ),
                 held AS (
                     SELECT DISTINCT matched.role_id, carried.new_name

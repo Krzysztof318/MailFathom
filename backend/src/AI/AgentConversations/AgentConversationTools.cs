@@ -105,6 +105,19 @@ internal sealed class AgentConversationTools
     /// <remarks>Held rather than written, because they belong to the answer that completes and a model that suggests and then fails has suggested nothing for the one that follows it.</remarks>
     internal IReadOnlyList<PresentationText> FollowUps { get; private set; } = [];
 
+    /// <summary>Gets the accounts the model is told of: the person's where a tool it is offered takes one, and none otherwise.</summary>
+    /// <remarks>
+    /// Which mailboxes somebody has is read under <see cref="MailFathomPermission.MailRead" /> everywhere else, so a
+    /// model answering a caller without it is not handed their names as a side effect of being asked something. The
+    /// one other reason to name them is the proposal of a new message, which is sent from one.
+    /// </remarks>
+    internal IReadOnlyList<MailAccountId> NamedAccounts =>
+        this.readers.Authorization.Permits(MailFathomPermission.MailRead) || this.ProposesMail ? this.accounts : [];
+
+    private bool ProposesMail =>
+        this.readers.Authorization.Permits(MailFathomPermission.MailDraftsWrite)
+        && this.readers.Authorization.Permits(MailFathomPermission.MailSend);
+
     /// <summary>Creates the tools the person's grant allows.</summary>
     /// <returns>
     /// Each reading tool where the grant reads that record — mail, the calendar, the task list — each of the two that
@@ -145,7 +158,7 @@ internal sealed class AgentConversationTools
             tools.Add(AIFunctionFactory.Create(this.ProposeTaskAsync, "propose_task", "Proposes a task for the person's own list. Nothing is created: the person sees the task, corrects its due day, and decides."));
         }
 
-        if (this.readers.Authorization.Permits(MailFathomPermission.MailDraftsWrite) && this.readers.Authorization.Permits(MailFathomPermission.MailSend))
+        if (this.ProposesMail)
         {
             tools.Add(AIFunctionFactory.Create(this.ProposeMessageAsync, "propose_message", "Proposes a new email for the person to review. Nothing is sent: the person sees the draft and decides."));
 
