@@ -129,6 +129,7 @@ public sealed class ConfiguredMailFolderDeclarationWriterTests
     [Theory]
     [InlineData(ForcingTheInbox, null)]
     [InlineData(HoldingNothing, WithholdingTheFolders)]
+    [InlineData(NotAPolicy, null)]
     public async Task FindDeclarationRefusalAsync_FoldersAPolicyHolds_LeavesCreateOutOfTheActsTheAccountOffers(
         string deploymentPolicy,
         string? organizationPolicy)
