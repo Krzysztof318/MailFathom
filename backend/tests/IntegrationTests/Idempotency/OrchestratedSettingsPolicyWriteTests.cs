@@ -148,8 +148,8 @@ public sealed class OrchestratedSettingsPolicyWriteTests(MailFathomOrchestration
         string json,
         long expectedVersion,
         CancellationToken cancellationToken) => services.InScopeAsync(
-            (scope, token) => scope.GetRequiredService<ISettingsPolicyStore>()
-                .CommitAsync(organizationId, json, expectedVersion, token),
+            async (scope, token) => (await scope.GetRequiredService<ISettingsPolicyStore>()
+                .CommitAsync(organizationId, json, expectedVersion, maximumUserRecordsJudged: null, token)).Version,
             cancellationToken);
 
     private static Task<SettingsPolicyDocument?> ReadAsync(

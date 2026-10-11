@@ -5,6 +5,9 @@
 using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.UserSettings.Administration;
+using MailFathom.Host.UnitTests.TestDoubles;
+using MailFathom.Infrastructure.Persistence.Policies;
+using MailFathom.Infrastructure.Persistence.Users;
 using MailFathom.TestSupport;
 using NSubstitute;
 using Xunit;
@@ -19,6 +22,9 @@ namespace MailFathom.Host.UnitTests.Configuration.UserSettings.Administration;
 /// </summary>
 public sealed class OwnDisplayNameTests
 {
+    private const string WithholdingTheName = """{"Users":{"Editing":{"Mode":"AllExcept","Properties":["DisplayName"]}}}""";
+    private const string NotAPolicy = """{"Users":{"Forced":{"Dialect":"Silesian"}}}""";
+
     [Fact]
     public async Task ReadAsync_APersonThisDeploymentHolds_HandsThemTheNameItRecordsThemUnder()
     {
@@ -224,6 +230,65 @@ public sealed class OwnDisplayNameTests
             () => harness.Names.ChangeAsync("Ada King", TestContext.Current.CancellationToken));
     }
 
+    /// <summary>The flag is the grant and the policy together, so a client never offers a field the deployment would refuse.</summary>
+    [Theory]
+    [InlineData(WithholdingTheName, false)]
+    [InlineData("{}", true)]
+    [InlineData(NotAPolicy, false)]
+    public async Task ReadAsync_ACallerGrantedTheRecordsWriteUnderAPolicy_ReportsTheNameAsChangeableOnlyWhereThePolicyLeavesItToThem(
+        string organizationPolicy,
+        bool changeable)
+    {
+        // Arrange
+        var harness = new NameHarness(MailFathomPermission.MailRead, MailFathomPermission.MailAccountsWrite);
+        harness.Recording("Ada Lovelace");
+        harness.GovernedBy(StatedPolicies.Governing(organization: organizationPolicy));
+
+        // Act
+        var read = await harness.Names.ReadAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(changeable, read!.Value.Changeable);
+    }
+
+    [Fact]
+    public async Task ChangeAsync_ANameAPolicyWithholdsFromThePerson_IsRefusedNamingWhoHoldsItWithoutWriting()
+    {
+        // Arrange
+        var harness = new NameHarness(MailFathomPermission.MailRead, MailFathomPermission.MailAccountsWrite);
+        harness.Recording("Ada Lovelace");
+        harness.GovernedBy(StatedPolicies.Governing(organization: WithholdingTheName));
+
+        // Act
+        var change = await harness.Names.ChangeAsync("Ada King", TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(change.UserHeld);
+        Assert.StartsWith("DisplayName is held by the organization", change.RefusalMessage, StringComparison.Ordinal);
+        await harness.Provisioning.DidNotReceive()
+            .RelabelAsync(Arg.Any<UserId>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A request stating the name already held changes nothing, so a policy holds nothing against it.</summary>
+    [Fact]
+    public async Task ChangeAsync_AWithheldNameCarriedThroughAsItStands_PassesWithoutWriting()
+    {
+        // Arrange
+        var harness = new NameHarness(MailFathomPermission.MailRead, MailFathomPermission.MailAccountsWrite);
+        harness.Recording("Ada Lovelace");
+        harness.GovernedBy(StatedPolicies.Governing(organization: WithholdingTheName));
+
+        // Act
+        var change = await harness.Names.ChangeAsync(" Ada Lovelace ", TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(change.RefusalMessage);
+        Assert.Equal("Ada Lovelace", change.Recorded);
+        Assert.True(change.IsHeld);
+        await harness.Provisioning.DidNotReceive()
+            .RelabelAsync(Arg.Any<UserId>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
     /// <summary>The service over a substituted envelope.</summary>
     private sealed class NameHarness
     {
@@ -242,8 +307,12 @@ public sealed class OwnDisplayNameTests
             this.Names = new OwnDisplayName(
                 AccessAuthorizations.ForUserGranted(SyntheticUser.Deployment, granted),
                 this.Directory,
-                this.Provisioning);
+                this.Provisioning,
+                this.Documents);
         }
+
+        /// <summary>Gets the reader the person's record and the policies governing it are read from, which holds no record until a test says so.</summary>
+        internal IUserSettingsDocumentReader Documents { get; } = Substitute.For<IUserSettingsDocumentReader>();
 
         internal OwnDisplayName Names { get; }
 
@@ -256,5 +325,11 @@ public sealed class OwnDisplayNameTests
             this.Directory
                 .ReadUserAsync(SyntheticUser.Deployment, Arg.Any<CancellationToken>())
                 .Returns(new UserRecord(SyntheticUser.Deployment, displayName));
+
+        /// <summary>States the settings policies the person's record is read under.</summary>
+        internal void GovernedBy(GoverningSettingsPolicies policies) =>
+            this.Documents
+                .ReadAsync(SyntheticUser.Deployment, Arg.Any<CancellationToken>())
+                .Returns(new UserSettingsDocument(SyntheticUser.Deployment, "ada", "{}", Version: 1) { Policies = policies });
     }
 }

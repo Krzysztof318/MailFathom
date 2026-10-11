@@ -5,6 +5,7 @@
 using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Api;
+using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Policies;
 using MailFathom.Host.Signals;
 using MailFathom.Host.UnitTests.TestDoubles;
@@ -213,6 +214,7 @@ public sealed class SettingsPolicyEndpointsTests
                     MailFathomPermission.AdminRead,
                     MailFathomPermission.AdminConfigurationWrite),
                 this.Store,
+                this.Deployment,
                 new ConfigurationChangeAnnouncements(
                     () => Task.FromResult(new InMemoryBackplane().Connect()),
                     new RecordingLogger<ConfigurationChangeAnnouncements>()));
@@ -220,6 +222,9 @@ public sealed class SettingsPolicyEndpointsTests
 
         internal SettingsPolicyAdministration Policies { get; }
 
-        internal InMemorySettingsPolicies Store { get; } = new();
+        internal InMemorySettingsPolicies Store { get; } = InMemorySettingsPolicies.JudgingRecords();
+
+        /// <summary>Gets the deployment's own options, which bound how many records one policy write judges.</summary>
+        internal TestOptionsMonitor<DeploymentOptions> Deployment { get; } = new(new DeploymentOptions());
     }
 }

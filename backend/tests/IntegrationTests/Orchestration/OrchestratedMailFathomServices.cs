@@ -48,6 +48,10 @@ using MailFathom.Domain.Delivery.Governance;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authorship;
 using MailFathom.Domain.Folders;
+using MailFathom.Host.Configuration;
+using MailFathom.Host.Configuration.Policies;
+using MailFathom.Host.Configuration.SensitiveContent;
+using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Infrastructure;
 using MailFathom.Infrastructure.DataEncryption;
 using MailFathom.Infrastructure.Mail;
@@ -56,8 +60,10 @@ using MailFathom.Infrastructure.ObjectStorage;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Persistence.Entities;
+using MailFathom.Infrastructure.Persistence.Policies;
 using MailFathom.Infrastructure.Resilience;
 using MailFathom.Infrastructure.Secrets.Discovery;
+using MailFathom.Infrastructure.Secrets.References;
 using MailFathom.Infrastructure.Secrets.Resolution;
 using MailFathom.Infrastructure.Spam;
 using MailFathom.TestSupport;
@@ -65,6 +71,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace MailFathom.IntegrationTests.Orchestration;
@@ -490,6 +497,14 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         // Registered by the composition root over the signal backplane rather than by AddInfrastructure. The suite runs
         // one process, so forgetting what it computed is the whole of what an announcement has to do here.
         builder.Services.AddSingleton<IGrantChangeAnnouncer, LocalGrantChanges>();
+        // Registered by the composition root as well, because judging a user's record under a settings policy is
+        // resolving and binding it, which is the host's. The deployment's own judge rather than a stand-in, so a
+        // policy write and a move here are refused and projected by exactly what a deployment asks.
+        builder.Services.AddSingleton<IUserRecordPolicyJudge>(provider => new UserRecordPolicyJudge(
+            new UserAccountDocumentBinder(
+                new PersistedSecretMaterial(provider.GetServices<ISecretSchemeResolver>()),
+                provider.GetRequiredService<TimeProvider>(),
+                Options.Create(new SensitiveContentOptions()))));
         // Registered by the composition root beside the database health checks rather than by AddInfrastructure, so
         // the resolver that reads a secret straight off the pool — a bare command rather than a unit of work — would
         // find nothing to bound itself by here. The shipped default, because nothing this suite asserts is about a

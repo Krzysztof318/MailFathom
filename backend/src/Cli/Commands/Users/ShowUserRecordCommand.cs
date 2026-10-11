@@ -4,7 +4,9 @@
 
 using System.CommandLine;
 using System.Globalization;
+using System.Text.Json;
 using MailFathom.Cli.Administration;
+using MailFathom.Cli.Administration.Users;
 using MailFathom.Cli.Editing;
 
 namespace MailFathom.Cli.Commands.Users;
@@ -17,6 +19,11 @@ namespace MailFathom.Cli.Commands.Users;
 /// nothing else: the mail server, the mailbox user name, the secret's declared name, and the folder aliases are printed
 /// as the record holds them, and a mailbox user name is ordinarily the person's own address, so this output is one
 /// person's mailbox identity rather than something to paste where the record itself would not go.
+/// <para>
+/// The document is the record's own. With <c>--effective</c> the command prints instead what the user is served with:
+/// each property as the settings policies governing them resolve it, which step of the resolution order supplied it,
+/// whose policy holds it against the person, and whether an administrator may change it.
+/// </para>
 /// </remarks>
 internal static class ShowUserRecordCommand
 {
@@ -31,11 +38,16 @@ internal static class ShowUserRecordCommand
         var endpointOption = CliOptions.Endpoint();
         var formatOption = CliOptions.DocumentFormat();
         var userOption = UserOptions.User();
+        Option<bool> effectiveOption = new("--effective")
+        {
+            Description = "Print each setting as the user is served it, with the settings policy or record that supplied it, instead of the record's own document.",
+        };
 
         Command command = new("show", "Read one user's record as this deployment holds it.")
         {
             userOption,
             formatOption,
+            effectiveOption,
             endpointOption,
         };
 
@@ -43,6 +55,7 @@ internal static class ShowUserRecordCommand
             context,
             result.GetValue(userOption),
             result.GetValue(formatOption),
+            result.GetValue(effectiveOption),
             CliOptions.RequestedDeployment(result.GetValue(endpointOption), context.Variable(CliOptions.EndpointVariable)),
             cancellationToken));
 
@@ -53,6 +66,7 @@ internal static class ShowUserRecordCommand
         CliContext context,
         Guid? requestedUser,
         DocumentView view,
+        bool effective,
         string? requestedDeployment,
         CancellationToken cancellationToken)
     {
@@ -71,8 +85,50 @@ internal static class ShowUserRecordCommand
 
         context.Console.WriteLine($"{record.DisplayName} ({record.User:D})");
         context.Console.WriteLine($"  version: {record.Version.ToString(CultureInfo.InvariantCulture)}");
-        context.Console.WriteLine(EditorDrivenDocument.Show(record.Document ?? "{}", view));
+
+        if (!effective)
+        {
+            context.Console.WriteLine(EditorDrivenDocument.Show(record.Document ?? "{}", view));
+
+            return CliExitCode.Success;
+        }
+
+        if (record.Unresolved is { } unresolved)
+        {
+            context.Console.WriteLine($"  {ConsoleSafeText.SanitizeExplanation(unresolved)}");
+
+            return CliExitCode.Success;
+        }
+
+        foreach (var property in record.Properties ?? [])
+        {
+            context.Console.WriteLine(Describe(property));
+        }
 
         return CliExitCode.Success;
+    }
+
+    /// <summary>Writes one resolved setting as a line: what it is, where it came from, and who holds it.</summary>
+    /// <remarks>
+    /// Every part the deployment answered with is reduced before it is written. A value is what somebody stated — the
+    /// name is one a person sets for themselves — so it could otherwise carry the characters a terminal acts on into
+    /// an administrator's listing.
+    /// </remarks>
+    private static string Describe(UserRecordProperty property)
+    {
+        var value = property.Value is { ValueKind: not (JsonValueKind.Null or JsonValueKind.Undefined) } stated
+            ? ConsoleSafeText.Sanitize(stated.ValueKind == JsonValueKind.String ? stated.GetString() : stated.GetRawText())
+            : "(nothing stated)";
+        var heldBy = property.HeldBy is { } holder
+            ? $", held by the {ConsoleSafeText.Sanitize(holder.ToLowerInvariant())}"
+            : string.Empty;
+        var changeable = property switch
+        {
+            { Changeable: true } => string.Empty,
+            { Source: { } source } when source.EndsWith("Forced", StringComparison.Ordinal) => ", not changeable while the policy forces it",
+            _ => ", not changeable under your grant",
+        };
+
+        return $"  {ConsoleSafeText.Sanitize(property.Path)}: {value}  [{ConsoleSafeText.Sanitize(property.Source)}{heldBy}{changeable}]";
     }
 }

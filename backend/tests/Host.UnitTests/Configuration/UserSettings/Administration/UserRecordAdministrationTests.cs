@@ -439,7 +439,7 @@ public sealed class UserRecordAdministrationTests
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.True(changed);
+        Assert.Equal(OwnSettingChange.SettledServing("Asia/Tokyo"), changed);
         await harness.Store.Received(1).CommitAsync(
             SyntheticUser.Deployment,
             Arg.Is<string>(json => json!.Contains("Asia/Tokyo", StringComparison.Ordinal)),
@@ -466,7 +466,7 @@ public sealed class UserRecordAdministrationTests
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.True(changed);
+        Assert.Equal(OwnSettingChange.SettledServing("Europe/Warsaw"), changed);
         await harness.Store.DidNotReceiveWithAnyArgs()
             .CommitAsync(default, default!, default, default, TestContext.Current.CancellationToken);
     }
@@ -488,7 +488,7 @@ public sealed class UserRecordAdministrationTests
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.True(changed);
+        Assert.Equal(OwnSettingChange.SettledServing(UserTimeZone.Coordinated.Id), changed);
         await harness.Store.Received(1).CommitAsync(
             SyntheticUser.Deployment,
             Arg.Is<string>(json => json!.Contains(UserTimeZone.Coordinated.Id, StringComparison.Ordinal)),
@@ -1030,7 +1030,8 @@ public sealed class UserRecordAdministrationTests
                 : AuthorizedPrincipal.Caller(AdministratorIdentity, grants));
 
             this.Documents = Substitute.For<IUserSettingsDocumentReader>();
-            this.Store = Substitute.For<IUserSettingsDocumentWriter>();
+            this.Store = Substitute.For<IRecordedUserRecordCommits>();
+            this.Writer = new ComposingUserRecordWriter(this.Store);
             this.Store.CommitAsync(
                     Arg.Any<UserId>(),
                     Arg.Any<string>(),
@@ -1048,7 +1049,7 @@ public sealed class UserRecordAdministrationTests
             this.Records = new UserRecordAdministration(
                 authorization ?? new AccessAuthorization(principals),
                 this.Documents,
-                this.Store,
+                this.Writer,
                 new UserAccountDocumentBinder(
                     new PersistedSecretMaterial(DeclaredSecretScheme.Registered),
                     new FakeTimeProvider(Today),
@@ -1071,7 +1072,11 @@ public sealed class UserRecordAdministrationTests
 
         internal IUserSettingsDocumentReader Documents { get; }
 
-        internal IUserSettingsDocumentWriter Store { get; }
+        /// <summary>Gets what each commit was composed to, which is what a test arranges an answer on and asserts against.</summary>
+        internal IRecordedUserRecordCommits Store { get; }
+
+        /// <summary>Gets the writer the service commits through, which composes each commit under the policies a test states.</summary>
+        internal ComposingUserRecordWriter Writer { get; }
 
         /// <summary>Gets the users this replica holds, read from <see cref="Documents" />, which holds nobody until a test says so.</summary>
         internal ServedUsers ServedUsers { get; }

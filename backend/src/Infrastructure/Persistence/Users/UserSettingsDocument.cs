@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Domain.Access;
+using MailFathom.Infrastructure.Persistence.Policies;
 
 namespace MailFathom.Infrastructure.Persistence.Users;
 
@@ -48,4 +49,18 @@ public sealed record UserSettingsDocument(
     /// <summary>Gets the mail accounts assigned to the user, in the order they were created in.</summary>
     /// <remarks>Read beside the record rather than inside it, because an account is a record of its own; the configuration layer composes the two into the record a user is served from.</remarks>
     public IReadOnlyList<MailAccountRecord> MailAccounts { get; init; } = [];
+
+    /// <summary>Gets the organization the user belongs to, or <see langword="null" /> for a user in none.</summary>
+    public Guid? OrganizationId { get; init; }
+
+    /// <summary>Gets the settings policies that govern the record, as they stood when it was read.</summary>
+    /// <remarks>
+    /// Read beside the record rather than asked for afterwards, because what a user is served is the record resolved
+    /// through them and a caller that read one would immediately ask for the other. Each carries its own version, so
+    /// whoever composed a user from this reading can tell later that a policy has moved on underneath it. A policy
+    /// past <see cref="SettingsPolicyDocument.MaximumOctets" /> is answered as empty text rather than transferred,
+    /// which no build judges as a policy: the record is then held back by whoever resolves it instead of being served
+    /// on part of what governs it.
+    /// </remarks>
+    public GoverningSettingsPolicies Policies { get; init; } = GoverningSettingsPolicies.Unwritten;
 }

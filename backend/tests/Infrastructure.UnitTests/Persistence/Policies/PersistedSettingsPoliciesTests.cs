@@ -7,6 +7,7 @@ using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Persistence.Policies;
 using MailFathom.Infrastructure.Persistence.Settings;
 using Microsoft.Extensions.Time.Testing;
+using NSubstitute;
 using Xunit;
 
 namespace MailFathom.Infrastructure.UnitTests.Persistence.Policies;
@@ -29,13 +30,14 @@ public sealed class PersistedSettingsPoliciesTests
     {
         // Arrange
         await using var context = CreateContext();
-        var store = new PersistedSettingsPolicies(context, new FakeTimeProvider());
+        var store = new PersistedSettingsPolicies(context, Substitute.For<IUserRecordPolicyJudge>(), new FakeTimeProvider());
 
         // Act
         var refusal = await Record.ExceptionAsync(() => store.CommitAsync(
             Organization,
             json,
             expectedVersion: 0,
+            maximumUserRecordsJudged: null,
             TestContext.Current.CancellationToken));
 
         // Assert
@@ -48,7 +50,7 @@ public sealed class PersistedSettingsPoliciesTests
     {
         // Arrange
         await using var context = CreateContext();
-        var store = new PersistedSettingsPolicies(context, new FakeTimeProvider());
+        var store = new PersistedSettingsPolicies(context, Substitute.For<IUserRecordPolicyJudge>(), new FakeTimeProvider());
         var oversized = $$$$"""{"Users":{"Defaults":{"Language":"{{{{new string('a', SettingsPolicyDocument.MaximumOctets)}}}}"}}}""";
 
         // Act
@@ -56,6 +58,7 @@ public sealed class PersistedSettingsPoliciesTests
             organizationId: null,
             oversized,
             expectedVersion: 3,
+            maximumUserRecordsJudged: null,
             TestContext.Current.CancellationToken));
 
         // Assert
@@ -69,13 +72,14 @@ public sealed class PersistedSettingsPoliciesTests
     {
         // Arrange
         await using var context = CreateContext();
-        var store = new PersistedSettingsPolicies(context, new FakeTimeProvider());
+        var store = new PersistedSettingsPolicies(context, Substitute.For<IUserRecordPolicyJudge>(), new FakeTimeProvider());
 
         // Act
         var refusal = await Record.ExceptionAsync(() => store.CommitAsync(
             organizationId: null,
             "{}",
             expectedVersion: -1,
+            maximumUserRecordsJudged: null,
             TestContext.Current.CancellationToken));
 
         // Assert

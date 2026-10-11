@@ -3,12 +3,14 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Text.Json.Nodes;
 using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Failures;
 using MailFathom.Host.Signals;
 using MailFathom.Infrastructure.Persistence.Policies;
+using Microsoft.Extensions.Options;
 
 namespace MailFathom.Host.Configuration.Policies;
 
@@ -20,15 +22,23 @@ namespace MailFathom.Host.Configuration.Policies;
 /// committed as one statement or not at all.
 /// </para>
 /// <para>
-/// A stored policy governs nothing yet. No record is read through one, so a write here changes what the scope states
-/// and nothing about what any user or mail account is served; what it is judged by is therefore the document alone.
+/// A stored policy governs the users of its scope: every user's record is read through the policies above it, so a
+/// write here changes what those users are served. It is therefore judged twice. First as a document, and then —
+/// where it changes a default or a forced value of the section about users — against every user record it governs,
+/// inside the commit: a write that would leave one of them a record this deployment could not serve is refused
+/// naming the records in the way, and one that governs more records than
+/// <see cref="DeploymentOptions.MaximumRecordsJudgedPerPolicyWrite" /> is refused before any is read. The same commit
+/// rewrites the endpoint switches on the row of every user whose effective switches it moves, which is what makes a
+/// session or a token stop or resume on its holder's next request on every replica. A write that changes nothing but
+/// an editing restriction judges no record, because a restriction cannot make a record invalid.
 /// </para>
 /// <para>
-/// That is also why a grant held below the deployment states no default and no forced value for a mail account.
-/// Forcing a host, a port, or a token endpoint decides where a mailbox's credential is presented, and such a grant is
-/// trusted with its organization's mailboxes and not with a credential the deployment holds for somebody else — which
-/// only a reading of the accounts a policy governs can tell apart. Nothing reads them here, and a stored policy
-/// outlives the build that stored it, so the statement is refused rather than committed unjudged. Which settings
+/// A mail account is not read through a policy yet, which is why a grant held below the deployment states no default
+/// and no forced value for one. Forcing a host, a port, or a token endpoint decides where a mailbox's credential is
+/// presented, and such a grant is trusted with its organization's mailboxes and not with a credential the deployment
+/// holds for somebody else — which only a reading of the accounts a policy governs can tell apart. Nothing reads them
+/// here, and a stored policy outlives the build that stored it, so the statement is refused rather than committed
+/// unjudged. Which settings
 /// decide where a credential goes is not enumerated, because a list is what a setting added later would be missing
 /// from. An editing restriction moves no value and is the organization's administrator's to write, as the whole of
 /// the section about users is. The values are compared as this build judges them, so a policy in force that this
@@ -56,6 +66,7 @@ namespace MailFathom.Host.Configuration.Policies;
 internal sealed class SettingsPolicyAdministration(
     AccessAuthorization authorization,
     ISettingsPolicyStore store,
+    IOptionsMonitor<DeploymentOptions> deployment,
     ConfigurationChangeAnnouncements announcements)
 {
     /// <summary>Reads the policy one scope holds.</summary>
@@ -129,20 +140,72 @@ internal sealed class SettingsPolicyAdministration(
                 $"The saved policy states what the policy in force already states, so nothing was written and version {inForce.Version} stays in force.");
         }
 
-        if (await store.CommitAsync(organizationId, judged, expectedVersion, cancellationToken) is not { } committed)
+        var maximum = deployment.CurrentValue.MaximumRecordsJudgedPerPolicyWrite;
+
+        var commit = await store.CommitAsync(
+            organizationId,
+            judged,
+            expectedVersion,
+            MovesWhatAUserIsServed(inForce.Json, judged) ? maximum : null,
+            cancellationToken);
+
+        switch (commit.Result)
         {
-            // The policy moved while this candidate was being judged, or the organization was removed under it. Which
-            // of the two is settled by reading rather than assumed, because the statement distinguishes neither.
-            return await store.ReadAsync(organizationId, cancellationToken) is { } current
-                ? Superseded(expectedVersion, current.Version)
-                : null;
+            case SettingsPolicyCommitResult.Committed:
+                // The fast path only, as it is for a committed record: every replica converges on a version on its
+                // own interval whether or not this reaches it.
+                await announcements.AnnounceAsync();
+
+                return SettingsPolicyWriteOutcome.Committed(commit.Version!.Value);
+
+            case SettingsPolicyCommitResult.TooManyRecords:
+                return SettingsPolicyWriteOutcome.Refused(
+                    MailFathomErrorCode.ConfigurationCandidateInvalid,
+                    inForce.Version,
+                    [
+                        $"The saved policy changes a default or a forced value for {commit.GovernedRecords} user records, and one policy write judges at most {maximum}, so none was read and nothing was written. {DeploymentOptions.SectionName}:{nameof(DeploymentOptions.MaximumRecordsJudgedPerPolicyWrite)} raises that bound; the judgement runs inside the write, and saves of the records it judges wait for it.",
+                    ]);
+
+            case SettingsPolicyCommitResult.RecordsLeftInvalid:
+                return SettingsPolicyWriteOutcome.Refused(
+                    MailFathomErrorCode.ConfigurationCandidateInvalid,
+                    inForce.Version,
+                    DescribeRecordsInTheWay(commit));
+
+            default:
+                // The policy moved while this candidate was being judged, or the organization was removed under it.
+                // Which of the two is settled by reading rather than assumed, because the statement distinguishes
+                // neither.
+                return await store.ReadAsync(organizationId, cancellationToken) is { } current
+                    ? Superseded(expectedVersion, current.Version)
+                    : null;
         }
+    }
 
-        // The fast path only, as it is for a committed record: every replica converges on a version on its own
-        // interval whether or not this reaches it.
-        await announcements.AnnounceAsync();
+    /// <summary>Reports whether a save changes a default or a forced value of the section about users, which is all of a policy that can break a user's record or move their endpoint switches.</summary>
+    /// <remarks>
+    /// A policy in force that this build does not judge whole is answered as one the save moves: what it states is
+    /// unknown here, so whether the save leaves it standing is as well.
+    /// </remarks>
+    private static bool MovesWhatAUserIsServed(string inForceJson, string judgedJson) =>
+        SettingsPolicyStatements.Read(inForceJson, SettingsPolicySection.Users) is not { } standing
+        || SettingsPolicyStatements.Read(judgedJson, SettingsPolicySection.Users) is not { } saved
+        || !JsonNode.DeepEquals(standing.Defaults, saved.Defaults)
+        || !JsonNode.DeepEquals(standing.Forced, saved.Forced);
 
-        return SettingsPolicyWriteOutcome.Committed(committed);
+    /// <summary>Names the records a policy would have left unservable, and what each would have been left without.</summary>
+    private static IReadOnlyList<string> DescribeRecordsInTheWay(SettingsPolicyCommit commit)
+    {
+        var named = commit.RecordsInTheWay;
+
+        return
+        [
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"The saved policy would leave {commit.RecordsLeftInvalid} of the {commit.GovernedRecords} user records it governs a record this deployment could not serve, so nothing was written. Correct those records first, or keep what they rely on in the policy. {(named.Count < commit.RecordsLeftInvalid ? $"The first {named.Count} are named below." : "Each is named below.")}"),
+            .. named.Select(record =>
+                $"User '{record.DisplayName}' ({record.Identity:D}): {string.Join(" ", record.Corrections)}"),
+        ];
     }
 
     /// <summary>Requires the capability an act on a policy is published under, and reports whether the caller holds it over the scope named.</summary>

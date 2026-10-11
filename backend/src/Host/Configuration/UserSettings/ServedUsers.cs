@@ -5,6 +5,7 @@
 using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Records;
+using MailFathom.Infrastructure.Persistence.Policies;
 using MailFathom.Infrastructure.Persistence.Users;
 
 namespace MailFathom.Host.Configuration.UserSettings;
@@ -169,18 +170,21 @@ internal sealed class ServedUsers(
     /// <param name="displayName">The label the user record carries.</param>
     /// <param name="record">The validated record the committed document bound to.</param>
     /// <param name="version">The committed document version.</param>
+    /// <param name="policies">The settings policies the record was resolved through, as the commit read them.</param>
     /// <exception cref="ArgumentException">Thrown when the user is unspecified, the display name is blank, or the version is not positive.</exception>
-    /// <exception cref="ArgumentNullException">Thrown when the record is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when the record or the policies are <see langword="null" />.</exception>
     /// <remarks>
     /// The whole bound record rather than the accounts alone, because everything of a user's this serves comes from one
     /// document. A version older than the one already held changes nothing, so a write overtaken by a newer reading
-    /// cannot put the older record back.
+    /// cannot put the older record back. The policies are held beside it by their versions, which is what tells a
+    /// later convergence whether a policy has moved on since this record was resolved.
     /// </remarks>
     internal void UserDocumentPublished(
         UserId user,
         string displayName,
         UserAccountOptions record,
-        long version)
+        long version,
+        GoverningSettingsPolicies policies)
     {
         if (!user.IsSpecified)
         {
@@ -189,9 +193,11 @@ internal sealed class ServedUsers(
 
         ArgumentException.ThrowIfNullOrWhiteSpace(displayName);
         ArgumentNullException.ThrowIfNull(record);
+        ArgumentNullException.ThrowIfNull(policies);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(version);
 
-        this.Published(
+        this.Hold(
+            user,
             new ServedUser(
                 user,
                 displayName,
@@ -201,7 +207,7 @@ internal sealed class ServedUsers(
                 TimeZone = record.ReadingTimeZone,
                 ClientTelemetryLevel = record.ReadingClientTelemetryLevel,
             },
-            version);
+            new HeldRevision(version, policies));
     }
 
     /// <summary>Holds one user composed from a committed record as the version this replica serves them from.</summary>
@@ -209,13 +215,17 @@ internal sealed class ServedUsers(
     /// <param name="version">The committed document version.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="served" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="version" /> is not positive.</exception>
-    /// <remarks>A version older than the one already held changes nothing, exactly as <see cref="UserDocumentPublished" /> states.</remarks>
+    /// <remarks>
+    /// A version older than the one already held changes nothing, exactly as <see cref="UserDocumentPublished" /> states.
+    /// Held as composed under no policy, so a deployment that stores one composes the user again on the next
+    /// convergence rather than serving this composition as though it had been resolved.
+    /// </remarks>
     internal void Published(ServedUser served, long version)
     {
         ArgumentNullException.ThrowIfNull(served);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(version);
 
-        this.Hold(served.User, served, version);
+        this.Hold(served.User, served, new HeldRevision(version, GoverningSettingsPolicies.Unwritten));
     }
 
     /// <summary>Lets go of an erased user and of everything reported about their record.</summary>
@@ -322,7 +332,9 @@ internal sealed class ServedUsers(
     /// is gone is let go; either takes what was reported about them along, because a user nothing compares again would
     /// otherwise leave their refusals listed after their record was repaired or erased. A user whose record moved is recomposed here rather
     /// than on their next request, because that is what keeps them served from the last version that bound while a newer
-    /// one is refused.
+    /// one is refused. A user is recomposed as well when a settings policy governing them moved, since what they are
+    /// served is their record as those policies resolve it; until this runs they are served the composition held,
+    /// which is the earlier policy and never none.
     /// </remarks>
     internal async Task ConvergeAsync(CancellationToken cancellationToken)
     {
@@ -331,18 +343,20 @@ internal sealed class ServedUsers(
         foreach (var chunk in this.LetGoOfIdleUsers().Chunk(ComparedPerStatement))
         {
             var stored = (await documents.ReadVersionsAsync(chunk, cancellationToken))
-                .ToDictionary(static row => row.User, static row => row.Version);
+                .ToDictionary(
+                    static row => row.User,
+                    static row => new HeldRevision(row.Version, row.DeploymentPolicyVersion, row.OrganizationPolicyVersion));
 
             foreach (var user in chunk)
             {
-                await this.ConvergeAsync(user, stored.TryGetValue(user, out var version) ? version : null, cancellationToken);
+                await this.ConvergeAsync(user, stored.TryGetValue(user, out var revision) ? revision : null, cancellationToken);
             }
         }
     }
 
-    private async Task ConvergeAsync(UserId user, long? storedVersion, CancellationToken cancellationToken)
+    private async Task ConvergeAsync(UserId user, HeldRevision? stored, CancellationToken cancellationToken)
     {
-        if (storedVersion is not { } version)
+        if (stored is not { } revision)
         {
             this.UserErased(user);
 
@@ -351,7 +365,7 @@ internal sealed class ServedUsers(
 
         lock (this.mutex)
         {
-            if (!this.held.TryGetValue(user, out var current) || current.Version >= version)
+            if (!this.held.TryGetValue(user, out var current) || current.Revision.Covers(revision))
             {
                 return;
             }
@@ -400,23 +414,23 @@ internal sealed class ServedUsers(
             return null;
         }
 
-        return this.Hold(user, resolved.User, resolved.Version);
+        return this.Hold(user, resolved.User, new HeldRevision(resolved.Version, resolved.Policies));
     }
 
     /// <summary>Holds a composition unless a newer one is already held, keeping the last one that bound where this one did not.</summary>
     /// <returns>The user this replica now serves them as.</returns>
-    private ServedUser? Hold(UserId user, ServedUser? composed, long version)
+    private ServedUser? Hold(UserId user, ServedUser? composed, HeldRevision revision)
     {
         lock (this.mutex)
         {
-            if (this.held.TryGetValue(user, out var current) && current.Version >= version)
+            if (this.held.TryGetValue(user, out var current) && current.Revision.Covers(revision))
             {
                 return this.withheld.ContainsKey(user) ? null : current.Served;
             }
 
             var served = composed ?? current?.Served;
 
-            this.held[user] = new HeldUser(served, version) { LastRead = timeProvider.GetUtcNow() };
+            this.held[user] = new HeldUser(served, revision) { LastRead = timeProvider.GetUtcNow() };
 
             return this.withheld.ContainsKey(user) ? null : served;
         }
@@ -443,13 +457,37 @@ internal sealed class ServedUsers(
         }
     }
 
-    /// <summary>One user's composition and the version of their record it was composed at.</summary>
-    /// <param name="Served">The user, or <see langword="null" /> where no version this replica read has bound.</param>
-    /// <param name="Version">The version of the record last read, which is newer than the one <paramref name="Served" /> was composed at where that version was refused.</param>
-    private sealed record HeldUser(ServedUser? Served, long Version)
+    /// <summary>One user's composition and what it was composed at.</summary>
+    /// <param name="Served">The user, or <see langword="null" /> where nothing this replica read has bound.</param>
+    /// <param name="Revision">What was last read, which is newer than what <paramref name="Served" /> was composed at where that reading was refused.</param>
+    private sealed record HeldUser(ServedUser? Served, HeldRevision Revision)
     {
         /// <summary>Gets or sets when anything last asked for this user, which is what an idle user is let go by.</summary>
         public DateTimeOffset LastRead { get; set; }
+    }
+
+    /// <summary>What one composition was read at: the version of the user's record, and of each settings policy governing them.</summary>
+    /// <param name="Record">The version of the user's record.</param>
+    /// <param name="DeploymentPolicy">The version of the deployment's policy, zero where it stores none.</param>
+    /// <param name="OrganizationPolicy">The version of the policy of the user's organization, zero where it stores none or the user is in no organization.</param>
+    private readonly record struct HeldRevision(long Record, long DeploymentPolicy, long OrganizationPolicy)
+    {
+        public HeldRevision(long record, GoverningSettingsPolicies policies)
+            : this(record, policies.Deployment.Version, policies.Organization?.Version ?? 0)
+        {
+        }
+
+        /// <summary>Reports whether a composition held at this needs no composing again for a reading at another.</summary>
+        /// <remarks>
+        /// The record's version decides alone where it differs, because a move between organizations moves it and
+        /// the policy of the organization left says nothing about the one joined. Where it is the same record
+        /// version the user stands under the same two policies, each of which only ever moves forward.
+        /// </remarks>
+        public bool Covers(HeldRevision other) =>
+            this.Record > other.Record
+            || (this.Record == other.Record
+                && this.DeploymentPolicy >= other.DeploymentPolicy
+                && this.OrganizationPolicy >= other.OrganizationPolicy);
     }
 
     /// <summary>How many users the deployment holds, as far as telling nobody, one, and several apart.</summary>

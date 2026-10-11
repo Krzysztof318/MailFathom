@@ -61,6 +61,23 @@ internal sealed class DeploymentOptions : IValidatableObject
     /// </remarks>
     public bool ReadOnly { get; set; }
 
+    /// <summary>Gets or sets how many records one write of a settings policy judges before it is refused unjudged.</summary>
+    /// <remarks>
+    /// <para>
+    /// A policy write that changes a default or a forced value is judged against every record it governs, inside the
+    /// write, so that it cannot leave one of them a record this deployment could not serve. That judgement holds the
+    /// lock every write of a governed record waits on, which is why it is bounded: a policy governing more records
+    /// than this is refused before any of them is read, naming both figures, and is never committed half-judged.
+    /// </para>
+    /// <para>
+    /// A ceiling on one write rather than on the deployment, and so the same figure on every replica. Raising it is
+    /// the operator's call and costs what the paragraph above says: for the length of the judgement, saves of the
+    /// records being judged and moves between organizations wait.
+    /// </para>
+    /// </remarks>
+    [Range(1, int.MaxValue)]
+    public int MaximumRecordsJudgedPerPolicyWrite { get; set; } = 10_000;
+
     /// <summary>Composes the address a consumer's route is served at.</summary>
     /// <param name="routePrefix">The route's path prefix, owned by the endpoint that answers it.</param>
     /// <returns>The prefix an identifier is appended to, or <see langword="null" /> when this deployment declares no address.</returns>

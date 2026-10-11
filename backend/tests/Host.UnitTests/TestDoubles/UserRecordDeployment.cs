@@ -14,6 +14,7 @@ using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.Configuration.UserSettings.Administration;
 using MailFathom.Host.Hosting.Workers;
 using MailFathom.Host.Signals;
+using MailFathom.Infrastructure.Persistence.Policies;
 using MailFathom.Infrastructure.Persistence.Users;
 using MailFathom.Infrastructure.Secrets;
 using MailFathom.Infrastructure.Secrets.Database;
@@ -47,6 +48,8 @@ internal sealed class UserRecordDeployment
     /// <summary>The instant the binder judges a date-bound rule at, so nothing here is drawn from the wall clock.</summary>
     private static readonly DateTimeOffset Today = new(2026, 3, 1, 9, 0, 0, TimeSpan.Zero);
 
+    private readonly Dictionary<UserId, GoverningSettingsPolicies> policiesRead = [];
+
     /// <summary>Composes the deployment for a caller granted the permissions a test's routes are published under.</summary>
     /// <param name="granted">The permissions the caller holds.</param>
     /// <param name="actingFor">The user the caller acts for, or the default for one acting for nobody's mail.</param>
@@ -74,11 +77,13 @@ internal sealed class UserRecordDeployment
             .Returns(call => Task.FromResult<IReadOnlyList<UserSettingsDocumentVersion>>(
             [
                 .. this.MailAccountRecords.Versions()
-                    .Where(row => call.ArgAt<IReadOnlyCollection<UserId>>(0).Contains(row.User)),
+                    .Where(row => call.ArgAt<IReadOnlyCollection<UserId>>(0).Contains(row.User))
+                    .Select(this.WithPolicyVersions),
             ]));
         this.ServedUsers = ResolvedServedUsers.Over(this.Documents);
 
-        this.Store = Substitute.For<IUserSettingsDocumentWriter>();
+        this.Store = Substitute.For<IRecordedUserRecordCommits>();
+        this.Writer = new ComposingUserRecordWriter(this.Store);
         this.Store
             .CommitAsync(
                 Arg.Any<UserId>(),
@@ -109,6 +114,11 @@ internal sealed class UserRecordDeployment
             Options.Create(new McpEndpointOptions()),
             Options.Create(new ClientEndpointOptions()));
 
+        var binder = new UserAccountDocumentBinder(
+            new PersistedSecretMaterial(DeclaredSecretScheme.Registered),
+            new FakeTimeProvider(Today),
+            Options.Create(scanning ?? new SensitiveContentOptions()));
+
         this.Roster = new UserRosterAdministration(
             authorization,
             this.Directory,
@@ -117,21 +127,17 @@ internal sealed class UserRecordDeployment
             this.MailAccountRecords,
             this.Quiescing,
             new WithheldMailAccounts(),
-            this.Store,
+            this.Writer,
+            binder,
             this.ServedUsers,
             admission,
             new ConfigurationChangeAnnouncements(connect: null, NullLogger<ConfigurationChangeAnnouncements>.Instance),
             NullLogger<UserRosterAdministration>.Instance);
 
-        var binder = new UserAccountDocumentBinder(
-            new PersistedSecretMaterial(DeclaredSecretScheme.Registered),
-            new FakeTimeProvider(Today),
-            Options.Create(scanning ?? new SensitiveContentOptions()));
-
         this.Records = new UserRecordAdministration(
             authorization,
             this.Documents,
-            this.Store,
+            this.Writer,
             binder,
             SecretValidation.OverRegisteredSchemes(),
             this.ServedUsers,
@@ -207,8 +213,11 @@ internal sealed class UserRecordDeployment
     /// <summary>Gets the substituted reader one user's row is stated through.</summary>
     internal IUserSettingsDocumentReader Documents { get; }
 
-    /// <summary>Gets the substituted writer every commit reaches.</summary>
-    internal IUserSettingsDocumentWriter Store { get; }
+    /// <summary>Gets the substitute every composed commit is reported to: the document, the switches it resolves to, and the version it was composed over.</summary>
+    internal IRecordedUserRecordCommits Store { get; }
+
+    /// <summary>Gets the writer the administrations commit through, which composes each commit under the policies <see cref="GovernedBy" /> states and reports it to <see cref="Store" />.</summary>
+    internal ComposingUserRecordWriter Writer { get; }
 
     /// <summary>Gets the substituted roster read.</summary>
     internal IUserDirectory Directory { get; }
@@ -228,8 +237,29 @@ internal sealed class UserRecordDeployment
     {
         this.MailAccountRecords.HoldUser(user, json, version, accounts);
         this.Documents.ReadAsync(user, Arg.Any<CancellationToken>())
-            .Returns(_ => this.MailAccountRecords.DocumentOf(user));
+            .Returns(_ => this.MailAccountRecords.DocumentOf(user) is { } document
+                ? document with { Policies = this.policiesRead.GetValueOrDefault(user, GoverningSettingsPolicies.Unwritten) }
+                : null);
     }
+
+    /// <summary>States the settings policies governing one user, as their record is read under them and as a commit of it is composed under them.</summary>
+    internal void GovernedBy(UserId user, GoverningSettingsPolicies policies)
+    {
+        this.policiesRead[user] = policies;
+        this.Writer.GovernedBy(user, policies);
+    }
+
+    /// <summary>States the policies one user's record is read under and leaves the ones a commit is composed under as they are, which is a policy that moved between the two.</summary>
+    internal void ReadingUnder(UserId user, GoverningSettingsPolicies policies) => this.policiesRead[user] = policies;
+
+    private UserSettingsDocumentVersion WithPolicyVersions(UserSettingsDocumentVersion row) =>
+        this.policiesRead.TryGetValue(row.User, out var policies)
+            ? row with
+            {
+                DeploymentPolicyVersion = policies.Deployment.Version,
+                OrganizationPolicyVersion = policies.Organization?.Version ?? 0,
+            }
+            : row;
 
     /// <summary>States the users this deployment holds, whether or not this process serves them.</summary>
     /// <param name="held">The users.</param>

@@ -29,8 +29,12 @@ namespace MailFathom.Host.Configuration.UserSettings;
 /// asked to record at, the stored file they are drawn by, and which of the two mail-serving endpoints they are served
 /// on; the mail rules and the trusted senders join them as each moves out of the deployment's
 /// section, and each arrives as a property here rather than as a second document. What never belongs in it is a value
-/// the deployment set: there is no user configuration layer, so nothing here shadows a deployment setting, and a
-/// property that would need to is a deployment setting somebody put in the wrong document. What also never belongs in
+/// the deployment set in its own configuration: nothing here shadows a configuration key, and a property that would
+/// need to is a deployment setting somebody put in the wrong document. What a deployment or an organization states
+/// for the people it holds is a settings policy instead, which is a row rather than configuration: every property
+/// here is read through the two governing the user, in the order <c>GovernedRecordResolution</c> holds, so the value
+/// a person is served with is the record's only where no policy forces one and a policy's default only where the
+/// record states none. The document stays what somebody stated on it either way. What also never belongs in
 /// it is a setting of a mailbox — how mail is classified as spam, what it is scanned for, which folders are mirrored —
 /// because the mail is one copy and two people assigned one mailbox must not configure it apart; those are the account
 /// record's, and a record naming one of them is refused as a property nothing binds.
@@ -39,7 +43,8 @@ namespace MailFathom.Host.Configuration.UserSettings;
 /// The envelope is not repeated here. The user's identifier, the label they are told apart by, the version, and the
 /// marker saying whether this document has ever been written are relational columns, because authenticating a request
 /// and joining a user's mail must never depend on reading a document. The endpoint switches are the one value both
-/// places hold: stated here so every record write reaches them, and copied onto the row by the commit that writes them.
+/// places hold: stated here so every record write reaches them, and written onto the row as the policies resolve
+/// them by every commit that can move that answer.
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The configuration binder materializes this type when a user's document is read.")]
@@ -53,10 +58,11 @@ internal sealed class UserAccountOptions : IValidatableObject
     /// <summary>Gets or sets the language this deployment writes for this person in, named as it is spelled in English.</summary>
     /// <remarks>
     /// <para>
-    /// The one property here a record being written must state. Everything else in this document is something a person
-    /// asks for, and absence is the answer for somebody who asked for nothing; a language has no such absence, because
-    /// text composed for them comes out in some language whether or not anybody chose it, and what it fell back to
-    /// before this property existed was whichever of their mailboxes the catalog answered first.
+    /// The one property here somebody has to state: a record being written states it wherever no settings policy
+    /// governing the user supplies it, as a default or as a forced value. Everything else in this document is
+    /// something a person asks for, and absence is the answer for somebody who asked for nothing; a language has no
+    /// such absence, because text composed for them comes out in some language whether or not anybody chose it, and
+    /// what it fell back to before this property existed was whichever of their mailboxes the catalog answered first.
     /// </para>
     /// <para>
     /// It is the person's rather than a mailbox's because what reads it is composed for them alone and stored nowhere:
@@ -110,9 +116,9 @@ internal sealed class UserAccountOptions : IValidatableObject
     /// restarting the process to put every client of the deployment onto it and remembering to put them back.
     /// </para>
     /// <para>
-    /// Absent is the ordinary state, as it is for the zone beside it: a record stating nothing is served the
-    /// deployment's level, so every record held from before this property existed reads exactly as it did and no
-    /// operator acts on an upgrade.
+    /// Absent is the ordinary state, as it is for the zone beside it: a record stating nothing is served what a
+    /// settings policy governing the user supplies and, where none does, the deployment's level, so every record
+    /// held from before this property existed reads exactly as it did and no operator acts on an upgrade.
     /// </para>
     /// <para>
     /// It raises and lowers how many log records a client writes, down to <c>None</c> of them, rather than deciding
@@ -150,7 +156,9 @@ internal sealed class UserAccountOptions : IValidatableObject
     /// <summary>Gets which of the two mail-serving endpoints this user is served on.</summary>
     /// <remarks>
     /// Always present and on in both switches, so a record written before this block existed serves its user where it
-    /// always did. The commit writes what it states onto the user's row as well, which is where a request reads it.
+    /// always did. A request reads the user's row rather than this, and the row carries the switches as the settings
+    /// policies governing the user resolve them: written afresh by a commit of the record, of a policy governing the
+    /// user, and of a move into or out of an organization.
     /// </remarks>
     [SettingsPolicyClass(SettingsPolicyPropertyClass.AdministratorOnly)]
     public UserEndpointAccessOptions EndpointAccess { get; } = new();

@@ -310,7 +310,7 @@ internal static class UserRecordEndpoints
     /// <param name="userId">The user asked about.</param>
     /// <param name="records">The record administration.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
-    /// <returns><c>200</c> with the record and the version it was read at, <c>404</c> when this deployment holds no such user, or <c>400</c> when the row is not a document of settings.</returns>
+    /// <returns><c>200</c> with the record, the version it was read at, and each of its properties as the settings policies governing the user resolve it; <c>404</c> when this deployment holds no such user; or <c>400</c> when the row is not a document of settings.</returns>
     internal static async Task<Results<Ok<UserRecordResponse>, NotFound<ProblemDetails>, ProblemHttpResult>> ReadRecordAsync(
         Guid userId,
         [FromServices] UserRecordAdministration records,

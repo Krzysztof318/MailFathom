@@ -79,10 +79,11 @@ public sealed class OwnPortrait
     /// <summary>Replaces the picture the signed-in person is drawn by.</summary>
     /// <param name="portrait">The portrait, whose octets are stored as they were supplied.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
-    /// <returns><see langword="true" /> when the write landed, and <see langword="false" /> when this deployment holds no record for the caller.</returns>
+    /// <returns>Whether this deployment holds a record for the caller, and the sentence saying why where the change was refused: who holds the portrait where it is not theirs to change, or which settings policy holds their whole record where this build does not read it.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="portrait" /> is <see langword="null" />.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
-    public async Task<bool> ReplaceAsync(UserPortrait portrait, CancellationToken cancellationToken)
+    /// <remarks>A refused portrait leaves the file written for it removed again, so a refusal stores nothing.</remarks>
+    public async Task<PortraitChange> ReplaceAsync(UserPortrait portrait, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(portrait);
 
@@ -92,14 +93,21 @@ public sealed class OwnPortrait
 
         if (await this.files.WriteAsync(user, portrait.Type.MediaType, portrait.Content, cancellationToken) is not { } written)
         {
-            return false;
+            return PortraitChange.NoSuchUser;
         }
 
         var relinked = await this.links.RelinkOwnPortraitAsync(written, cancellationToken);
 
         if (!relinked.UserHeld)
         {
-            return false;
+            return PortraitChange.NoSuchUser;
+        }
+
+        if (relinked.Refusal is { } refusal)
+        {
+            await this.files.RemoveAsync(user, written, cancellationToken);
+
+            return new PortraitChange(UserHeld: true, refusal);
         }
 
         if (relinked.Replaced is { } displaced && displaced != written)
@@ -107,17 +115,18 @@ public sealed class OwnPortrait
             await this.files.RemoveAsync(user, displaced, cancellationToken);
         }
 
-        return true;
+        return PortraitChange.Landed;
     }
 
     /// <summary>Removes the picture the signed-in person is drawn by.</summary>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
+    /// <returns>Whether this deployment holds a record for the caller, and the sentence saying why where the change was refused: who holds the portrait where it is not theirs to change, or which settings policy holds their whole record where this build does not read it.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
     /// <remarks>
     /// Nothing else about the person is touched, and the removal is silent about whether there was one to remove. The
     /// link goes before the file does, for the reason a replacement orders its steps.
     /// </remarks>
-    public async Task RemoveAsync(CancellationToken cancellationToken)
+    public async Task<PortraitChange> RemoveAsync(CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.MailRead);
 
@@ -128,5 +137,7 @@ public sealed class OwnPortrait
         {
             await this.files.RemoveAsync(user, displaced, cancellationToken);
         }
+
+        return relinked.UserHeld ? new PortraitChange(UserHeld: true, relinked.Refusal) : PortraitChange.NoSuchUser;
     }
 }

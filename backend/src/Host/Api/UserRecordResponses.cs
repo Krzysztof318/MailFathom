@@ -2,8 +2,11 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Text.Json.Nodes;
 using MailFathom.Application.Paging;
+using MailFathom.Host.Configuration.Policies;
 using MailFathom.Host.Configuration.UserSettings.Administration;
+using MailFathom.Infrastructure.Secrets.Discovery;
 
 namespace MailFathom.Host.Api;
 
@@ -89,20 +92,31 @@ internal sealed record UserProvisionedResponse(Guid Id);
 /// <remarks>The second reports whether the erasure also removed the user from the running process.</remarks>
 internal sealed record UserErasureResponse(bool Erased, bool WasServed);
 
-/// <summary>What the deployment reports when asked for one user's record.</summary>
+/// <summary>One user's record as an editing session opens it.</summary>
 /// <param name="User">The user the record belongs to.</param>
-/// <param name="DisplayName">The label the user is recorded under.</param>
-/// <param name="Version">The version the record was read at, which the commit that follows is accepted against.</param>
-/// <param name="Document">The record, with every secret-bearing value replaced by the redaction marker.</param>
+/// <param name="DisplayName">The label the deployment tells this user apart by.</param>
+/// <param name="Version">The version the record was read at, which a save states back.</param>
+/// <param name="Document">The record's own document as redacted JSON: what somebody stated on it, which is what a save is composed over.</param>
+/// <remarks>
+/// The document is never the record as it is served. A settings policy may force a value over the record's or supply
+/// one the record leaves out, and neither is written into the document, so what the user is served with is answered
+/// per property beside it.
+/// </remarks>
 internal sealed record UserRecordResponse(
     Guid User,
     string DisplayName,
     long Version,
     string Document)
 {
-    /// <summary>Describes a record reading.</summary>
-    /// <param name="record">The record as the administration read it.</param>
-    /// <returns>The response body.</returns>
+    /// <summary>Gets every property of the record as the settings policies governing the user resolve it, in path order.</summary>
+    public IReadOnlyList<UserRecordPropertyResponse> Properties { get; init; } = [];
+
+    /// <summary>Gets the sentence saying which settings policy this build does not read, where the properties could not be resolved; otherwise <see langword="null" />.</summary>
+    public string? Unresolved { get; init; }
+
+    /// <summary>Builds the response for one record.</summary>
+    /// <param name="record">The record as it was read.</param>
+    /// <returns>The response.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="record" /> is <see langword="null" />.</exception>
     internal static UserRecordResponse For(UserRecordReading record)
     {
@@ -112,7 +126,48 @@ internal sealed record UserRecordResponse(
             record.User.Value,
             record.DisplayName,
             record.Version,
-            record.Json);
+            record.Json)
+        {
+            Properties =
+            [
+                .. record.Properties.Select(property => UserRecordPropertyResponse.For(
+                    property,
+                    record.Changeable.Contains(property.Property.Path))),
+            ],
+            Unresolved = record.Unresolved,
+        };
+    }
+}
+
+/// <summary>One property of a user's record as the settings policies governing the user resolve it.</summary>
+/// <param name="Path">The property, as the colon-separated path a policy and a configuration key name it by.</param>
+/// <param name="Value">The value the user is served with, or <see langword="null" /> where nothing states one and the build takes none either.</param>
+/// <param name="Source">Which step of the resolution order supplied the value: <c>DeploymentForced</c>, <c>OrganizationForced</c>, <c>Record</c>, <c>OrganizationDefault</c>, <c>DeploymentDefault</c>, or <c>BuiltIn</c>.</param>
+/// <param name="HeldBy">Whose policy holds the property against the person the record is about — <c>Deployment</c> or <c>Organization</c> — or <see langword="null" /> where no policy does.</param>
+/// <param name="Changeable">Whether a change to the property from whoever read the record would be accepted: no settings policy holds it against them, and their grant reaches a write of it.</param>
+internal sealed record UserRecordPropertyResponse(
+    string Path,
+    JsonNode? Value,
+    string Source,
+    string? HeldBy,
+    bool Changeable)
+{
+    /// <summary>Builds the response for one resolved property.</summary>
+    /// <param name="property">The property as it resolved.</param>
+    /// <param name="changeable">Whether whoever read the record may change the property.</param>
+    /// <returns>The response.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="property" /> is <see langword="null" />.</exception>
+    internal static UserRecordPropertyResponse For(ResolvedProperty property, bool changeable)
+    {
+        ArgumentNullException.ThrowIfNull(property);
+
+        return new UserRecordPropertyResponse(
+            property.Property.Path,
+            // A secret-bearing value is redacted in the document beside this, and must not come back through here.
+            SecretPropertyNaming.NamesASecret(property.Property.Path.Split(':')[^1]) ? null : property.EffectiveValue,
+            property.Source.Name,
+            property.HeldBy?.Name,
+            changeable);
     }
 }
 

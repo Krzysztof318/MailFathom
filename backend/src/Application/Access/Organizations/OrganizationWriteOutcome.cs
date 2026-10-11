@@ -36,4 +36,7 @@ public enum OrganizationWriteOutcome
 
     /// <summary>A move out of every organization would have left a mail account in none assigned to more than one user, and a mailbox is shared only inside an organization, so it was refused.</summary>
     SharedOnlyInOrganization = 9,
+
+    /// <summary>A move would have left the user's record one the deployment could not serve under the settings policy of where they were going, so it was refused.</summary>
+    RecordLeftInvalid = 10,
 }

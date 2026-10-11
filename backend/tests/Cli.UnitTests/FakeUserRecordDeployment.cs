@@ -51,6 +51,29 @@ internal static class FakeUserRecordDeployment
     internal static FakeHttpMessageHandler HoldingRecords(Guid user, params string[] records) =>
         Answering([user], WriteCommitted, records);
 
+    /// <summary>Builds a deployment holding one user whose record a policy this deployment could not read left unresolved.</summary>
+    /// <param name="user">The user the roster reports.</param>
+    /// <returns>The deployment, whose record read answers no property and the sentence saying why.</returns>
+    /// <remarks>
+    /// The sentence carries an escape sequence and a bidirectional override, because it is text a deployment supplied
+    /// and a terminal would act on, and it is as long as the one a deployment answers with, because the instruction
+    /// that clears it is its last clause.
+    /// </remarks>
+    internal static FakeHttpMessageHandler HoldingARecordLeftUnresolved(Guid user) =>
+        new((request, _) => Task.FromResult(
+            request.Method == HttpMethod.Get
+            && (request.RequestUri?.AbsolutePath ?? string.Empty).EndsWith("/record", StringComparison.Ordinal)
+                ? FakeAdminEndpoint.Json(
+                    HttpStatusCode.OK,
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $$"""
+                          {"user":"{{user:D}}","displayName":"user-{{user:D}}","version":{{RecordVersion}},"document":"{}",
+                          "properties":[],
+                          "unresolved":"The settings policy of the deployment\u001b[2J\u202e is not one this build reads as a settings policy, so the record is not resolved through it and is held back rather than served on part of what governs it. Correct the policy with 'mfctl policy edit', or bring this replica to the build that wrote it."}
+                          """))
+                : Answer(request, [user], [(user, true, true)], WriteCommitted, () => EmptyRecord)));
+
     /// <summary>Builds a deployment that refuses every write to a record, with the code and the sentence it names.</summary>
     /// <param name="user">The user the roster reports.</param>
     /// <param name="code">The five-digit code the refusal carries.</param>
@@ -211,6 +234,10 @@ internal static class FakeUserRecordDeployment
         CultureInfo.InvariantCulture,
         $$"""
           {"user":"{{(users.Length > 0 ? users[0] : Guid.Empty):D}}","displayName":"user-{{(users.Length > 0 ? users[0] : Guid.Empty):D}}",
-          "version":{{RecordVersion}},"document":{{JsonSerializer.Serialize(document)}}}
+          "version":{{RecordVersion}},"document":{{JsonSerializer.Serialize(document)}},
+          "properties":[
+            {"path":"DisplayName","value":"alex\u001b[2J\u202e","source":"Record","heldBy":null,"changeable":false},
+            {"path":"Language","value":"Polish","source":"OrganizationForced","heldBy":"Organization","changeable":false},
+            {"path":"TimeZone","value":null,"source":"BuiltIn","heldBy":null,"changeable":true}]}
           """);
 }

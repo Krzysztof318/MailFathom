@@ -14,6 +14,7 @@ using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.Hosting.Workers;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Observability;
+using MailFathom.Infrastructure.Persistence.Policies;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
@@ -612,7 +613,8 @@ public sealed class MailSynchronizationCoordinatorTests
                 SyntheticUser.Deployment,
                 "user",
                 new UserAccountOptions { MailAccounts = [.. mailAccounts] },
-                ++this.recordedDocumentVersion);
+                ++this.recordedDocumentVersion,
+                GoverningSettingsPolicies.Unwritten);
             var recorded = this.ServedUsers.Peek(SyntheticUser.Deployment)!;
             this.Settings.Current = this.Settings.Current.WithServedUsers(
                 [.. (this.Settings.Current.ServedUsers ?? []).Where(served => served.User != recorded.User), recorded]);

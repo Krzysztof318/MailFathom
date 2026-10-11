@@ -232,6 +232,7 @@ it once and whatever else has to hand back an absolute address later reads the s
 | --- | --- | --- | --- | --- |
 | `Deployment:PublicBaseAddress` | url | — | Absolute, `https` unless the host is loopback, no path, no query, no fragment | restart |
 | `Deployment:ReadOnly` | bool | `false` | — | reload |
+| `Deployment:MaximumRecordsJudgedPerPolicyWrite` | int | `10000` | At least `1` | reload |
 
 **It has no default on purpose.** Only an operator knows which name a client reaches this process by, and a guess would
 produce addresses that resolve to nothing or, worse, to somebody else. Nothing derives it from a request either: an
@@ -251,6 +252,14 @@ through, so nothing is queued and nothing waits for the mode to be turned off;
 told. What it reaches is sending, which is what leaves this installation for somebody else's mailbox; changes to a
 mailbox this deployment reads are governed by the account's own
 [rule action permissions](configuration-mail.md#one-account--a-mailbox-in-a-users-record) and by the grant a caller holds.
+
+**`MaximumRecordsJudgedPerPolicyWrite` bounds one save of a settings policy, not what a policy may govern.** A save
+that changes a default or a forced value for users is
+[judged against every user record the policy governs](admin-endpoint.md#settings-policies) inside its own transaction,
+and a save of any of those records waits for it. A policy governing more records than this is refused before any is
+read, with a sentence naming this key. Raise it for a deployment holding more users than the default, knowing that the
+judgement of that many records is how long record saves wait behind one policy write; the bound is each replica's own
+reading of the setting and the judgement runs on the replica the save reached.
 
 
 ## `MailboxExport`

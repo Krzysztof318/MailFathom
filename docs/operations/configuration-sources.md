@@ -168,12 +168,15 @@ No count bounds how many users may be recorded. A replica reads a user's record 
 ### What a user's own record carries
 
 `mfctl user add` provisions the record naming the language and nothing else, so a user is recorded and served without
-anybody writing a line of it. What it can carry is four keys, and everything else about how their mail is read belongs
+anybody writing a line of it — and provisions the empty record instead where
+[a settings policy](#how-a-settings-policy-resolves-a-users-record) of their organization or of the deployment
+supplies the language, because one written on the record would stand in front of the default they were recorded
+under. What it can carry is four keys, and everything else about how their mail is read belongs
 to the mail accounts they are assigned:
 
 | Key | Required | What it is |
 | --- | --- | --- |
-| `Language` | Yes, of a record being written | `English` or `Polish`, read however it was capitalized. The language this deployment writes **for this person** in; [the language this person reads](#the-language-this-person-reads--language) holds the rule and both refusals |
+| `Language` | Yes, of a record being written, unless a settings policy supplies it | `English` or `Polish`, read however it was capitalized. The language this deployment writes **for this person** in; [the language this person reads](#the-language-this-person-reads--language) holds the rule and both refusals |
 | `TimeZone` | No | The IANA zone this person's own days are read in, such as `Europe/Warsaw`. [The zone their days are read in](#the-zone-this-persons-days-are-read-in--timezone) holds the rule and its refusal; a record stating none is read in `UTC` |
 | `ClientTelemetryLevel` | No | The lowest severity **this person's own client** is asked to record at, such as `Debug`. [The level their client records at](#the-level-this-persons-client-records-at--clienttelemetrylevel) holds the rule and its refusal; a record stating none is served the deployment's own level |
 | `Portrait` | No | The identifier of the stored file this person is drawn by. [The portrait routes](client-endpoint.md#the-portrait-routes) write it; a record naming a file that is not a stored file of this same user is refused |
@@ -199,8 +202,10 @@ somebody with no client open could not read it.
 ```
 
 `mfctl user add` provisions `English`, and [`mfctl user edit`](admin-endpoint.md#users-and-their-records) is where it is
-changed — one line, and the next card and the next blank-composer draft come out in it. Two refusals, and the next act
-differs between them:
+changed — one line, and the next card and the next blank-composer draft come out in it. Where [a settings
+policy](#how-a-settings-policy-resolves-a-users-record) governing the person supplies a language, as a default or as a
+forced value, the record need state none: `mfctl user add` then provisions an empty record, and a save leaving
+`Language` out is not refused. Two refusals, and the next act differs between them:
 
 ```
 Language is not stated, and every user record names the language MailFathom writes for that person in — the card
@@ -385,7 +390,7 @@ Every record is judged before it is committed, so a stored one that no longer re
 
 | The record | What a document this build will not read costs |
 | --- | --- |
-| A user | That user is not served: no mailbox of theirs is synchronized and no surface answers for them. Every other user is served unchanged; a replica already serving them keeps serving them from the last version that bound, and adopts the next version that does. |
+| A user | That user is not served: no mailbox of theirs is synchronized and no surface answers for them. Every other user is served unchanged; a replica already serving them keeps serving them from the last version that bound, and adopts the next version that does. A record governed by [a settings policy this build does not read](#how-a-settings-policy-resolves-a-users-record) is held back the same way, for as long as the policy stays unreadable. |
 | One of a user's mail accounts | That mailbox alone. The user's other mailboxes keep synchronizing, their record is published at the version the row holds, and everybody else is unaffected. |
 | An organization | The prefix its members type in front of their username. Every other organization is listed, renamed, and removed exactly as before, and the members of the affected one keep every credential that is not a password scoped to it. |
 
@@ -427,10 +432,80 @@ that states none of it reads as both on — which is every record written before
 ```
 
 `mfctl user endpoints` writes them one at a time and `mfctl user edit` writes them with the rest of the record; both
-reach the same commit, which stores the record and copies the two switches onto the user's row in one statement. A
-request is judged against that row rather than against the document, so authentication never reads a record. A user
-saving their own record is refused a change to either switch; what the switches do is
+reach the same commit, which stores the record and writes the switches it resolves to onto the user's row in one
+statement. A request is judged against that row rather than against the document, so authentication never reads a
+record. A user saving their own record is refused a change to either switch; what the switches do is
 [the administrative page's](admin-endpoint.md#users-and-their-records).
+
+**The row carries the switches in force, which a settings policy may decide.** Where a policy forces a switch, or
+supplies one a record leaves out, the row carries the policy's answer and the record keeps its own — and the row is
+rewritten by every commit that can move that answer: a write of the record, a write of a policy governing the user, and
+a move of the user into or out of an organization. So a session or a token stops or resumes on its holder's next
+request on every replica, with no convergence to wait for.
+
+**A forced switch reaches the row of a record that cannot itself be resolved.** A record that does not bind states no
+switch a policy write or a move could project, so the switches nothing forces stay on its row as they stand — but a
+switch a policy forces is written regardless, because a force does not depend on what the record says. The same holds
+where the organization's policy is one this build does not read: what the deployment's policy forces is still
+written, and what that organization's would have said is left as the row has it.
+
+**Every writer of that row has to know policies for it to hold.** While a rolling upgrade still runs a replica of a
+build older than settings policies, a record write or a move that reaches that replica writes the record's own
+switches onto the row, over whatever a policy forced or supplied — and the row keeps them until the next write of
+that record, of that user's organization, or of a default or a forced value in a policy governing them, each of which
+writes the row afresh from what the policies resolve. So state a policy that forces or
+defaults an endpoint switch once every replica runs a build that knows policies, and not during the upgrade that
+introduces them.
+
+### How a settings policy resolves a user's record
+
+A [settings policy](admin-endpoint.md#settings-policies) of the deployment governs every user, and one of an
+organization governs its members. Every reader of a person's language, zone, client telemetry level, and endpoint
+switches reads the value the policies resolve rather than the one the record states.
+
+**Each setting resolves on its own, and the first of these that states it wins:**
+
+| Step | Reported as | What states it |
+| --- | --- | --- |
+| 1 | `DeploymentForced` | A forced value in the deployment's policy |
+| 2 | `OrganizationForced` | A forced value in the policy of the user's organization |
+| 3 | `Record` | The user's own record |
+| 4 | `OrganizationDefault` | A default in the policy of the user's organization |
+| 5 | `DeploymentDefault` | A default in the deployment's policy |
+| 6 | `BuiltIn` | Nothing — the value the build takes for a setting nobody states |
+
+A setting is a leaf of the record, so forcing `EndpointAccess:McpEndpoint` leaves `EndpointAccess:ClientEndpoint` to
+resolve on its own. A user in no organization is governed by the deployment's policy alone, and steps 2 and 4 state
+nothing for them; an organization that stores no policy states nothing either.
+
+**A forced value is never written into the record.** The record keeps what somebody stated on it, which is what a save
+is composed over, what `mfctl user show` prints as the document, and what comes back the moment the force is lifted.
+`mfctl user show --effective` and the `properties` of
+[a record read](admin-endpoint.md#users-and-their-records) answer the value in force and which step supplied it.
+
+**A write may not move a held setting, and may carry it through.** A policy holds a setting against a writer in one of
+two ways. A forced value binds everybody, an administrator included: a write stating another value is refused naming
+the setting and whether the organization or the deployment holds it. An editing restriction — the policy's `Editing`
+block — binds the person the record is about and nobody administering them. A write that states a held setting as a
+read showed it — unchanged from the record's own value, or as the value in force — passes, and writes nothing over the
+record's own value. Beside both stand the two settings only an administrator writes, `EndpointAccess` and
+`ClientTelemetryLevel`: no policy makes them the person's to change, and the person writing either is refused.
+
+**The validators run over the record as resolved.** `Language` is therefore required of a record only where no policy
+supplies it, and a value a policy forces is judged with the record it lands on.
+
+**A policy may not leave a record it governs unservable.** A write of a policy that changes a default or a forced
+value for users is [judged against every user record it governs](admin-endpoint.md#settings-policies) inside its own
+commit, and so is a move of a user into or out of an organization, which changes which policy governs them: a move
+that would leave their record without something it requires — a language their old organization supplied, most
+often — is refused naming it, and nothing is rewritten on the record to make the move pass.
+
+**A policy a replica's build does not read holds the records it governs back.** Between two builds that both know
+policies, a policy can name a setting or a value only the newer one carries. A replica that cannot read a policy
+governing a user keeps serving that user from the last composition it held, and serves them nothing where it holds
+none — it never falls back to the record unresolved, because a force that lifts wherever a replica cannot read it is
+not a force. It is reported exactly as [a record this deployment will not read](#a-record-this-deployment-will-not-read)
+is, and writes of that user's record through that replica are refused until the policy reads.
 
 ## Changing a persisted setting
 
@@ -556,7 +631,7 @@ Two further properties belong to Kubernetes rather than to the watcher: an updat
 
 **A change to what users are granted travels the same way.** Writing a role's permissions, an assignment, a group's membership, or a user's organization makes the committing replica forget every grant it remembered and raise the same empty announcement, and every replica forgets its own on that announcement and again on every interval — so a revoked permission stops being held everywhere within thirty seconds, and at once where the backplane delivers. [How a caller's grant is computed](permissions.md#how-a-callers-grant-is-computed) is what is remembered.
 
-**A committed [settings policy](admin-endpoint.md#settings-policies) raises the same empty announcement.** No replica holds a policy in memory and no record is read through one, so nothing acts on it beyond what every announcement already starts: each replica compares the versions it holds, and finds them unchanged.
+**A committed [settings policy](admin-endpoint.md#settings-policies) raises the same empty announcement, and recomposes the users it governs.** A replica holds each user it serves at three versions — the record's, the deployment's policy, and the policy of the user's organization — and the comparison reads all three, so a policy that moved recomposes every user it governs that the replica is holding, through the path a record change takes. Until a replica has made that comparison it serves those users as the earlier policy resolved them, which is the same thirty seconds a record change has. What a request authenticates against does not wait: the endpoint switches on a user's row are [rewritten in the policy's own commit](#which-endpoints-one-user-is-served-on). Moving a user into or out of an organization raises their record's version, so the replica holding them recomposes them under the policy that now governs them on the same comparison.
 
 **Mail synchronization reads the accounts it supervises from the records themselves, on a schedule of its own.** Its coordinator wakes on every announcement — the ones this replica makes, whether or not a backplane is declared, and every one heard over one — and otherwise every `MailSynchronization:Interval`. So an account recorded, changed, or removed on another replica reaches that replica's supervision on the announcement, or within that interval where none arrives, which can be longer than the thirty seconds above. [Per-account supervision](../features/imap-synchronization.md#per-account-supervision) states what a pass reads and what it replaces.
 

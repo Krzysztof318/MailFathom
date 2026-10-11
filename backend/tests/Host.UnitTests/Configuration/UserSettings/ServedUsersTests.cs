@@ -11,6 +11,7 @@ using MailFathom.Host.Configuration.Spam;
 using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.Observability.ClientTelemetry;
 using MailFathom.Host.UnitTests.TestDoubles;
+using MailFathom.Infrastructure.Persistence.Policies;
 using MailFathom.Infrastructure.Persistence.Users;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
@@ -27,6 +28,12 @@ public sealed class ServedUsersTests
 {
     /// <summary>The record a provisioning leaves behind, which declares nothing until its user asks for something.</summary>
     private const string EmptyRecord = "{}";
+
+    private const string DefaultingPolish = """{"Users":{"Defaults":{"Language":"Polish"}}}""";
+
+    private const string ForcingEnglish = """{"Users":{"Forced":{"Language":"English"}}}""";
+
+    private const string NotAPolicy = """{"Users":{"Forced":{"Dialect":"Silesian"}}}""";
 
     private const string UnbindableRecord = """{"NothingBindsThis":true}""";
 
@@ -360,8 +367,8 @@ public sealed class ServedUsersTests
         var newer = new MailSynchronizationAccountOptions { AccountId = "newer" };
 
         // Act
-        servedUsers.UserDocumentPublished(Alex, "user", new UserAccountOptions { MailAccounts = [newer] }, 3);
-        servedUsers.UserDocumentPublished(Alex, "user", new UserAccountOptions { MailAccounts = [older] }, 2);
+        servedUsers.UserDocumentPublished(Alex, "user", new UserAccountOptions { MailAccounts = [newer] }, 3, GoverningSettingsPolicies.Unwritten);
+        servedUsers.UserDocumentPublished(Alex, "user", new UserAccountOptions { MailAccounts = [older] }, 2, GoverningSettingsPolicies.Unwritten);
 
         // Assert
         Assert.Same(newer, servedUsers.Peek(Alex)?.MailAccounts.Single());
@@ -382,7 +389,7 @@ public sealed class ServedUsersTests
         var account = new MailSynchronizationAccountOptions { AccountId = "primary", SpamClassification = classification };
 
         // Act
-        servedUsers.UserDocumentPublished(Alex, "user", new UserAccountOptions { MailAccounts = [account] }, 2);
+        servedUsers.UserDocumentPublished(Alex, "user", new UserAccountOptions { MailAccounts = [account] }, 2, GoverningSettingsPolicies.Unwritten);
 
         // Assert
         Assert.Same(classification, servedUsers.Peek(Alex)?.MailAccounts.Single().SpamClassification);
@@ -396,7 +403,7 @@ public sealed class ServedUsersTests
         var servedUsers = this.Cache();
 
         // Act
-        servedUsers.UserDocumentPublished(Alex, "user", new UserAccountOptions { ClientTelemetryLevel = "Debug" }, 2);
+        servedUsers.UserDocumentPublished(Alex, "user", new UserAccountOptions { ClientTelemetryLevel = "Debug" }, 2, GoverningSettingsPolicies.Unwritten);
 
         // Assert
         Assert.Equal(ClientTelemetryLevel.Debug, servedUsers.Peek(Alex)?.ClientTelemetryLevel);
@@ -629,6 +636,114 @@ public sealed class ServedUsersTests
         Assert.Equal(Morgan, servedUsers.User);
     }
 
+    /// <summary>A user is served their record as the policies governing them resolve it, not as the record alone states it.</summary>
+    [Fact]
+    public async Task ReadAsync_ARecordGovernedByAPolicy_ComposesTheUserFromWhatThePoliciesResolve()
+    {
+        // Arrange
+        this.records.Put(Record(Alex, EmptyRecord, 2) with { Policies = StatedPolicies.Governing(deployment: DefaultingPolish) });
+
+        // Act
+        var served = await this.Cache().ReadAsync(Alex, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(UserLanguage.Polish, served!.Language);
+    }
+
+    /// <summary>
+    /// A committed policy moves no record's version, so the comparison reads the policy versions as well. A replica
+    /// that has not made it yet serves the user as the earlier policy resolved them, and never as nobody.
+    /// </summary>
+    [Fact]
+    public async Task ConvergeAsync_APolicyCommittedOnAnotherReplica_ServesTheEarlierCompositionUntilItRecomposesTheUsersItGoverns()
+    {
+        // Arrange
+        this.records.Put(Record(Alex, EmptyRecord, 2) with { Policies = StatedPolicies.Governing(deployment: DefaultingPolish) });
+        var servedUsers = this.Cache();
+        await servedUsers.ReadAsync(Alex, TestContext.Current.CancellationToken);
+        this.records.Put(Record(Alex, EmptyRecord, 2) with
+        {
+            Policies = StatedPolicies.Governing(deployment: ForcingEnglish, deploymentVersion: 2),
+        });
+
+        // Act
+        var beforeAdopting = servedUsers.Peek(Alex);
+        await servedUsers.ConvergeAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(UserLanguage.Polish, beforeAdopting!.Language);
+        Assert.Equal(UserLanguage.English, servedUsers.Peek(Alex)!.Language);
+    }
+
+    /// <summary>
+    /// A held composition is keyed by the organization's policy version as well as by the deployment's, so an
+    /// organization replacing its policy recomposes its members where neither the record nor the deployment moved.
+    /// </summary>
+    [Fact]
+    public async Task ConvergeAsync_OnlyTheOrganizationPolicyReplacedOnAnotherReplica_RecomposesTheMemberUnderIt()
+    {
+        // Arrange
+        this.records.Put(Record(Alex, EmptyRecord, 2) with { Policies = StatedPolicies.Governing(organization: DefaultingPolish) });
+        var servedUsers = this.Cache();
+        await servedUsers.ReadAsync(Alex, TestContext.Current.CancellationToken);
+        this.records.Put(Record(Alex, EmptyRecord, 2) with
+        {
+            Policies = StatedPolicies.Governing(organization: ForcingEnglish, organizationVersion: 2),
+        });
+
+        // Act
+        var beforeAdopting = servedUsers.Peek(Alex);
+        await servedUsers.ConvergeAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(UserLanguage.Polish, beforeAdopting!.Language);
+        Assert.Equal(UserLanguage.English, servedUsers.Peek(Alex)!.Language);
+    }
+
+    /// <summary>
+    /// A policy this build does not read holds the records it governs back: the user stays served from the last
+    /// composition held, and is never served their record unresolved.
+    /// </summary>
+    [Fact]
+    public async Task ConvergeAsync_APolicyThisBuildDoesNotRead_KeepsServingTheLastCompositionAndHoldsTheRecordBack()
+    {
+        // Arrange
+        this.records.Put(Record(Alex, EmptyRecord, 2) with { Policies = StatedPolicies.Governing(deployment: DefaultingPolish) });
+        var servedUsers = this.Cache();
+        await servedUsers.ReadAsync(Alex, TestContext.Current.CancellationToken);
+        this.records.Put(Record(Alex, EmptyRecord, 2) with
+        {
+            Policies = StatedPolicies.Governing(deployment: NotAPolicy, deploymentVersion: 2),
+        });
+
+        // Act
+        await servedUsers.ConvergeAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(UserLanguage.Polish, servedUsers.Peek(Alex)!.Language);
+        Assert.StartsWith(
+            "The settings policy of the deployment",
+            Assert.Single(Assert.Single(this.heldBack.Current).Corrections),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ReadAsync_ARecordGovernedByAPolicyThisBuildDoesNotRead_ServesNothingAndHoldsItBack()
+    {
+        // Arrange
+        this.records.Put(Record(Alex, """{"Language":"English"}""", 2) with
+        {
+            Policies = StatedPolicies.Governing(organization: NotAPolicy),
+        });
+
+        // Act
+        var served = await this.Cache().ReadAsync(Alex, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(served);
+        Assert.Single(this.heldBack.Current);
+    }
+
     private static UserSettingsDocument Record(UserId user, string json, long version, params MailAccountRecord[] mailAccounts) =>
         new(user, "alex", json, version) { MailAccounts = mailAccounts };
 
@@ -672,6 +787,10 @@ public sealed class ServedUsersTests
         }
 
         private static UserSettingsDocumentVersion VersionOf(UserSettingsDocument document) =>
-            new(document.User, document.Version);
+            new(document.User, document.Version)
+            {
+                DeploymentPolicyVersion = document.Policies.Deployment.Version,
+                OrganizationPolicyVersion = document.Policies.Organization?.Version ?? 0,
+            };
     }
 }

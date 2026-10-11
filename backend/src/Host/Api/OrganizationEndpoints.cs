@@ -232,7 +232,7 @@ internal static class OrganizationEndpoints
     /// <param name="request">The organization to move them into, or none.</param>
     /// <param name="organizations">The organization administration.</param>
     /// <param name="cancellationToken">Cancels the write when the client disconnects.</param>
-    /// <returns><c>204</c> once the move stands, <c>404</c> when no such user exists, <c>409</c> naming the username the target already holds or how many of the user's mail accounts it would leave outside, or <c>400</c> naming what was wrong with the request.</returns>
+    /// <returns><c>204</c> once the move stands, <c>404</c> when no such user exists, <c>409</c> naming the username the target already holds, how many of the user's mail accounts it would leave outside, or what the settings policy of the target would leave their record without, or <c>400</c> naming what was wrong with the request.</returns>
     internal static async Task<Results<NoContent, NotFound<ProblemDetails>, ProblemHttpResult>> SetUserOrganizationAsync(
         Guid userId,
         [FromBody] UserOrganizationRequest? request,
@@ -271,6 +271,12 @@ internal static class OrganizationEndpoints
                 $"The user is assigned {result.StandingAssignments} mail account(s) outside the organization they would "
                 + "move into, and an account is assigned only to a user of its own organization. Unassign them, or move "
                 + "each account to where the user is going first.",
+                statusCode: StatusCodes.Status409Conflict),
+            OrganizationWriteOutcome.RecordLeftInvalid => TypedResults.Problem(
+                "The move would change which settings policy governs this user, and under the one they would move to "
+                + "their record is not one this deployment could serve, so they were not moved: "
+                + $"{string.Join(' ', result.Corrections)} Correct the record first, or have the policy they would move "
+                + "under supply what it is missing.",
                 statusCode: StatusCodes.Status409Conflict),
             _ => TypedResults.Problem(
                 result.CollidingUsername is { } username

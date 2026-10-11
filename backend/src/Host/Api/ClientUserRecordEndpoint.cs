@@ -108,7 +108,7 @@ internal static class ClientUserRecordEndpoint
     /// <summary>Hands the acting user their record, as the redacted JSON an editing session opens.</summary>
     /// <param name="records">The record administration.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
-    /// <returns><c>200</c> with the record and the version it was read at, <c>404</c> when this deployment holds no record for the caller, or <c>400</c> when the row is not a document of settings.</returns>
+    /// <returns><c>200</c> with the record, the version it was read at, and each of its properties as the settings policies governing the caller resolve it; <c>404</c> when this deployment holds no record for the caller; or <c>400</c> when the row is not a document of settings.</returns>
     internal static async Task<Results<Ok<UserRecordResponse>, NotFound<ProblemDetails>, ProblemHttpResult>> ReadAsync(
         [FromServices] UserRecordAdministration records,
         CancellationToken cancellationToken)

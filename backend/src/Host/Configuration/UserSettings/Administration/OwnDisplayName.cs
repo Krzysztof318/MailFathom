@@ -6,6 +6,8 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
+using MailFathom.Host.Configuration.Policies;
+using MailFathom.Infrastructure.Persistence.Users;
 
 namespace MailFathom.Host.Configuration.UserSettings.Administration;
 
@@ -31,6 +33,13 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// the read says whether a write would be accepted, so a client draws the name as text rather than discovering the
 /// refusal by submitting one.
 /// </para>
+/// <para>
+/// A settings policy may withhold the name from the person as it may any property of their record, although the name
+/// is a column beside the record rather than a key of it. So what the read answers and what the write accepts are both
+/// the grant and the policy together: a name the organization or the deployment holds is refused naming which, and a
+/// request stating the name already held passes, because it changes nothing. An administrator's relabel is not bound,
+/// since an editing restriction binds the person alone and a policy never forces a name.
+/// </para>
 /// </remarks>
 [SuppressMessage(
     "Performance",
@@ -39,7 +48,8 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 internal sealed class OwnDisplayName(
     AccessAuthorization authorization,
     IUserDirectory directory,
-    IUserProvisioning provisioning)
+    IUserProvisioning provisioning,
+    IUserSettingsDocumentReader documents)
 {
     /// <summary>Reads the name this deployment records the signed-in person under.</summary>
     /// <param name="cancellationToken">Cancels the read.</param>
@@ -54,7 +64,8 @@ internal sealed class OwnDisplayName(
         return await directory.ReadUserAsync(user, cancellationToken) is { } held
             ? new OwnDisplayNameReading(
                 held.DisplayName,
-                authorization.Permits(MailFathomPermission.MailAccountsWrite))
+                authorization.Permits(MailFathomPermission.MailAccountsWrite)
+                && await this.FindPolicyRefusalAsync(user, cancellationToken) is null)
             : null;
     }
 
@@ -75,7 +86,7 @@ internal sealed class OwnDisplayName(
 
         var user = authorization.RequireUser();
 
-        if (await directory.ReadUserAsync(user, cancellationToken) is null)
+        if (await directory.ReadUserAsync(user, cancellationToken) is not { } held)
         {
             return OwnDisplayNameChange.NoSuchUser;
         }
@@ -87,9 +98,36 @@ internal sealed class OwnDisplayName(
 
         var name = displayName!.Trim();
 
+        if (await this.FindPolicyRefusalAsync(user, cancellationToken) is { } withheld)
+        {
+            // Carried through as it stands, which changes nothing and so is nothing a policy holds against anybody.
+            return name == held.DisplayName
+                ? OwnDisplayNameChange.Recording(name) with { IsHeld = true }
+                : OwnDisplayNameChange.Refused(withheld);
+        }
+
         return await provisioning.RelabelAsync(user, name, cancellationToken)
             ? OwnDisplayNameChange.Recording(name)
             : OwnDisplayNameChange.Refused(NameTaken);
+    }
+
+    /// <summary>Says which settings policy does not leave the name to the person to change, or nothing where every policy does.</summary>
+    /// <remarks>
+    /// A policy this build does not read is answered as one that holds the name, for the reason a record is never
+    /// served on part of what governs it: a restriction that lifts wherever a replica cannot read it is not one.
+    /// </remarks>
+    private async Task<string?> FindPolicyRefusalAsync(UserId user, CancellationToken cancellationToken)
+    {
+        if (await documents.ReadAsync(user, cancellationToken) is not { } record)
+        {
+            return null;
+        }
+
+        return SettingsPolicyLayers.Read(record.Policies, SettingsPolicySection.Users, out var unreadable) is { } layers
+            ? GovernedRecordResolution.Resolve(SettingsPolicySection.Users, layers, record.Json)
+                .Find(SettingsPolicySection.UserDisplayNameColumn)
+                .FindRefusal(byThePerson: true)
+            : SettingsPolicyLayers.DescribeUnreadable(unreadable);
     }
 
     /// <summary>Says why a stated name is not one this deployment would record, or nothing where it is.</summary>
