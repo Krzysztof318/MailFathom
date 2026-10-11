@@ -11,11 +11,11 @@ MailFathomDesign.mailHtml = (() => {
     '<body style="margin:0;padding:0;background:#eef1f5;font-family:Georgia,\'Times New Roman\',serif;color:#1f2933">' + body + '</body></html>';
   /* Measuring script injected BEFORE the message markup. It runs in an opaque origin and does
      exactly one thing: report height via parent.postMessage. The message markup itself carries
-     no scripts — it is sanitised before it gets here. */
+     no scripts - it is sanitised before it gets here. */
   const S_OPEN = "<" + "script>", S_CLOSE = "<" + "/script>";
   const FIT_SCRIPT = (frameId) => S_OPEN + '(function(){var ID=' + JSON.stringify(frameId) + ',last=0,sends=0;' +
     /* We measure with a zero-height viewport so the result does not depend on the frame height
-       — otherwise every fit would grow the content and the measurement would never settle. */
+       - otherwise every fit would grow the content and the measurement would never settle. */
     'function measure(){var de=document.documentElement,b=document.body;if(!de||!b)return 0;' +
     'var prev=de.style.height;de.style.height="0px";' +
     'var h=Math.max(b.scrollHeight,b.offsetHeight,Math.ceil(b.getBoundingClientRect().height));' +

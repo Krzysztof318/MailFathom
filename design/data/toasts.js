@@ -4,12 +4,12 @@
 
 MailFathomDesign.data.toastsSamples = [
   { kind: "neutral", name: "Neutral", title: "Archived 3 threads", body: "", action: "Undo",
-    desc: "Confirmation of an ordinary operation. No colour — it does not take attention but offers a way back." },
+    desc: "Confirmation of an ordinary operation. No colour - it does not take attention but offers a way back." },
   { kind: "success", name: "Success", title: "Message sent", body: "To: anna.kowalska@lexmar.example", action: "",
     desc: "Operation finished. Green accent only on the icon and the timer bar." },
   { kind: "error", name: "Error", title: "Could not send", body: "The SMTP server refused the connection (421). The text was saved to Drafts.", action: "Retry",
     desc: "Something failed and needs a decision. Always with a cause and a way to fix it." },
-  { kind: "warning", name: "Warning", title: "Cancelled", body: "The operation was aborted before saving — nothing was changed.", action: "",
+  { kind: "warning", name: "Warning", title: "Cancelled", body: "The operation was aborted before saving - nothing was changed.", action: "",
     desc: "A side effect or an interruption. Not an error, but the user needs to know." },
   { kind: "info", name: "Information", title: "Index extended", body: "Search now covers the contents of PDF attachments.", action: "",
     desc: "A system message unrelated to the last click." },
@@ -27,18 +27,18 @@ MailFathomDesign.data.toastsBurst = [
 
 MailFathomDesign.data.toastsMessages = {
   restored: { title: "Restored 3 threads", body: "The threads are back in the inbox." },
-  cancelled: { title: "Cancelled", body: "The operation was aborted before saving — nothing was changed." },
-  cancelAskText: "The operation is running. Closing the toast aborts it — partial results will not be saved.",
+  cancelled: { title: "Cancelled", body: "The operation was aborted before saving - nothing was changed." },
+  cancelAskText: "The operation is running. Closing the toast aborts it - partial results will not be saved.",
 };
 
 MailFathomDesign.data.toastsTasks = {
   archive: {
     cancelText: "The ZIP archive is being prepared. Aborting discards the partially packed file.",
-    doneTitle: "Archive ready", doneBody: "attachments.zip — 14 files", ms: 6000,
+    doneTitle: "Archive ready", doneBody: "attachments.zip - 14 files", ms: 6000,
   },
   mailboxSync: {
     title: "Syncing the mailbox…", body: "1,240 of 3,800 messages",
-    cancelText: "The sync is running. Aborting stops it where it is — downloaded messages stay, the rest has to be fetched again.",
+    cancelText: "The sync is running. Aborting stops it where it is - downloaded messages stay, the rest has to be fetched again.",
     doneTitle: "Mailbox synced", doneBody: "3,800 messages, 12 new threads", ms: 5200,
   },
   sendFailure: {
@@ -66,7 +66,7 @@ MailFathomDesign.data.toastsBlockingOperations = {
 };
 
 MailFathomDesign.data.toastsBlockSpecs = [
-  { k: "When", v: "Only operations where aborting halfway corrupts data — migration, bulk change, export." },
+  { k: "When", v: "Only operations where aborting halfway corrupts data - migration, bulk change, export." },
   { k: "Exit", v: "Background clicks and Esc do nothing. The only way out is Cancel → “Really abort?”." },
   { k: "After aborting", v: "The overlay disappears and a warning toast says what was saved and what was not." },
 ];

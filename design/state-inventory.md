@@ -41,6 +41,32 @@ Three things decide composition before any state does, and they are read from th
 `FRAMES` is the design's own four sizes: `phone` 390 × 844, `fold` 884 × 832,
 `tablet` 1024 × 768, and the artboard's 1440 × 900. A `fold` is a *tablet-class* width with two panes.
 
+## What every artboard shares — `styles/base.css`
+
+Every page links `styles/base.css` ahead of its own stylesheet. It holds what is decided once for the whole design
+rather than per screen, and the scales below are what every inline value in an artboard is drawn from.
+
+| What | Where it is stated | The rule |
+|---|---|---|
+| The palette | the `:root` tokens | Each token states its light and its dark value as one `light-dark()` pair and `color-scheme` picks between them: an artboard sets it through `data-theme`, and a page that sets none — `mail-search.html` — follows the browser. Every neutral is hue 262 in both themes, and the accent is the one blue |
+| Text on a surface | `--text`, `--text2`, `--muted`, `--faint` | Four steps, and the lightest of them still reads at 4.5:1 on `--bg`, `--panel`, `--rail`, `--sub` and `--hover` in both themes, so no step is decoration only |
+| The typeface | `body` | Geist, with Geist Mono for a literal — a state id, a file name — and tabular figures throughout |
+| Text sizes | every `font-size` on text | 11, 12, 13, 14, 15, 16, 18, 20, 22, 24, 28 and 34 px, and nothing between |
+| Icon sizes | every `font-size` on a Material Symbols glyph | 12, 14, 16, 18, 20, 22, 24, 32 and 40 px |
+| Radii | every `border-radius` | 4, 6, 8, 12, 16 and 24 px, `50%` on a circle and `999px` on a pill |
+| Labels | every section caption | Sentence case at weight 600, never capitals and never tracked out |
+
+A message shown as its sender wrote it is somebody else's HTML, so the bodies in `data/prototype/mail-bodies.js` follow
+none of these scales and are not meant to.
+
+Three reactions are stated there as well, and no rendered preview shows any of them at rest:
+
+| State | Selector | What happens |
+|---|---|---|
+| Pressed | `:active` on a `button` and on `role="button"`, `"tab"` and `"menuitem"` | the control scales to 0.98 over 140 ms. A list row does not: it is swiped and long-pressed, and shrinking under the finger would read as a fault |
+| Keyboard focus | `:focus-visible` on a control and on anything carrying `tabindex` | a 2 px `--accent` outline, 2 px off the edge. A text field keeps its own treatment instead — its border turns `--accent` (`style-focus`) |
+| Less motion asked for | `prefers-reduced-motion: reduce` | every animation and transition ends at once: the pulses, the shimmer, the row and toast movement, and the press itself |
+
 ## Discover — `isDiscover`
 
 The run is a phase machine (`st.phase`), and the blocks arrive one at a time (`ready.<block>`).
@@ -108,7 +134,7 @@ list: it nests, it is placed somewhere in the account's own tree, and it can be 
 | Children shown | `mb.hasKids` / `mb.twisty` | `expand_more` against `chevron_right`, titled *Collapse subfolders* and *Show subfolders*; a collapsed side list draws depth 0 only |
 | New folder dialog | `newFolderOpen` | the *New folder* row at the end of an account group, *New folder inside* on a folder, or *New folder here* in the move sheet |
 | Editing one | the same dialog in `mode: "edit"` | *Edit folder* — the title reads *Edit folder* and the button *Save changes* |
-| Its two fields | `nfName` / `nfParent` | *FOLDER NAME*, and *INSIDE* as a select rather than a text field |
+| Its two fields | `nfName` / `nfParent` | *Folder name*, and *Inside* as a select rather than a text field |
 | Where it may sit | `nfLocations`, from `folderLocations` | the select's options: *Top level of the account* first, then the account's folders drawn as `Parent / Child`. Editing one drops the folder itself, everything under it, and any parent too shallow to hold its subtree |
 | Nothing typed yet | `nfCreateStyle` / `nfCreateHover` | the create button is drawn flat and refuses the pointer while the name is empty |
 | The name is taken | the `warning` notification *Pick another name* | saving an edit onto a name already used in that place — *There is already a folder called “<name>” inside …* |
@@ -139,7 +165,7 @@ and deleting it cannot be undone.*
 |---|---|---|
 | AI summary | `aiSumOpen` | the `auto_awesome` control on a message row, or *AI summary* at the top of that row's context menu |
 | Its cards | `aiSumCards` | **three at most**, each a heading, the claim, a *Why:* line, a model chip reading *Model — mailfathom-email-enrichment*, and the fragment of the message it rests on |
-| Which headings exist | — | *WHAT IS SETTLED*, *WHAT IS STILL OPEN*, *WHAT IS THE COMMITMENT*, *WHAT THE DEADLINE IS*, *WHAT CHANGED BETWEEN VERSIONS* for a `VERSION DIFFERENCE` state, and *WHAT THIS IS ABOUT* where the list's own reading fills a card out. The cards follow the thread's state list and stop at three, so a fourth state never reaches the dialog — which is where both seeded `VERSION DIFFERENCE` states sit |
+| Which headings exist | — | *What is settled*, *What is still open*, *What is the commitment*, *What the deadline is*, *What changed between versions* for a `Version difference` state, and *What this is about* where the list's own reading fills a card out. The cards follow the thread's state list and stop at three, so a fourth state never reaches the dialog — which is where both seeded `Version difference` states sit |
 | Jump to the source | `ac.showSrc` | only where the thread holds more than one message — *Open message N in the thread* |
 
 The dialog opens at 620 px on the desktop and full-screen on the phone. Its own sentence is the
@@ -156,7 +182,7 @@ fragment it rests on.*
 | State inside the body | `stateInBody` | `tablet && !stateBarOff && !stateStale` — the tablet's own answer to the same content |
 | The AI line on one pane | `mobileStateLine` | `singlePane && !stateStale` — the state bar's one-line reading, on the phone |
 | Reading held back | `stateStale` / `stateFresh` | the thread carries `stateStale`: a message joined or left the conversation after its state was derived. The state cards, the in-body chips, the one-pane AI line and the thread sheet's state list stop drawing, and each place says instead *This conversation has changed since where it stands was last derived, so that reading is held back until it is derived again.* The prototype reaches it through *Refresh*, whose second step marks the thread it changes |
-| Four states or more | `stateRowStyle` / `stateBodyRowStyle` / `sc.valueStyle` | `thread.state.length >= 4` — the state cards beside the thread and the chips inside the body stand as a two-column grid, and each chip's value wraps (`text-wrap:pretty`, line height 1.35) rather than ending in an ellipsis on one line. The phone keeps its single column. `contoso` and `piotr` reach it, each carrying a fourth state, `VERSION DIFFERENCE`, that says what a later message corrected in an earlier one |
+| Four states or more | `stateRowStyle` / `stateBodyRowStyle` / `sc.valueStyle` | `thread.state.length >= 4` — the state cards beside the thread and the chips inside the body stand as a two-column grid, and each chip's value wraps (`text-wrap:pretty`, line height 1.35) rather than ending in an ellipsis on one line. The phone keeps its single column. `contoso` and `piotr` reach it, each carrying a fourth state, `Version difference`, that says what a later message corrected in an earlier one |
 | Held back, on the tablet | `staleInBody` | `tablet && !stateBarOff && stateStale` — the same sentence as a note at the top of the thread body, where `stateInBody` would have drawn the chips |
 | Panels hidden | `st.stateBarOff` | the *fullscreen* toolbar control; nothing else sets it |
 | Jump to the agent | `showAgentJump` | `!isMobile && !stateBarOff` |
@@ -307,7 +333,7 @@ menu's *Tab mode* switch is turned on at a width of at least 1180 px**.
 | Starter chips | `agentShowChips` | fewer than two messages in the conversation |
 | The scripted example playing | `st.demoRun` (`playDemo`) | the *Real example* starter chip |
 | Cancel offered | `agentCancelActive` | `agentThinking \|\| demoRun`; the control itself is drawn at all times and is disabled otherwise |
-| Proposed next steps | `agentNextShown`, from `nextActs` | the agent has stopped and the last reply carries `next` — at most three, under a `PROPOSED NEXT` label |
+| Proposed next steps | `agentNextShown`, from `nextActs` | the agent has stopped and the last reply carries `next` — at most three, under a `Proposed next` label |
 | An answer with prose | `m.hasMd`, drawing `m.md` | the bot message carries `text`, `paras`, or both — each is read as Markdown and drawn as one list of blocks, a paragraph's blocks animating in together as it lands. `m.hasText`, `m.hasParas` and `m.paras` are still computed beside it and nothing reads them |
 | An answer still being worked | `m.working` | the message carries `working` — it draws an `autorenew` glyph and *The agent is going through your mail…* instead of prose |
 | An answer carrying blocks | `m.hasBlocks` | the message carries `blocks` |
@@ -327,8 +353,8 @@ The agent's turn carries no card at all — no panel, no border, no shadow, no t
 on the page, `width:100%` to a `max-width` of 900 px on the desktop and the whole width on the phone
 (`bubbleStyle`). The reader's own turn stands on the right instead: `rowStyle`
 justifies `flex-end` and `colStyle` aligns the column, and the turn is drawn as a lightly
-tinted block on `--accent-soft` in `--text` at radius 10, 775 px wide on the desktop and 92 % on the
-phone. The line above a reply is `AI · <scope>` in 10.5 px tracked caps with the `AI` alone in
+tinted block on `--accent-soft` in `--text` at radius 12, 775 px wide on the desktop and 92 % on the
+phone. The line above a reply is `AI · <scope>` in 11 px semibold `--muted` with the `AI` alone in
 `--accent-d`, where it used to be a filled accent pill.
 
 **The column centres itself with padding rather than a width cap.** Off the phone, the scrolling
@@ -376,9 +402,9 @@ and `mfblkin` a block; `mfdot` is declared beside them and nothing reads it.
 
 **Cancel stands beside Send at all times.** `agentCancel` stops the playback or a pending
 reply where it stands. Disabled it is `tabIndex` `-1` with `aria-disabled` and the label
-*Cancel — nothing is running*; active it is filled `--err` and labelled *Stop what the agent is
+*Cancel - nothing is running*; active it is filled `--err` and labelled *Stop what the agent is
 doing*. Nothing is rolled back — what arrived stays, and one reply scoped *stopped by you* is written
-reading *Stopped. What arrived so far stays — tell me where to pick it up.*.
+reading *Stopped. What arrived so far stays - tell me where to pick it up.*.
 
 **The thread pins itself to the bottom while a run is in flight.** `scrollAgentDown`
 takes two `requestAnimationFrame`s so the new block has been laid out before `pinAgentBottom`
@@ -396,8 +422,8 @@ Space bound and a focus outline.
 ### The answer is blocks, and three of them are actionable
 
 An answer is not prose with buttons under it. `bkView(b, key, isMobile)` draws one block,
-and the catalogue is the Discover one: `TIMELINE`, `EVIDENCE`, `THREAD STATE`, `FACT TABLE`,
-`ATTACHMENTS`, `DRAFT`, `EVENT PROPOSAL`, `TASK PROPOSAL`, `SUGGESTED ACTION`. What a conversation
+and the catalogue is the Discover one: `Timeline`, `Evidence`, `Thread state`, `Fact table`,
+`Attachments`, `Draft`, `Event proposal`, `Task proposal`, `Suggested action`. What a conversation
 adds is that the last four carry controls, and therefore a phase.
 
 | State | Flag | Reveal |
@@ -405,16 +431,16 @@ adds is that the last four carry controls, and therefore a phase.
 | Pending | `phase === "pending"` | the block's own `phase`, or `bkPhase[key]` once something was pressed — an accent card (`--accent-soft` on `--accent-line`) with a `help` chip reading *needs confirmation* and the type's controls under a rule |
 | Accepted | `accepted` | `acceptBk` — the controls go, a `check_circle` chip reads *done*, and one result line states what happened and at what time |
 | Accepted but not done | `failed` | the block carries `failed` — an `error` chip reading *not done*, and *Try again* as the only control |
-| Declined | `isDeclined` | `declineBk` — the card collapses to a dashed outline holding one struck line, *Declined — nothing was done*, and its `nav` rows go with it |
+| Declined | `isDeclined` | `declineBk` — the card collapses to a dashed outline holding one struck line, *Declined - nothing was done*, and its `nav` rows go with it |
 | Loading | `isLoading` | the block's `state` is `loading` — three skeleton bars |
 | Partial | `isPartial` | `state` is `partial` — an `hourglass_top` note, `partialNote`, under the body it did return |
 | Empty | `isEmpty` | `state` is `empty` — a per-type icon and sentence, `event_busy`, `task_alt`, `edit_note` or `find_in_page` |
 | Error | `isError` | `state` is `error` — `errorText` and a *Try again* control that `retryBk` puts back to `ready` |
 | Editing a draft | `editing` | *Edit here* — `editBk` swaps the paragraphs for a `textarea` inside the conversation, and the controls become *Send* and *Stop editing* |
 
-**The controls are the type's.** `EVENT PROPOSAL` takes *Add to calendar*, *Another time* and
-*Decline*; `TASK PROPOSAL` takes *Add* and *Decline*; `DRAFT` takes *Send*, *Edit here* and
-*Discard*; `SUGGESTED ACTION` takes the block's own `cta` and *Decline*. Each is a `role="button"`
+**The controls are the type's.** `Event proposal` takes *Add to calendar*, *Another time* and
+*Decline*; `Task proposal` takes *Add* and *Decline*; `Draft` takes *Send*, *Edit here* and
+*Discard*; `Suggested action` takes the block's own `cta` and *Decline*. Each is a `role="button"`
 with its own `aria-label` naming the object, and on touch they stack full width at 44 px.
 
 **A phase is not stored in the message.** `bkPhase`, `bkState`, `bkResult` and `bkEdit` are keyed by
@@ -433,12 +459,12 @@ plays the script above instead of opening anything.
 
 `ai-blocks.dc.html` draws the catalogue rather than a conversation, so it is where a
 phase is read against its siblings. Thirteen `PROPOSAL_SPECS` cards stand
-under the heading *Proposal blocks — the Agent's three phases*, two to a row, one per
+under the heading *Proposal blocks - the Agent's three phases*, two to a row, one per
 type and phase. Its `state` property — `ready`, `loading`, `partial`, `empty`, `error`, `offline` —
 drives every card at once, so the empty and error wording of each type is reachable there and
-nowhere else. It also states the rule for which types earn a proposal block at all: `EVENT` and
-`TASK` exist only because the object has to be seen and corrected before it is approved, and moving
-to a folder, marking as read, adding to a case and closing a case stay a one-line `SUGGESTED ACTION`.
+nowhere else. It also states the rule for which types earn a proposal block at all: `Event proposal` and
+`Task proposal` exist only because the object has to be seen and corrected before it is approved, and moving
+to a folder, marking as read, adding to a case and closing a case stay a one-line `Suggested action`.
 
 ## Chrome that stands over every screen
 
@@ -465,7 +491,7 @@ to a folder, marking as read, adding to a case and closing a case stay a one-lin
 | Toasts | `toasts` | any operation that reports; `toasts.dc.html` is the whole of it |
 
 Every label in the prototype is English, among them the Settings tabs *Profile* and *Application*, the user menu's
-*Sign out*, and the single-pane state toggle beside the thread head, *Hide panels — correspondence only* against
+*Sign out*, and the single-pane state toggle beside the thread head, *Hide panels - correspondence only* against
 *Show thread panels* — and `design/parity.json` presses two of those under their English names.
 
 ### The settings panel
@@ -486,9 +512,9 @@ control is marked `data-nodrag` so pressing it closes the panel instead of start
 
 | State | Flag | Reveal |
 |---|---|---|
-| The account list | `acctListShown` | the *Accounts* tab with no draft open — one row per account carrying a colour dot, the display name, the address, `IMAP host:port · SMTP host:port` and `chevron_right`, under a `MAIL ACCOUNTS` caption beside `acctCount`, and under the rows the sentence that settles what this tab is: *Accounts are set up by your administrator — here you can open one and change its settings.* |
+| The account list | `acctListShown` | the *Accounts* tab with no draft open — one row per account carrying a colour dot, the display name, the address, `IMAP host:port · SMTP host:port` and `chevron_right`, under a `Mail accounts` caption beside `acctCount`, and under the rows the sentence that settles what this tab is: *Accounts are set up by your administrator - here you can open one and change its settings.* |
 | The account editor | `acctEditShown` | a row. `acctTitle` reads *Edit account* and nothing else, there being no second way in |
-| The address is fixed | the `E-MAIL ADDRESS` input | it is `readOnly` with `tabIndex` `-1`, drawn on `--bg` rather than `--sub`, under *The address identifies the account and cannot be changed here.* |
+| The address is fixed | the `E-mail address` input | it is `readOnly` with `tabIndex` `-1`, drawn on `--bg` rather than `--sub`, under *The address identifies the account and cannot be changed here.* |
 | Save refused | `acctSaveStyle` | the display name or the address is empty — the button is drawn flat and refuses the pointer |
 | The password shown | `acctPassType` / `acctPassIcon` | the `visibility` control beside the field |
 | Login left empty | `acctLoginHint` | nothing typed in LOGIN — *Empty = the e-mail address is used as the login.* |
@@ -497,14 +523,14 @@ control is marked `data-nodrag` so pressing it closes the panel instead of start
 | An earliest date set | `acctEarliestClearShown` / `acctEarliestHint` | the date field — the hint states that older mail stays on the mail server, and reverts to *No limit* when cleared |
 | The folder mapping | `acctFolders` | six rows pairing Inbox, Sent, Drafts, Archive, Spam and Trash with `INBOX`, `Sent`, `Drafts`, `Archive`, `Junk` and `Trash` |
 | The three switches over what it deletes and sends | `acctHardDelete` / `acctPurgeGone` / `acctSaveSent` | each is on by default and each carries a hint that changes with its position — hard delete states that a message goes from both servers with nothing left to restore |
-| The secret check | `acctSecretScan` / `acctSecretScanWarn` | the account editor's own switch, under `BEFORE SENDING TO THE MODEL — THIS ACCOUNT ONLY`, on by default; while it is on, a warning states the check is best-effort and can both miss a secret and hide ordinary text |
+| The secret check | `acctSecretScan` / `acctSecretScanWarn` | the account editor's own switch, under `Before sending to the model - this account only`, on by default; while it is on, a warning states the check is best-effort and can both miss a secret and hide ordinary text |
 | The AI language | `aiLangOptions` / `aiMatchReply` | *AI* — English or Polski, **English first and English selected** (`st.aiLang` falls back to `"en"`), separate from the interface language, with a note that a change applies only to content written from now on, and *Match the language of the message* beneath it. `langOptions`, the interface language in the account menu, is drawn and defaulted the same way |
-| Notifications cleared on read | `notifAutoClear` | the *Notifications* tab's switch; while it is on, a `REMOVE` select offers Right away, After 1 hour, After 24 hours and After 7 days |
-| Notified on this device | `notifDevice` | the *Notifications* tab's `THIS DEVICE` group, off by default — *When the window is not in front of you, this device tells you how many things arrived and of what kind — never from whom, never what it is about.* |
+| Notifications cleared on read | `notifAutoClear` | the *Notifications* tab's switch; while it is on, a `Remove` select offers Right away, After 1 hour, After 24 hours and After 7 days |
+| Notified on this device | `notifDevice` | the *Notifications* tab's `This device` group, off by default — *When the window is not in front of you, this device tells you how many things arrived and of what kind - never from whom, never what it is about.* |
 | How long one stays up | `notifDuration` / `notifDurationLabel` | the range beneath it, 1 to 30 whole seconds and 5 by default, drawn as `<n> s` in the accent; its copy ties the value to the undo window, which *waits exactly as long as its notification is up* |
-| The message view | `viewAiStyle` / `viewSimpleStyle` / `viewHtmlStyle` | *Application* — a `MESSAGE VIEW` strip of three, *AI simplified*, *Simplified* and *Original* in that order, each drawn by one `segStyle` helper that is the only place the segment's own styling lives |
+| The message view | `viewAiStyle` / `viewSimpleStyle` / `viewHtmlStyle` | *Application* — a `Message view` strip of three, *AI simplified*, *Simplified* and *Original* in that order, each drawn by one `segStyle` helper that is the only place the segment's own styling lives |
 | Images loaded automatically | `autoImages` | *Application* — while it is on, a warning states the image is fetched from the sender's server and is how tracking pixels work |
-| Layout reset | `resetLayout` / `resetLayoutDone` | *Reset layout* under `LAYOUT ON THIS DEVICE`; the confirmation *Layout restored to the defaults.* stands for 3 200 ms and then goes |
+| Layout reset | `resetLayout` / `resetLayoutDone` | *Reset layout* under `Layout on this device`; the confirmation *Layout restored to the defaults.* stands for 3 200 ms and then goes |
 
 **An account is neither added nor removed here any more.** The dashed *Add account* row, `acctAdd`,
 *Remove this account* and the two-step removal dialog that made the name be typed out are all gone
@@ -513,9 +539,9 @@ nothing else. A client screen offering either act is offering something the desi
 
 **The secret check is per account, and the AI tab says so rather than holding it.** The switch and
 its warning moved into the account editor, and where the global switch stood the *AI* tab now draws a
-`shield` note reading that the check *is set separately for each mail account — open
+`shield` note reading that the check *is set separately for each mail account - open
 Accounts and pick the account*. Which is why the editor's own group is captioned
-`BEFORE SENDING TO THE MODEL — THIS ACCOUNT ONLY` and its copy says *from this account*.
+`Before sending to the model - this account only` and its copy says *from this account*.
 
 The message view is **three** options rather than two, drawn *AI simplified*, *Simplified*,
 *Original* — the last reading **Original** and not *HTML*. `msgView` carries `"ai"`, `"simple"` and
@@ -536,7 +562,7 @@ plain *Simplified*, especially on newsletters and long reply chains.
 scripted batch out of three (`DEMO_BATCHES`) — a message lands at the top of the list and
 in the notification centre, a second after 1 000 ms an existing thread is replaced in place and its
 reading held back, and a third after 2 050 ms is simply no longer in the list, with the toast *The
-sender withdrew a message — the thread has left the list*.
+sender withdrew a message - the thread has left the list*.
 
 **The batch is the prototype's stand-in for live data, not a state to build.** What the client owes
 here is the states it reveals, each of which the client reaches from its own live data:
@@ -584,7 +610,7 @@ is forced by configuration.
 | Sign-in | `isLogin` | the opening view |
 | Server address | `isServer` | *Change server* under *Advanced* — and `envLocked` refuses it |
 | SSO offered | `showSso` | the server declares it (prop `ssoAvailable`, on by default) — the accent primary button above everything else, `shield_person` and `open_in_new` around `{{ ssoLabel }}`, under a hint reading *<provider> opens in your browser.* The provider's name is the prop `ssoName`, *MailFathom SSO* by default |
-| SSO handing off | `ssoBusy` / `ssoIdle` | pressing it — the two glyphs give way to the spinner, the label becomes *Opening <provider>…*, the button drops to `opacity:0.85`, and the hint becomes *Finish signing in in the browser window — this screen picks up the session when it returns.* It returns to idle after 2 000 ms |
+| SSO handing off | `ssoBusy` / `ssoIdle` | pressing it — the two glyphs give way to the spinner, the label becomes *Opening <provider>…*, the button drops to `opacity:0.85`, and the hint becomes *Finish signing in in the browser window - this screen picks up the session when it returns.* It returns to idle after 2 000 ms |
 | SSO, then something else | `showSsoDivider` | SSO offered beside OAuth or a password — the divider reads *or another method* |
 | OAuth offered | `showOauth` | the server declares it (prop `oauthAvailable`) |
 | Password offered | `showBasic` | the server declares it (prop `basicAvailable`) |
@@ -746,3 +772,5 @@ clicking a preview.
 - **The `fold` composition's own case.** 884 px is `tablet` and `!singlePane`: touch, drawers, and two
   panes at once. Neither the phone artboard nor the desktop artboard shows it, and no click produces
   it — only a width does.
+- **Pressed, keyboard focus, and reduced motion.** All three are rules in `styles/base.css` rather than regions of a
+  template, so no artboard draws them at rest — *What every artboard shares* above states each one.

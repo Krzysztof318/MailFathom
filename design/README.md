@@ -15,7 +15,7 @@ loop that judges a client screen runs in any clone.
 | `sign-in.dc.html`, `client-states.dc.html`, `ai-blocks.dc.html`, `toasts.dc.html`, `notification-gesture.dc.html` | The other artboards, one each |
 | `mail-search.html` | The mail search specimen, a static page with no runtime |
 | `design.js` | The one global the other files share, `MailFathomDesign`: sample data under `data`, each artboard's component under `artboards` |
-| `styles/` | One stylesheet per artboard, linked from the page's `<helmet>` |
+| `styles/` | `base.css`, which every page links first and which holds what the whole design shares — the palette, the typeface, and how a control answers a press, a keyboard focus, and a request for less motion — and then one stylesheet per artboard, linked from the page's `<helmet>` |
 | `logic/` | Each artboard's component. The prototype's is split into `markdown.js` (the Markdown renderer message bodies use), `mail-html.js` (the shell and the measuring script an original message is shown in), and `component.js` |
 | `data/` | The sample data, one file per artboard or, for the prototype, one file per concern: `threads.js`, `mail-bodies.js`, `people.js`, `workspace.js`, `home.js`, `discover.js`, `cases.js`, `calendar.js`, `tasks.js`, `compose.js`, `documents.js`, `agent.js`, `notifications.js`, and `sample-text.js` |
 | `runtime/support.js` | The generated runtime every `.dc.html` page boots on. An artboard is a component this runtime renders rather than a document a browser draws, so without it nothing renders |
