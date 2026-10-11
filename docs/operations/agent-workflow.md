@@ -807,7 +807,9 @@ The canonical skills are:
   `design/` first, in a change whose issue asks for it, never in the client as a
   guess. When the task is the design itself, the skill says what that change owes:
   the inventory and the parity pairing moved in the same change, sample data kept
-  made up and in `data/`, and the artboard opened at the compositions it reaches;
+  made up and in `data/`, and the artboard opened at the compositions it reaches.
+  How that change is authored is `design/AGENTS.md`'s: the vendored design skills
+  a screen is drawn with, and the bar an artboard's own code is held to;
 - `review-change` performs a findings-first diff review and records verification
   status and residual risks, and reruns the fast loop only when something has
   invalidated its last green run;
@@ -1368,8 +1370,8 @@ generated runtime the design's artboards boot on — one minified bundle a desig
 tool wrote, which nobody here writes a line of and which is more added lines than
 a large change. It is that one directory rather than the tree above it: the
 artboards, their data, logic and styles, `design/state-inventory.md`,
-`design/parity.json` and `design/README.md` are written in this repository and are
-read like anything else.
+`design/parity.json`, `design/README.md` and `design/AGENTS.md` are written in this
+repository and are read like anything else, against the bar the last of those states.
 
 `backend/src/Infrastructure/Persistence/Migrations/` is the second. EF Core writes
 the migration, its `.Designer.cs` twin and the model snapshot; `AGENTS.md` makes
@@ -1791,7 +1793,7 @@ happens, so a stuck labelling run must not hold a review open or fail one.
 The prompt points the reviewer at this repository's own rules rather than at
 general review practice: root `AGENTS.md`, the nested `AGENTS.md` files under
 `backend/`, `backend/src/`, `backend/src/Infrastructure/`, `backend/tests/`,
-`frontend/`, `frontend/src/`, `frontend/tests/`, and `docs/`, the recurring
+`frontend/`, `frontend/src/`, `frontend/tests/`, `design/`, and `docs/`, the recurring
 findings in the `review-change` skill, and the ADRs that govern the area the
 change touches. A finding names the rule it rests on in a field of its own,
 and one that applies generic advice where this repository has stated a different
@@ -2592,6 +2594,7 @@ rule matters.
 | `backend/src/AGENTS.md` | A change under `backend/src/` | The directory cascade. It holds what is true of the service's production code alone |
 | `backend/src/Infrastructure/AGENTS.md` | A change under `backend/src/Infrastructure/` | The directory cascade |
 | `backend/tests/AGENTS.md` | A change under `backend/tests/` | The directory cascade, and root `AGENTS.md` names it wherever tests are owed |
+| `design/AGENTS.md` | A change under `design/` | The directory cascade. It holds how the design is authored, which is the one place the stacks' rules for structure, logic, and tests are stated not to reach |
 | `docs/AGENTS.md` | A change under `docs/` | The directory cascade |
 | `docs/operations/issue-tracking.md` | An issue is opened, placed, or linked | `start-task` step 8 and `finish-change` both name it at the step that writes the board — the only two points at which the rules are acted on |
 | `docs/operations/agent-workflow.md` | A workflow script or skill is in question | Root `AGENTS.md` § *Agent workflow and verification* opens by naming it |

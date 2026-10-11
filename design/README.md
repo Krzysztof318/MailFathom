@@ -48,11 +48,14 @@ of its data, logic, and styles the change reaches, and in the same change:
   built from, so a state the artboard has and the inventory does not is a state nobody will build;
 - `parity.json`, when a paired screen moves to another artboard or is reached by different presses.
 
+How such a change is authored is [`AGENTS.md`](AGENTS.md)'s: the skills a screen is drawn with, how fast, and the bar an
+artboard's own code is held to.
+
 A change that alters what an artboard looks like is checked by opening it in a browser at the compositions it reaches,
 in both themes — `frontend/AGENTS.md` § *Holding a screen against the design* names the four sizes and the scripts.
 
 Every `.html`, `.css`, and `.js` file here carries the licensing header except `runtime/support.js`, which a design tool
-generated and which is replaced whole rather than edited; `AGENTS.md` states that exemption, and
+generated and which is replaced whole rather than edited; the root `AGENTS.md` states that exemption, and
 `THIRD_PARTY_LICENSES.md` records the file.
 
 ## When the client and the design disagree
