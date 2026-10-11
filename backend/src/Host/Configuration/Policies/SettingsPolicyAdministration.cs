@@ -31,7 +31,9 @@ namespace MailFathom.Host.Configuration.Policies;
 /// outlives the build that stored it, so the statement is refused rather than committed unjudged. Which settings
 /// decide where a credential goes is not enumerated, because a list is what a setting added later would be missing
 /// from. An editing restriction moves no value and is the organization's administrator's to write, as the whole of
-/// the section about users is.
+/// the section about users is. The values are compared as this build judges them, so a policy in force that this
+/// build cannot judge whole — one a newer build stored while both were serving — is refused to such a grant as
+/// well: a statement neither side of the comparison holds would otherwise be one the save could remove unseen.
 /// </para>
 /// <para>
 /// The deployment's policy is the deployment's to write, so it takes the grant over the whole deployment. An
@@ -112,14 +114,12 @@ internal sealed class SettingsPolicyAdministration(
         }
 
         if (!authorization.Permits(MailFathomPermission.AdminConfigurationWrite)
-            && !candidate.MailAccountValues.SetEquals(SettingsPolicyCandidate.Judge(inForce.Json).MailAccountValues))
+            && FindNarrowerGrantRefusal(candidate, inForce) is { } beyondTheGrant)
         {
             return SettingsPolicyWriteOutcome.Refused(
                 MailFathomErrorCode.ConfigurationCandidateInvalid,
                 inForce.Version,
-                [
-                    $"The saved policy changes a default or a forced value of the {SettingsPolicySection.MailAccounts.Name} section, and '{MailFathomPermission.AdminConfigurationWrite.Name}' held over an organization rather than over the whole deployment does not state one: such a value can decide where a mailbox's credential is presented. Leave those two statements as version {inForce.Version} has them, or have them written under a grant at the deployment.",
-                ]);
+                [beyondTheGrant]);
         }
 
         if (JsonNode.DeepEquals(JsonNode.Parse(inForce.Json), JsonNode.Parse(judged)))
@@ -168,6 +168,27 @@ internal sealed class SettingsPolicyAdministration(
             permission,
             AssignmentScope.Organization(organization),
             cancellationToken);
+    }
+
+    /// <summary>Says why a save under a grant held below the deployment may not stand, or nothing where it may.</summary>
+    /// <remarks>
+    /// The policy in force is judged as the candidate was, and the two are compared by the values each states. One
+    /// this build refuses in any part is not compared at all: what it could not judge is in neither set, so the two
+    /// would read as equal over a statement the save had removed.
+    /// </remarks>
+    private static string? FindNarrowerGrantRefusal(SettingsPolicyCandidate candidate, SettingsPolicyDocument inForce)
+    {
+        var standing = SettingsPolicyCandidate.Judge(inForce.Json);
+        var grant = $"'{MailFathomPermission.AdminConfigurationWrite.Name}' held over an organization rather than over the whole deployment";
+
+        if (standing.Refusals.Count > 0)
+        {
+            return $"Version {inForce.Version} of this policy states something this build does not judge as a settings policy, so a save under {grant} cannot be shown to leave the default and forced values of the {SettingsPolicySection.MailAccounts.Name} section as they stand. Have the policy written under a grant at the deployment.";
+        }
+
+        return candidate.MailAccountValues.SetEquals(standing.MailAccountValues)
+            ? null
+            : $"The saved policy changes a default or a forced value of the {SettingsPolicySection.MailAccounts.Name} section, and {grant} does not state one: such a value can decide where a mailbox's credential is presented. Leave those two statements as version {inForce.Version} has them, or have them written under a grant at the deployment.";
     }
 
     private static SettingsPolicyWriteOutcome Superseded(long composedOver, long inForce) =>

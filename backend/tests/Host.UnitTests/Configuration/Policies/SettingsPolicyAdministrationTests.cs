@@ -249,6 +249,51 @@ public sealed class SettingsPolicyAdministrationTests
         Assert.Equal(0, harness.Store.Commits);
     }
 
+    /// <summary>
+    /// A policy outlives the build that stored it, and during an upgrade two builds serve one. A statement this build
+    /// does not know is in neither set of values it compares, so a save that dropped it would read as leaving the
+    /// values alone. The policy in force is therefore not compared at all where it cannot be judged whole.
+    /// </summary>
+    [Theory]
+    [InlineData(ForcingPolling)]
+    [InlineData(DefaultingPolish)]
+    public async Task ApplyAsync_APolicyInForceThisBuildCannotJudgeUnderAGrantHeldAtTheOrganization_IsRefusedAndWritesNothing(string saved)
+    {
+        // Arrange
+        var harness = PolicyHarness.ForTheOrganizationsAdministrator();
+        harness.Store.Holding(
+            Organization,
+            """{"MailAccounts":{"Forced":{"Mode":"Polling","SettingALaterBuildGoverns":true}}}""",
+            version: 4);
+
+        // Act
+        var outcome = await harness.Policies.ApplyAsync(Organization, saved, expectedVersion: 4, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(outcome!.IsCommitted);
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome.Refusal);
+        Assert.Contains("states something this build does not judge as a settings policy", Assert.Single(outcome.Messages), StringComparison.Ordinal);
+        Assert.Equal(0, harness.Store.Commits);
+    }
+
+    /// <summary>The deployment's administrator is who corrects a policy this build cannot judge, so that grant still replaces it.</summary>
+    [Fact]
+    public async Task ApplyAsync_APolicyInForceThisBuildCannotJudgeUnderAGrantHeldAtTheDeployment_IsReplaced()
+    {
+        // Arrange
+        var harness = PolicyHarness.ForTheDeploymentsAdministrator();
+        harness.Store.Holding(
+            Organization,
+            """{"MailAccounts":{"Forced":{"Mode":"Polling","SettingALaterBuildGoverns":true}}}""",
+            version: 4);
+
+        // Act
+        var outcome = await harness.Policies.ApplyAsync(Organization, ForcingPolling, expectedVersion: 4, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(outcome!.IsCommitted);
+    }
+
     /// <summary>The same write under a grant at the deployment is the deployment's to make, so it is not asked.</summary>
     [Fact]
     public async Task ApplyAsync_AMailAccountValueUnderAGrantHeldAtTheDeployment_IsWrittenToTheOrganizationsPolicy()

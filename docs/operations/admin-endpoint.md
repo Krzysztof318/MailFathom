@@ -2174,7 +2174,10 @@ none, so a save under such a grant whose `MailAccounts:Defaults` or `MailAccount
 force is refused under `12007`, whichever setting moved and whether it was added, changed, or removed. Which
 settings decide where a credential goes is deliberately not a list. Such an administrator still saves the whole of
 `Users` and `MailAccounts:Editing`, and saves back unchanged whatever the deployment's administrator stated for the
-organization's mail accounts; a grant at the deployment writes every part of every policy.
+organization's mail accounts; a grant at the deployment writes every part of every policy. The comparison is made
+as the replica answering judges a policy, so a policy in force that it cannot judge whole — one a newer build
+stored while two builds were serving during an upgrade — is refused to a grant held at the organization whatever
+the save states, and is the deployment's administrator's to replace.
 
 **A stored policy past the size above is refused rather than read.** No save produces one, so it is a row written
 beside MailFathom. Every route that reads it — both `GET`s, and both `POST`s, which read the policy in force before
