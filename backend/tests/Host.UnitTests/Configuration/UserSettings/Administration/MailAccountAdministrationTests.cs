@@ -20,11 +20,12 @@ using Xunit;
 namespace MailFathom.Host.UnitTests.Configuration.UserSettings.Administration;
 
 /// <summary>
-/// Covers what is done to the mail accounts a deployment holds. Two callers reach it — an administrator naming the
-/// account and the user, and a user naming only their own account — so the cases that matter are the rules both hold:
-/// that an address is held by one account in the whole deployment and a user is never told whose, that a display name
-/// tells a user's accounts apart, that a user names only credentials provisioned for them, that ending the last
-/// assignment erases the account, and that every committed write reaches the roster before it is announced.
+/// Covers what is done to the mail accounts a deployment holds. An administrator creates one, assigns it, changes it,
+/// and ends an assignment, naming the account and the user; a user changes only the folders of an account assigned to
+/// them. So the cases that matter are that an address is held by one account in the whole deployment, that a display
+/// name tells a user's accounts apart, that ending the last assignment erases the account, that a folder write is
+/// composed over the user's own record version, and that every committed write reaches the roster before it is
+/// announced.
 /// </summary>
 public sealed class MailAccountAdministrationTests
 {
