@@ -339,7 +339,7 @@ public sealed class UserRecordAdministrationTests
         // Arrange
         var earlier = StoredFileId.Create(Guid.Parse("0197a3c0-0000-7000-8000-000000000001"));
         var written = StoredFileId.Create(Guid.Parse("0197a3c0-0000-7000-8000-000000000002"));
-        var harness = new RecordHarness(MailFathomPermission.MailRead, actingFor: SyntheticUser.Deployment);
+        var harness = new RecordHarness(MailFathomPermission.ProfileWrite, actingFor: SyntheticUser.Deployment);
         harness.Holding(SyntheticUser.Deployment, $$"""{"Portrait":"{{earlier}}"}""", version: 5);
         harness.Files.HoldsAsync(SyntheticUser.Deployment, written, Arg.Any<CancellationToken>()).Returns(true);
 
@@ -414,7 +414,7 @@ public sealed class UserRecordAdministrationTests
     {
         // Arrange
         var written = StoredFileId.Create(Guid.Parse("0197a3c0-0000-7000-8000-000000000002"));
-        var harness = new RecordHarness(MailFathomPermission.MailRead, actingFor: SyntheticUser.Deployment);
+        var harness = new RecordHarness(MailFathomPermission.ProfileWrite, actingFor: SyntheticUser.Deployment);
         harness.Holding(SyntheticUser.Deployment, "{}", version: 1);
         harness.Files.HoldsAsync(SyntheticUser.Deployment, written, Arg.Any<CancellationToken>()).Returns(true);
 
@@ -430,7 +430,7 @@ public sealed class UserRecordAdministrationTests
     public async Task ChangeOwnTimeZoneAsync_ARecordStatingAnotherZone_CommitsTheOneStated()
     {
         // Arrange
-        var harness = new RecordHarness(MailFathomPermission.MailRead, actingFor: SyntheticUser.Deployment);
+        var harness = new RecordHarness(MailFathomPermission.ProfileWrite, actingFor: SyntheticUser.Deployment);
         harness.Holding(SyntheticUser.Deployment, """{"TimeZone":"Europe/Warsaw"}""", version: 7);
 
         // Act
@@ -457,7 +457,7 @@ public sealed class UserRecordAdministrationTests
     public async Task ChangeOwnTimeZoneAsync_ARecordAlreadyStatingThatZone_IsHeldWithoutCommitting()
     {
         // Arrange
-        var harness = new RecordHarness(MailFathomPermission.MailRead, actingFor: SyntheticUser.Deployment);
+        var harness = new RecordHarness(MailFathomPermission.ProfileWrite, actingFor: SyntheticUser.Deployment);
         harness.Holding(SyntheticUser.Deployment, """{"TimeZone":"Europe/Warsaw"}""", version: 7);
 
         // Act
@@ -479,7 +479,7 @@ public sealed class UserRecordAdministrationTests
     public async Task ChangeOwnTimeZoneAsync_ARecordStatingNoZoneAndTheCoordinatedZoneChosen_IsCommitted()
     {
         // Arrange
-        var harness = new RecordHarness(MailFathomPermission.MailRead, actingFor: SyntheticUser.Deployment);
+        var harness = new RecordHarness(MailFathomPermission.ProfileWrite, actingFor: SyntheticUser.Deployment);
         harness.Holding(SyntheticUser.Deployment, "{}", version: 1);
 
         // Act
@@ -499,7 +499,7 @@ public sealed class UserRecordAdministrationTests
 
     /// <summary>The relink is an entry point of its own, so it holds the grant itself rather than trusting whoever called it to have checked.</summary>
     [Fact]
-    public async Task RelinkOwnPortraitAsync_ACallerNotGrantedTheirOwnMail_IsRefusedBeforeTheRecordIsRead()
+    public async Task RelinkOwnPortraitAsync_ACallerNotGrantedTheirOwnProfile_IsRefusedBeforeTheRecordIsRead()
     {
         // Arrange
         var harness = new RecordHarness(MailFathomPermission.MailAccountsWrite, actingFor: SyntheticUser.Deployment);
@@ -509,7 +509,7 @@ public sealed class UserRecordAdministrationTests
             () => harness.Records.RelinkOwnPortraitAsync(null, TestContext.Current.CancellationToken));
 
         // Assert
-        Assert.Equal(MailFathomPermission.MailRead, refusal.RequiredPermission);
+        Assert.Equal(MailFathomPermission.ProfileWrite, refusal.RequiredPermission);
         await harness.Documents.DidNotReceive().ReadAsync(Arg.Any<UserId>(), Arg.Any<CancellationToken>());
     }
 
@@ -518,7 +518,7 @@ public sealed class UserRecordAdministrationTests
     public async Task RelinkOwnPortraitAsync_ACallerActingForNoUser_IsRefusedBeforeTheRecordIsRead()
     {
         // Arrange
-        var harness = new RecordHarness(MailFathomPermission.MailRead);
+        var harness = new RecordHarness(MailFathomPermission.ProfileWrite);
 
         // Act
         await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(

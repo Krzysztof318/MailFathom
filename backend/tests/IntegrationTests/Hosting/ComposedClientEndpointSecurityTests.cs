@@ -570,7 +570,7 @@ public sealed class ComposedClientEndpointSecurityTests
                 new ProvisionedUserApiKey(
                     NarrowedClientKey,
                     NarrowedClientUser,
-                    [MailFathomPermission.MailAsk],
+                    [MailFathomPermission.AssistantUse],
                     new UserEndpointAccess(McpEndpoint: false, ClientEndpoint: true)),
                 new ProvisionedUserApiKey(
                     McpKey,

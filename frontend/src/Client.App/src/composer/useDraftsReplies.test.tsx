@@ -46,7 +46,7 @@ describe('useDraftsReplies', () => {
         const deployment = answeringInTurn(notAnswering, drafts);
         const view = renderHook(
             ({ offered }: { offered: DeploymentSession }) => useDraftsReplies(session, offered, deployment.transport),
-            { initialProps: { offered: offering('mailfathom.mail.ask') } },
+            { initialProps: { offered: offering('mailfathom.assistant.use') } },
         );
 
         await waitFor(() => {
@@ -54,7 +54,7 @@ describe('useDraftsReplies', () => {
         });
         expect(view.result.current).toBe(false);
 
-        view.rerender({ offered: offering('mailfathom.mail.ask') });
+        view.rerender({ offered: offering('mailfathom.assistant.use') });
 
         await waitFor(() => {
             expect(view.result.current).toBe(true);

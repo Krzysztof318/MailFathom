@@ -28,10 +28,11 @@ namespace MailFathom.Application.Tasks;
 /// commitments halfway down a screen.
 /// </para>
 /// <para>
-/// Every act is admitted under <see cref="MailFathomPermission.MailRead" />, the writes included, and none of them adds
-/// a name to the published set. It is the notification centre's reasoning rather than the mutation routes': a task is
-/// this deployment's own record of what a person owes, nothing here reaches a mail server, nothing moves in a mailbox,
-/// and a person whose mail accounts an administrator maintains has to be able to keep their own list.
+/// The reads are admitted under <see cref="MailFathomPermission.TasksRead" /> and the writes under
+/// <see cref="MailFathomPermission.TasksWrite" />, neither of which is a grant over mail: a task is this deployment's
+/// own record of what a person owes, nothing here reaches a mail server, nothing moves in a mailbox, and a person
+/// whose mail accounts an administrator maintains keeps their own list under a grant that says nothing about those
+/// accounts.
 /// </para>
 /// </remarks>
 public sealed class OwnTasks
@@ -76,7 +77,7 @@ public sealed class OwnTasks
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The page, or <see langword="null" /> when the cursor is not one this deployment issued for this reading.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="origin" /> is not a declared origin.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.TasksRead" />.</exception>
     /// <remarks>
     /// Completed tasks are served with the outstanding ones and carry the flag that tells them apart, because which of
     /// them a screen draws is the screen's decision: a list that hid them would leave a person no way to see what they
@@ -93,7 +94,7 @@ public sealed class OwnTasks
             throw new ArgumentOutOfRangeException(nameof(origin), origin, "A task list is read under a declared origin.");
         }
 
-        this.authorization.RequirePermission(MailFathomPermission.MailRead);
+        this.authorization.RequirePermission(MailFathomPermission.TasksRead);
 
         var user = this.authorization.RequireUser();
         var fingerprint = FingerprintOf(user, origin);
@@ -120,10 +121,10 @@ public sealed class OwnTasks
     /// <param name="task">The task to read.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The task, or <see langword="null" /> when this person holds none under that identity.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.TasksRead" />.</exception>
     public Task<PersonalTask?> FindAsync(PersonalTaskId task, CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.MailRead);
+        this.authorization.RequirePermission(MailFathomPermission.TasksRead);
 
         return this.store.FindAsync(this.authorization.RequireUser(), task, cancellationToken);
     }
@@ -138,7 +139,7 @@ public sealed class OwnTasks
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="announcement" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="title" /> is blank, when one lead is stated twice, or when leads are stated against no due day.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="title" /> exceeds <see cref="PersonalTask.MaximumTitleLength" />, or when more than <see cref="Reminder.MaximumCount" /> leads are stated.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.TasksWrite" />.</exception>
     /// <remarks>
     /// What somebody types into their own client is something they owe, so a task written here is asserted and this is
     /// not the seam a proposal arrives through: what mail suggested is written by the extraction that read it, under
@@ -157,7 +158,7 @@ public sealed class OwnTasks
         StoredEmailId? sourceMessage,
         CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.MailRead);
+        this.authorization.RequirePermission(MailFathomPermission.TasksWrite);
 
         var task = PersonalTask.Compose(
             PersonalTaskId.Create(Guid.CreateVersion7(this.clock.GetUtcNow())),
@@ -183,7 +184,7 @@ public sealed class OwnTasks
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="announcement" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="title" /> is blank, when one lead is stated twice, or when leads are stated against no due day.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="title" /> exceeds <see cref="PersonalTask.MaximumTitleLength" />, or when more than <see cref="Reminder.MaximumCount" /> leads are stated.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.TasksWrite" />.</exception>
     /// <remarks>
     /// The task is read before it is written because an edit is stated against the record it edits: the answer is what
     /// the person now holds rather than what they sent, and a task erased between the two is reported as one they do
@@ -201,7 +202,7 @@ public sealed class OwnTasks
         TaskAnnouncement announcement,
         CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.MailRead);
+        this.authorization.RequirePermission(MailFathomPermission.TasksWrite);
 
         var held = await this.store.FindAsync(this.authorization.RequireUser(), task, cancellationToken);
 
@@ -221,7 +222,7 @@ public sealed class OwnTasks
     /// <param name="task">The task to accept.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The task as it now stands, or <see langword="null" /> when this person holds none under that identity.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.TasksWrite" />.</exception>
     /// <remarks>
     /// A task already asserted is the state the caller asked for rather than an error, so accepting twice is answered
     /// as done. Dismissing a proposal is the erasure instead: what a person declines is not a task they owe, and
@@ -229,7 +230,7 @@ public sealed class OwnTasks
     /// </remarks>
     public Task<PersonalTask?> AcceptAsync(PersonalTaskId task, CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.MailRead);
+        this.authorization.RequirePermission(MailFathomPermission.TasksWrite);
 
         var user = this.authorization.RequireUser();
 
@@ -241,13 +242,13 @@ public sealed class OwnTasks
     /// <param name="isCompleted">The completion state it is to stand in.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The task as it now stands, or <see langword="null" /> when this person holds none under that identity.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.TasksWrite" />.</exception>
     public Task<PersonalTask?> SetCompletionAsync(
         PersonalTaskId task,
         bool isCompleted,
         CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.MailRead);
+        this.authorization.RequirePermission(MailFathomPermission.TasksWrite);
 
         var user = this.authorization.RequireUser();
 
@@ -262,7 +263,7 @@ public sealed class OwnTasks
     /// <param name="task">The task to erase.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns><see langword="true" /> when a task was erased, and <see langword="false" /> when this person held none.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.TasksWrite" />.</exception>
     /// <remarks>
     /// One act rather than two, whichever origin the task carries: deleting something a person owes and dismissing
     /// something mail suggested leave the same list behind, and a second name for the same erasure would be a route
@@ -270,7 +271,7 @@ public sealed class OwnTasks
     /// </remarks>
     public Task<bool> EraseAsync(PersonalTaskId task, CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.MailRead);
+        this.authorization.RequirePermission(MailFathomPermission.TasksWrite);
 
         return this.store.EraseAsync(this.authorization.RequireUser(), task, cancellationToken);
     }

@@ -424,7 +424,7 @@ public sealed class ContactBookTests
         // Arrange
         var book = BookOver(
             new InMemoryContactBookStore(),
-            authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailContactsWrite));
+            authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.ContactsWrite));
 
         // Act
         var result = await book.RecordAsync(
@@ -443,7 +443,7 @@ public sealed class ContactBookTests
         // Arrange
         var book = BookOver(
             new InMemoryContactBookStore(),
-            authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailContactsWrite));
+            authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.ContactsWrite));
 
         // Act
         var refusal = await Record.ExceptionAsync(() =>
@@ -471,7 +471,7 @@ public sealed class ContactBookTests
                 TestContext.Current.CancellationToken);
         var byAgent = await BookOver(
                 store,
-                authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailContactsWrite))
+                authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.ContactsWrite))
             .PromoteAsync(
                 Scope,
                 ContactId.Create(Guid.CreateVersion7(Now)),
@@ -494,7 +494,7 @@ public sealed class ContactBookTests
 
         var book = BookOver(
             store,
-            authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailContactsWrite));
+            authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.ContactsWrite));
 
         // Act
         var promoted = await book.PromoteAsync(
@@ -536,7 +536,7 @@ public sealed class ContactBookTests
             new InMemoryContactBookStore(),
             authorization: AccessAuthorizations.ForCallerGranted(
                 MailFathomPermission.AdminOperate,
-                MailFathomPermission.MailContactsWrite));
+                MailFathomPermission.ContactsWrite));
 
         // Act & Assert
         await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() => book.CollectAsync(

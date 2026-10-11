@@ -208,7 +208,7 @@ public sealed class ClientContactCorrespondenceEndpointTests
     private static AccessAuthorization Granted() => AccessAuthorizations.ForUserGranted(
         SyntheticUser.Deployment,
         MailFathomPermission.MailRead,
-        MailFathomPermission.MailContactsRead);
+        MailFathomPermission.ContactsRead);
 
     /// <summary>Reports the accounts this caller is assigned, which is what the correlation narrows by.</summary>
     private static ICallerMailAccountCatalog CatalogServing(params MailAccountId[] accounts)

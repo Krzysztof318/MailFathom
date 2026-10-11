@@ -91,10 +91,12 @@ public sealed class MailBodyCleaning
         bool retainRemoteImageReferences,
         CancellationToken cancellationToken)
     {
-        // The grant is asked for here as well as at the transport boundary, because what this spends is the deployment's
-        // provider allowance rather than a local read: an entrypoint added later that holds only the reading grant would
-        // otherwise reach a chat call through a use case that never checked.
-        this.authorization.RequirePermission(MailFathomPermission.MailAsk);
+        // The assistant grant is asked for here as well as at the transport boundary, because what this spends is the
+        // deployment's provider allowance rather than a local read: an entrypoint added later that holds only the reading
+        // grant would otherwise reach a chat call through a use case that never checked. The reading grant is asked
+        // beside it because what leaves is a message, and holding one of the two says nothing about the other.
+        this.authorization.RequirePermission(MailFathomPermission.AssistantUse);
+        this.authorization.RequirePermission(MailFathomPermission.MailRead);
 
         var request = GetEmailContentRequest.Create([storedEmailId]) with
         {

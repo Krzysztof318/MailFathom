@@ -423,13 +423,13 @@ public sealed class OwnTasksTests
         Assert.False(erased);
     }
 
-    /// <summary>The list is a person's own working state, so a caller holding no reading grant reaches none of it.</summary>
+    /// <summary>The list is a record of its own rather than anything in a mailbox, so the grant that reads mail reaches none of it.</summary>
     [Fact]
-    public async Task ReadPageAsync_ACallerWithoutTheReadingGrant_IsRefused()
+    public async Task ReadPageAsync_ACallerGrantedOnlyReadingMail_IsRefused()
     {
         // Arrange
         var tasks = new OwnTasks(
-            AccessAuthorizations.ForUserGranted(User, MailFathomPermission.MailSend),
+            AccessAuthorizations.ForUserGranted(User, MailFathomPermission.MailRead),
             new InMemoryPersonalTaskStore(),
             new FakeTimeProvider(Stamped));
 
@@ -442,15 +442,42 @@ public sealed class OwnTasksTests
                 TestContext.Current.CancellationToken));
     }
 
-    /// <summary>A grant that writes no mailbox still writes this list, which is the whole reason every act here is admitted under the reading grant.</summary>
+    /// <summary>Reading the list is not changing it, so a caller granted only the reading half records nothing.</summary>
     [Fact]
-    public async Task RecordAsync_ACallerGrantedOnlyReading_WritesTheTask()
+    public async Task RecordAsync_ACallerGrantedOnlyReadingTheList_IsRefused()
     {
         // Arrange
         var store = new InMemoryPersonalTaskStore();
+        var tasks = new OwnTasks(
+            AccessAuthorizations.ForUserGranted(User, MailFathomPermission.TasksRead),
+            store,
+            new FakeTimeProvider(Stamped));
+
+        // Act and assert
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
+            () => tasks.RecordAsync(
+                "keep a list",
+                dueOn: null,
+                TaskAnnouncement.Silent,
+                sourceMessage: null,
+                TestContext.Current.CancellationToken));
+
+        Assert.Empty(store.Held);
+    }
+
+    /// <summary>A grant that reads no mailbox still keeps this list, because nothing about a task is mail.</summary>
+    [Fact]
+    public async Task RecordAsync_ACallerGrantedOnlyChangingTheList_WritesTheTask()
+    {
+        // Arrange
+        var store = new InMemoryPersonalTaskStore();
+        var tasks = new OwnTasks(
+            AccessAuthorizations.ForUserGranted(User, MailFathomPermission.TasksWrite),
+            store,
+            new FakeTimeProvider(Stamped));
 
         // Act
-        await SignedIn(store).RecordAsync(
+        await tasks.RecordAsync(
             "keep a list",
             dueOn: null,
             TaskAnnouncement.Silent,
@@ -464,7 +491,7 @@ public sealed class OwnTasksTests
     private static OwnTasks SignedIn(IPersonalTaskStore store) => Signed(store, User);
 
     private static OwnTasks Signed(IPersonalTaskStore store, UserId user) => new(
-        AccessAuthorizations.ForUserGranted(user, MailFathomPermission.MailRead),
+        AccessAuthorizations.ForUserGranted(user, MailFathomPermission.TasksRead, MailFathomPermission.TasksWrite),
         store,
         new FakeTimeProvider(Stamped));
 

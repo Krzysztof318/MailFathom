@@ -64,7 +64,7 @@ public sealed class ClientSessionTokenAuthenticationHandlerTests
         // Assert
         Assert.True(result.Succeeded);
         Assert.Equal(
-            new HashSet<MailFathomPermission> { MailFathomPermission.MailRead, MailFathomPermission.MailAsk },
+            new HashSet<MailFathomPermission> { MailFathomPermission.MailRead, MailFathomPermission.AssistantUse },
             TransportGrant.PermissionsCarriedBy(result.Principal!));
     }
 
@@ -194,7 +194,7 @@ public sealed class ClientSessionTokenAuthenticationHandlerTests
     private static AdmittedUserCredential Admitted() => new(
         CredentialId,
         SyntheticUser.Deployment,
-        [MailFathomPermission.MailRead, MailFathomPermission.MailAsk],
+        [MailFathomPermission.MailRead, MailFathomPermission.AssistantUse],
         UserEndpointAccess.Everywhere);
 
     private static async Task<AuthenticateResult> AuthenticateAsync(ClientSessionTokens sessions, string headerValue)

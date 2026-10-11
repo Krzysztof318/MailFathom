@@ -228,7 +228,7 @@ internal static class ClientSessionTokenEndpoints
     /// The session keeps the narrowing rather than the grant the exchange resolved, so what the user's roles grant is
     /// read again on every request the session makes: a role assigned after the sign-in reaches the session as readily
     /// as a revoked one leaves it. A credential naming nothing, and a caller no credential admitted, arrive here as every
-    /// name the mail half publishes, which narrows nothing this build publishes.
+    /// name the user-facing half publishes, which narrows nothing this build publishes.
     /// <para>
     /// ponytail: that expansion is stored rather than an absent narrowing, so a mail name a later release publishes
     /// reaches such a session at its next sign-in rather than at its next request. It fails closed; storing an absent

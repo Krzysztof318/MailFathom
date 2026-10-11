@@ -36,14 +36,14 @@ public sealed class PermissionSubtreeTests
     public void CoveredPermissions_ADeeperSubtree_ReachesOnlyWhatSitsBeneathThatSegment()
     {
         // Arrange
-        Assert.True(PermissionSubtree.TryParse("mailfathom.mail.contacts.*", out var subtree));
+        Assert.True(PermissionSubtree.TryParse("mailfathom.contacts.*", out var subtree));
 
         // Act
         var covered = subtree.CoveredPermissions();
 
         // Assert
         Assert.Equal(
-            [MailFathomPermission.MailContactsRead, MailFathomPermission.MailContactsWrite],
+            [MailFathomPermission.ContactsRead, MailFathomPermission.ContactsWrite],
             covered);
     }
 
@@ -58,7 +58,18 @@ public sealed class PermissionSubtreeTests
         var covered = subtree.CoveredPermissions();
 
         // Assert
-        Assert.Equal(MailFathomPermission.PublishedFor(ProtectedSurface.Mail), covered);
+        Assert.Equal(
+            [
+                MailFathomPermission.MailRead,
+                MailFathomPermission.MailFlagsWrite,
+                MailFathomPermission.MailMove,
+                MailFathomPermission.MailDelete,
+                MailFathomPermission.MailDraftsWrite,
+                MailFathomPermission.MailSend,
+                MailFathomPermission.MailAccountsWrite,
+                MailFathomPermission.MailFoldersWrite,
+            ],
+            covered);
     }
 
     /// <summary>The reason the wildcard was widened: the reading half of a surface sits at two depths, and no trailing pattern reaches both.</summary>
@@ -66,13 +77,13 @@ public sealed class PermissionSubtreeTests
     public void CoveredPermissions_AWildcardBeforeTheLastSegment_ReachesEveryDepthBeneathIt()
     {
         // Arrange
-        Assert.True(PermissionSubtree.TryParse("mailfathom.mail.*.read", out var subtree));
+        Assert.True(PermissionSubtree.TryParse("mailfathom.admin.*.read", out var subtree));
 
         // Act
         var covered = subtree.CoveredPermissions();
 
         // Assert
-        Assert.Equal([MailFathomPermission.MailContactsRead], covered);
+        Assert.Equal([MailFathomPermission.AdminAuditRead], covered);
     }
 
     /// <summary>A wildcard stands for one or more segments, so one written value names what sits directly beneath a prefix and what sits below that.</summary>
@@ -89,7 +100,11 @@ public sealed class PermissionSubtreeTests
         Assert.Equal(
             [
                 MailFathomPermission.MailRead,
-                MailFathomPermission.MailContactsRead,
+                MailFathomPermission.ContactsRead,
+                MailFathomPermission.TasksRead,
+                MailFathomPermission.CalendarRead,
+                MailFathomPermission.NotificationsRead,
+                MailFathomPermission.ProfileRead,
                 MailFathomPermission.AdminRead,
                 MailFathomPermission.AdminAuditRead,
             ],
@@ -108,7 +123,7 @@ public sealed class PermissionSubtreeTests
 
         // Assert
         Assert.Equal(
-            [MailFathomPermission.MailContactsRead, MailFathomPermission.MailContactsWrite],
+            [MailFathomPermission.ContactsRead, MailFathomPermission.ContactsWrite],
             covered);
     }
 

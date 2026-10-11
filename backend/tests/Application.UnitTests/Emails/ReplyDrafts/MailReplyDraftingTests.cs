@@ -194,6 +194,24 @@ public sealed class MailReplyDraftingTests
 
     /// <summary>The drafting is what puts mail in front of a provider, so it is behind the grant that governs doing so.</summary>
     [Fact]
+    public async Task DraftAsync_ACallerGrantedOnlyAsking_IsRefusedBeforeAnythingIsRead()
+    {
+        // Arrange
+        var sourceReader = SourceReaderReturning(Sources());
+        var drafting = CreateDrafting(
+            sourceReader,
+            WriterReturning(Written("We accept.")),
+            authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.AssistantUse));
+
+        // Act and assert
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            drafting.DraftAsync(Request(), TestContext.Current.CancellationToken));
+
+        Assert.Equal(MailFathomPermission.MailRead, refusal.RequiredPermission);
+        Assert.Empty(sourceReader.ReceivedCalls());
+    }
+
+    [Fact]
     public async Task DraftAsync_ACallerWithoutTheMailAskGrant_IsRefusedBeforeAnythingIsRead()
     {
         // Arrange
@@ -207,7 +225,7 @@ public sealed class MailReplyDraftingTests
         var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
             drafting.DraftAsync(Request(), TestContext.Current.CancellationToken));
 
-        Assert.Equal(MailFathomPermission.MailAsk, refusal.RequiredPermission);
+        Assert.Equal(MailFathomPermission.AssistantUse, refusal.RequiredPermission);
         await sourceReader.DidNotReceiveWithAnyArgs().ReadSourcesAsync(
             Arg.Any<StoredEmailId>(),
             Arg.Any<MailboxScope>(),
@@ -389,7 +407,7 @@ public sealed class MailReplyDraftingTests
             writer,
             scopeResolver,
             egressGuard ?? SensitiveContentEgressGuards.Inactive(),
-            authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailAsk),
+            authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.AssistantUse, MailFathomPermission.MailRead),
             LanguagesAnswering(language),
             derivesStyleFromSentMail);
     }

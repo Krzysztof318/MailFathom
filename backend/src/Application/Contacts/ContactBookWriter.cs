@@ -14,7 +14,7 @@ namespace MailFathom.Application.Contacts;
 /// <remarks>
 /// <para>
 /// The four acts a caller performs on the book — record a person, amend one, erase one, promote one this deployment
-/// collected — each behind <see cref="MailFathomPermission.MailContactsWrite" />. The permission is asked for here
+/// collected — each behind <see cref="MailFathomPermission.ContactsWrite" />. The permission is asked for here
 /// rather than only at the transport, so an entrypoint added later cannot change what this deployment holds about
 /// somebody by arriving another way, and erasure is behind the same grant as the rest: a caller that may edit the book
 /// may take somebody out of it, and no smaller grant reaches an act that cannot be undone.
@@ -73,7 +73,7 @@ public sealed class ContactBookWriter
     {
         ArgumentNullException.ThrowIfNull(draft);
 
-        this.authorization.RequirePermission(MailFathomPermission.MailContactsWrite);
+        this.authorization.RequirePermission(MailFathomPermission.ContactsWrite);
 
         var record = ReadRecord(draft);
 
@@ -105,7 +105,7 @@ public sealed class ContactBookWriter
     {
         ArgumentNullException.ThrowIfNull(draft);
 
-        this.authorization.RequirePermission(MailFathomPermission.MailContactsWrite);
+        this.authorization.RequirePermission(MailFathomPermission.ContactsWrite);
 
         var record = ReadRecord(draft);
 
@@ -140,7 +140,7 @@ public sealed class ContactBookWriter
     /// </remarks>
     public async Task<ContactWriteResult> PromoteAsync(ContactId contactId, CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.MailContactsWrite);
+        this.authorization.RequirePermission(MailFathomPermission.ContactsWrite);
 
         var scope = await this.ownership.ReadScopeAsync(cancellationToken);
 
@@ -160,7 +160,7 @@ public sealed class ContactBookWriter
     /// </remarks>
     public async Task<ContactErasure> EraseAsync(ContactId contactId, CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.MailContactsWrite);
+        this.authorization.RequirePermission(MailFathomPermission.ContactsWrite);
 
         var scope = await this.ownership.ReadScopeAsync(cancellationToken);
 

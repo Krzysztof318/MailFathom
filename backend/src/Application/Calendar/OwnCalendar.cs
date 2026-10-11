@@ -21,10 +21,10 @@ namespace MailFathom.Application.Calendar;
 /// holds answers as one that does not exist.
 /// </para>
 /// <para>
-/// Every act here is <see cref="MailFathomPermission.MailRead" />, the four writes included, on the reasoning the
-/// personal task list is published under rather than the contact book's: an event is this deployment's own record of
-/// when one person is committed, nothing here reaches a mail server, and the message an event cites is a value it
-/// carries rather than mail these acts read.
+/// The two reads are <see cref="MailFathomPermission.CalendarRead" /> and the four writes are
+/// <see cref="MailFathomPermission.CalendarWrite" />, neither of which is a grant over mail: an event is this
+/// deployment's own record of when one person is committed, nothing here reaches a mail server, and the message an
+/// event cites is a value it carries rather than mail these acts read.
 /// </para>
 /// <para>
 /// A refused write is a result rather than an exception, because each refusal is something a person corrects and
@@ -75,7 +75,7 @@ public sealed class OwnCalendar
     /// <param name="count">How many events it may answer with, or <see langword="null" /> for <see cref="CalendarEventQuery.DefaultCount" />.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The events, or <see langword="null" /> where what was asked for is not a window this deployment answers.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no person, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no person, or its grant omits <see cref="MailFathomPermission.CalendarRead" />.</exception>
     /// <remarks>
     /// The window is refused rather than narrowed to what this deployment would serve, which is where this reading
     /// differs from the notification centre's clamped page: a caller asking for a year of an agenda is asking a
@@ -89,7 +89,7 @@ public sealed class OwnCalendar
         int? count,
         CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.MailRead);
+        this.authorization.RequirePermission(MailFathomPermission.CalendarRead);
 
         // Asked before the window is composed rather than caught afterwards: what a caller states is a request this
         // surface reports on, and the query type raises for a programming error instead.
@@ -109,10 +109,10 @@ public sealed class OwnCalendar
     /// <param name="eventId">The event to read.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The event, or <see langword="null" /> where that calendar holds no such event.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no person, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no person, or its grant omits <see cref="MailFathomPermission.CalendarRead" />.</exception>
     public Task<CalendarEvent?> FindAsync(CalendarEventId eventId, CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.MailRead);
+        this.authorization.RequirePermission(MailFathomPermission.CalendarRead);
 
         return this.store.ReadAsync(this.authorization.RequireUser(), eventId, cancellationToken);
     }
@@ -126,7 +126,7 @@ public sealed class OwnCalendar
     /// <param name="sourceMessage">The message it was created from, or <see langword="null" /> where none was open.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The event as the calendar holds it, or why it was refused.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no person, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no person, or its grant omits <see cref="MailFathomPermission.CalendarWrite" />.</exception>
     /// <remarks>
     /// What is written is asserted by construction, because a person typing into their own client is putting an event
     /// on their calendar. Nothing here creates a proposal: those are read out of mail, and an event created from an
@@ -141,7 +141,7 @@ public sealed class OwnCalendar
         StoredEmailId? sourceMessage,
         CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.MailRead);
+        this.authorization.RequirePermission(MailFathomPermission.CalendarWrite);
 
         var owner = this.authorization.RequireUser();
 
@@ -181,7 +181,7 @@ public sealed class OwnCalendar
     /// <param name="reminders">The leads it is announced at afterwards, as stated in minutes before it, or empty to announce nothing.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The event as the calendar holds it, or why it was refused.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no person, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no person, or its grant omits <see cref="MailFathomPermission.CalendarWrite" />.</exception>
     /// <remarks>
     /// The whole record rather than the difference from the one held, which is what keeps retitling an event, moving
     /// it, and dropping its end one operation. What it never changes is the identity, the origin, the message the event
@@ -196,7 +196,7 @@ public sealed class OwnCalendar
         IReadOnlyCollection<int> reminders,
         CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.MailRead);
+        this.authorization.RequirePermission(MailFathomPermission.CalendarWrite);
 
         var owner = this.authorization.RequireUser();
 
@@ -235,7 +235,7 @@ public sealed class OwnCalendar
     /// <param name="eventId">The proposal to accept.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The event as the calendar now holds it, or why it was refused.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no person, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no person, or its grant omits <see cref="MailFathomPermission.CalendarWrite" />.</exception>
     /// <remarks>
     /// Accepting an event already on the calendar is refused rather than answered as done, which is the domain's
     /// decision: the second acceptance is a caller acting on a proposal that was already taken, and reporting it as
@@ -245,7 +245,7 @@ public sealed class OwnCalendar
         CalendarEventId eventId,
         CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.MailRead);
+        this.authorization.RequirePermission(MailFathomPermission.CalendarWrite);
 
         var owner = this.authorization.RequireUser();
 
@@ -275,14 +275,14 @@ public sealed class OwnCalendar
     /// <param name="eventId">The event to delete.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns><see langword="true" /> when the calendar held the event and it is gone; <see langword="false" /> when it held none.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no person, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no person, or its grant omits <see cref="MailFathomPermission.CalendarWrite" />.</exception>
     /// <remarks>
     /// Dismissing a proposal is this operation and not one of its own: a date nobody wanted is not a fact worth
     /// keeping, so what a person dismisses and what they delete leave the calendar the same way.
     /// </remarks>
     public async Task<bool> DeleteAsync(CalendarEventId eventId, CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.MailRead);
+        this.authorization.RequirePermission(MailFathomPermission.CalendarWrite);
 
         var owner = this.authorization.RequireUser();
 

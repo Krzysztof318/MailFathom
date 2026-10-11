@@ -90,7 +90,15 @@ internal static partial class ClientSignalEndpoints
     /// <param name="cancellationToken">Cancels the mint with the request that asked for it.</param>
     /// <returns><c>200</c> with the ticket, or <c>503</c> where the deployment already holds every ticket it will hold or could not be asked.</returns>
     /// <exception cref="ArgumentNullException">Thrown when a required service is <see langword="null" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.NotificationsRead" />.</exception>
     /// <remarks>
+    /// <para>
+    /// The route publishes <see cref="MailFathomPermission.MailRead" /> and this asks
+    /// <see cref="MailFathomPermission.NotificationsRead" /> beside it, because the channel a ticket opens announces
+    /// both: statements about mail, and a notification with the two lines its toast draws. A ticket is the whole of
+    /// what a connection is admitted on, so it is minted only for a caller who may read everything that connection
+    /// will be told. A caller holding one of the two reads its screens over the ordinary routes instead.
+    /// </para>
     /// <para>
     /// A <c>POST</c> rather than a <c>GET</c>, because minting a single-use credential changes state: a <c>GET</c> would
     /// be a route a cache, a prefetch, or a link preview could spend a ticket through.
@@ -112,6 +120,9 @@ internal static partial class ClientSignalEndpoints
         ArgumentNullException.ThrowIfNull(authorization);
         ArgumentNullException.ThrowIfNull(tickets);
         ArgumentNullException.ThrowIfNull(loggerFactory);
+
+        authorization.RequirePermission(MailFathomPermission.MailRead);
+        authorization.RequirePermission(MailFathomPermission.NotificationsRead);
 
         MintedClientSignalTicket? minted;
 

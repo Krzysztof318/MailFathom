@@ -378,6 +378,20 @@ export function App({
     const readsMail = deploymentSession !== null && offers(deploymentSession, 'readMail');
     const writesMail = deploymentSession !== null && offers(deploymentSession, 'composeMail');
 
+    // What the deployment keeps beside the mailbox is each reached under a grant of its own, so each is asked about
+    // here rather than read off the grant that reads mail. The profile is read on its reading half alone, because a
+    // name and a preference are shown to somebody who may not change them. The bell needs both halves of its pair:
+    // every row in the centre is marked read by being opened, so a centre somebody may only look at is one whose
+    // first press is refused. And the channel that says what changed is opened with a ticket the deployment mints
+    // only for a credential that may read everything it announces, which is mail and the notification beside it.
+    const readsProfile = deploymentSession !== null && offers(deploymentSession, 'readProfile');
+    const keepsNotifications =
+        deploymentSession !== null &&
+        offers(deploymentSession, 'readNotifications') &&
+        offers(deploymentSession, 'writeNotifications');
+    const hearsChanges = readsMail && offers(deploymentSession, 'readNotifications');
+    const readsCalendar = deploymentSession !== null && offers(deploymentSession, 'readCalendar');
+
     // The address book is read under a grant of its own and changed under a second, which is what draws the People
     // space at all and what decides whether it is a book somebody may only read. The first is what the space is
     // reached under, so a credential without it meets no People space rather than an empty one.
@@ -420,7 +434,7 @@ export function App({
     // and into one holding no asking grant at all would otherwise leave the block drawn over a permission nobody has.
     // Every other capability here is derived from the session each render, and this is what puts the one that is read
     // over the wire on the same footing.
-    const drafts = asksMail && writesMail && draftsReplies;
+    const drafts = asksMail && readsMail && writesMail && draftsReplies;
     const composing = useMemo(
         () => ({
             offered: writesMail,
@@ -472,11 +486,10 @@ export function App({
     // shows them because two of them decide what opening a message does, which is the frame's rather than a menu's —
     // the tab mode, whose other half lands in #1494 and will already be here, and whether opening one marks it read.
     //
-    // Asked for on the same three conditions the mail itself is: somebody signed in, a machine with a network, and a
-    // credential the deployment lets read. The route is admitted under the grant a reader already holds, so a
-    // credential without it would meet a refusal the screen has nothing to do about, and a machine with no network
-    // would meet nothing at all.
-    const preferences = useClientPreferences(readsMail && connection.online ? session : null, readMail, person);
+    // Asked for on three conditions: somebody signed in, a machine with a network, and a credential the deployment
+    // lets read its own profile. The route is admitted under that grant, so a credential without it would meet a
+    // refusal the screen has nothing to do about, and a machine with no network would meet nothing at all.
+    const preferences = useClientPreferences(readsProfile && connection.online ? session : null, readMail, person);
 
     // What this client reports about itself goes out under the session that is signed in, so it starts when one exists
     // and stops with it. Signing out, or being pointed at another deployment, therefore leaves nothing queued for a
@@ -577,14 +590,14 @@ export function App({
     // Who the person is, asked on the same three conditions and for the same reasons. It is read here rather than in
     // the menu that shows it because the settings screen behind that menu writes it, and two reads made separately
     // would disagree the moment one of them did.
-    const profile = useOwnProfile(readsMail && connection.online ? session : null, readMail, portraits);
+    const profile = useOwnProfile(readsProfile && connection.online ? session : null, readMail, portraits);
 
-    // What the deployment says has changed while somebody is looking at it, held on the same three conditions every
-    // read above is: a credential that may not read mail is told nothing about it, and a machine with no network has
-    // no connection to open. A screen subscribes to decide what to read again; nothing here renders, and a deployment
+    // What the deployment says has changed while somebody is looking at it, held on the same conditions every read
+    // above is: a credential that may not read what the channel announces is told nothing over it, and a machine with
+    // no network has no connection to open. A screen subscribes to decide what to read again; nothing here renders, and a deployment
     // that serves no channel leaves every screen on the interval the hook refreshes it on.
     const signalledChanges = useSignals(
-        readsMail && connection.online ? session : null,
+        hearsChanges && connection.online ? session : null,
         readMail,
         openSignals,
         signalSchedule,
@@ -639,14 +652,14 @@ export function App({
         [openTabs],
     );
 
-    // Asked for on the three conditions the mail itself is, and on the grant the routes are admitted under: the
-    // notification routes read what this deployment holds about one person's mail, so a credential that may not read
-    // mail meets no bell rather than a bell that answers nothing.
+    // Asked for on the grants the routes are admitted under: the notification routes read and mark what this
+    // deployment drew for one person, so a credential that may not do both meets no bell rather than a bell that
+    // answers nothing or refuses its first press.
     // The network is not part of that condition, and deliberately: what was read before it went stays on the screen
     // rather than being cleared, which is the offline state every other surface here holds to. The reads themselves
     // stop, which is what the hook is handed `online` for.
     const notifications = useNotificationCentre(
-        readsMail ? session : null,
+        keepsNotifications ? session : null,
         readMail,
         connection.online,
         followNotification,
@@ -658,7 +671,7 @@ export function App({
     const wideWorkspace = useWideWorkspace();
     const swipe = usePanelSwipe(
         notifications.shown,
-        readsMail && coarsePointer && !wideWorkspace,
+        keepsNotifications && coarsePointer && !wideWorkspace,
         notifications.show,
         notifications.hide,
     );
@@ -1239,20 +1252,26 @@ export function App({
                                                                                     }
                                                                                     tasks={
                                                                                         session === null ||
-                                                                                        !readsMail ? null : (
+                                                                                        !offeredSpaces.includes(
+                                                                                            'tasks',
+                                                                                        ) ? null : (
                                                                                             <TasksSpace
                                                                                                 session={session}
                                                                                                 transport={readMail}
                                                                                                 // Whether the day may be
                                                                                                 // arranged at all is two
                                                                                                 // questions: whether this
-                                                                                                // credential may ask, which is
-                                                                                                // this, and whether the
-                                                                                                // deployment arranges one,
-                                                                                                // which the screen asks the
-                                                                                                // capability route.
+                                                                                                // credential may ask and may
+                                                                                                // read the calendar the
+                                                                                                // arrangement is laid
+                                                                                                // around, which is this, and
+                                                                                                // whether the deployment
+                                                                                                // arranges one, which the
+                                                                                                // screen asks the capability
+                                                                                                // route.
                                                                                                 asksDeployment={
-                                                                                                    asksMail
+                                                                                                    asksMail &&
+                                                                                                    readsCalendar
                                                                                                 }
                                                                                                 onOpenMessage={(
                                                                                                     messageId,
@@ -1343,7 +1362,9 @@ export function App({
                                                                                     }
                                                                                     calendar={
                                                                                         session === null ||
-                                                                                        !readsMail ? null : (
+                                                                                        !offeredSpaces.includes(
+                                                                                            'calendar',
+                                                                                        ) ? null : (
                                                                                             <CalendarSpace
                                                                                                 session={session}
                                                                                                 transport={readMail}
@@ -1442,16 +1463,17 @@ export function App({
                                                                                 swipe.onNavigationClickCapture
                                                                             }
                                                                             refresh={
-                                                                                // On the same grant the bell is, and for the same reason: what it
-                                                                                // reads again is the mail and the centre, and a credential that may
-                                                                                // read neither would press it for nothing.
+                                                                                // On the grant that reads mail, absent rather than inert without
+                                                                                // it: what it reads again is the mail, and the centre beside it
+                                                                                // where a bell is drawn, so a credential that may not read mail
+                                                                                // would press it for nothing.
                                                                                 readsMail ? <Refresh /> : null
                                                                             }
                                                                             notifications={
                                                                                 // Offered on the grant the routes are admitted under, and absent
                                                                                 // rather than inert without it: a bell that could never answer is
                                                                                 // a control saying less about why than not drawing it does.
-                                                                                readsMail ? (
+                                                                                keepsNotifications ? (
                                                                                     <NotificationBell
                                                                                         unreadCount={
                                                                                             notifications.unreadCount
@@ -1489,7 +1511,7 @@ export function App({
                                                     nothing about where it is drawn. It is mounted whether or not it is
                                                     open, which is what lets it travel on and off the screen rather than
                                                     appearing and disappearing. */}
-                                                                        {readsMail ? (
+                                                                        {keepsNotifications ? (
                                                                             <NotificationCentre
                                                                                 centre={notifications}
                                                                                 swipe={swipe}

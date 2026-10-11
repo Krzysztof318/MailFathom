@@ -52,8 +52,10 @@ export const expectedRenewedSessionAuthorization = `Bearer ${renewedSession.toke
 /**
  * What the session route answers, which is what decides how much of the client is offered at all.
  *
- * The grant names both permissions the client acts on: an answer without them opens a frame with Discover and the
- * intent field absent, which is a different screen from the one most checks are about.
+ * The grant names every permission the frame is drawn under: reading mail and asking, without which Discover and the
+ * intent field are absent, and both halves of the four records a person keeps beside their mailbox, without which the
+ * task list, the calendar, the bell, and their own settings are. An answer missing one is a different screen from the
+ * one most checks are about.
  *
  * **`version` is the one field a consumer replaces rather than reads.** Only a build knows what version it was built
  * from, and a corpus stating one would be a second copy of `Version.props` going stale in a directory nothing reads it
@@ -63,7 +65,18 @@ export const expectedRenewedSessionAuthorization = `Bearer ${renewedSession.toke
 export const sessionAnswer = {
     service: 'MailFathom',
     version: '0.0.0',
-    permissions: ['mailfathom.mail.read', 'mailfathom.mail.ask'],
+    permissions: [
+        'mailfathom.mail.read',
+        'mailfathom.assistant.use',
+        'mailfathom.tasks.read',
+        'mailfathom.tasks.write',
+        'mailfathom.calendar.read',
+        'mailfathom.calendar.write',
+        'mailfathom.notifications.read',
+        'mailfathom.notifications.write',
+        'mailfathom.profile.read',
+        'mailfathom.profile.write',
+    ],
     telemetry: 'info',
 };
 

@@ -97,7 +97,7 @@ public sealed class PublishedToolsTests
 
         // Assert
         Assert.True(declared);
-        Assert.Equal(MailFathomPermission.MailAsk, permission);
+        Assert.Equal(MailFathomPermission.AssistantUse, permission);
     }
 
     [Theory]
@@ -110,7 +110,7 @@ public sealed class PublishedToolsTests
 
         // Assert
         Assert.True(declared);
-        Assert.Equal(MailFathomPermission.MailContactsRead, permission);
+        Assert.Equal(MailFathomPermission.ContactsRead, permission);
     }
 
     /// <summary>Writing the book is separated from reading it because erasing a person is not something a reader's grant may reach.</summary>
@@ -126,7 +126,7 @@ public sealed class PublishedToolsTests
 
         // Assert
         Assert.True(declared);
-        Assert.Equal(MailFathomPermission.MailContactsWrite, permission);
+        Assert.Equal(MailFathomPermission.ContactsWrite, permission);
     }
 
     /// <summary>Writing a mailbox is a grant of its own, and this mapping is what withholds the tool from a reader.</summary>

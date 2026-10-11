@@ -20,7 +20,12 @@ public sealed class CorpusReadersTests
 {
     private static AgentConversationReaders Readers() =>
         CorpusReaders.For(
-            AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead, MailFathomPermission.MailDraftsWrite, MailFathomPermission.MailSend),
+            AccessAuthorizations.ForCallerGranted(
+                MailFathomPermission.MailRead,
+                MailFathomPermission.MailDraftsWrite,
+                MailFathomPermission.MailSend,
+                MailFathomPermission.CalendarRead,
+                MailFathomPermission.TasksRead),
             new CorpusKnowledgeSearch(AgentConversationScenario.Mailbox));
 
     [Fact]

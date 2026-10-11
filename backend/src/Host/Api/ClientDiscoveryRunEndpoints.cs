@@ -45,9 +45,10 @@ namespace MailFathom.Host.Api;
 /// the guarantee.
 /// </para>
 /// <para>
-/// The run reads mail and sends what it reads to a chat provider, so all three routes are published under the grant
-/// that governs asking a question about mail anywhere else. The reading route is under the same one rather than the
-/// reading grant, because what it hands back is the answer to a question that was asked under it.
+/// The run reads mail and sends what it reads to a chat provider, so all three routes are published under the
+/// assistant grant, and starting one asks for the grant that reads mail beneath it. The reading route is published
+/// under the assistant grant as well rather than the reading one, because what it hands back is the answer to a
+/// question that was asked under both.
 /// </para>
 /// <para>
 /// Everything a run composes about the mail — a source, a quoted fragment, a subject — reaches the caller here and
@@ -84,13 +85,13 @@ internal static class ClientDiscoveryRunEndpoints
 
         api.MapPost(DiscoveryRunsRoute, Start)
             .WithMetadata(new RequestSizeLimitAttribute(MaxQuestionRequestBytes))
-            .RequirePermission(MailFathomPermission.MailAsk);
+            .RequirePermission(MailFathomPermission.AssistantUse);
 
         api.MapGet(DiscoveryRunRoute, Read)
-            .RequirePermission(MailFathomPermission.MailAsk);
+            .RequirePermission(MailFathomPermission.AssistantUse);
 
         api.MapDelete(DiscoveryRunRoute, Stop)
-            .RequirePermission(MailFathomPermission.MailAsk);
+            .RequirePermission(MailFathomPermission.AssistantUse);
     }
 
     /// <summary>Composes the address one run is read at.</summary>
@@ -117,7 +118,7 @@ internal static class ClientDiscoveryRunEndpoints
     /// <param name="timeProvider">Stamps the run, which its retention and its ceiling are measured from.</param>
     /// <param name="launcher">Puts the run on a scope of its own and starts it.</param>
     /// <param name="cancellationToken">Cancels opening the run, which is the one part of this a caller waits for.</param>
-    /// <returns><c>202</c> naming the run, <c>400</c> naming what was wrong with the question or its scope, <c>429</c> where this person is already running as many as they may, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.ask</c>.</returns>
+    /// <returns><c>202</c> naming the run, <c>400</c> naming what was wrong with the question or its scope, <c>429</c> where this person is already running as many as they may, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.assistant.use</c>.</returns>
     /// <remarks>
     /// <para>
     /// The question and the scope are validated here rather than in the run, so a mistake in either is a refusal a
@@ -197,7 +198,7 @@ internal static class ClientDiscoveryRunEndpoints
     /// <param name="runs">Where the deployment holds its runs, which every replica reads the same rows of.</param>
     /// <param name="timeProvider">Stamps the read, which the run's retention window is measured from.</param>
     /// <param name="cancellationToken">Cancels the read where the caller has gone away.</param>
-    /// <returns>The run's standing and everything after that sequence, <c>404</c> where this user has no such run, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.ask</c>.</returns>
+    /// <returns>The run's standing and everything after that sequence, <c>404</c> where this user has no such run, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.assistant.use</c>.</returns>
     /// <remarks>
     /// <para>
     /// <strong>One route serves the first read and every later one.</strong> A cursor left out means from the
@@ -253,7 +254,7 @@ internal static class ClientDiscoveryRunEndpoints
     /// <param name="executing">The runs this replica is executing, so a stop that landed here reaches the work at once.</param>
     /// <param name="timeProvider">Stamps the stop.</param>
     /// <param name="cancellationToken">Cancels recording the stop.</param>
-    /// <returns><c>204</c> where the run was this user's and is now stopping, <c>404</c> where the deployment holds no such run for this user, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.ask</c>.</returns>
+    /// <returns><c>204</c> where the run was this user's and is now stopping, <c>404</c> where the deployment holds no such run for this user, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.assistant.use</c>.</returns>
     /// <remarks>
     /// <para>
     /// <strong>Stopping stops the spending rather than the watching.</strong> Ending a read says nothing about the run,

@@ -20,6 +20,7 @@ import {
     framed,
     goTo,
     heldSession,
+    keptBesideTheMailbox,
     openingAt,
     preferencesAnswering,
     renderApp,
@@ -48,7 +49,7 @@ resetsBetweenTests();
  */
 function deploymentAnsweringDrafting(draftsReplies: boolean, drafting: { read: boolean }): DeploymentTransport {
     const otherwise = deploymentDrawingAMessage(
-        sessionAnswering(['mailfathom.mail.read', 'mailfathom.mail.ask', 'mailfathom.mail.drafts.write']),
+        sessionAnswering(['mailfathom.mail.read', 'mailfathom.assistant.use', 'mailfathom.mail.drafts.write', ...keptBesideTheMailbox]),
     );
 
     return (signal) => (request) => {
@@ -322,7 +323,7 @@ describe('App', () => {
             servedFrom,
             heldSession,
             deploymentDrawingAMessage(
-                sessionAnswering(['mailfathom.mail.read', 'mailfathom.mail.ask', 'mailfathom.mail.flags.write']),
+                sessionAnswering(['mailfathom.mail.read', 'mailfathom.assistant.use', 'mailfathom.mail.flags.write', ...keptBesideTheMailbox]),
             ),
         );
         await framed();

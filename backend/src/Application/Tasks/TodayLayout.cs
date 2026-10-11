@@ -97,7 +97,7 @@ public sealed class TodayLayout
     /// <param name="dayEnd">The instant it closes.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The arrangement or the reason there is none, or <see langword="null" /> where what was asked for is not a day this deployment arranges.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no person, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no person, or its grant omits <see cref="MailFathomPermission.AssistantUse" />, <see cref="MailFathomPermission.TasksRead" />, or <see cref="MailFathomPermission.CalendarRead" />.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels.</exception>
     /// <remarks>
     /// The deployment's state is asked first, so an instance that lays out no day reads nobody's tasks and nobody's
@@ -110,7 +110,11 @@ public sealed class TodayLayout
         DateTimeOffset dayEnd,
         CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.MailRead);
+        // All three before anything is read: the titles of what the person owes and of what they are committed to are
+        // what leaves for the chat provider, so the act needs the grant to send and the grant over each record it sends.
+        this.authorization.RequirePermission(MailFathomPermission.AssistantUse);
+        this.authorization.RequirePermission(MailFathomPermission.TasksRead);
+        this.authorization.RequirePermission(MailFathomPermission.CalendarRead);
 
         var user = this.authorization.RequireUser();
 

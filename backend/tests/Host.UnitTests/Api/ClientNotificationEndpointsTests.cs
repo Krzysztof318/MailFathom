@@ -442,7 +442,10 @@ public sealed class ClientNotificationEndpointsTests
     private static JsonSerializerOptions WebFormat { get; } = new(JsonSerializerDefaults.Web);
 
     private static OwnNotifications SignedIn(INotificationStore store) => new(
-        AccessAuthorizations.ForUserGranted(User, MailFathomPermission.MailRead),
+        AccessAuthorizations.ForUserGranted(
+            User,
+            MailFathomPermission.NotificationsRead,
+            MailFathomPermission.NotificationsWrite),
         store);
 
     private static Notification MailNotification(NotificationStatement? statement) => Notification.Compose(

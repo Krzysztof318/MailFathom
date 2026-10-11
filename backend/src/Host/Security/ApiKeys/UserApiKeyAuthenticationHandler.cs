@@ -24,7 +24,7 @@ namespace MailFathom.Host.Security.ApiKeys;
 /// <para>
 /// It carries no key list. A key a user's client presents resolves a credential row, so what the scheme has to know is
 /// which surface it protects and nothing else: the user and the narrowing both arrive from the row, and the surface
-/// keeps the user's grant to the half it guards — the mail half on the MCP and client endpoints, the administrative
+/// keeps the user's grant to the half it guards — the user-facing half on the MCP and client endpoints, the administrative
 /// half on the administrative one.
 /// </para>
 /// <para>

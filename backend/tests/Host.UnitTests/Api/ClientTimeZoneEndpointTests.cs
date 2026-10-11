@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Scheduling;
 using MailFathom.Host.Api;
@@ -43,7 +44,7 @@ public sealed class ClientTimeZoneEndpointTests
         // Act
         var result = ClientTimeZoneEndpoint.Read(
             new ServedUserTimeZones(roster),
-            AccessAuthorizations.ForUserGranted(Person, MailFathomPermission.MailRead));
+            AccessAuthorizations.ForUserGranted(Person, MailFathomPermission.ProfileRead));
 
         // Assert
         var answered = result.Value!;
@@ -66,7 +67,7 @@ public sealed class ClientTimeZoneEndpointTests
         // Act
         var result = ClientTimeZoneEndpoint.Read(
             new ServedUserTimeZones(roster),
-            AccessAuthorizations.ForUserGranted(Person, MailFathomPermission.MailRead));
+            AccessAuthorizations.ForUserGranted(Person, MailFathomPermission.ProfileRead));
 
         // Assert
         var answered = result.Value!;
@@ -90,13 +91,46 @@ public sealed class ClientTimeZoneEndpointTests
         // Act
         var result = ClientTimeZoneEndpoint.Read(
             new ServedUserTimeZones(roster),
-            AccessAuthorizations.ForUserGranted(Person, MailFathomPermission.MailRead));
+            AccessAuthorizations.ForUserGranted(Person, MailFathomPermission.ProfileRead));
 
         // Assert
         var answered = result.Value!;
 
         Assert.Equal("UTC", answered.TimeZone);
         Assert.False(answered.IsDefault);
+    }
+
+    /// <summary>Which zone somebody's days are read in is not mail, so the grant that reads mail is not shown it.</summary>
+    [Fact]
+    public void Read_ACallerGrantedOnlyReadingMail_IsRefused()
+    {
+        // Arrange
+        var roster = ResolvedServedUsers.Serving(new ServedUser(Person, "alex", []));
+
+        // Act
+        var refusal = Assert.Throws<PrincipalNotAuthorizedException>(() => ClientTimeZoneEndpoint.Read(
+            new ServedUserTimeZones(roster),
+            AccessAuthorizations.ForUserGranted(Person, MailFathomPermission.MailRead)));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.ProfileRead, refusal.RequiredPermission);
+    }
+
+    /// <summary>Reading the zone is not stating it, so a caller granted only the reading half changes nothing.</summary>
+    [Fact]
+    public async Task ChangeAsync_ACallerGrantedOnlyReadingTheirProfile_IsRefused()
+    {
+        // Arrange
+        var deployment = new UserRecordDeployment([MailFathomPermission.ProfileRead], Person);
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() => ClientTimeZoneEndpoint.ChangeAsync(
+            deployment.Records,
+            new ClientTimeZoneRequest("Europe/Warsaw"),
+            TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.ProfileWrite, refusal.RequiredPermission);
     }
 
     /// <summary>A correction is committed to the record, so the next anchor and the next date a client draws are both in it.</summary>
@@ -154,7 +188,7 @@ public sealed class ClientTimeZoneEndpointTests
     public async Task ChangeAsync_APersonThisDeploymentNoLongerHolds_SaysItHoldsNoRecordForThem()
     {
         // Arrange
-        var deployment = new UserRecordDeployment([MailFathomPermission.MailRead], Person);
+        var deployment = new UserRecordDeployment([MailFathomPermission.ProfileWrite], Person);
 
         // Act
         var result = await ClientTimeZoneEndpoint.ChangeAsync(
@@ -265,7 +299,7 @@ public sealed class ClientTimeZoneEndpointTests
 
     private static UserRecordDeployment Holding(string json)
     {
-        var deployment = new UserRecordDeployment([MailFathomPermission.MailRead], Person);
+        var deployment = new UserRecordDeployment([MailFathomPermission.ProfileWrite], Person);
 
         deployment.Holding(Person, json, version: 1);
         deployment.Serving(new ServedUser(Person, "alex", []));

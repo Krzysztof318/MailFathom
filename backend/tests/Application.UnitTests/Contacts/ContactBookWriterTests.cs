@@ -44,13 +44,13 @@ public sealed class ContactBookWriterTests
     {
         // Arrange
         var book = new InMemoryContactBookStore();
-        var writer = WriterOver(book, MailFathomPermission.MailContactsRead);
+        var writer = WriterOver(book, MailFathomPermission.ContactsRead);
 
         // Act, Assert
         var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
             writer.RecordAsync(DraftOf("Anna Kowalska", "anna@example.test"), TestContext.Current.CancellationToken));
 
-        Assert.Equal(MailFathomPermission.MailContactsWrite, refusal.RequiredPermission);
+        Assert.Equal(MailFathomPermission.ContactsWrite, refusal.RequiredPermission);
         Assert.Equal(0, book.ContactCount);
     }
 
@@ -62,7 +62,7 @@ public sealed class ContactBookWriterTests
         var book = new InMemoryContactBookStore();
         book.Hold(ContactOf("Anna Kowalska", "anna@example.test", ContactOrigin.Asserted));
 
-        var writer = WriterOver(book, MailFathomPermission.MailContactsRead);
+        var writer = WriterOver(book, MailFathomPermission.ContactsRead);
 
         // Act, Assert
         await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
@@ -80,7 +80,7 @@ public sealed class ContactBookWriterTests
         var held = ContactOf("Anna Kowalska", "anna@example.test", ContactOrigin.Asserted);
         book.Hold(held);
 
-        var writer = WriterOver(book, MailFathomPermission.MailContactsRead);
+        var writer = WriterOver(book, MailFathomPermission.ContactsRead);
 
         // Act
         var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() => writer.AmendAsync(
@@ -89,7 +89,7 @@ public sealed class ContactBookWriterTests
             TestContext.Current.CancellationToken));
 
         // Assert
-        Assert.Equal(MailFathomPermission.MailContactsWrite, refusal.RequiredPermission);
+        Assert.Equal(MailFathomPermission.ContactsWrite, refusal.RequiredPermission);
         var untouched = await book.FindAsync(Scope, held.Id, TestContext.Current.CancellationToken);
         Assert.Equal("Anna Kowalska", untouched?.DisplayName.Value);
     }
@@ -374,7 +374,7 @@ public sealed class ContactBookWriterTests
         principals.Current.Returns(AuthorizedPrincipal.CallerActingFor(
             User,
             "a-caller",
-            granted.Length == 0 ? [MailFathomPermission.MailContactsWrite] : granted));
+            granted.Length == 0 ? [MailFathomPermission.ContactsWrite] : granted));
 
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ => new CommittingSession());

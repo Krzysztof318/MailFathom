@@ -49,7 +49,7 @@ namespace MailFathom.Application.Contacts;
 /// </para>
 /// <para>
 /// Two surfaces perform this book's writes and each publishes them under a name of its own, so recording, amending, and
-/// erasing admit the administrative grant above <em>or</em> <see cref="MailFathomPermission.MailContactsWrite" />, which
+/// erasing admit the administrative grant above <em>or</em> <see cref="MailFathomPermission.ContactsWrite" />, which
 /// is what an agent reaching the contact tools holds. The halves are disjoint, so requiring one name would leave the act
 /// reachable from the operator and dead from the protocol. Promotion is written the same way and for the same reason: a
 /// collected record exists to be taken on, and an agent that read the book has the same standing to do it as an operator
@@ -342,7 +342,7 @@ public sealed class ContactBook
     /// <returns>The promoted record, or the refusal naming what stopped it.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="scope" /> is <see langword="null" />.</exception>
     /// <exception cref="PersistenceConcurrencyConflictException">Thrown when every allowed attempt lost the race.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the write was reached by anything but a caller granted <see cref="MailFathomPermission.AdminOperate" /> or <see cref="MailFathomPermission.MailContactsWrite" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the write was reached by anything but a caller granted <see cref="MailFathomPermission.AdminOperate" /> or <see cref="MailFathomPermission.ContactsWrite" />.</exception>
     /// <remarks>
     /// <para>
     /// <b>It copies rather than moves</b>, because the record it is promoting is the mailbox's and the mailbox may be
@@ -540,14 +540,14 @@ public sealed class ContactBook
         return covered.Count == accounts.Length ? scope : ContactBookScope.Of(scope.User, covered);
     }
 
-    /// <summary>Decides whether the caller may write to one user's books: as that user through the mail half, or as an administrator whose scope covers them.</summary>
+    /// <summary>Decides whether the caller may write to one user's books: as that user through the user-facing half, or as an administrator whose scope covers them.</summary>
     /// <param name="administrativePermission">The name the operator's half publishes the act under.</param>
     /// <param name="user">The user whose books the act reaches.</param>
     /// <param name="cancellationToken">Cancels the read of where the user sits.</param>
     /// <returns><see langword="true" /> when the act may proceed, and <see langword="false" /> where the user is outside the administrator's scope, which the act answers as a person it does not hold.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller holds neither alternative at any scope, naming the one on the surface its grant is written on.</exception>
     /// <remarks>
-    /// An agent writing through the mail half writes its own user's books, which no scope bounds. An operator writes
+    /// An agent writing through the user-facing half writes its own user's books, which no scope bounds. An operator writes
     /// through the administrative half, whose permission is held at a scope, so the user the act names has to be inside
     /// it — exactly as every other administrative act naming a user.
     /// </remarks>
@@ -556,14 +556,14 @@ public sealed class ContactBook
         UserId user,
         CancellationToken cancellationToken)
     {
-        if (this.authorization.Permits(MailFathomPermission.MailContactsWrite))
+        if (this.authorization.Permits(MailFathomPermission.ContactsWrite))
         {
             return true;
         }
 
         if (!this.authorization.PermitsAtAnyScope(administrativePermission))
         {
-            this.authorization.RequireAnyPermission(administrativePermission, MailFathomPermission.MailContactsWrite);
+            this.authorization.RequireAnyPermission(administrativePermission, MailFathomPermission.ContactsWrite);
         }
 
         return await this.authorization.PermitsOverAsync(administrativePermission, user, cancellationToken);
@@ -585,7 +585,7 @@ public sealed class ContactBook
         ContactBookScope scope,
         CancellationToken cancellationToken)
     {
-        if (this.authorization.Permits(MailFathomPermission.MailContactsWrite))
+        if (this.authorization.Permits(MailFathomPermission.ContactsWrite))
         {
             return scope;
         }

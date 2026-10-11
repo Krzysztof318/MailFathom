@@ -261,7 +261,7 @@ public sealed class ContactBookOwnershipTests
         var theirs = ContactOf("Anna Kowalska", "anna@example.test");
         store.Hold(SyntheticUser.Deployment, theirs);
 
-        var book = BookOf(store, SyntheticUser.Another, MailFathomPermission.MailContactsWrite);
+        var book = BookOf(store, SyntheticUser.Another, MailFathomPermission.ContactsWrite);
 
         // Act
         var result = await book.RecordAsync(
@@ -403,7 +403,7 @@ public sealed class ContactBookOwnershipTests
         UserId user,
         StubMailAccountAssignments? assignments = null)
     {
-        var authorization = AccessAuthorizations.ForUserGranted(user, MailFathomPermission.MailContactsRead);
+        var authorization = AccessAuthorizations.ForUserGranted(user, MailFathomPermission.ContactsRead);
 
         return new ContactBookReader(
             store,

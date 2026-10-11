@@ -144,8 +144,8 @@ public sealed class MailboxSearchReader
     /// <para>
     /// The grant belongs to publishing as well, and for the same reason the guard does. This is the method an MCP caller
     /// reaches, so it asks what that caller was granted; <see cref="SearchWindowAsync" /> is reached by an answering run
-    /// already admitted under <see cref="MailFathomPermission.MailAsk" />, and asking for a mailbox-read grant there
-    /// would make one permission a component of the other, which the vocabulary deliberately does not do.
+    /// that asked for <see cref="MailFathomPermission.AssistantUse" /> and this grant at its own entry, before anything
+    /// was read, so it does not ask a second time for what that run already established.
     /// </para>
     /// <para>
     /// The guard belongs to publishing rather than to searching, which is why it is here and not in

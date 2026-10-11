@@ -291,7 +291,7 @@ public sealed class CalendarFileImportTests
         return await guarded;
     }
 
-    private CalendarFileImport SignedIn() => this.ImportFor(MailFathomPermission.MailRead);
+    private CalendarFileImport SignedIn() => this.ImportFor(MailFathomPermission.CalendarWrite);
 
     private CalendarFileImport ImportFor(params MailFathomPermission[] granted)
     {

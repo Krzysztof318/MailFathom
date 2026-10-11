@@ -72,13 +72,13 @@ AppHost provisions its synthetic credential after the service reports ready;
 | `POST /api/client/managed-folders/deletions` | `mailfathom.mail.folders.write` with `mailfathom.mail.read` |
 | `GET /api/client/emails` | `mailfathom.mail.read` |
 | `GET /api/client/emails/search` | `mailfathom.mail.read` |
-| `GET /api/client/emails/search/phrasing` | `mailfathom.mail.ask` |
-| `POST /api/client/emails/search/phrasing` | `mailfathom.mail.ask` |
+| `GET /api/client/emails/search/phrasing` | `mailfathom.assistant.use` |
+| `POST /api/client/emails/search/phrasing` | `mailfathom.assistant.use` |
 | `GET /api/client/threads/{threadId}` | `mailfathom.mail.read` |
 | `GET /api/client/threads/{threadId}/state` | `mailfathom.mail.read` |
 | `GET /api/client/messages/{storedEmailId}` | `mailfathom.mail.read` |
 | `GET /api/client/messages/{storedEmailId}/body` | `mailfathom.mail.read` |
-| `GET /api/client/messages/{storedEmailId}/body/cleaned` | `mailfathom.mail.ask` |
+| `GET /api/client/messages/{storedEmailId}/body/cleaned` | `mailfathom.assistant.use` with `mailfathom.mail.read` |
 | `GET /api/client/messages/{storedEmailId}/attachments/{position}` | `mailfathom.mail.read` |
 | `POST /api/client/citations/resolution` | `mailfathom.mail.read` |
 | `GET /api/client/mutations` | `mailfathom.mail.read` |
@@ -95,8 +95,10 @@ AppHost provisions its synthetic credential after the service reports ready;
 | `POST /api/client/record/mail-accounts/folders` | `mailfathom.mail.accounts.write` |
 | `POST /api/client/record/mail-accounts/folders/replacement` | `mailfathom.mail.accounts.write` |
 | `POST /api/client/record/mail-accounts/folders/removal` | `mailfathom.mail.accounts.write` |
-| `GET /api/client/display-name` | `mailfathom.mail.read` |
-| `POST /api/client/display-name` | `mailfathom.mail.accounts.write` |
+| `GET /api/client/display-name` | `mailfathom.profile.read` |
+| `POST /api/client/display-name` | `mailfathom.profile.write` |
+| `GET /api/client/time-zone` | `mailfathom.profile.read` |
+| `POST /api/client/time-zone` | `mailfathom.profile.write` |
 | `GET /api/client/drafts` | `mailfathom.mail.drafts.write` |
 | `POST /api/client/drafts` | `mailfathom.mail.drafts.write` |
 | `GET /api/client/drafts/{draftId}` | `mailfathom.mail.drafts.write` |
@@ -105,64 +107,65 @@ AppHost provisions its synthetic credential after the service reports ready;
 | `POST /api/client/drafts/{draftId}/attachments` | `mailfathom.mail.drafts.write` |
 | `DELETE /api/client/drafts/{draftId}/attachments/{attachmentId}` | `mailfathom.mail.drafts.write` |
 | `POST /api/client/drafts/{draftId}/send` | `mailfathom.mail.send` |
-| `GET /api/client/replies/drafting` | `mailfathom.mail.ask` |
-| `POST /api/client/replies/drafting` | `mailfathom.mail.ask` |
+| `GET /api/client/replies/drafting` | `mailfathom.assistant.use` |
+| `POST /api/client/replies/drafting` | `mailfathom.assistant.use` with `mailfathom.mail.read` |
 | `GET /api/client/outbox` | `mailfathom.mail.send` |
 | `GET /api/client/outbox/{outgoingEmailId}` | `mailfathom.mail.send` |
 | `POST /api/client/outbox/cancellation` | `mailfathom.mail.send` |
 | `POST /api/client/outbox/requeue` | `mailfathom.mail.send` |
-| `GET /api/client/contacts` | `mailfathom.mail.contacts.read` |
-| `GET /api/client/contacts/collected` | `mailfathom.mail.contacts.read` |
-| `GET /api/client/contacts/{contactId}` | `mailfathom.mail.contacts.read` |
-| `GET /api/client/contacts/{contactId}/correspondence` | `mailfathom.mail.read` with `mailfathom.mail.contacts.read` |
-| `GET /api/client/contacts/{contactId}/relationship` | `mailfathom.mail.ask` with `mailfathom.mail.read` and `mailfathom.mail.contacts.read` |
-| `POST /api/client/contacts` | `mailfathom.mail.contacts.write` |
-| `PUT /api/client/contacts/{contactId}` | `mailfathom.mail.contacts.write` |
-| `POST /api/client/contacts/{contactId}/promotion` | `mailfathom.mail.contacts.write` |
-| `DELETE /api/client/contacts/{contactId}` | `mailfathom.mail.contacts.write` |
-| `GET /api/client/notifications` | `mailfathom.mail.read` |
-| `GET /api/client/notifications/unread-count` | `mailfathom.mail.read` |
-| `POST /api/client/notifications/{notificationId}/read-state` | `mailfathom.mail.read` |
-| `POST /api/client/notifications/read` | `mailfathom.mail.read` |
-| `POST /api/client/notifications/deletions` | `mailfathom.mail.read` |
-| `GET /api/client/tasks` | `mailfathom.mail.read` |
-| `GET /api/client/tasks/proposed` | `mailfathom.mail.read` |
-| `GET /api/client/tasks/today/layout` | `mailfathom.mail.ask` |
-| `POST /api/client/tasks/today/layout` | `mailfathom.mail.ask` |
-| `GET /api/client/tasks/{taskId}` | `mailfathom.mail.read` |
-| `POST /api/client/tasks` | `mailfathom.mail.read` |
-| `PUT /api/client/tasks/{taskId}` | `mailfathom.mail.read` |
-| `POST /api/client/tasks/{taskId}/completion` | `mailfathom.mail.read` |
-| `POST /api/client/tasks/{taskId}/acceptance` | `mailfathom.mail.read` |
-| `DELETE /api/client/tasks/{taskId}` | `mailfathom.mail.read` |
-| `GET /api/client/calendar` | `mailfathom.mail.read` |
-| `GET /api/client/calendar/{eventId}` | `mailfathom.mail.read` |
-| `POST /api/client/calendar` | `mailfathom.mail.read` |
-| `PUT /api/client/calendar/{eventId}` | `mailfathom.mail.read` |
-| `POST /api/client/calendar/{eventId}/acceptance` | `mailfathom.mail.read` |
-| `DELETE /api/client/calendar/{eventId}` | `mailfathom.mail.read` |
-| `POST /api/client/calendar/import/summary` | `mailfathom.mail.read` |
-| `POST /api/client/calendar/import` | `mailfathom.mail.read` |
-| `GET /api/client/calendar/drafts` | `mailfathom.mail.ask` |
-| `POST /api/client/calendar/drafts` | `mailfathom.mail.ask` |
-| `GET /api/client/preferences` | `mailfathom.mail.read` |
-| `POST /api/client/preferences` | `mailfathom.mail.read` |
-| `GET /api/client/portrait` | `mailfathom.mail.read` |
-| `POST /api/client/portrait` | `mailfathom.mail.read` |
-| `DELETE /api/client/portrait` | `mailfathom.mail.read` |
-| `POST /api/client/discovery/runs` | `mailfathom.mail.ask` |
-| `GET /api/client/discovery/runs/{runId}` | `mailfathom.mail.ask` |
-| `DELETE /api/client/discovery/runs/{runId}` | `mailfathom.mail.ask` |
-| `GET /api/client/agent/conversations` | `mailfathom.mail.ask` |
-| `POST /api/client/agent/conversations/search` | `mailfathom.mail.ask` |
-| `GET /api/client/agent/conversations/{conversationId}` | `mailfathom.mail.ask` |
-| `DELETE /api/client/agent/conversations/{conversationId}` | `mailfathom.mail.ask` |
-| `PUT /api/client/agent/conversations/{conversationId}/archive` | `mailfathom.mail.ask` |
-| `DELETE /api/client/agent/conversations/{conversationId}/archive` | `mailfathom.mail.ask` |
-| `POST /api/client/agent/conversations/{conversationId}/messages` | `mailfathom.mail.ask` |
-| `POST /api/client/agent/conversations/{conversationId}/runs/{runId}/messages` | `mailfathom.mail.ask` |
-| `DELETE /api/client/agent/conversations/{conversationId}/runs/{runId}` | `mailfathom.mail.ask` |
-| `PUT /api/client/agent/conversations/{conversationId}/proposals/{proposedAt}` | `mailfathom.mail.ask` |
+| `GET /api/client/contacts` | `mailfathom.contacts.read` |
+| `GET /api/client/contacts/collected` | `mailfathom.contacts.read` |
+| `GET /api/client/contacts/{contactId}` | `mailfathom.contacts.read` |
+| `GET /api/client/contacts/{contactId}/correspondence` | `mailfathom.mail.read` with `mailfathom.contacts.read` |
+| `GET /api/client/contacts/{contactId}/relationship` | `mailfathom.assistant.use` with `mailfathom.mail.read` and `mailfathom.contacts.read` |
+| `POST /api/client/contacts` | `mailfathom.contacts.write` |
+| `PUT /api/client/contacts/{contactId}` | `mailfathom.contacts.write` |
+| `POST /api/client/contacts/{contactId}/promotion` | `mailfathom.contacts.write` |
+| `DELETE /api/client/contacts/{contactId}` | `mailfathom.contacts.write` |
+| `GET /api/client/notifications` | `mailfathom.notifications.read` |
+| `GET /api/client/notifications/unread-count` | `mailfathom.notifications.read` |
+| `POST /api/client/notifications/{notificationId}/read-state` | `mailfathom.notifications.write` |
+| `POST /api/client/notifications/read` | `mailfathom.notifications.write` |
+| `POST /api/client/notifications/deletions` | `mailfathom.notifications.write` |
+| `GET /api/client/tasks` | `mailfathom.tasks.read` |
+| `GET /api/client/tasks/proposed` | `mailfathom.tasks.read` |
+| `GET /api/client/tasks/today/layout` | `mailfathom.assistant.use` |
+| `POST /api/client/tasks/today/layout` | `mailfathom.assistant.use` with `mailfathom.tasks.read` and `mailfathom.calendar.read` |
+| `GET /api/client/tasks/{taskId}` | `mailfathom.tasks.read` |
+| `POST /api/client/tasks` | `mailfathom.tasks.write` |
+| `PUT /api/client/tasks/{taskId}` | `mailfathom.tasks.write` |
+| `POST /api/client/tasks/{taskId}/completion` | `mailfathom.tasks.write` |
+| `POST /api/client/tasks/{taskId}/acceptance` | `mailfathom.tasks.write` |
+| `DELETE /api/client/tasks/{taskId}` | `mailfathom.tasks.write` |
+| `GET /api/client/calendar` | `mailfathom.calendar.read` |
+| `GET /api/client/calendar/{eventId}` | `mailfathom.calendar.read` |
+| `POST /api/client/calendar` | `mailfathom.calendar.write` |
+| `PUT /api/client/calendar/{eventId}` | `mailfathom.calendar.write` |
+| `POST /api/client/calendar/{eventId}/acceptance` | `mailfathom.calendar.write` |
+| `DELETE /api/client/calendar/{eventId}` | `mailfathom.calendar.write` |
+| `POST /api/client/calendar/import/summary` | `mailfathom.calendar.write` |
+| `POST /api/client/calendar/import` | `mailfathom.calendar.write` |
+| `GET /api/client/calendar/drafts` | `mailfathom.assistant.use` |
+| `POST /api/client/calendar/drafts` | `mailfathom.assistant.use` |
+| `GET /api/client/preferences` | `mailfathom.profile.read` |
+| `POST /api/client/preferences` | `mailfathom.profile.write` |
+| `GET /api/client/portrait` | `mailfathom.profile.read` |
+| `POST /api/client/portrait` | `mailfathom.profile.write` |
+| `DELETE /api/client/portrait` | `mailfathom.profile.write` |
+| `POST /api/client/discovery/runs` | `mailfathom.assistant.use` with `mailfathom.mail.read` |
+| `GET /api/client/discovery/runs/{runId}` | `mailfathom.assistant.use` |
+| `DELETE /api/client/discovery/runs/{runId}` | `mailfathom.assistant.use` |
+| `GET /api/client/agent/conversations` | `mailfathom.assistant.use` |
+| `POST /api/client/agent/conversations/search` | `mailfathom.assistant.use` |
+| `GET /api/client/agent/conversations/{conversationId}` | `mailfathom.assistant.use` |
+| `DELETE /api/client/agent/conversations/{conversationId}` | `mailfathom.assistant.use` |
+| `PUT /api/client/agent/conversations/{conversationId}/archive` | `mailfathom.assistant.use` |
+| `DELETE /api/client/agent/conversations/{conversationId}/archive` | `mailfathom.assistant.use` |
+| `POST /api/client/agent/conversations/{conversationId}/messages` | `mailfathom.assistant.use` |
+| `POST /api/client/agent/conversations/{conversationId}/runs/{runId}/messages` | `mailfathom.assistant.use` |
+| `DELETE /api/client/agent/conversations/{conversationId}/runs/{runId}` | `mailfathom.assistant.use` |
+| `PUT /api/client/agent/conversations/{conversationId}/proposals/{proposedAt}` | `mailfathom.assistant.use` |
+| `POST /api/client/signals/ticket` | `mailfathom.mail.read` with `mailfathom.notifications.read` |
 | `POST /api/client/telemetry/v1/traces` | none |
 | `POST /api/client/telemetry/v1/metrics` | none |
 | `POST /api/client/telemetry/v1/logs` | none |
@@ -219,9 +222,9 @@ published names the caller holds — its user's grant, kept to what the credenti
 project publishes them; and `telemetry`, how much of a client's own telemetry this deployment wants forwarded.
 `permissions` is computed on every read rather than copied from the credential, so a role assigned or revoked since the
 sign-in is already in it, and a credential naming no permission reports exactly what its user's roles grant. The one
-change a session meets only at its next sign-in is a mail permission a later release publishes: a session records what
+change a session meets only at its next sign-in is a user-facing permission a later release publishes: a session records what
 its credential narrows the grant to when it is minted, every renewal carries that forward, and a credential naming
-nothing is recorded as every mail name the release that minted it published.
+nothing is recorded as every user-facing name the release that minted it published.
 
 That is what a client needs before it has drawn a single message: that this is MailFathom rather than something else
 answering the port, which contract it speaks, and what the rest of the surface will serve it. It is also what lets
@@ -1127,7 +1130,7 @@ echoes what was sent. The body is strict — a key nothing binds is refused with
 day it asked on is told, rather than having the field dropped and the sentence read against this deployment's own
 clock.
 
-**Both routes are published under `mailfathom.mail.ask`** rather than under the reading grant, because that is what
+**Both routes are published under `mailfathom.assistant.use`** rather than under the reading grant, because that is what
 they do: a sentence leaves this deployment for a chat provider and is charged to the same allowance a question is. A
 credential holding only `mailfathom.mail.read` is answered `403` and searches by words, which is the same search a
 deployment with no provider serves. Nothing about the sentence reaches a log or telemetry on either route.
@@ -1637,7 +1640,7 @@ frame rather than their message absent, and every block it keeps identical to wh
 
 **A route of its own rather than a query on the body route, because what it costs is different in kind.** The body route
 reads a local copy and is published under `mailfathom.mail.read`; this one sends an outline to a chat provider and is
-charged to the period allowance a question is charged to, so it is published under **`mailfathom.mail.ask`** — a reading
+charged to the period allowance a question is charged to, so it is published under **`mailfathom.assistant.use`** — a reading
 grant is not a way to spend a deployment's provider budget. A caller holds both, the read behind this needing the reading
 grant as every read does.
 
@@ -1663,7 +1666,7 @@ composed out of a different read would disagree with the body on their screen ab
 | `remoteImages` | `true` where the body on the reader's screen was read with the sender's pictures | `false` |
 
 **A message this user does not hold is answered `404`**, under the same rule the body route states, and a credential whose
-grant does not carry `mailfathom.mail.ask` is answered `403`. Nothing here contacts a mail server, so no screen waits on
+grant does not carry `mailfathom.assistant.use` is answered `403`. Nothing here contacts a mail server, so no screen waits on
 IMAP and no read can set the remote `\Seen` flag.
 
 [AI configuration § Cleaning a message body](configuration-ai.md#cleaning-a-message-body--chatbodycleanup) holds what an
@@ -2289,7 +2292,7 @@ nothing resolves anybody by. A client reading the record alone would still have 
 why this is a route of its own rather than a key in that document.
 
 **The read says whether the write would be accepted, so the client never has to find out by trying.** `changeable` is
-false for somebody whose credential was not granted `mailfathom.mail.accounts.write`, and for somebody whose
+false for somebody whose credential was not granted `mailfathom.profile.write`, and for somebody whose
 organization's or deployment's [settings policy](admin-endpoint.md#settings-policies) does not leave `DisplayName` to
 them to change. It reports the answer rather than the reason: a client draws the same read-only field however the write
 would be refused, and naming the grant a credential lacks would report a deployment's own decisions back to a page
@@ -2317,9 +2320,12 @@ the name is not part of that document, so nothing here is refused as superseded.
 that authenticated, resolved from the request rather than out of the body or the path. Neither adds a name to
 [the published permission set](permissions.md).
 
-**Reading is `mailfathom.mail.read` and writing is `mailfathom.mail.accounts.write`.** The write is the record's own
-grant because it writes the same row an administrator maintains, and the read is the grant every signed-in person
-already holds — somebody whose mailboxes an administrator maintains still sees their own name.
+**Reading is `mailfathom.profile.read` and writing is `mailfathom.profile.write`.** Neither is a grant over mail,
+because what a person is called is not mail, and the write is deliberately not `mailfathom.mail.accounts.write`: that
+grant decides what this deployment reads out of somebody's mailboxes, so somebody whose mail configuration an administrator maintains in full does
+not hold it and still corrects their own name. What keeps a name from being changed where it should not be is not the
+grant — it is the configuration source that declares the person and the settings policy that holds the setting, both
+above.
 
 ### The time zone a person's days are read in
 
@@ -2370,7 +2376,7 @@ that authenticated. A deployment holding no record for that person answers the w
 record already states is answered as a write that landed and commits nothing: the record's version is what every replica
 recomposes that person on, which is a cost to pay for a change rather than for a re-submitted choice.
 
-**Both routes are `mailfathom.mail.read`.** The write is under the reading grant for the reason
+**Reading is `mailfathom.profile.read` and writing is `mailfathom.profile.write`**, for the reason
 [the portrait routes](#the-portrait-routes) are: which zone somebody's own days are read in is not a decision about
 what this deployment reads out of their mailboxes, so gating it on the record's own write would refuse a change about
 nothing but themselves to somebody whose mail configuration an administrator maintains in full.
@@ -2500,11 +2506,11 @@ way these routes differ from [the record routes](#the-record-routes), which are 
 **No route here names a user**, exactly as no record route does: the preferences acted on are those of the credential
 that authenticated, resolved from the request rather than read out of the body or the path.
 
-**Reading and writing are both `mailfathom.mail.read`.** The write is deliberately not
+**Reading is `mailfathom.profile.read` and writing is `mailfathom.profile.write`.** The write is deliberately not
 `mailfathom.mail.accounts.write`, which every record write is: that grant decides what this deployment reads out of
 somebody's mailboxes, somebody whose mail configuration an administrator maintains in full does not hold it, and
-what may be said about a person must not be decided by a grant over their mail configuration. Neither route adds a name
-to [the published permission set](permissions.md).
+what may be said about a person must not be decided by a grant over their mail configuration. Nor is either a grant
+over mail, since nothing here is mail.
 
 **Nothing here reports when anything was set, or from where.** This deployment keeps no record of the machines somebody
 signed in from, and a response saying when a switch last moved would be the beginning of one. Erasing a user erases
@@ -2615,10 +2621,10 @@ deliberately not cached without revalidation: a portrait is personal data.
 **No route here names a user**, exactly as no record route does: the picture acted on is that of the credential that
 authenticated, resolved from the request rather than read out of the body or the path.
 
-**All three are `mailfathom.mail.read`**, and none adds a name to [the published permission set](permissions.md). The
-two writes are deliberately not `mailfathom.mail.accounts.write`, for the reason [the preferences
-write](#the-preferences-routes) is not: that grant decides what this deployment reads out of somebody's mailboxes,
-and what a person is drawn by must not be decided by a grant over their mail configuration.
+**Reading is `mailfathom.profile.read` and the two writes are `mailfathom.profile.write`.** The writes are
+deliberately not `mailfathom.mail.accounts.write`, for the reason [the preferences write](#the-preferences-routes) is
+not: that grant decides what this deployment reads out of somebody's mailboxes, and what a person is drawn by must not
+be decided by a grant over their mail configuration.
 
 **The file hangs off the user row.** Erasing a user erases their portrait with everything else derived from them, in
 the database and in the object store alike, and [moving stored content](moving-stored-content.md) into the object store
@@ -2791,10 +2797,13 @@ that reaches an access log by default, here and on every proxy in front of this 
 refused before it is read, a request naming no message and an over-long `selection` or `instruction` are refused with
 `400`, and a refusal never echoes what was sent.
 
-**Both routes are published under `mailfathom.mail.ask`** rather than under the reading grant, because that is what
+**Both routes are published under `mailfathom.assistant.use`** rather than under the reading grant, because that is what
 drafting does: the conversation and a sample of the account's own sent mail leave this deployment for a chat provider,
 and the call is charged to the same allowance a question is. A credential holding only `mailfathom.mail.read` is
-answered `403`. Nothing about a draft reaches a log or telemetry on either route.
+answered `403`, and so is one holding only the asking grant on `POST`: a draft is written from the conversation it
+answers, which is mail, so drafting asks for `mailfathom.mail.read` beneath the grant the route is published under.
+`GET` reads no mail and answers on the asking grant alone. Nothing about a draft reaches a log or telemetry on either
+route.
 [Drafting a reply](../features/reply-drafting.md) holds what a draft is written from and what never leaves.
 
 ### The calendar event drafting routes
@@ -2856,7 +2865,7 @@ echoes what was typed. The body is strict — a key nothing binds is refused wit
 instant it wrote at is told, rather than having the field dropped and the description read against this deployment's
 own clock.
 
-**Both routes are published under `mailfathom.mail.ask`**, because the sentence leaves this deployment for a chat
+**Both routes are published under `mailfathom.assistant.use`**, because the sentence leaves this deployment for a chat
 provider and the call is charged to the same allowance a question is. Nothing about a description or a drafted event
 reaches a log or telemetry on either route.
 [Reading a calendar event out of text](../features/calendar-event-extraction.md) holds what counts as an event, why a
@@ -2947,7 +2956,7 @@ request is answered from and it belongs on the surface an operator answers one f
 whole collected book, because emptying what one mailbox picked up is an act about the mailbox rather than about
 whoever reads it.
 
-**Reading is `mailfathom.mail.contacts.read` and every write is `mailfathom.mail.contacts.write`**, the same split
+**Reading is `mailfathom.contacts.read` and every write is `mailfathom.contacts.write`**, the same split
 [the tools over this book](../features/mcp-tools.md#the-contact-book-on-this-surface) publish. The erasure is behind
 the writing grant rather than a narrower one: a grant that may edit the book may take somebody out of it, and no
 smaller grant reaches an act that cannot be undone.
@@ -3020,7 +3029,7 @@ outside the query rather than filtered out of its answer — neither list ever c
 **A contact no book in this caller's scope holds is answered `404`**, which is also the answer for a contact nobody
 ever held: neither discloses the other. A contact the window holds no mail of is answered `200` with two empty lists,
 which is the accurate answer rather than a missing one. A credential whose grant does not carry `mailfathom.mail.read`
-is answered `403`, and so is one missing `mailfathom.mail.contacts.read` — the refusal names which. It is served from
+is answered `403`, and so is one missing `mailfathom.contacts.read` — the refusal names which. It is served from
 the local copy, so it contacts no mail server and cannot set the remote `\Seen` flag.
 
 ### The contact relationship route
@@ -3085,8 +3094,8 @@ as the message it was last carried by, a document as that message's own attachme
 card carries at most one observation per aspect.
 
 **A contact no book in this caller's scope holds is answered `404`**, the same answer a contact nobody ever held gets.
-A credential whose grant does not carry `mailfathom.mail.ask` is answered `403`, and so is one missing
-`mailfathom.mail.read` or `mailfathom.mail.contacts.read`, which the correlation and the book ask for themselves — the
+A credential whose grant does not carry `mailfathom.assistant.use` is answered `403`, and so is one missing
+`mailfathom.mail.read` or `mailfathom.contacts.read`, which the correlation and the book ask for themselves — the
 refusal names which. It reaches no mail server and cannot set the remote `\Seen` flag.
 
 ### The notification routes
@@ -3169,13 +3178,13 @@ and how many remain unread; the mark-all route reports how many it moved and tha
 many went and what stands unread after them. None of them needs the page to be fetched again to find out what the
 request produced.
 
-**Every route here is `mailfathom.mail.read`, the three writes included.** Marking a notification read, and taking one
-out of the centre, each change what this deployment draws for one person about mail they can already see: neither
-reaches a mail server and neither moves anything in a mailbox. It is [the preferences routes](#the-preferences-routes)'
-reasoning rather than [the mutation routes](#the-mutation-routes)' — a person whose mail accounts an administrator
-maintains does not hold a write grant and still has to be able to clear their own bell. `mailfathom.mail.delete` is the
-power to remove somebody's mail and is not what the erasure asks for: what leaves is a record about a message that
-stays.
+**The two reads are `mailfathom.notifications.read` and the three writes are `mailfathom.notifications.write`.**
+Neither is a grant over mail: a notification is what this deployment drew for one person, so marking one read and
+taking one out of the centre reach no mail server and move nothing in a mailbox, and a person whose mail accounts an
+administrator maintains clears their own bell under a grant that says nothing about those accounts.
+`mailfathom.mail.delete` is the power to remove somebody's mail and is not what the erasure asks for: what leaves is a
+record about a message that stays. Opening the message a notification points at is `mailfathom.mail.read`, as it is
+from anywhere else.
 
 **Where opening one leads is one of five shapes**, and `target` carries the one the producer chose: `Nothing`,
 `Message` with a `messageId`, `Screen` with a `screen`, `CalendarEvent` with a `calendarEventId`, and `PersonalTask`
@@ -3279,13 +3288,12 @@ is the state the caller asked for, so a repeated press is a no-op rather than an
 that already exists, so a commitment keeps the identity it was proposed under and whatever already points at it still
 points at it.
 
-**Every route here is `mailfathom.mail.read`, the five writes included.** A task is this deployment's own record of
-what one person owes: nothing here reaches a mail server, nothing moves in a mailbox, and the message a task cites is a
-value it carries rather than mail these routes read. It is [the notification routes](#the-notification-routes)'
-reasoning rather than [the mutation routes](#the-mutation-routes)' — a person whose mail accounts an administrator
-maintains does not hold a write grant and still has to be able to keep their own list. `mailfathom.mail.delete` is the
-power to remove somebody's mail and is not what the erasure asks for: what leaves is a commitment about a message that
-stays.
+**The three reads are `mailfathom.tasks.read` and the five writes are `mailfathom.tasks.write`.** A task is this
+deployment's own record of what one person owes: nothing here reaches a mail server, nothing moves in a mailbox, and
+the message a task cites is a value it carries rather than mail these routes read — so neither is a grant over mail,
+and a person whose mail accounts an administrator maintains keeps their own list under a grant that says nothing about
+those accounts. `mailfathom.mail.delete` is the power to remove somebody's mail and is not what the erasure asks for:
+what leaves is a commitment about a message that stays.
 
 ### The day-layout routes
 
@@ -3324,13 +3332,14 @@ it offers the control, so a deployment that composes nothing is not offering a b
 is the one refusal that travels**, as `429`, because falling back to "nothing arranged" would leave somebody pressing
 a control the last of the allowance has already been paid for, told nothing.
 
-**Both routes are `mailfathom.mail.ask` rather than the read grant the rest of the list is served under**, for the
+**Both routes are `mailfathom.assistant.use` rather than the read grant the rest of the list is served under**, for the
 reason [reply drafting](#the-reply-drafting-routes) carries that grant: arranging a day is a provider call charged to
 the same allowance a question is. It is what the call costs that decides the grant here, rather than which of this
-deployment's own records were read to compose it. **`POST` asks for `mailfathom.mail.read` beneath it as well**, for
-the reason [the contact card](#the-contact-relationship-route) asks for the grants its correlation needs: the tasks and
-the calendar it reads to compose the turn are that grant's own records, so a caller holding the asking grant alone is
-refused naming the one they are missing. `GET` reads neither and answers on the asking grant alone.
+deployment's own records were read to compose it. **`POST` asks for `mailfathom.tasks.read` and
+`mailfathom.calendar.read` beneath it as well**, for the reason [the contact card](#the-contact-relationship-route)
+asks for the grants its correlation needs: the tasks and the calendar it reads to compose the turn are those grants'
+own records, so a caller holding the asking grant alone is refused naming the one they are missing. `GET` reads
+neither and answers on the asking grant alone.
 
 ### The calendar routes
 
@@ -3425,8 +3434,8 @@ problem document is the one part of an answer a proxy log, a trace, and a client
 title says who somebody is meeting. An end that is not after its start is refused the same way, when the event is
 created and again whenever it is amended.
 
-**Every route here is `mailfathom.mail.read`, the four writes included**, exactly as
-[the task routes](#the-task-routes) above are. An event is this deployment's own record of when one person is
+**The two reads are `mailfathom.calendar.read` and the four writes are `mailfathom.calendar.write`**, on the reading
+[the task routes](#the-task-routes) above are split by. An event is this deployment's own record of when one person is
 committed: nothing here reaches a mail server, nothing moves in a mailbox, and the message an event cites is a value it
 carries rather than mail these routes read. `mailfathom.mail.delete` is the power to remove somebody's mail and is not
 what the deletion asks for — what leaves is a date about a message that stays.
@@ -3701,7 +3710,9 @@ and one that would start a conversation for a person already holding 1 000, wher
 over-long text, an empty identifier, or a scope naming no subject is `400`.
 
 **The answer is composed by the replica that took the question, past the request that asked it.** The run reads the
-person's mail, calendar, and tasks under the grant the question was asked with, writes a status line, each block, and
+person's mail, calendar, and tasks each under the grant that reads it — `mailfathom.mail.read`,
+`mailfathom.calendar.read`, `mailfathom.tasks.read` — so a caller holding the asking grant without one of them is
+answered by a model that was not offered that reading at all, writes a status line, each block, and
 each proposal the moment it exists, and ends as completed, stopped, or failed — so a client that leaves and returns
 reads everything written meanwhile, and closing the connection ends nothing. It spends from the same period ceiling and
 per-run bounds a mail answer does, on the model `Chat:Agent:Model` routes it to; a deployment with no chat endpoint
@@ -3752,7 +3763,8 @@ composing it by hand goes through — and an act this deployment refuses ends th
 conversation then shows. The one decided proposal that can still be answered is a `failed` one, and only by
 `accepted`, which is how it is tried again; declining a `failed` proposal is `409`, as is answering a declined or an
 accepted one either way. A caller whose grant does not carry every permission the act needs — `mailfathom.mail.drafts.write`
-and `mailfathom.mail.send`, and `mailfathom.mail.read` as well for an answer to a message — is `403` before anything is
+and `mailfathom.mail.send` for a message, `mailfathom.mail.read` as well for an answer to one,
+`mailfathom.calendar.write` for an event, and `mailfathom.tasks.write` for a task — is `403` before anything is
 recorded. Declining carries nothing out. `DELETE /api/client/agent/conversations/{conversationId}` removes
 the conversation and everything said in it, `204`, and `404` once there is nothing to remove.
 
@@ -3906,8 +3918,10 @@ network or a proxy that will not pass the WebSocket upgrade gives that client no
 reads its screens over the ordinary routes on its own schedule instead.
 
 **A connection is opened against a ticket, because a browser cannot put a header on a WebSocket.** The client mints one
-over the route above — an ordinary authenticated route on this surface, requiring `mailfathom.mail.read` like the mail
-it announces — and hands it to the connection. A ticket names the user the credential behind it already named, is
+over the route above — an ordinary authenticated route on this surface, published under `mailfathom.mail.read` like
+the mail it announces and asking for `mailfathom.notifications.read` beside it, because one of the lines the channel
+carries is a notification's own headline — and hands it to the connection. A caller missing either grant is answered
+`403` naming it and holds no ticket, so its client reads its screens over the ordinary routes on its own schedule. A ticket names the user the credential behind it already named, is
 drawn from a cryptographically secure source, lives 30 seconds, and stops working the first time it is presented, so one
 read out of a proxy's access log or a browser's own history is already spent or already expired. Nothing else opens a
 connection: a connection presenting nothing, something malformed, something expired, or something already spent is
@@ -4118,7 +4132,7 @@ switch**, because a request presents nothing that names a user and every one is 
 deployment holds; keeping somebody off it means configuring a credential for it, or disabling it.
 
 What a caller here may do is what its user's roles grant, kept to the names its credential records rather than anything
-on the entry. Those names draw from the mailbox half of the published set — a name reaching only the administrative half
+on the entry. Those names draw from the user-facing half of the published set — a name reaching only the administrative half
 is refused where the credential is provisioned. [Writing a grant](permissions.md#writing-a-grant) and
 [how a caller's grant is computed](permissions.md#how-a-callers-grant-is-computed) are the whole of that rule; nothing
 about it is particular to this surface.

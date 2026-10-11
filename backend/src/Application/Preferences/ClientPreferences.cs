@@ -32,8 +32,8 @@ namespace MailFathom.Application.Preferences;
 /// </para>
 /// <para>
 /// Nothing here is personal data about a third party and nothing here is mail. What it does carry is a decision about
-/// what may be said about this person, which is why the switch is theirs to set under the grant they already hold
-/// rather than under one an administrator maintains for them.
+/// what may be said about this person, which is why the switch is theirs to set under the grant over their own
+/// profile rather than under one an administrator maintains over their mail accounts.
 /// </para>
 /// <para>
 /// That decision is theirs unless a settings policy takes it. The deployment's policy, or the policy of the

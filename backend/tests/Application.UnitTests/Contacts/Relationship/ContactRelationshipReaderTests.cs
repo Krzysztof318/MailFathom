@@ -143,7 +143,7 @@ public sealed class ContactRelationshipReaderTests
             reader.ReadAsync(ContactOf("anna@example.com"), TestContext.Current.CancellationToken));
 
         // Assert
-        Assert.Equal(MailFathomPermission.MailAsk, refusal.RequiredPermission);
+        Assert.Equal(MailFathomPermission.AssistantUse, refusal.RequiredPermission);
     }
 
     private static ContactRelationshipReader ReaderOver(
@@ -155,7 +155,7 @@ public sealed class ContactRelationshipReaderTests
     {
         var guard = egressGuard ?? SensitiveContentEgressGuards.Inactive();
         var granted = authorization ?? AccessAuthorizations.ForCallerGranted(
-            MailFathomPermission.MailAsk,
+            MailFathomPermission.AssistantUse,
             MailFathomPermission.MailRead);
         var scopeResolver = new MailboxScopeResolver(
             CatalogServing(TheAccount),

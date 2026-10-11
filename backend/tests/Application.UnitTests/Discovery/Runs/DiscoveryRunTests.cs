@@ -213,7 +213,27 @@ public sealed class DiscoveryRunTests
             run.RunAsync(Question, progress: null, TestContext.Current.CancellationToken));
 
         // Assert
-        Assert.Equal(MailFathomPermission.MailAsk, refusal.RequiredPermission);
+        Assert.Equal(MailFathomPermission.AssistantUse, refusal.RequiredPermission);
+    }
+
+    /// <summary>Asking is not reading, so the grant that sends content to a provider reaches no mail to send without the one that reads it.</summary>
+    [Fact]
+    public async Task RunAsync_ACallerGrantedAskingAlone_IsRefused()
+    {
+        // Arrange
+        var planner = DiscoveryRuns.PlannerDeriving(DiscoveryIntent.FindFact, SufficientPassages, "quotation");
+        var run = DiscoveryRuns.Composing(
+            planner,
+            new ScriptedEmailKnowledgeSearch(),
+            authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.AssistantUse));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            run.RunAsync(Question, progress: null, TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.MailRead, refusal.RequiredPermission);
+        Assert.Empty(planner.ReceivedCalls());
     }
 
     /// <summary>Nothing runs before the grant is read, so a caller that may not ask reaches no derivation.</summary>

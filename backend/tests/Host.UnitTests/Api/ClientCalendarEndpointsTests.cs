@@ -522,7 +522,7 @@ public sealed class ClientCalendarEndpointsTests
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ => new CommittingSession());
 
         return new OwnCalendar(
-            AccessAuthorizations.ForUserGranted(Person, MailFathomPermission.MailRead),
+            AccessAuthorizations.ForUserGranted(Person, MailFathomPermission.CalendarRead, MailFathomPermission.CalendarWrite),
             this.store,
             new OptimisticConcurrencyRetryPolicy(sessionFactory, new PersistenceConcurrencyOptions(), this.clock),
             this.clock);

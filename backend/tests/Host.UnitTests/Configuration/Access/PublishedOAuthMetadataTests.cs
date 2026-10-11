@@ -222,7 +222,7 @@ public sealed class PublishedOAuthMetadataTests
             published.ScopesSupported);
     }
 
-    /// <summary>The administrative endpoint narrowed by token scopes advertises its own half, never the mail half beside it.</summary>
+    /// <summary>The administrative endpoint narrowed by token scopes advertises its own half, never the user-facing half beside it.</summary>
     [Fact]
     public void ForUserFacing_AnAdministrativeEntryNarrowedByTokenScopes_PublishesTheWholeAdministrativeSurface()
     {

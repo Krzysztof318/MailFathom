@@ -29,7 +29,7 @@ public sealed class OwnClientPreferencesTests
         var store = Substitute.For<IClientPreferencesStore>();
         store.ReadAsync(SyntheticUser.Deployment, Arg.Any<CancellationToken>()).Returns(Chosen);
 
-        var preferences = ReachedBy(store, MailFathomPermission.MailRead);
+        var preferences = ReachedBy(store, MailFathomPermission.ProfileRead, MailFathomPermission.ProfileWrite);
 
         // Act
         var read = await preferences.ReadAsync(TestContext.Current.CancellationToken);
@@ -46,7 +46,7 @@ public sealed class OwnClientPreferencesTests
         var store = Substitute.For<IClientPreferencesStore>();
         store.ReadAsync(Arg.Any<UserId>(), Arg.Any<CancellationToken>()).Returns((ClientPreferences?)null);
 
-        var preferences = ReachedBy(store, MailFathomPermission.MailRead);
+        var preferences = ReachedBy(store, MailFathomPermission.ProfileRead, MailFathomPermission.ProfileWrite);
 
         // Act
         var read = await preferences.ReadAsync(TestContext.Current.CancellationToken);
@@ -61,7 +61,7 @@ public sealed class OwnClientPreferencesTests
     {
         // Arrange
         var store = Substitute.For<IClientPreferencesStore>();
-        var preferences = ReachedBy(store, SyntheticUser.Another, MailFathomPermission.MailRead);
+        var preferences = ReachedBy(store, SyntheticUser.Another, MailFathomPermission.ProfileRead, MailFathomPermission.ProfileWrite);
 
         // Act
         await preferences.ReadAsync(TestContext.Current.CancellationToken);
@@ -88,7 +88,7 @@ public sealed class OwnClientPreferencesTests
     {
         // Arrange
         var preferences = new OwnClientPreferences(
-            AccessAuthorizations.ForAdministratorGranted(MailFathomPermission.MailRead),
+            AccessAuthorizations.ForAdministratorGranted(MailFathomPermission.ProfileRead),
             Substitute.For<IClientPreferencesStore>());
 
         // Assert
@@ -104,7 +104,7 @@ public sealed class OwnClientPreferencesTests
         store.SaveAsync(Arg.Any<UserId>(), Arg.Any<ClientPreferences>(), Arg.Any<CancellationToken>())
             .Returns(true);
 
-        var preferences = ReachedBy(store, SyntheticUser.Another, MailFathomPermission.MailRead);
+        var preferences = ReachedBy(store, SyntheticUser.Another, MailFathomPermission.ProfileRead, MailFathomPermission.ProfileWrite);
 
         // Act
         var written = await preferences.SaveAsync(Chosen, TestContext.Current.CancellationToken);
@@ -123,7 +123,7 @@ public sealed class OwnClientPreferencesTests
         store.SaveAsync(Arg.Any<UserId>(), Arg.Any<ClientPreferences>(), Arg.Any<CancellationToken>())
             .Returns(false);
 
-        var preferences = ReachedBy(store, MailFathomPermission.MailRead);
+        var preferences = ReachedBy(store, MailFathomPermission.ProfileRead, MailFathomPermission.ProfileWrite);
 
         // Act
         var written = await preferences.SaveAsync(Chosen, TestContext.Current.CancellationToken);
@@ -132,10 +132,38 @@ public sealed class OwnClientPreferencesTests
         Assert.False(written);
     }
 
+    /// <summary>Reading what somebody set is not setting it, so a caller granted only the reading half writes nothing.</summary>
+    [Fact]
+    public async Task SaveAsync_ACallerGrantedOnlyReadingTheirProfile_IsRefused()
+    {
+        // Arrange
+        var store = Substitute.For<IClientPreferencesStore>();
+        var preferences = ReachedBy(store, MailFathomPermission.ProfileRead);
+
+        // Assert
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
+            () => preferences.SaveAsync(Chosen, TestContext.Current.CancellationToken));
+
+        await store.DidNotReceive()
+            .SaveAsync(Arg.Any<UserId>(), Arg.Any<ClientPreferences>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>What somebody set about their own client is not mail, so the grant that reads mail reads none of it.</summary>
+    [Fact]
+    public async Task ReadAsync_ACallerGrantedOnlyReadingMail_IsRefused()
+    {
+        // Arrange
+        var preferences = ReachedBy(Substitute.For<IClientPreferencesStore>(), MailFathomPermission.MailRead);
+
+        // Assert
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
+            () => preferences.ReadAsync(TestContext.Current.CancellationToken));
+    }
+
     /// <summary>
-    /// The write is admitted under the grant a signed-in person already holds rather than under the one that decides
-    /// which mailboxes this deployment reads: somebody whose accounts an administrator maintains still turns their own
-    /// telemetry off.
+    /// The write is admitted under a grant over the person's own profile rather than under the one that decides which
+    /// mailboxes this deployment reads: somebody whose accounts an administrator maintains still turns their own
+    /// telemetry off, and holding the second says nothing about the first.
     /// </summary>
     [Fact]
     public async Task SaveAsync_ACallerHoldingOnlyTheMailAccountsGrant_IsRefused()
@@ -155,7 +183,7 @@ public sealed class OwnClientPreferencesTests
     {
         // Arrange
         var store = Substitute.For<IClientPreferencesStore>();
-        var preferences = ReachedBy(store, MailFathomPermission.MailRead);
+        var preferences = ReachedBy(store, MailFathomPermission.ProfileRead, MailFathomPermission.ProfileWrite);
 
         // Assert
         await Assert.ThrowsAsync<ArgumentNullException>(

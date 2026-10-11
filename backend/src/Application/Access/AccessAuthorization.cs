@@ -115,7 +115,7 @@ public sealed class AccessAuthorization
     /// is granted — requiring a single permission there would mean the use case was reachable from one entrypoint and
     /// dead from the other. Writing the contact book is the case: an operator reaches it under
     /// <see cref="MailFathomPermission.AdminOperate" /> and an agent under
-    /// <see cref="MailFathomPermission.MailContactsWrite" />, and the act is the same act.
+    /// <see cref="MailFathomPermission.ContactsWrite" />, and the act is the same act.
     /// </para>
     /// <para>
     /// It is an alternative rather than a widening, so it is written where the act genuinely belongs to both surfaces and

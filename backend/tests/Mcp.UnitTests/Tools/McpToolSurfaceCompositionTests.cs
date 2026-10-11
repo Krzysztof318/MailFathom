@@ -44,7 +44,7 @@ public sealed class McpToolSurfaceCompositionTests
         // Arrange
         await using var provider = RegisteredMcpToolSurface.ComposedForCallerGranted(
             MailFathomPermission.MailRead,
-            MailFathomPermission.MailAsk);
+            MailFathomPermission.AssistantUse);
 
         // Act
         var listing = await RegisteredMcpToolSurface.ListedToolsAsync(provider);
@@ -60,7 +60,7 @@ public sealed class McpToolSurfaceCompositionTests
     {
         // Arrange
         await using var provider = RegisteredMcpToolSurface.ComposedForCallerGranted(
-            MailFathomPermission.MailContactsRead);
+            MailFathomPermission.ContactsRead);
 
         // Act
         var listing = await RegisteredMcpToolSurface.ListedToolsAsync(provider);
@@ -77,7 +77,7 @@ public sealed class McpToolSurfaceCompositionTests
     {
         // Arrange
         await using var provider = RegisteredMcpToolSurface.ComposedForCallerGranted(
-            MailFathomPermission.MailContactsWrite);
+            MailFathomPermission.ContactsWrite);
 
         // Act
         var listing = await RegisteredMcpToolSurface.ListedToolsAsync(provider);
@@ -166,7 +166,7 @@ public sealed class McpToolSurfaceCompositionTests
     {
         // Arrange
         await using var provider = RegisteredMcpToolSurface.ComposedForCallerGranted(
-            MailFathomPermission.MailContactsRead);
+            MailFathomPermission.ContactsRead);
 
         // Act
         var refusal = await Assert.ThrowsAsync<McpProtocolException>(() =>

@@ -35,7 +35,7 @@ public sealed class McpToolAuthorizationTests
         // Arrange
         var authorization = AccessAuthorizations.ForCallerGranted(
             MailFathomPermission.MailRead,
-            MailFathomPermission.MailAsk);
+            MailFathomPermission.AssistantUse);
 
         // Act
         var listing = await FilteredListingAsync(authorization, ListingOf(EveryPublishedToolName));
@@ -70,7 +70,7 @@ public sealed class McpToolAuthorizationTests
     public async Task WithoutUnauthorizedToolsAsync_ACallerGrantedOnlyMailAsk_IsOfferedTheAnsweringToolAlone()
     {
         // Arrange
-        var authorization = AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailAsk);
+        var authorization = AccessAuthorizations.ForCallerGranted(MailFathomPermission.AssistantUse);
 
         // Act
         var listing = await FilteredListingAsync(authorization, ListingOf(EveryPublishedToolName));
@@ -100,7 +100,7 @@ public sealed class McpToolAuthorizationTests
         // Arrange
         var authorization = AccessAuthorizations.ForCallerGranted(
             MailFathomPermission.MailRead,
-            MailFathomPermission.MailAsk);
+            MailFathomPermission.AssistantUse);
 
         // Act
         var listing = await FilteredListingAsync(
@@ -252,7 +252,7 @@ public sealed class McpToolAuthorizationTests
         refusals.Received(1).RecordRefusal(
             ProtectedSurface.Mail,
             AskMailTool.ToolName,
-            MailFathomPermission.MailAsk,
+            MailFathomPermission.AssistantUse,
             CallerIdentity);
     }
 
@@ -291,14 +291,14 @@ public sealed class McpToolAuthorizationTests
             authorization,
             SearchEmailsTool.ToolName,
             ServedResult,
-            onReached: () => authorization.RequirePermission(MailFathomPermission.MailAsk),
+            onReached: () => authorization.RequirePermission(MailFathomPermission.AssistantUse),
             refusals: refusals));
 
         // Assert
         refusals.Received(1).RecordRefusal(
             ProtectedSurface.Mail,
             SearchEmailsTool.ToolName,
-            MailFathomPermission.MailAsk,
+            MailFathomPermission.AssistantUse,
             CallerIdentity);
     }
 

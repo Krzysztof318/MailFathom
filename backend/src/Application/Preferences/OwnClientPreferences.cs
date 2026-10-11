@@ -15,8 +15,8 @@ namespace MailFathom.Application.Preferences;
 /// caller cannot express rather than something a surface has to refuse.
 /// </para>
 /// <para>
-/// Both acts are admitted under <see cref="MailFathomPermission.MailRead" />, which is the grant a signed-in person
-/// already holds, and neither adds a name to the published set. The write is deliberately not
+/// Reading is admitted under <see cref="MailFathomPermission.ProfileRead" /> and the write under
+/// <see cref="MailFathomPermission.ProfileWrite" />. The write is deliberately not
 /// <see cref="MailFathomPermission.MailAccountsWrite" />: that grant decides what this deployment reads out of
 /// somebody's mailboxes, somebody whose mail configuration an administrator maintains in full does not hold it, and
 /// hanging a person's own telemetry switch on it would let a grant they do not hold over their mail configuration
@@ -49,11 +49,11 @@ public sealed class OwnClientPreferences
     /// <summary>Reads what the signed-in person set about their own client.</summary>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>What they set, or <see cref="ClientPreferences.Unset" /> where they have set nothing.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.ProfileRead" />.</exception>
     /// <exception cref="System.Text.Json.JsonException">Thrown when the stored row is not a document of preferences.</exception>
     public async Task<ClientPreferences> ReadAsync(CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.MailRead);
+        this.authorization.RequirePermission(MailFathomPermission.ProfileRead);
 
         var stored = await this.store.ReadAsync(this.authorization.RequireUser(), cancellationToken);
 
@@ -65,12 +65,12 @@ public sealed class OwnClientPreferences
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns><see langword="true" /> when the write landed, and <see langword="false" /> when this deployment holds no record for the caller.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="preferences" /> is <see langword="null" />.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.ProfileWrite" />.</exception>
     public Task<bool> SaveAsync(ClientPreferences preferences, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(preferences);
 
-        this.authorization.RequirePermission(MailFathomPermission.MailRead);
+        this.authorization.RequirePermission(MailFathomPermission.ProfileWrite);
 
         return this.store.SaveAsync(this.authorization.RequireUser(), preferences, cancellationToken);
     }

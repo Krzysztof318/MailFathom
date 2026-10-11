@@ -30,7 +30,7 @@ namespace MailFathom.Host.UnitTests.Security.Transport;
 /// user holds where it configures no entry, and none of the three where it configures one. The download route is
 /// withheld from the permissive half of that before either surface is asked, because a principal appearing out of the
 /// transport there would be a second and weaker way into an attachment than the signature the route verifies. On a
-/// mail-serving surface a caller holds its user's grant kept to the mail half and to what its credential names, so an
+/// mail-serving surface a caller holds its user's grant kept to the user-facing half and to what its credential names, so an
 /// arrangement here states the user's grant beside the credential and resolves it as the pipeline does.
 /// </remarks>
 public sealed class TransportAuthorizedPrincipalSourceTests
@@ -123,7 +123,7 @@ public sealed class TransportAuthorizedPrincipalSourceTests
     /// <summary>
     /// ADR 0012 leaves a surface with no <c>Authentication</c> entry serving its callers, because there is no entry for
     /// a credential to hang on. On a mail-serving surface that caller acts for the served user and holds what that
-    /// user's roles grant of the mail half; reporting no principal here would have a use case refuse every call on a
+    /// user's roles grant of the user-facing half; reporting no principal here would have a use case refuse every call on a
     /// deployment whose own record says it serves them.
     /// </summary>
     [Theory]
@@ -243,7 +243,7 @@ public sealed class TransportAuthorizedPrincipalSourceTests
             mcpConfiguresACredential: true);
         var userGrant = ScopedGrant.Of([
             (MailFathomPermission.MailRead, userScope),
-            (MailFathomPermission.MailAsk, userScope),
+            (MailFathomPermission.AssistantUse, userScope),
         ]);
 
         // Act
@@ -256,7 +256,7 @@ public sealed class TransportAuthorizedPrincipalSourceTests
     }
 
     /// <summary>
-    /// A credential naming nothing is admitted kept to every name the mail half publishes, so what its caller holds is
+    /// A credential naming nothing is admitted kept to every name the user-facing half publishes, so what its caller holds is
     /// exactly its user's grant: a mail name no role carries — which is what a permission a later release publishes is
     /// until somebody writes it into one — is not held, and the session route reports that grant rather than the
     /// credential's own list.
@@ -272,7 +272,7 @@ public sealed class TransportAuthorizedPrincipalSourceTests
             clientConfiguresACredential: true);
         var userGrant = ScopedGrant.Of([
             (MailFathomPermission.MailRead, AssignmentScope.User(SyntheticUser.Another)),
-            (MailFathomPermission.MailAsk, AssignmentScope.User(SyntheticUser.Another)),
+            (MailFathomPermission.AssistantUse, AssignmentScope.User(SyntheticUser.Another)),
         ]);
 
         // Act
@@ -282,12 +282,12 @@ public sealed class TransportAuthorizedPrincipalSourceTests
         // Assert
         Assert.NotNull(principal);
         Assert.DoesNotContain(MailFathomPermission.MailSend, principal.Permissions);
-        Assert.Equal([MailFathomPermission.MailRead.Name, MailFathomPermission.MailAsk.Name], session.Permissions);
+        Assert.Equal([MailFathomPermission.MailRead.Name, MailFathomPermission.AssistantUse.Name], session.Permissions);
     }
 
-    /// <summary>A mail-serving surface reads the mail half of a grant, so a role carrying administrative names grants nothing there by them, whatever the credential lists.</summary>
+    /// <summary>A mail-serving surface reads the user-facing half of a grant, so a role carrying administrative names grants nothing there by them, whatever the credential lists.</summary>
     [Fact]
-    public async Task Current_AUsersCredentialWhoseUserHoldsAdministrativeNames_HoldsOnlyTheMailHalfOnAMailSurface()
+    public async Task Current_AUsersCredentialWhoseUserHoldsAdministrativeNames_HoldsOnlyTheUserFacingHalfOnAMailSurface()
     {
         // Arrange
         var source = SourceOver(
@@ -583,7 +583,7 @@ public sealed class TransportAuthorizedPrincipalSourceTests
     }
 
     /// <summary>Resolves the grant as the pipeline does ahead of every route, then reads the principal.</summary>
-    /// <remarks>The user holds the whole mail half unless a test states otherwise.</remarks>
+    /// <remarks>The user holds the whole user-facing half unless a test states otherwise.</remarks>
     private static async Task<AuthorizedPrincipal?> ResolvedAsync(
         TransportAuthorizedPrincipalSource source,
         ScopedGrant? userGrant = null)

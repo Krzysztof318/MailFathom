@@ -123,14 +123,19 @@ public sealed class MailboxQuestionReader
     /// <exception cref="MailAnsweringBudgetExhaustedException">Thrown when the current period has spent what this deployment allows answering to cost, or when the run reached what one question may spend.</exception>
     /// <exception cref="ChatGenerationFailedException">Thrown when the run produced no answer, naming which kind of failure ended it.</exception>
     /// <exception cref="SensitiveContentScannerUnavailableException">Thrown when a switched-on scanner could not establish what the answer carries, which refuses the response rather than serving it unscanned.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.MailAsk" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted both <see cref="MailFathomPermission.AssistantUse" /> and <see cref="MailFathomPermission.MailRead" />.</exception>
     /// <remarks>
     /// <para>
-    /// The grant is asked for first, ahead of the question's own validation, because this is the one use case whose work
+    /// The grants are asked for first, ahead of the question's own validation, because this is the one use case whose work
     /// sends mail content to a model provider: what a caller granted nothing may not do here is cause an egress, and the
-    /// order that keeps that true is the one where nothing runs before the grant is read. It is asked for here rather
+    /// order that keeps that true is the one where nothing runs before the grant is read. They are asked for here rather
     /// than only at the transport that withholds the tool, so an entrypoint added later cannot spend on a provider by
     /// forgetting a filter.
+    /// </para>
+    /// <para>
+    /// Two are asked because the act is two things: placing content with a chat provider, which is
+    /// <see cref="MailFathomPermission.AssistantUse" />, and that content being mail the answer quotes back, which is
+    /// <see cref="MailFathomPermission.MailRead" />. No permission implies another, so neither alone reaches an answer.
     /// </para>
     /// <para>
     /// The request is validated before the capability is read, so a deployment that answers questions and one that does
@@ -154,7 +159,8 @@ public sealed class MailboxQuestionReader
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        this.authorization.RequirePermission(MailFathomPermission.MailAsk);
+        this.authorization.RequirePermission(MailFathomPermission.AssistantUse);
+        this.authorization.RequirePermission(MailFathomPermission.MailRead);
 
         var questionText = MailQuestionText.Create(request.QuestionText);
         // Junk is left out with no override, unlike a listing and a search. Answering a question is exactly the path the

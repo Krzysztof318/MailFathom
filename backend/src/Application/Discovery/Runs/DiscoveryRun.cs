@@ -25,9 +25,9 @@ namespace MailFathom.Application.Discovery.Runs;
 /// deployment owes somebody instead of a plausible sentence nobody wrote.
 /// </para>
 /// <para>
-/// A run reads mail and sends what it reads to a chat provider, so it is published under
-/// <see cref="MailFathomPermission.MailAsk" /> — the same grant that governs asking a question about mail through any
-/// other surface, because it is the same act.
+/// A run reads mail and sends what it reads to a chat provider, so it asks for
+/// <see cref="MailFathomPermission.AssistantUse" /> and <see cref="MailFathomPermission.MailRead" /> together — the
+/// same two grants asking a question about mail takes on any other surface, because it is the same act.
 /// </para>
 /// </remarks>
 public sealed class DiscoveryRun
@@ -89,7 +89,7 @@ public sealed class DiscoveryRun
     /// <returns>What the run decided, what it found, and what it composed out of it.</returns>
     /// <exception cref="MailAnsweringUnavailableException">This deployment answers no questions about mail, or currently cannot.</exception>
     /// <exception cref="MailAnsweringBudgetExhaustedException">The current period has no allowance left for another question, or the run reached what one question may spend.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">The caller does not hold <see cref="MailFathomPermission.MailAsk" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">The caller does not hold both <see cref="MailFathomPermission.AssistantUse" /> and <see cref="MailFathomPermission.MailRead" />.</exception>
     /// <remarks>
     /// <para>
     /// The two refusals are distinguishable on purpose and carry the availability that produced them. A deployment that
@@ -110,7 +110,8 @@ public sealed class DiscoveryRun
     {
         ArgumentNullException.ThrowIfNull(question);
 
-        this.authorization.RequirePermission(MailFathomPermission.MailAsk);
+        this.authorization.RequirePermission(MailFathomPermission.AssistantUse);
+        this.authorization.RequirePermission(MailFathomPermission.MailRead);
 
         // Both halves come from one registration, so a deployment holding one holds both; asking for the two together
         // keeps a build that grew a third from reporting the same absence twice in two different words.

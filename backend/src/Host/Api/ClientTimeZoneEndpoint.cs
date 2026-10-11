@@ -27,11 +27,11 @@ namespace MailFathom.Host.Api;
 /// rather than read out of the body or the path, exactly as no record route names one.
 /// </para>
 /// <para>
-/// Both routes are <see cref="MailFathomPermission.MailRead" />, which is the grant a signed-in person already holds.
-/// The write is under the read's grant for the reason the portrait routes are: what a person's own days are read in is
-/// not a decision about what this deployment reads out of their mailboxes, so gating it on the record's own write
-/// would refuse somebody whose mail configuration an administrator maintains in full a change about nothing but
-/// themselves.
+/// The read is <see cref="MailFathomPermission.ProfileRead" /> and the write is
+/// <see cref="MailFathomPermission.ProfileWrite" />, the pair the portrait routes take and for their reason: what a
+/// person's own days are read in is not a decision about what this deployment reads out of their mailboxes, so gating
+/// it on the record's own write would refuse somebody whose mail configuration an administrator maintains in full a
+/// change about nothing but themselves.
 /// </para>
 /// </remarks>
 internal static class ClientTimeZoneEndpoint
@@ -51,19 +51,20 @@ internal static class ClientTimeZoneEndpoint
         ArgumentNullException.ThrowIfNull(api);
 
         api.MapGet(TimeZoneRoute, Read)
-            .RequirePermission(MailFathomPermission.MailRead);
+            .RequirePermission(MailFathomPermission.ProfileRead);
 
         // The attribute is reached for its metadata rather than as an MVC filter, for the reason the record routes
         // state: it implements IRequestSizeLimitMetadata, which the routing pipeline applies to the request body.
         api.MapPost(TimeZoneRoute, ChangeAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxWriteRequestBytes))
-            .RequirePermission(MailFathomPermission.MailRead);
+            .RequirePermission(MailFathomPermission.ProfileWrite);
     }
 
     /// <summary>Hands the acting person the zone their own days are read in.</summary>
     /// <param name="zones">Answers each person's zone out of the served-user cache their own record is held in.</param>
     /// <param name="authorization">Names the person the request is being served for.</param>
     /// <returns><c>200</c> with the zone identifier and whether it is still the one an unstated record falls to.</returns>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.ProfileRead" />.</exception>
     /// <remarks>
     /// Answered from the served-user cache rather than from a document read, because that is where every other reader of this
     /// value takes it from and a second source would be a second answer. <c>isDefault</c> is whether the record states
@@ -76,6 +77,8 @@ internal static class ClientTimeZoneEndpoint
     {
         ArgumentNullException.ThrowIfNull(zones);
         ArgumentNullException.ThrowIfNull(authorization);
+
+        authorization.RequirePermission(MailFathomPermission.ProfileRead);
 
         var stated = zones.StatedZoneOf(authorization.RequireUser());
 

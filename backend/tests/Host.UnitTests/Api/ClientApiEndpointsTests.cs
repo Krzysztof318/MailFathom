@@ -283,75 +283,75 @@ public sealed class ClientApiEndpointsTests
         // Assert
         Assert.Equal(
             [
-                $"DELETE {prefix}{ClientAgentConversationEndpoints.ConversationRoute} -> {MailFathomPermission.MailAsk.Name}",
-                $"DELETE {prefix}{ClientAgentConversationEndpoints.ArchiveRoute} -> {MailFathomPermission.MailAsk.Name}",
-                $"DELETE {prefix}{ClientAgentConversationEndpoints.RunRoute} -> {MailFathomPermission.MailAsk.Name}",
-                $"DELETE {prefix}{ClientCalendarEndpoints.CalendarEventRoute} -> {MailFathomPermission.MailRead.Name}",
-                $"DELETE {prefix}{ClientContactEndpoints.ContactRoute} -> {MailFathomPermission.MailContactsWrite.Name}",
-                $"DELETE {prefix}{ClientDiscoveryRunEndpoints.DiscoveryRunRoute} -> {MailFathomPermission.MailAsk.Name}",
+                $"DELETE {prefix}{ClientAgentConversationEndpoints.ConversationRoute} -> {MailFathomPermission.AssistantUse.Name}",
+                $"DELETE {prefix}{ClientAgentConversationEndpoints.ArchiveRoute} -> {MailFathomPermission.AssistantUse.Name}",
+                $"DELETE {prefix}{ClientAgentConversationEndpoints.RunRoute} -> {MailFathomPermission.AssistantUse.Name}",
+                $"DELETE {prefix}{ClientCalendarEndpoints.CalendarEventRoute} -> {MailFathomPermission.CalendarWrite.Name}",
+                $"DELETE {prefix}{ClientContactEndpoints.ContactRoute} -> {MailFathomPermission.ContactsWrite.Name}",
+                $"DELETE {prefix}{ClientDiscoveryRunEndpoints.DiscoveryRunRoute} -> {MailFathomPermission.AssistantUse.Name}",
                 $"DELETE {prefix}{ClientDraftEndpoints.DraftRoute} -> {MailFathomPermission.MailDraftsWrite.Name}",
                 $"DELETE {prefix}{ClientDraftEndpoints.DraftAttachmentRoute} -> {MailFathomPermission.MailDraftsWrite.Name}",
-                $"DELETE {prefix}{ClientPortraitEndpoint.PortraitRoute} -> {MailFathomPermission.MailRead.Name}",
-                $"DELETE {prefix}{ClientTaskEndpoints.TaskRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"DELETE {prefix}{ClientPortraitEndpoint.PortraitRoute} -> {MailFathomPermission.ProfileWrite.Name}",
+                $"DELETE {prefix}{ClientTaskEndpoints.TaskRoute} -> {MailFathomPermission.TasksWrite.Name}",
                 $"GET {prefix}{ClientMailAccountsEndpoint.MailAccountsRoute} -> {MailFathomPermission.MailRead.Name}",
-                $"GET {prefix}{ClientAgentConversationEndpoints.ConversationsRoute} -> {MailFathomPermission.MailAsk.Name}",
-                $"GET {prefix}{ClientAgentConversationEndpoints.ConversationRoute} -> {MailFathomPermission.MailAsk.Name}",
-                $"GET {prefix}{ClientCalendarEndpoints.CalendarRoute} -> {MailFathomPermission.MailRead.Name}",
-                $"GET {prefix}{ClientCalendarEventDraftEndpoint.CalendarEventDraftRoute} -> {MailFathomPermission.MailAsk.Name}",
-                $"GET {prefix}{ClientCalendarEndpoints.CalendarEventRoute} -> {MailFathomPermission.MailRead.Name}",
-                $"GET {prefix}{ClientContactEndpoints.ContactsRoute} -> {MailFathomPermission.MailContactsRead.Name}",
-                $"GET {prefix}{ClientContactEndpoints.CollectedContactsRoute} -> {MailFathomPermission.MailContactsRead.Name}",
-                $"GET {prefix}{ClientContactEndpoints.ContactRoute} -> {MailFathomPermission.MailContactsRead.Name}",
+                $"GET {prefix}{ClientAgentConversationEndpoints.ConversationsRoute} -> {MailFathomPermission.AssistantUse.Name}",
+                $"GET {prefix}{ClientAgentConversationEndpoints.ConversationRoute} -> {MailFathomPermission.AssistantUse.Name}",
+                $"GET {prefix}{ClientCalendarEndpoints.CalendarRoute} -> {MailFathomPermission.CalendarRead.Name}",
+                $"GET {prefix}{ClientCalendarEventDraftEndpoint.CalendarEventDraftRoute} -> {MailFathomPermission.AssistantUse.Name}",
+                $"GET {prefix}{ClientCalendarEndpoints.CalendarEventRoute} -> {MailFathomPermission.CalendarRead.Name}",
+                $"GET {prefix}{ClientContactEndpoints.ContactsRoute} -> {MailFathomPermission.ContactsRead.Name}",
+                $"GET {prefix}{ClientContactEndpoints.CollectedContactsRoute} -> {MailFathomPermission.ContactsRead.Name}",
+                $"GET {prefix}{ClientContactEndpoints.ContactRoute} -> {MailFathomPermission.ContactsRead.Name}",
                 $"GET {prefix}{ClientContactCorrespondenceEndpoint.ContactCorrespondenceRoute} -> {MailFathomPermission.MailRead.Name}",
-                $"GET {prefix}{ClientContactRelationshipEndpoint.ContactRelationshipRoute} -> {MailFathomPermission.MailAsk.Name}",
-                $"GET {prefix}{ClientDiscoveryRunEndpoints.DiscoveryRunRoute} -> {MailFathomPermission.MailAsk.Name}",
-                $"GET {prefix}{ClientDisplayNameEndpoint.DisplayNameRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"GET {prefix}{ClientContactRelationshipEndpoint.ContactRelationshipRoute} -> {MailFathomPermission.AssistantUse.Name}",
+                $"GET {prefix}{ClientDiscoveryRunEndpoints.DiscoveryRunRoute} -> {MailFathomPermission.AssistantUse.Name}",
+                $"GET {prefix}{ClientDisplayNameEndpoint.DisplayNameRoute} -> {MailFathomPermission.ProfileRead.Name}",
                 $"GET {prefix}{ClientDraftEndpoints.DraftsRoute} -> {MailFathomPermission.MailDraftsWrite.Name}",
                 $"GET {prefix}{ClientDraftEndpoints.DraftRoute} -> {MailFathomPermission.MailDraftsWrite.Name}",
                 $"GET {prefix}{ClientMailTimelineEndpoint.MailTimelineRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailSearchEndpoint.MailSearchRoute} -> {MailFathomPermission.MailRead.Name}",
-                $"GET {prefix}{ClientMailSearchPhraseEndpoint.MailSearchPhrasingRoute} -> {MailFathomPermission.MailAsk.Name}",
+                $"GET {prefix}{ClientMailSearchPhraseEndpoint.MailSearchPhrasingRoute} -> {MailFathomPermission.AssistantUse.Name}",
                 $"GET {prefix}{ClientMailFoldersEndpoint.MailFoldersRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientManagedMailFoldersEndpoint.ManagedFoldersRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailMessageEndpoint.MailMessageRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailAttachmentEndpoint.MailAttachmentRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailBodyEndpoint.MailBodyRoute} -> {MailFathomPermission.MailRead.Name}",
-                $"GET {prefix}{ClientMailCleanedBodyEndpoint.CleanedMailBodyRoute} -> {MailFathomPermission.MailAsk.Name}",
+                $"GET {prefix}{ClientMailCleanedBodyEndpoint.CleanedMailBodyRoute} -> {MailFathomPermission.AssistantUse.Name}",
                 $"GET {prefix}{ClientMailMutationsEndpoint.MutationsRoute} -> {MailFathomPermission.MailRead.Name}",
-                $"GET {prefix}{ClientNotificationEndpoints.NotificationsRoute} -> {MailFathomPermission.MailRead.Name}",
-                $"GET {prefix}{ClientNotificationEndpoints.UnreadCountRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"GET {prefix}{ClientNotificationEndpoints.NotificationsRoute} -> {MailFathomPermission.NotificationsRead.Name}",
+                $"GET {prefix}{ClientNotificationEndpoints.UnreadCountRoute} -> {MailFathomPermission.NotificationsRead.Name}",
                 $"GET {prefix}{ClientOutboxEndpoints.OutboxRoute} -> {MailFathomPermission.MailSend.Name}",
                 $"GET {prefix}{ClientOutboxEndpoints.OutboxSendRoute} -> {MailFathomPermission.MailSend.Name}",
-                $"GET {prefix}{ClientPortraitEndpoint.PortraitRoute} -> {MailFathomPermission.MailRead.Name}",
-                $"GET {prefix}{ClientPreferencesEndpoint.PreferencesRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"GET {prefix}{ClientPortraitEndpoint.PortraitRoute} -> {MailFathomPermission.ProfileRead.Name}",
+                $"GET {prefix}{ClientPreferencesEndpoint.PreferencesRoute} -> {MailFathomPermission.ProfileRead.Name}",
                 $"GET {prefix}{ClientUserRecordEndpoint.RecordRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientUserRecordEndpoint.MailAccountsRoute} -> {MailFathomPermission.MailRead.Name}",
-                $"GET {prefix}{ClientReplyDraftingEndpoint.ReplyDraftingRoute} -> {MailFathomPermission.MailAsk.Name}",
+                $"GET {prefix}{ClientReplyDraftingEndpoint.ReplyDraftingRoute} -> {MailFathomPermission.AssistantUse.Name}",
                 $"GET {prefix}{ClientApiEndpoints.SessionRoute} -> none",
-                $"GET {prefix}{ClientTaskEndpoints.TasksRoute} -> {MailFathomPermission.MailRead.Name}",
-                $"GET {prefix}{ClientTaskEndpoints.ProposedTasksRoute} -> {MailFathomPermission.MailRead.Name}",
-                $"GET {prefix}{ClientTaskEndpoints.TodayLayoutRoute} -> {MailFathomPermission.MailAsk.Name}",
-                $"GET {prefix}{ClientTaskEndpoints.TaskRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"GET {prefix}{ClientTaskEndpoints.TasksRoute} -> {MailFathomPermission.TasksRead.Name}",
+                $"GET {prefix}{ClientTaskEndpoints.ProposedTasksRoute} -> {MailFathomPermission.TasksRead.Name}",
+                $"GET {prefix}{ClientTaskEndpoints.TodayLayoutRoute} -> {MailFathomPermission.AssistantUse.Name}",
+                $"GET {prefix}{ClientTaskEndpoints.TaskRoute} -> {MailFathomPermission.TasksRead.Name}",
                 $"GET {prefix}{ClientMailThreadEndpoint.MailThreadRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailThreadStateEndpoint.MailThreadStateRoute} -> {MailFathomPermission.MailRead.Name}",
-                $"GET {prefix}{ClientTimeZoneEndpoint.TimeZoneRoute} -> {MailFathomPermission.MailRead.Name}",
-                $"POST {prefix}{ClientAgentConversationEndpoints.SearchRoute} -> {MailFathomPermission.MailAsk.Name}",
-                $"POST {prefix}{ClientAgentConversationEndpoints.MessagesRoute} -> {MailFathomPermission.MailAsk.Name}",
-                $"POST {prefix}{ClientAgentConversationEndpoints.RunMessagesRoute} -> {MailFathomPermission.MailAsk.Name}",
-                $"POST {prefix}{ClientCalendarEndpoints.CalendarRoute} -> {MailFathomPermission.MailRead.Name}",
-                $"POST {prefix}{ClientCalendarEventDraftEndpoint.CalendarEventDraftRoute} -> {MailFathomPermission.MailAsk.Name}",
-                $"POST {prefix}{ClientCalendarImportEndpoints.CalendarImportRoute} -> {MailFathomPermission.MailRead.Name}",
-                $"POST {prefix}{ClientCalendarImportEndpoints.CalendarImportSummaryRoute} -> {MailFathomPermission.MailRead.Name}",
-                $"POST {prefix}{ClientCalendarEndpoints.CalendarEventAcceptanceRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"GET {prefix}{ClientTimeZoneEndpoint.TimeZoneRoute} -> {MailFathomPermission.ProfileRead.Name}",
+                $"POST {prefix}{ClientAgentConversationEndpoints.SearchRoute} -> {MailFathomPermission.AssistantUse.Name}",
+                $"POST {prefix}{ClientAgentConversationEndpoints.MessagesRoute} -> {MailFathomPermission.AssistantUse.Name}",
+                $"POST {prefix}{ClientAgentConversationEndpoints.RunMessagesRoute} -> {MailFathomPermission.AssistantUse.Name}",
+                $"POST {prefix}{ClientCalendarEndpoints.CalendarRoute} -> {MailFathomPermission.CalendarWrite.Name}",
+                $"POST {prefix}{ClientCalendarEventDraftEndpoint.CalendarEventDraftRoute} -> {MailFathomPermission.AssistantUse.Name}",
+                $"POST {prefix}{ClientCalendarImportEndpoints.CalendarImportRoute} -> {MailFathomPermission.CalendarWrite.Name}",
+                $"POST {prefix}{ClientCalendarImportEndpoints.CalendarImportSummaryRoute} -> {MailFathomPermission.CalendarWrite.Name}",
+                $"POST {prefix}{ClientCalendarEndpoints.CalendarEventAcceptanceRoute} -> {MailFathomPermission.CalendarWrite.Name}",
                 $"POST {prefix}{ClientCitationEndpoint.CitationResolutionRoute} -> {MailFathomPermission.MailRead.Name}",
-                $"POST {prefix}{ClientContactEndpoints.ContactsRoute} -> {MailFathomPermission.MailContactsWrite.Name}",
-                $"POST {prefix}{ClientContactEndpoints.ContactPromotionRoute} -> {MailFathomPermission.MailContactsWrite.Name}",
-                $"POST {prefix}{ClientDiscoveryRunEndpoints.DiscoveryRunsRoute} -> {MailFathomPermission.MailAsk.Name}",
-                $"POST {prefix}{ClientDisplayNameEndpoint.DisplayNameRoute} -> {MailFathomPermission.MailAccountsWrite.Name}",
+                $"POST {prefix}{ClientContactEndpoints.ContactsRoute} -> {MailFathomPermission.ContactsWrite.Name}",
+                $"POST {prefix}{ClientContactEndpoints.ContactPromotionRoute} -> {MailFathomPermission.ContactsWrite.Name}",
+                $"POST {prefix}{ClientDiscoveryRunEndpoints.DiscoveryRunsRoute} -> {MailFathomPermission.AssistantUse.Name}",
+                $"POST {prefix}{ClientDisplayNameEndpoint.DisplayNameRoute} -> {MailFathomPermission.ProfileWrite.Name}",
                 $"POST {prefix}{ClientDraftEndpoints.DraftsRoute} -> {MailFathomPermission.MailDraftsWrite.Name}",
                 $"POST {prefix}{ClientDraftEndpoints.DraftAttachmentsRoute} -> {MailFathomPermission.MailDraftsWrite.Name}",
                 $"POST {prefix}{ClientDraftEndpoints.DraftSendRoute} -> {MailFathomPermission.MailSend.Name}",
-                $"POST {prefix}{ClientMailSearchPhraseEndpoint.MailSearchPhrasingRoute} -> {MailFathomPermission.MailAsk.Name}",
+                $"POST {prefix}{ClientMailSearchPhraseEndpoint.MailSearchPhrasingRoute} -> {MailFathomPermission.AssistantUse.Name}",
                 $"POST {prefix}{ClientManagedMailFoldersEndpoint.ManagedFoldersRoute} -> {MailFathomPermission.MailFoldersWrite.Name}",
                 $"POST {prefix}{ClientManagedMailFoldersEndpoint.DeletionsRoute} -> {MailFathomPermission.MailFoldersWrite.Name}",
                 $"POST {prefix}{ClientManagedMailFoldersEndpoint.MovesRoute} -> {MailFathomPermission.MailFoldersWrite.Name}",
@@ -363,46 +363,46 @@ public sealed class ClientApiEndpointsTests
                 $"POST {prefix}{ClientMailMutationsEndpoint.FlagWithdrawalsRoute} -> {MailFathomPermission.MailFlagsWrite.Name}",
                 $"POST {prefix}{ClientMailMutationsEndpoint.MoveMutationsRoute} -> {MailFathomPermission.MailMove.Name}",
                 $"POST {prefix}{ClientMailMutationsEndpoint.MoveWithdrawalsRoute} -> {MailFathomPermission.MailMove.Name}",
-                $"POST {prefix}{ClientNotificationEndpoints.DeletionsRoute} -> {MailFathomPermission.MailRead.Name}",
-                $"POST {prefix}{ClientNotificationEndpoints.MarkAllReadRoute} -> {MailFathomPermission.MailRead.Name}",
-                $"POST {prefix}{ClientNotificationEndpoints.ReadStateRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"POST {prefix}{ClientNotificationEndpoints.DeletionsRoute} -> {MailFathomPermission.NotificationsWrite.Name}",
+                $"POST {prefix}{ClientNotificationEndpoints.MarkAllReadRoute} -> {MailFathomPermission.NotificationsWrite.Name}",
+                $"POST {prefix}{ClientNotificationEndpoints.ReadStateRoute} -> {MailFathomPermission.NotificationsWrite.Name}",
                 $"POST {prefix}{ClientOutboxEndpoints.OutboxCancellationRoute} -> {MailFathomPermission.MailSend.Name}",
                 $"POST {prefix}{ClientOutboxEndpoints.OutboxRequeueRoute} -> {MailFathomPermission.MailSend.Name}",
-                $"POST {prefix}{ClientPortraitEndpoint.PortraitRoute} -> {MailFathomPermission.MailRead.Name}",
-                $"POST {prefix}{ClientPreferencesEndpoint.PreferencesRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"POST {prefix}{ClientPortraitEndpoint.PortraitRoute} -> {MailFathomPermission.ProfileWrite.Name}",
+                $"POST {prefix}{ClientPreferencesEndpoint.PreferencesRoute} -> {MailFathomPermission.ProfileWrite.Name}",
                 $"POST {prefix}{ClientUserRecordEndpoint.RecordRoute} -> {MailFathomPermission.MailAccountsWrite.Name}",
                 $"POST {prefix}{ClientUserRecordEndpoint.FoldersRoute} -> {MailFathomPermission.MailAccountsWrite.Name}",
                 $"POST {prefix}{ClientUserRecordEndpoint.FolderRemovalRoute} -> {MailFathomPermission.MailAccountsWrite.Name}",
                 $"POST {prefix}{ClientUserRecordEndpoint.FolderReplacementRoute} -> {MailFathomPermission.MailAccountsWrite.Name}",
-                $"POST {prefix}{ClientReplyDraftingEndpoint.ReplyDraftingRoute} -> {MailFathomPermission.MailAsk.Name}",
+                $"POST {prefix}{ClientReplyDraftingEndpoint.ReplyDraftingRoute} -> {MailFathomPermission.AssistantUse.Name}",
                 $"POST {prefix}{ClientSessionTokenEndpoints.ExchangeRoute} -> none",
                 $"POST {prefix}{ClientSessionTokenEndpoints.RevocationRoute} -> none",
                 $"POST {prefix}{ClientSignalEndpoints.TicketRoute} -> {MailFathomPermission.MailRead.Name}",
-                $"POST {prefix}{ClientTaskEndpoints.TasksRoute} -> {MailFathomPermission.MailRead.Name}",
-                $"POST {prefix}{ClientTaskEndpoints.TodayLayoutRoute} -> {MailFathomPermission.MailAsk.Name}",
-                $"POST {prefix}{ClientTaskEndpoints.TaskAcceptanceRoute} -> {MailFathomPermission.MailRead.Name}",
-                $"POST {prefix}{ClientTaskEndpoints.TaskCompletionRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"POST {prefix}{ClientTaskEndpoints.TasksRoute} -> {MailFathomPermission.TasksWrite.Name}",
+                $"POST {prefix}{ClientTaskEndpoints.TodayLayoutRoute} -> {MailFathomPermission.AssistantUse.Name}",
+                $"POST {prefix}{ClientTaskEndpoints.TaskAcceptanceRoute} -> {MailFathomPermission.TasksWrite.Name}",
+                $"POST {prefix}{ClientTaskEndpoints.TaskCompletionRoute} -> {MailFathomPermission.TasksWrite.Name}",
                 .. ClientTelemetrySignal.All
                     .Select(signal =>
                         $"POST {prefix}{ClientTelemetryEndpoint.TelemetryRoutePrefix}{signal.Route} -> none")
                     .Order(StringComparer.Ordinal),
-                $"POST {prefix}{ClientTimeZoneEndpoint.TimeZoneRoute} -> {MailFathomPermission.MailRead.Name}",
-                $"PUT {prefix}{ClientAgentConversationEndpoints.ArchiveRoute} -> {MailFathomPermission.MailAsk.Name}",
-                $"PUT {prefix}{ClientAgentConversationEndpoints.ProposalRoute} -> {MailFathomPermission.MailAsk.Name}",
-                $"PUT {prefix}{ClientCalendarEndpoints.CalendarEventRoute} -> {MailFathomPermission.MailRead.Name}",
-                $"PUT {prefix}{ClientContactEndpoints.ContactRoute} -> {MailFathomPermission.MailContactsWrite.Name}",
+                $"POST {prefix}{ClientTimeZoneEndpoint.TimeZoneRoute} -> {MailFathomPermission.ProfileWrite.Name}",
+                $"PUT {prefix}{ClientAgentConversationEndpoints.ArchiveRoute} -> {MailFathomPermission.AssistantUse.Name}",
+                $"PUT {prefix}{ClientAgentConversationEndpoints.ProposalRoute} -> {MailFathomPermission.AssistantUse.Name}",
+                $"PUT {prefix}{ClientCalendarEndpoints.CalendarEventRoute} -> {MailFathomPermission.CalendarWrite.Name}",
+                $"PUT {prefix}{ClientContactEndpoints.ContactRoute} -> {MailFathomPermission.ContactsWrite.Name}",
                 $"PUT {prefix}{ClientDraftEndpoints.DraftRoute} -> {MailFathomPermission.MailDraftsWrite.Name}",
-                $"PUT {prefix}{ClientTaskEndpoints.TaskRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"PUT {prefix}{ClientTaskEndpoints.TaskRoute} -> {MailFathomPermission.TasksWrite.Name}",
             ],
             PublishedAllocation(endpoints).Order(StringComparer.Ordinal));
     }
 
     /// <summary>
-    /// This surface's grants are drawn from the mailbox half, so a route published under an administrative permission
+    /// This surface's grants are drawn from the user-facing half, so a route published under an administrative permission
     /// would be one no client credential could ever reach.
     /// </summary>
     [Fact]
-    public void MapClientApi_Always_PublishesEveryRouteUnderTheMailboxHalfOfTheSet()
+    public void MapClientApi_Always_PublishesEveryRouteUnderTheUserFacingHalfOfTheSet()
     {
         // Arrange
         var endpoints = BuildRouteBuilder();
@@ -420,14 +420,14 @@ public sealed class ClientApiEndpointsTests
     }
 
     /// <summary>
-    /// A read under the reading grant, and every write under a grant that says what it writes, save the three a grant
-    /// could not tell apart: the caller's own client preferences, the caller's own portrait, and the client handing
-    /// over its own telemetry.
+    /// A read under a reading grant, and every write under a grant that says what it writes, save the acts that are a
+    /// <c>POST</c> for a reason other than changing a record: minting a ticket, exchanging a credential, following
+    /// citations, asking a question, holding a conversation, and the client handing over its own telemetry.
     /// Reading mail, changing the caller's own record, composing a draft, filing one on their server, sending,
-    /// changing a flag, moving a message, deleting one, writing the caller's own address book, and writing their own
-    /// calendar are separately provisioned powers, so a route that changes anything under
-    /// <c>mailfathom.mail.read</c> is one somebody added without deciding what it costs — and a credential provisioned
-    /// to read a mailbox would then send from it.
+    /// changing a flag, moving a message, deleting one, and changing the caller's own address book, task list,
+    /// calendar, notification centre, and profile are separately provisioned powers, so a route that changes anything
+    /// under a grant ending in <c>.read</c> is one somebody added without deciding what it costs — and a credential
+    /// provisioned to read a mailbox would then keep somebody's calendar.
     /// </summary>
     [Fact]
     public void MapClientApi_Always_PublishesEveryWriteUnderAGrantThatSaysWhatItWrites()
@@ -454,17 +454,11 @@ public sealed class ClientApiEndpointsTests
                     method => Assert.True(
                         method == "GET"
                         || IsPublishedAsAWrite(endpoint)
-                        || WritesTheCallersOwnPreferences(endpoint)
-                        || WritesTheCallersOwnPortrait(endpoint)
-                        || ChangesTheCallersOwnNotificationCentre(endpoint)
-                        || ChangesTheCallersOwnTaskList(endpoint)
-                        || ChangesTheCallersOwnCalendar(endpoint)
                         || MintsTheCallersOwnSignalTicket(endpoint)
                         || ExchangesTheCallersOwnCredentialForASession(endpoint)
                         || FollowsTheCallersOwnCitations(endpoint)
                         || AsksAQuestionOfTheCallersOwnMail(endpoint)
                         || HoldsTheCallersOwnAgentConversation(endpoint)
-                        || SetsTheCallersOwnTimeZone(endpoint)
                         || HandsOverTheClientsOwnTelemetry(endpoint),
                         $"{method} {endpoint} changes something under a grant that does not say so."));
             });
@@ -482,108 +476,22 @@ public sealed class ClientApiEndpointsTests
                 || published.Permission == MailFathomPermission.MailMove
                 || published.Permission == MailFathomPermission.MailDelete
                 || published.Permission == MailFathomPermission.MailFoldersWrite
-                || published.Permission == MailFathomPermission.MailContactsWrite);
-
-    /// <summary>Reports whether a route is the write of the caller's own client preferences, by the route it is served at.</summary>
-    /// <remarks>
-    /// The route rather than the grant, which is the one place this file cannot use the test above's reasoning. That
-    /// write is deliberately admitted under the grant every read here holds — a person whose mail accounts an
-    /// administrator maintains does not hold <see cref="MailFathomPermission.MailAccountsWrite" /> and still turns
-    /// their own telemetry off — so nothing about the permission tells it apart from a <c>GET</c>. Naming the one route
-    /// keeps the claim narrow: a second write published under the read grant fails this rather than joining it.
-    /// </remarks>
-    private static bool WritesTheCallersOwnPreferences(Endpoint endpoint) =>
-        endpoint is RouteEndpoint route
-        && $"/{route.RoutePattern.RawText?.TrimStart('/')}"
-            == $"{ClientEndpointOptions.RoutePrefix}{ClientPreferencesEndpoint.PreferencesRoute}";
-
-    /// <summary>Reports whether a route is a write of the caller's own portrait, by the route it is served at.</summary>
-    /// <remarks>
-    /// The route rather than the grant, for the reason the preferences write is named that way: what a person is drawn
-    /// by is theirs to set under the grant they already hold, so nothing about the permission tells these two apart
-    /// from a <c>GET</c>. Naming the one route keeps the claim narrow.
-    /// </remarks>
-    private static bool WritesTheCallersOwnPortrait(Endpoint endpoint) =>
-        endpoint is RouteEndpoint route
-        && $"/{route.RoutePattern.RawText?.TrimStart('/')}"
-            == $"{ClientEndpointOptions.RoutePrefix}{ClientPortraitEndpoint.PortraitRoute}";
-
-    /// <summary>Reports whether a route is the write of the caller's own time zone, by the route it is served at.</summary>
-    /// <remarks>
-    /// The route rather than the grant, for the reason the preferences and portrait writes are named that way. Which
-    /// zone a person's own days are read in changes what this deployment draws for them and what a relative period in
-    /// their own question resolves to, and nothing else: a person whose mail accounts an administrator maintains holds
-    /// no write grant and still has to be able to say where they are. Naming the one route keeps the claim narrow.
-    /// </remarks>
-    private static bool SetsTheCallersOwnTimeZone(Endpoint endpoint) =>
-        endpoint is RouteEndpoint route
-        && $"/{route.RoutePattern.RawText?.TrimStart('/')}"
-            == $"{ClientEndpointOptions.RoutePrefix}{ClientTimeZoneEndpoint.TimeZoneRoute}";
-
-    /// <summary>Reports whether a route changes the caller's own notification centre, by the three routes they are served at.</summary>
-    /// <remarks>
-    /// The routes rather than the grant, for the reason the preferences and portrait writes are named that way. What
-    /// these change is what this deployment draws for one person about mail they can already see: nothing reaches a
-    /// mail server, nothing moves in a mailbox, and a person whose mail accounts an administrator maintains does not
-    /// hold a write grant and still has to be able to clear their own bell. That reasoning carries the erasure as well
-    /// as the two markings — <see cref="MailFathomPermission.MailDelete" /> is the power to remove somebody's mail, and
-    /// what leaves here is a record this deployment derived about mail that stays exactly where it was. Naming the
-    /// three keeps the claim narrow — a fourth write published under the read grant fails this rather than joining it.
-    /// </remarks>
-    private static bool ChangesTheCallersOwnNotificationCentre(Endpoint endpoint) =>
-        endpoint is RouteEndpoint route
-        && $"/{route.RoutePattern.RawText?.TrimStart('/')}" is var path
-        && (path == $"{ClientEndpointOptions.RoutePrefix}{ClientNotificationEndpoints.ReadStateRoute}"
-            || path == $"{ClientEndpointOptions.RoutePrefix}{ClientNotificationEndpoints.MarkAllReadRoute}"
-            || path == $"{ClientEndpointOptions.RoutePrefix}{ClientNotificationEndpoints.DeletionsRoute}");
-
-    /// <summary>Reports whether a route changes the caller's own task list, by the four routes its five writes are served at.</summary>
-    /// <remarks>
-    /// The routes rather than the grant, for the reason the notification centre's writes are named that way. A task is
-    /// this deployment's own record of what one person owes: nothing here reaches a mail server, nothing moves in a
-    /// mailbox, and the message a task cites is a value it carries rather than mail this route reads. The erasure is
-    /// carried by that same reasoning — <see cref="MailFathomPermission.MailDelete" /> is the power to remove
-    /// somebody's mail, and what leaves here is a commitment about a message that stays exactly where it was. Naming
-    /// the five keeps the claim narrow — a sixth write published under the read grant fails this rather than joining
-    /// it.
-    /// </remarks>
-    private static bool ChangesTheCallersOwnTaskList(Endpoint endpoint) =>
-        endpoint is RouteEndpoint route
-        && $"/{route.RoutePattern.RawText?.TrimStart('/')}" is var path
-        && (path == $"{ClientEndpointOptions.RoutePrefix}{ClientTaskEndpoints.TasksRoute}"
-            || path == $"{ClientEndpointOptions.RoutePrefix}{ClientTaskEndpoints.TaskRoute}"
-            || path == $"{ClientEndpointOptions.RoutePrefix}{ClientTaskEndpoints.TaskCompletionRoute}"
-            || path == $"{ClientEndpointOptions.RoutePrefix}{ClientTaskEndpoints.TaskAcceptanceRoute}");
-
-    /// <summary>Reports whether a route changes the caller's own calendar, by the five routes its five writes and the one reading that answers as a <c>POST</c> are served at.</summary>
-    /// <remarks>
-    /// The routes rather than the grant, for the reason the task list's writes are named that way. An event is this
-    /// deployment's own record of when one person is committed: nothing here reaches a mail server, nothing moves in a
-    /// mailbox, and the message an event cites is a value it carries rather than mail this route reads. The deletion
-    /// is carried by that same reasoning — <see cref="MailFathomPermission.MailDelete" /> is the power to remove
-    /// somebody's mail, and what leaves here is a date about a message that stays. The import carries it too: the file
-    /// is the caller's own and what it becomes is events on the caller's own calendar. Its summary writes nothing at
-    /// all and is a <c>POST</c> only because the file it reads is a request body rather than a query — so it is named
-    /// here to be admitted rather than because it changes anything. Naming the five keeps the claim narrow — a sixth
-    /// route published under the read grant fails this rather than joining it.
-    /// </remarks>
-    private static bool ChangesTheCallersOwnCalendar(Endpoint endpoint) =>
-        endpoint is RouteEndpoint route
-        && $"/{route.RoutePattern.RawText?.TrimStart('/')}" is var path
-        && (path == $"{ClientEndpointOptions.RoutePrefix}{ClientCalendarEndpoints.CalendarRoute}"
-            || path == $"{ClientEndpointOptions.RoutePrefix}{ClientCalendarEndpoints.CalendarEventRoute}"
-            || path == $"{ClientEndpointOptions.RoutePrefix}{ClientCalendarEndpoints.CalendarEventAcceptanceRoute}"
-            || path == $"{ClientEndpointOptions.RoutePrefix}{ClientCalendarImportEndpoints.CalendarImportRoute}"
-            || path == $"{ClientEndpointOptions.RoutePrefix}{ClientCalendarImportEndpoints.CalendarImportSummaryRoute}");
+                || published.Permission == MailFathomPermission.ContactsWrite
+                || published.Permission == MailFathomPermission.TasksWrite
+                || published.Permission == MailFathomPermission.CalendarWrite
+                || published.Permission == MailFathomPermission.NotificationsWrite
+                || published.Permission == MailFathomPermission.ProfileWrite);
 
     /// <summary>Reports whether a route mints the caller's own connection ticket, by the route it is served at.</summary>
     /// <remarks>
-    /// The route rather than the grant, for the reason the three writes above are named that way. It is a <c>POST</c>
-    /// because minting a single-use credential changes state and a <c>GET</c> would be a route a cache, a prefetch, or
-    /// a link preview could spend a ticket through — and what it changes is a ticket this deployment issued to the
-    /// caller for the caller's own connection. Nothing reaches a mail server, nothing moves in a mailbox, and the
-    /// channel it opens announces only the mail the reading grant already admits, so the reading grant is what it is
-    /// published under. Naming the one route keeps the claim narrow.
+    /// The route rather than the grant, which is the one place this file cannot use the reasoning above: the route is
+    /// published under a reading grant and is not a <c>GET</c>. It is a <c>POST</c> because minting a single-use
+    /// credential changes state and a <c>GET</c> would be a route a cache, a prefetch, or a link preview could spend a
+    /// ticket through — and what it changes is a ticket this deployment issued to the caller for the caller's own
+    /// connection. Nothing reaches a mail server, nothing moves in a mailbox, and the channel it opens announces only
+    /// what the caller's reading grants already admit, so a reading grant is what it is published under. Naming the
+    /// one route keeps the claim narrow: a second write published under a reading grant fails this rather than
+    /// joining it.
     /// </remarks>
     private static bool MintsTheCallersOwnSignalTicket(Endpoint endpoint) =>
         endpoint is RouteEndpoint route
@@ -592,7 +500,7 @@ public sealed class ClientApiEndpointsTests
 
     /// <summary>Reports whether a route is the exchange or the revocation of the caller's own session, by the two routes they are served at.</summary>
     /// <remarks>
-    /// The route rather than the grant, for the reason the preferences write is named that way, and with a stronger
+    /// The route rather than the grant, for the reason the ticket route is named that way, and with a stronger
     /// claim behind it: signing in and signing out are what a caller does before it holds a grant and after it stops
     /// needing one, so a permission on either would be a credential that could authenticate and not sign in. Naming
     /// the two routes keeps that narrow — a third route published under no permission fails this rather than joining
@@ -622,7 +530,7 @@ public sealed class ClientApiEndpointsTests
     /// <summary>Reports whether a route asks a question of the caller's own mail, stops one, reads a sentence into a search, drafts a reply, or reads a description into a calendar event, by the five routes they are served at.</summary>
     /// <remarks>
     /// The routes rather than the grant, for the reason the writes above are named that way — but the grant is what
-    /// makes them admissible, and it is a separately provisioned one: <c>mailfathom.mail.ask</c> is what sends mail to a
+    /// makes them admissible, and it is a separately provisioned one: <c>mailfathom.assistant.use</c> is what sends mail to a
     /// chat provider, so a credential provisioned to read a mailbox cannot ask a question of it. Asking is a
     /// <c>POST</c> because the question is the most revealing value this surface carries and a request line would put it
     /// in every access log between here and the client, and because a run outlives the request, so what the call
@@ -669,7 +577,7 @@ public sealed class ClientApiEndpointsTests
             StringComparison.Ordinal);
 
     /// <summary>Reports whether a route is the client posting its own telemetry, which changes nothing this deployment holds.</summary>
-    /// <remarks>The path rather than the grant here, because these are published under none by design — the caller is handing over what it recorded about itself, and no permission in the mailbox half names that act.</remarks>
+    /// <remarks>The path rather than the grant here, because these are published under none by design — the caller is handing over what it recorded about itself, and no permission in the user-facing half names that act.</remarks>
     private static bool HandsOverTheClientsOwnTelemetry(Endpoint endpoint) =>
         endpoint is RouteEndpoint { RoutePattern.RawText: { } path }
         && path.Contains(
@@ -871,7 +779,7 @@ public sealed class ClientApiEndpointsTests
     public async Task MapClientApi_ARouteReachedByACallerItsPermissionDoesNotAdmit_IsRefusedByTheGroupsFilter()
     {
         // Arrange
-        var endpoints = BuildRouteBuilder(AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailAsk));
+        var endpoints = BuildRouteBuilder(AccessAuthorizations.ForCallerGranted(MailFathomPermission.AssistantUse));
         endpoints.MapClientApi();
 
         var accountsRoute = endpoints.Materialize()

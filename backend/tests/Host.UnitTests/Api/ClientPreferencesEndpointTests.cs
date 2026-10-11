@@ -705,7 +705,10 @@ public sealed class ClientPreferencesEndpointTests
     private static JsonSerializerOptions WebFormat => new(JsonSerializerDefaults.Web);
 
     private static AccessAuthorization Acting() =>
-        AccessAuthorizations.ForUserGranted(SyntheticUser.Deployment, MailFathomPermission.MailRead);
+        AccessAuthorizations.ForUserGranted(
+            SyntheticUser.Deployment,
+            MailFathomPermission.ProfileRead,
+            MailFathomPermission.ProfileWrite);
 
     private static OwnClientPreferences SignedIn(IClientPreferencesStore store) => new(Acting(), store);
 

@@ -35,7 +35,7 @@ public sealed class ClientSessionTokensTests
     {
         // Arrange
         var sessions = Sessions(out _);
-        var admitted = Admitted(MailFathomPermission.MailRead, MailFathomPermission.MailAsk);
+        var admitted = Admitted(MailFathomPermission.MailRead, MailFathomPermission.AssistantUse);
 
         // Act
         var minted = await sessions.MintAsync(admitted, TestContext.Current.CancellationToken);

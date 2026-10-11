@@ -321,7 +321,7 @@ public sealed class MailBodyCleaningTests
             scopeResolver,
             egressGuard ?? SensitiveContentEgressGuards.Inactive(),
             AccessAuthorizations.ForCallerGranted(
-                granted ?? [MailFathomPermission.MailRead, MailFathomPermission.MailAsk]));
+                granted ?? [MailFathomPermission.MailRead, MailFathomPermission.AssistantUse]));
     }
 
     private static MailboxScopeResolver ScopeResolverOver(EmailSummary? summary)

@@ -284,9 +284,9 @@ public sealed class ClientContactRelationshipEndpointTests
     /// <summary>The caller this route is reached by, which holds every grant the answer needs.</summary>
     private static AccessAuthorization Granted() => AccessAuthorizations.ForUserGranted(
         SyntheticUser.Deployment,
-        MailFathomPermission.MailAsk,
+        MailFathomPermission.AssistantUse,
         MailFathomPermission.MailRead,
-        MailFathomPermission.MailContactsRead);
+        MailFathomPermission.ContactsRead);
 
     /// <summary>Reports the accounts this caller is assigned, which is what the correlation narrows by.</summary>
     private static ICallerMailAccountCatalog CatalogServing(params MailAccountId[] accounts)

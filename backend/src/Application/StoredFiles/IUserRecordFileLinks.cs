@@ -31,7 +31,7 @@ public interface IUserRecordFileLinks
     /// <param name="portrait">The file to link, or <see langword="null" /> to link none.</param>
     /// <param name="cancellationToken">Cancels the read and the commit.</param>
     /// <returns>Whether the user is held, and the file the record linked before this write.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.ProfileWrite" />.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the record refused the link for a reason other than a concurrent write.</exception>
     /// <remarks>
     /// It names no user, and resolves the one it writes for from the caller itself, so no implementation can be handed

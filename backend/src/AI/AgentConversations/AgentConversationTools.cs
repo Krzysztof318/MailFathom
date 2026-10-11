@@ -107,9 +107,9 @@ internal sealed class AgentConversationTools
 
     /// <summary>Creates the tools the person's grant allows.</summary>
     /// <returns>
-    /// The reading tools where the grant reads mail, beside the two that propose onto the person's own calendar and task
-    /// list — which those use cases admit under the same grant — and the ones proposing mail where it also drafts and
-    /// sends.
+    /// Each reading tool where the grant reads that record — mail, the calendar, the task list — each of the two that
+    /// propose onto the calendar or the task list where the grant writes it, and the ones proposing mail where it
+    /// drafts and sends.
     /// </returns>
     internal IReadOnlyList<AITool> Create()
     {
@@ -123,9 +123,25 @@ internal sealed class AgentConversationTools
             tools.Add(new ReportingFunction(this.retrieval.CreateSearchTool(), this.journal, AgentActivity.SearchingMail));
             tools.Add(AIFunctionFactory.Create(this.ReadThreadAsync, "read_thread", "Reads the whole email conversation a message belongs to: every message's sender, date, subject, and body. Pass the id of any message in it."));
             tools.Add(AIFunctionFactory.Create(this.ShowThreadStateAsync, "show_thread_state", "Shows the person where the conversation a message belongs to stands — what was agreed, what is still open, what somebody owes — exactly as it was already derived. The reading is placed in the conversation for them; do not restate it."));
+        }
+
+        if (this.readers.Authorization.Permits(MailFathomPermission.CalendarRead))
+        {
             tools.Add(AIFunctionFactory.Create(this.ReadCalendarAsync, "read_calendar", "Reads the person's calendar between two instants, earliest first."));
+        }
+
+        if (this.readers.Authorization.Permits(MailFathomPermission.TasksRead))
+        {
             tools.Add(AIFunctionFactory.Create(this.ReadTasksAsync, "read_tasks", "Reads the person's task list, soonest due first, including what their mail proposed as a task."));
+        }
+
+        if (this.readers.Authorization.Permits(MailFathomPermission.CalendarWrite))
+        {
             tools.Add(AIFunctionFactory.Create(this.ProposeEventAsync, "propose_event", "Proposes a calendar event for the person to review. Nothing is scheduled: the person sees the event, corrects its hour, and decides."));
+        }
+
+        if (this.readers.Authorization.Permits(MailFathomPermission.TasksWrite))
+        {
             tools.Add(AIFunctionFactory.Create(this.ProposeTaskAsync, "propose_task", "Proposes a task for the person's own list. Nothing is created: the person sees the task, corrects its due day, and decides."));
         }
 

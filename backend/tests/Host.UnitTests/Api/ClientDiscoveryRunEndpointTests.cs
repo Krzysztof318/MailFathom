@@ -525,7 +525,7 @@ public sealed class ClientDiscoveryRunEndpointTests
     {
         var principals = Substitute.For<IAuthorizedPrincipalSource>();
         principals.Current.Returns(
-            AuthorizedPrincipal.CallerActingFor(user, "test-caller", [MailFathomPermission.MailAsk]));
+            AuthorizedPrincipal.CallerActingFor(user, "test-caller", [MailFathomPermission.AssistantUse]));
 
         return principals;
     }
@@ -533,7 +533,7 @@ public sealed class ClientDiscoveryRunEndpointTests
     private static MailboxScopeResolver ResolverFor(UserId user) =>
         new(
             AssignedMailAccountCatalogs.For(
-                AccessAuthorizations.ForUserGranted(user, MailFathomPermission.MailAsk),
+                AccessAuthorizations.ForUserGranted(user, MailFathomPermission.AssistantUse),
                 SyntheticServedAccount.Of("primary")),
             StubMailFolderParticipation.Nothing,
             StubDeploymentMailFolders.None,

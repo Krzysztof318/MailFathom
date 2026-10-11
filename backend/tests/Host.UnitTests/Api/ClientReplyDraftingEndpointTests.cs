@@ -341,7 +341,7 @@ public sealed class ClientReplyDraftingEndpointTests
             writer,
             scopeResolver,
             SensitiveContentEgressGuards.Inactive(),
-            AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailAsk),
+            AccessAuthorizations.ForCallerGranted(MailFathomPermission.AssistantUse, MailFathomPermission.MailRead),
             LanguagesAnswering(UserLanguage.English),
             derivesStyleFromSentMail: true);
     }

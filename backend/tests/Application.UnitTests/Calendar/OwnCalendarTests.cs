@@ -386,12 +386,12 @@ public sealed class OwnCalendarTests
         Assert.NotNull(await this.store.ReadAsync(SomebodyElse, theirs.Id, TestContext.Current.CancellationToken));
     }
 
-    /// <summary>A grant that answers from mail is not a grant that reads it, so it reaches none of the calendar either.</summary>
+    /// <summary>The calendar is a record of its own rather than anything in a mailbox, so the grant that reads mail reaches none of it.</summary>
     [Fact]
-    public async Task ReadWindowAsync_ACallerWithoutTheMailReadingGrant_IsRefused()
+    public async Task ReadWindowAsync_ACallerGrantedOnlyReadingMail_IsRefused()
     {
         // Arrange
-        var calendar = this.CalendarFor(MailFathomPermission.MailAsk);
+        var calendar = this.CalendarFor(MailFathomPermission.MailRead);
 
         // Act and assert
         await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
@@ -403,12 +403,12 @@ public sealed class OwnCalendarTests
                 TestContext.Current.CancellationToken));
     }
 
-    /// <summary>Every write here is asked for under the same grant the reads are, so a caller without it changes nothing.</summary>
+    /// <summary>Reading the calendar is not changing it, so a caller granted only the reading half creates nothing.</summary>
     [Fact]
-    public async Task CreateAsync_ACallerWithoutTheMailReadingGrant_IsRefused()
+    public async Task CreateAsync_ACallerGrantedOnlyReadingTheCalendar_IsRefused()
     {
         // Arrange
-        var calendar = this.CalendarFor(MailFathomPermission.MailAsk);
+        var calendar = this.CalendarFor(MailFathomPermission.CalendarRead);
 
         // Act and assert
         await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
@@ -576,7 +576,8 @@ public sealed class OwnCalendarTests
             Now,
             Now);
 
-    private OwnCalendar SignedIn() => this.CalendarFor(MailFathomPermission.MailRead);
+    private OwnCalendar SignedIn() =>
+        this.CalendarFor(MailFathomPermission.CalendarRead, MailFathomPermission.CalendarWrite);
 
     private OwnCalendar CalendarFor(params MailFathomPermission[] granted)
     {

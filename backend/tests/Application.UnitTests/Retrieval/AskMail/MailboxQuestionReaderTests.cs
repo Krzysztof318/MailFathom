@@ -677,7 +677,26 @@ public sealed class MailboxQuestionReaderTests
             AnswerAsync(reader, new AskMailRequest { QuestionText = "was the invoice attached" }));
 
         // Assert
-        Assert.Equal(MailFathomPermission.MailAsk, refusal.RequiredPermission);
+        Assert.Equal(MailFathomPermission.AssistantUse, refusal.RequiredPermission);
+    }
+
+    /// <summary>Asking is not reading, so the grant that sends content to a provider answers nothing from mail it may not read.</summary>
+    [Fact]
+    public async Task AnswerQuestionAsync_ACallerGrantedOnlyAsking_IsRefusedBeforeAProviderIsCalled()
+    {
+        // Arrange
+        var answerer = new RecordingMailQuestionAnswerer().Answering("The invoice was attached.");
+        var reader = ReaderOver(
+            answerer,
+            authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.AssistantUse));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            AnswerAsync(reader, new AskMailRequest { QuestionText = "was the invoice attached" }));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.MailRead, refusal.RequiredPermission);
+        Assert.Empty(answerer.Questions);
     }
 
     /// <summary>Nothing runs before the grant is read, so a caller that may not ask causes no call to a model provider.</summary>
@@ -826,7 +845,7 @@ public sealed class MailboxQuestionReaderTests
             auditTrail ?? new RecordingMailAnsweringAuditTrail(),
             timeProvider,
             egressGuard ?? SensitiveContentEgressGuards.Inactive(),
-            authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailAsk),
+            authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.AssistantUse, MailFathomPermission.MailRead),
             userClock ?? UserClocks.Reading(Now));
     }
 

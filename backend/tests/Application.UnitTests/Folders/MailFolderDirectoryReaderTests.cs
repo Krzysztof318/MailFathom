@@ -417,7 +417,7 @@ public sealed class MailFolderDirectoryReaderTests
             StoredFolders(),
             StubMailFolderMappings.Nothing,
             Ledger(),
-            AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailAsk));
+            AccessAuthorizations.ForCallerGranted(MailFathomPermission.AssistantUse));
 
         // Act
         var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>

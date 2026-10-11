@@ -81,14 +81,14 @@ public sealed class AgentActPerformerTests
                 End: null,
                 IsAllDay: false,
                 SourceMessage: null),
-            [MailFathomPermission.MailRead]
+            [MailFathomPermission.CalendarWrite]
         },
         {
             new AgentTaskRecording(
                 PresentationText.Create("Send the revised schedule"),
                 new DateOnly(2026, 9, 24),
                 SourceMessage: null),
-            [MailFathomPermission.MailRead]
+            [MailFathomPermission.TasksWrite]
         },
     };
 
@@ -148,7 +148,7 @@ public sealed class AgentActPerformerTests
 
     private AgentActPerformer Performer()
     {
-        var authorization = AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead);
+        var authorization = AccessAuthorizations.ForCallerGranted(MailFathomPermission.CalendarWrite, MailFathomPermission.TasksWrite);
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ => new CommittingSession());
 

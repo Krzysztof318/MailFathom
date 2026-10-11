@@ -475,14 +475,14 @@ public sealed class ClientContactEndpointsTests
     private ContactBookReader Reader() => new(
         this.directory,
         ContactBookOwnerships.ForTheServedUser(),
-        AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailContactsRead));
+        AccessAuthorizations.ForCallerGranted(MailFathomPermission.ContactsRead));
 
     private ContactBookWriter Writer()
     {
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ => new CommittingSession());
 
-        var authorization = AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailContactsWrite);
+        var authorization = AccessAuthorizations.ForCallerGranted(MailFathomPermission.ContactsWrite);
 
         return new ContactBookWriter(
             new ContactBook(

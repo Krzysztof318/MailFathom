@@ -313,12 +313,12 @@ internal sealed class UserRecordAdministration(
     /// <param name="cancellationToken">Cancels the reads and the commit.</param>
     /// <returns>Whether this deployment holds a record for them; the zone they are served once the record is as they asked, which is the one a settings policy forces where one does rather than the one asked for; and, where the change was refused, the sentence naming who holds the zone where a settings policy does not leave it to them, or naming the policy where a settings policy governing them is one this build does not read.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="zone" /> is <see langword="null" />.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.ProfileWrite" />.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the record refused the zone for a reason a retry does not settle.</exception>
     /// <remarks>
     /// <para>
-    /// Asked for under the grant a signed-in person already holds rather than under the record's own write, for the
-    /// reason the portrait above is: what the zone decides is how that person's own days are read, which is not a
+    /// Asked for under <see cref="MailFathomPermission.ProfileWrite" /> rather than under the record's own write, for
+    /// the reason the portrait below is: what the zone decides is how that person's own days are read, which is not a
     /// decision about what this deployment reads out of their mailboxes. Somebody whose mail configuration an
     /// administrator maintains in full still reads their mail in their own week.
     /// </para>
@@ -338,7 +338,7 @@ internal sealed class UserRecordAdministration(
     {
         ArgumentNullException.ThrowIfNull(zone);
 
-        authorization.RequirePermission(MailFathomPermission.MailRead);
+        authorization.RequirePermission(MailFathomPermission.ProfileWrite);
 
         var user = authorization.RequireUser();
 
@@ -394,7 +394,7 @@ internal sealed class UserRecordAdministration(
     /// <param name="portrait">The file to link, or <see langword="null" /> to link none.</param>
     /// <param name="cancellationToken">Cancels the reads and the commit.</param>
     /// <returns>Whether the record was held, the file the link displaced, if any, and, where the link was refused, the sentence naming who holds the portrait where a settings policy does not leave it to them, or naming the policy where a settings policy governing them is one this build does not read.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.ProfileWrite" />.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the record refused the link for a reason a retry does not settle.</exception>
     /// <remarks>
     /// <para>
@@ -415,7 +415,7 @@ internal sealed class UserRecordAdministration(
         StoredFileId? portrait,
         CancellationToken cancellationToken)
     {
-        authorization.RequirePermission(MailFathomPermission.MailRead);
+        authorization.RequirePermission(MailFathomPermission.ProfileWrite);
 
         var user = authorization.RequireUser();
 

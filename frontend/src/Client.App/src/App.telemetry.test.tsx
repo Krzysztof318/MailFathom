@@ -11,6 +11,7 @@ import {
     framed,
     heldPerson,
     heldSession,
+    keptBesideTheMailbox,
     openSettings,
     preferencesAnswering,
     renderApp,
@@ -113,7 +114,7 @@ describe('App telemetry', () => {
         renderApp(
             servedFrom,
             heldSession,
-            deploymentAnswering(undefined, sessionAnswering(['mailfathom.mail.read', 'mailfathom.mail.ask'], 'off')),
+            deploymentAnswering(undefined, sessionAnswering(['mailfathom.mail.read', 'mailfathom.assistant.use', ...keptBesideTheMailbox], 'off')),
             storeKeeping(),
             recording.telemetry,
         );
@@ -137,7 +138,7 @@ describe('App telemetry', () => {
         renderApp(
             servedFrom,
             heldSession,
-            deploymentAnswering(undefined, sessionAnswering(['mailfathom.mail.read', 'mailfathom.mail.ask'], 'trace')),
+            deploymentAnswering(undefined, sessionAnswering(['mailfathom.mail.read', 'mailfathom.assistant.use', ...keptBesideTheMailbox], 'trace')),
             storeKeeping(),
             recording.telemetry,
         );

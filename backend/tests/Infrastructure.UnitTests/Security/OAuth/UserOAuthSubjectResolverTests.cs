@@ -26,7 +26,7 @@ public sealed class UserOAuthSubjectResolverTests
     private static readonly Guid CredentialId = new("0197c0de-0000-7000-8000-000000000003");
 
     private static readonly IReadOnlyList<MailFathomPermission> Grant =
-        [MailFathomPermission.MailRead, MailFathomPermission.MailAsk];
+        [MailFathomPermission.MailRead, MailFathomPermission.AssistantUse];
 
     [Fact]
     public async Task ResolveAsync_ASubjectTheDeploymentMapped_AdmitsTheUserWithTheGrantOnTheMapping()

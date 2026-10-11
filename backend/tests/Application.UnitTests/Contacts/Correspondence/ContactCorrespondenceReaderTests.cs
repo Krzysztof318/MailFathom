@@ -203,7 +203,7 @@ public sealed class ContactCorrespondenceReaderTests
         // Arrange
         var reader = ReaderOver(
             new InMemoryContactCorrespondenceIndex(),
-            authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailContactsRead));
+            authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.ContactsRead));
 
         // Act
         var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>

@@ -612,7 +612,11 @@ public sealed class ClientTaskEndpointsTests
     /// <summary>Composes the reading over a planner answering what a case states, and a list holding one task due that day.</summary>
     private static TodayLayout LayingOut(DayLayoutDerivation derivation)
     {
-        var authorization = AccessAuthorizations.ForUserGranted(User, MailFathomPermission.MailRead);
+        var authorization = AccessAuthorizations.ForUserGranted(
+            User,
+            MailFathomPermission.AssistantUse,
+            MailFathomPermission.TasksRead,
+            MailFathomPermission.CalendarRead);
         var store = Substitute.For<IPersonalTaskStore>();
         store
             .ReadAsync(
@@ -654,7 +658,7 @@ public sealed class ClientTaskEndpointsTests
     }
 
     private static OwnTasks SignedIn(IPersonalTaskStore store) => new(
-        AccessAuthorizations.ForUserGranted(User, MailFathomPermission.MailRead),
+        AccessAuthorizations.ForUserGranted(User, MailFathomPermission.TasksRead, MailFathomPermission.TasksWrite),
         store,
         new FakeTimeProvider(Stamped));
 

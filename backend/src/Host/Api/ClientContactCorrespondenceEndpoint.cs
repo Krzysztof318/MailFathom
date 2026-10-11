@@ -54,7 +54,7 @@ internal static class ClientContactCorrespondenceEndpoint
     /// <param name="contacts">Reads the contact, for a caller the book's own grant admits.</param>
     /// <param name="correspondence">Correlates the contact's addresses with the mail this caller may read.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
-    /// <returns><c>200</c> with the correlation, <c>404</c> where no book in this caller's scope holds the contact, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.read</c> or <c>mailfathom.mail.contacts.read</c>.</returns>
+    /// <returns><c>200</c> with the correlation, <c>404</c> where no book in this caller's scope holds the contact, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.read</c> or <c>mailfathom.contacts.read</c>.</returns>
     /// <remarks>
     /// A contact this caller does not hold and one no deployment ever held answer identically, so nothing here tells a
     /// caller that somebody else's correspondent exists. A contact the mail says nothing about answers with two empty

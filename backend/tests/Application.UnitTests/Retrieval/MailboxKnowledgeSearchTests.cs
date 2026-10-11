@@ -611,7 +611,7 @@ public sealed class MailboxKnowledgeSearchTests
             new RecordingMailboxReadTelemetry(),
             // The retrieval an answering run makes is reached under the grant that admitted the question, which is not
             // the mailbox-read grant: the window this walks is read through the internal method, which asks for none.
-            AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailAsk)),
+            AccessAuthorizations.ForCallerGranted(MailFathomPermission.AssistantUse)),
         bounds ?? EmailKnowledgeBounds.Default);
 
     /// <summary>Builds the semantic half of a deployment that configured no embedding provider and activated nothing.</summary>

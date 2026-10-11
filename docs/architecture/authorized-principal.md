@@ -132,8 +132,8 @@ The host composes one `IAuthorizedPrincipalSource` per scope, which for a served
   Those claims are a narrowing rather than the grant: a step after authorization reads the user's own grant through
   `UserGrantResolver`, which each replica remembers per user until a change to what users are granted makes it forget,
   and the caller holds that grant kept to the names the claims carry — on a mail-serving surface the credential's own
-  names on the mail half, and on the administrative surface both halves, kept to what its credential names and, where
-  its entry reads them, to a token's scopes, whose mail names that principal holds for comparison and never performs. A request that step never reached holds nothing.
+  names on the user-facing half, and on the administrative surface both halves, kept to what its credential names and, where
+  its entry reads them, to a token's scopes, whose user-facing names that principal holds for comparison and never performs. A request that step never reached holds nothing.
 - **A scope with no request behind it** is the process's own identity. Work reached outside a request in this process is
   work no caller asked for.
 - **A route that verified a capability** states that principal onto its own scope before it reaches the use case. The
@@ -143,7 +143,7 @@ The host composes one `IAuthorizedPrincipalSource` per scope, which for a served
 configures no `Authentication` entry at all, the caller is served anyway — there is no credential to narrow it with,
 which is the posture ADR 0012 settled and the startup record already states, so reporting no principal there would have
 a use case refuse every call on a deployment whose own record says it serves somebody. On the MCP or client surface that
-caller acts for the user the deployment serves and holds what that user's roles grant on the mail half; on the
+caller acts for the user the deployment serves and holds what that user's roles grant on the user-facing half; on the
 administrative surface it acts for no user, is named `user <the default administrator> credential none`, and holds what
 the default administrator's roles grant — and where the default administrator was removed,
 it is no principal at all, so such an endpoint serves nobody. Where the
@@ -199,7 +199,7 @@ answer an unknown credential gets.
 
 **The client surface reaches the same adapter and is no third case.** It is the third surface a request can arrive on,
 and its grant is resolved exactly as the MCP surface's is — the user's roles, kept to what the credential names, or
-to the whole of the mail half where it configures none. Its session route reports that grant rather than requiring anything of it, and
+to the whole of the user-facing half where it configures none. Its session route reports that grant rather than requiring anything of it, and
 its mail-reading routes reach the use cases that already ask, under the permissions they already name:
 `GET /api/client/accounts` is published under `mailfathom.mail.read` and calls the same account reader an agent's
 `list_accounts` reaches.
@@ -227,8 +227,8 @@ omission — it never said what admitted the work — and refusing it is what "f
 means in the one place the decision is taken.
 
 **The MCP surface answers it by saying nothing.** The use cases behind its tools each require a permission —
-`mailfathom.mail.read` for the four that read the local mailbox copy, `mailfathom.mail.ask` for the one that answers
-from it, `mailfathom.mail.flags.write` for the one that changes a mailbox, `mailfathom.mail.drafts.write` for the three
+`mailfathom.mail.read` for the four that read the local mailbox copy, `mailfathom.assistant.use` beside it for the one
+that answers from it, `mailfathom.mail.flags.write` for the one that changes a mailbox, `mailfathom.mail.drafts.write` for the three
 that write a draft, and the two contact names for the book — and
 the endpoint asks the same question ahead of them, from the grant the caller was admitted under. `mailfathom.mail.send`
 is asked for a third time by the outbox a send is written down in, which is the case that shows which of the checks is

@@ -814,7 +814,7 @@ public sealed class ClientMailMutationsEndpointTests
         preferences.ReadAsync(Arg.Any<UserId>(), Arg.Any<CancellationToken>()).Returns(Task.FromResult(stored));
 
         return new OwnClientPreferences(
-            AccessAuthorizations.ForCallerGranted(granted ?? MailFathomPermission.MailRead),
+            AccessAuthorizations.ForCallerGranted(granted ?? MailFathomPermission.ProfileRead),
             preferences);
     }
 

@@ -38,14 +38,14 @@ describe('readDeploymentSession', () => {
     it('reads the running release and the grant the presented credential carries', async () => {
         const result = await readDeploymentSession(
             session,
-            answering({ body: sessionBody(['mailfathom.mail.read', 'mailfathom.mail.ask'], '0.8.1') }),
+            answering({ body: sessionBody(['mailfathom.mail.read', 'mailfathom.assistant.use'], '0.8.1') }),
         );
 
         expect(result).toEqual({
             outcome: 'read',
             value: {
                 version: '0.8.1',
-                permissions: ['mailfathom.mail.read', 'mailfathom.mail.ask'],
+                permissions: ['mailfathom.mail.read', 'mailfathom.assistant.use'],
                 telemetryLevel: 'info',
             },
         });
@@ -93,6 +93,31 @@ describe('readDeploymentSession', () => {
         expect(result).toEqual({
             outcome: 'read',
             value: { version: '0.8.0', permissions: ['mailfathom.mail.read'], telemetryLevel: 'info' },
+        });
+    });
+
+    // The records a person keeps beside their mailbox are each published under a name outside `mailfathom.mail`, so a
+    // parser reading only that domain would answer a credential holding them as one holding nothing.
+    it('keeps the names published outside the mail domain, in the order the answer gave them', async () => {
+        const besideTheMailbox = [
+            'mailfathom.contacts.read',
+            'mailfathom.contacts.write',
+            'mailfathom.tasks.read',
+            'mailfathom.tasks.write',
+            'mailfathom.calendar.read',
+            'mailfathom.calendar.write',
+            'mailfathom.notifications.read',
+            'mailfathom.notifications.write',
+            'mailfathom.profile.read',
+            'mailfathom.profile.write',
+            'mailfathom.assistant.use',
+        ];
+
+        const result = await readDeploymentSession(session, answering({ body: sessionBody(besideTheMailbox) }));
+
+        expect(result).toEqual({
+            outcome: 'read',
+            value: { version: '0.8.0', permissions: besideTheMailbox, telemetryLevel: 'info' },
         });
     });
 

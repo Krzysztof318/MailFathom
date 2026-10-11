@@ -377,8 +377,8 @@ credentials, and its own authorization servers, exactly as the administrative en
 whole section is **restart**, while key material is read per request. [The client endpoint](client-endpoint.md) is the
 page.
 
-What a grant here draws on is the mailbox half of [the published set](permissions.md#the-published-set) — the same half
-the MCP endpoint's grants come from, because the client reads the mail an agent reads. Only the transport is separate.
+What a grant here draws on is the user-facing half of [the published set](permissions.md#the-published-set) — the same
+half the MCP endpoint's grants come from, because the client reaches the records an agent reaches. Only the transport is separate.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |

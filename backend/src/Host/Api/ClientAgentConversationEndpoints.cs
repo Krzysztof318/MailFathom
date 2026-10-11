@@ -44,9 +44,11 @@ namespace MailFathom.Host.Api;
 /// another person's record.
 /// </para>
 /// <para>
-/// A conversation is the person's own questions about their mail and the answers quoting it, so every route is
-/// published under the grant that governs asking a question about mail, the reading ones included. None of what is
-/// read or written reaches a log, a span, a problem detail, or a signal.
+/// A conversation is the person's own questions and the answers a chat provider composed for them, so every route is
+/// published under the assistant grant, the reading ones included. What an answer may draw on is decided per record
+/// rather than here: the Agent is offered a reading tool only where the caller holds that record's reading grant, and
+/// a proposing one only where the caller could carry the proposal out. None of what is read or written reaches a
+/// log, a span, a problem detail, or a signal.
 /// </para>
 /// </remarks>
 internal static class ClientAgentConversationEndpoints
@@ -98,41 +100,41 @@ internal static class ClientAgentConversationEndpoints
         ArgumentNullException.ThrowIfNull(api);
 
         api.MapGet(ConversationsRoute, List)
-            .RequirePermission(MailFathomPermission.MailAsk);
+            .RequirePermission(MailFathomPermission.AssistantUse);
 
         // A POST for an operation that changes nothing, for the reason the mail search phrasing is one: what somebody
         // looks for in their own history is as revealing as the history, and a query string is the part of a request
         // that reaches an access log by default, here and on every proxy in front of it.
         api.MapPost(SearchRoute, SearchAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxSearchRequestBytes))
-            .RequirePermission(MailFathomPermission.MailAsk);
+            .RequirePermission(MailFathomPermission.AssistantUse);
 
         api.MapGet(ConversationRoute, Read)
-            .RequirePermission(MailFathomPermission.MailAsk);
+            .RequirePermission(MailFathomPermission.AssistantUse);
 
         api.MapDelete(ConversationRoute, Delete)
-            .RequirePermission(MailFathomPermission.MailAsk);
+            .RequirePermission(MailFathomPermission.AssistantUse);
 
         api.MapPut(ArchiveRoute, Archive)
-            .RequirePermission(MailFathomPermission.MailAsk);
+            .RequirePermission(MailFathomPermission.AssistantUse);
 
         api.MapDelete(ArchiveRoute, Restore)
-            .RequirePermission(MailFathomPermission.MailAsk);
+            .RequirePermission(MailFathomPermission.AssistantUse);
 
         api.MapPost(MessagesRoute, Ask)
             .WithMetadata(new RequestSizeLimitAttribute(MaxMessageRequestBytes))
-            .RequirePermission(MailFathomPermission.MailAsk);
+            .RequirePermission(MailFathomPermission.AssistantUse);
 
         api.MapPost(RunMessagesRoute, Steer)
             .WithMetadata(new RequestSizeLimitAttribute(MaxMessageRequestBytes))
-            .RequirePermission(MailFathomPermission.MailAsk);
+            .RequirePermission(MailFathomPermission.AssistantUse);
 
         api.MapDelete(RunRoute, Stop)
-            .RequirePermission(MailFathomPermission.MailAsk);
+            .RequirePermission(MailFathomPermission.AssistantUse);
 
         api.MapPut(ProposalRoute, AnswerProposal)
             .WithMetadata(new RequestSizeLimitAttribute(MaxProposalAnswerRequestBytes))
-            .RequirePermission(MailFathomPermission.MailAsk);
+            .RequirePermission(MailFathomPermission.AssistantUse);
     }
 
     /// <summary>Composes the address one conversation is read at.</summary>
@@ -150,7 +152,7 @@ internal static class ClientAgentConversationEndpoints
     /// <param name="scopeResolver">Names the acting user, whose history this is.</param>
     /// <param name="store">Where conversations are held.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The history, bounded by <see cref="AgentConversationBounds.MaximumConversationsPerListing" />, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.ask</c>.</returns>
+    /// <returns>The history, bounded by <see cref="AgentConversationBounds.MaximumConversationsPerListing" />, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.assistant.use</c>.</returns>
     internal static async Task<Ok<ClientAgentConversationListResponse>> List(
         [FromServices] MailboxScopeResolver scopeResolver,
         [FromServices] IAgentConversationStore store,
@@ -180,7 +182,7 @@ internal static class ClientAgentConversationEndpoints
     /// <param name="scopeResolver">Names the acting user, whose history is the only one searched.</param>
     /// <param name="search">Ranks the history.</param>
     /// <param name="cancellationToken">Cancels the search.</param>
-    /// <returns><c>200</c> with the conversations found and the mode that ordered them, <c>400</c> naming what was wrong with the request, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.ask</c>.</returns>
+    /// <returns><c>200</c> with the conversations found and the mode that ordered them, <c>400</c> naming what was wrong with the request, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.assistant.use</c>.</returns>
     /// <remarks>
     /// <para>
     /// The history is searched here rather than filtered in the browser: a client holds at most a page of titles, and
@@ -233,7 +235,7 @@ internal static class ClientAgentConversationEndpoints
     /// <param name="scopeResolver">Names the acting user, whose conversation it has to be.</param>
     /// <param name="store">Where conversations are held.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
-    /// <returns><c>204</c> where it is this person's and archived, <c>404</c> where this person holds no such conversation, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.ask</c>.</returns>
+    /// <returns><c>204</c> where it is this person's and archived, <c>404</c> where this person holds no such conversation, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.assistant.use</c>.</returns>
     /// <remarks>
     /// Nothing but where the conversation is listed changes: every entry stays, it opens and deletes as it did, and an
     /// answer being composed in it is not stopped. A conversation already archived answers <c>204</c> as well, this
@@ -251,7 +253,7 @@ internal static class ClientAgentConversationEndpoints
     /// <param name="scopeResolver">Names the acting user, whose conversation it has to be.</param>
     /// <param name="store">Where conversations are held.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
-    /// <returns><c>204</c> where it is this person's and restored, <c>404</c> where this person holds no such conversation, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.ask</c>.</returns>
+    /// <returns><c>204</c> where it is this person's and restored, <c>404</c> where this person holds no such conversation, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.assistant.use</c>.</returns>
     /// <remarks>One never archived answers <c>204</c> as well, for the reason archiving one already archived does.</remarks>
     internal static Task<Results<NoContent, NotFound>> Restore(
         [FromRoute] Guid conversationId,
@@ -282,7 +284,7 @@ internal static class ClientAgentConversationEndpoints
     /// <param name="scopeResolver">Names the acting user, who is who may read it.</param>
     /// <param name="store">Where conversations are held.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The conversation's standing and everything written past that place, <c>404</c> where this person holds no such conversation, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.ask</c>.</returns>
+    /// <returns>The conversation's standing and everything written past that place, <c>404</c> where this person holds no such conversation, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.assistant.use</c>.</returns>
     /// <remarks>
     /// <para>
     /// <strong>One route serves the first read and every later one.</strong> What comes back says whether an answer is
@@ -346,7 +348,7 @@ internal static class ClientAgentConversationEndpoints
     /// <param name="scopeResolver">Names the acting user, who is who may delete it.</param>
     /// <param name="store">Where conversations are held.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
-    /// <returns><c>204</c> where it was this person's and is gone, <c>404</c> where this person holds no such conversation, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.ask</c>.</returns>
+    /// <returns><c>204</c> where it was this person's and is gone, <c>404</c> where this person holds no such conversation, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.assistant.use</c>.</returns>
     /// <remarks>
     /// An answer still being composed goes with it, and the run meets that as the first write the store refuses. A
     /// second request for the same conversation answers <c>404</c>, because by then there is none.
@@ -375,7 +377,7 @@ internal static class ClientAgentConversationEndpoints
     /// <param name="launcher">Composes the answer past this request.</param>
     /// <param name="timeProvider">Stamps the instant the question was asked at, which the answer is anchored to.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
-    /// <returns><c>202</c> naming the message, the run answering it, and the place the conversation stands at; <c>400</c> naming what was wrong with the request; <c>404</c> where the conversation is somebody else's; <c>409</c> where an answer is still being composed or the conversation is full; or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.ask</c>.</returns>
+    /// <returns><c>202</c> naming the message, the run answering it, and the place the conversation stands at; <c>400</c> naming what was wrong with the request; <c>404</c> where the conversation is somebody else's; <c>409</c> where an answer is still being composed or the conversation is full; or <c>403</c> for a caller whose grant does not carry <c>mailfathom.assistant.use</c>.</returns>
     /// <remarks>
     /// The message's identifier is the client's, so a post retried over a dropped connection answers with what the first
     /// one wrote — the same run and the same place — rather than writing the question twice, and the answer is started
@@ -440,7 +442,7 @@ internal static class ClientAgentConversationEndpoints
     /// <param name="scopeResolver">Names the acting user, who is whose conversation it is.</param>
     /// <param name="controls">Writes the instruction and announces it.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
-    /// <returns><c>202</c> naming the message, the run, and the place reached; <c>400</c> naming what was wrong with the request; <c>404</c> where this person holds no such conversation; <c>409</c> where that run is no longer being composed or the conversation is full; or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.ask</c>.</returns>
+    /// <returns><c>202</c> naming the message, the run, and the place reached; <c>400</c> naming what was wrong with the request; <c>404</c> where this person holds no such conversation; <c>409</c> where that run is no longer being composed or the conversation is full; or <c>403</c> for a caller whose grant does not carry <c>mailfathom.assistant.use</c>.</returns>
     /// <remarks>
     /// Nothing already composed is touched and nothing is restarted. A run that ended before the instruction arrived has
     /// nothing left to steer, which is a <c>409</c> the person answers by asking afresh rather than an instruction left
@@ -486,7 +488,7 @@ internal static class ClientAgentConversationEndpoints
     /// <param name="scopeResolver">Names the acting user, who is who may stop it.</param>
     /// <param name="controls">Ends the answer and has the agent say so.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
-    /// <returns><c>204</c> where the run is stopped or had already ended, <c>404</c> where this person holds no such conversation, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.ask</c>.</returns>
+    /// <returns><c>204</c> where the run is stopped or had already ended, <c>404</c> where this person holds no such conversation, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.assistant.use</c>.</returns>
     /// <remarks>
     /// <para>
     /// Nothing is rolled back: what the run composed stays in the conversation, and the agent writes a line saying it
@@ -530,7 +532,7 @@ internal static class ClientAgentConversationEndpoints
     /// <param name="controls">Records a decline and announces it.</param>
     /// <param name="acceptance">Records an acceptance and carries out exactly the act that was proposed.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
-    /// <returns><c>200</c> naming the place the last answer to the proposal was written at; <c>400</c> for a decision that is neither accepted nor declined; <c>409</c> where there is no proposal at that place this person can answer that way — none offered, not theirs, or already answered; or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.ask</c>, or, on accepting, every grant the proposed act needs.</returns>
+    /// <returns><c>200</c> naming the place the last answer to the proposal was written at; <c>400</c> for a decision that is neither accepted nor declined; <c>409</c> where there is no proposal at that place this person can answer that way — none offered, not theirs, or already answered; or <c>403</c> for a caller whose grant does not carry <c>mailfathom.assistant.use</c>, or, on accepting, every grant the proposed act needs.</returns>
     /// <remarks>
     /// Accepting carries the act out, under the accepting caller's own grant, before this route answers: an act this
     /// deployment refuses — a recipient a governor refuses, an account no longer served — ends the proposal as failed,

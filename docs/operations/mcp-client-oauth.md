@@ -127,8 +127,8 @@ mapper.
 [step 7](#7-write-the-mailfathom-entry) sets `PermissionsFromTokenScopes`, which is what lets your authorization server
 decide per subject what an admitted caller may do rather than the deployment granting every token the same thing. Create
 one further client scope per permission you intend a token to bring, named exactly as MailFathom publishes it —
-`mailfathom.mail.read`, `mailfathom.mail.ask`, `mailfathom.mail.contacts.read`, `mailfathom.mail.contacts.write`,
-`mailfathom.mail.flags.write`, `mailfathom.mail.move`, `mailfathom.mail.delete`, `mailfathom.mail.drafts.write`, `mailfathom.mail.send`, `mailfathom.mail.accounts.write`, `mailfathom.mail.folders.write`, or on the administrative endpoint one of the administrative names
+`mailfathom.mail.read`, `mailfathom.assistant.use`, `mailfathom.contacts.read`, `mailfathom.mail.send`, and so on through
+the user-facing names, or on the administrative endpoint one of the administrative names
 [the published set](permissions.md#the-published-set) lists. A scope is one published name and never the wildcard
 pattern [a role's list accepts](permissions.md#a-pattern-in-a-roles-list), which MailFathom refuses in `RequiredScopes` and `AdvertisedScopes` for the same reason no
 authorization server could mint one. The spelling is compared byte

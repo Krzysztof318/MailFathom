@@ -523,7 +523,7 @@ public sealed class ClientAgentConversationEndpointTests
     private static MailboxScopeResolver Resolver() =>
         new(
             AssignedMailAccountCatalogs.For(
-                AccessAuthorizations.ForUserGranted(SyntheticUser.Deployment, MailFathomPermission.MailAsk),
+                AccessAuthorizations.ForUserGranted(SyntheticUser.Deployment, MailFathomPermission.AssistantUse),
                 SyntheticServedAccount.Of("primary")),
             StubMailFolderParticipation.Nothing,
             StubDeploymentMailFolders.None,
@@ -536,7 +536,7 @@ public sealed class ClientAgentConversationEndpointTests
         new(
             this.store,
             Substitute.For<IAgentActPerformer>(),
-            AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailAsk, MailFathomPermission.MailDraftsWrite, MailFathomPermission.MailSend),
+            AccessAuthorizations.ForCallerGranted(MailFathomPermission.AssistantUse, MailFathomPermission.MailDraftsWrite, MailFathomPermission.MailSend),
             ClientSignalPublishers.ReachingNobody,
             new FakeTimeProvider(Now));
 
@@ -546,7 +546,7 @@ public sealed class ClientAgentConversationEndpointTests
         AuthorizedPrincipal? caller = null)
     {
         var principals = Substitute.For<IAuthorizedPrincipalSource>();
-        principals.Current.Returns(caller ?? AuthorizedPrincipal.CallerActingFor(SyntheticUser.Deployment, "test-caller", [MailFathomPermission.MailAsk]));
+        principals.Current.Returns(caller ?? AuthorizedPrincipal.CallerActingFor(SyntheticUser.Deployment, "test-caller", [MailFathomPermission.AssistantUse]));
 
         return ClientAgentConversationEndpoints.Ask(
             conversation,

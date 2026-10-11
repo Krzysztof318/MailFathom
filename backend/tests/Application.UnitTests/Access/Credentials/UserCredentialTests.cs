@@ -19,17 +19,17 @@ public sealed class UserCredentialTests
     /// what a permission a later release publishes is until somebody writes it into one — is not held through it.
     /// </summary>
     [Fact]
-    public void HeldUnder_ACredentialNamingNothing_HoldsExactlyTheMailHalfOfWhatItsUserHolds()
+    public void HeldUnder_ACredentialNamingNothing_HoldsExactlyTheUserFacingHalfOfWhatItsUserHolds()
     {
         // Arrange
         var credential = CredentialNarrowedTo(permissions: null);
-        var userGrant = GrantOf(MailFathomPermission.MailRead, MailFathomPermission.MailAsk, MailFathomPermission.AdminRead);
+        var userGrant = GrantOf(MailFathomPermission.MailRead, MailFathomPermission.AssistantUse, MailFathomPermission.AdminRead);
 
         // Act
         var held = credential.HeldUnder(userGrant);
 
         // Assert
-        Assert.Equal([MailFathomPermission.MailRead, MailFathomPermission.MailAsk], held);
+        Assert.Equal([MailFathomPermission.MailRead, MailFathomPermission.AssistantUse], held);
     }
 
     /// <summary>A listed name the user does not hold yields nothing, because the narrowing can only take away.</summary>
@@ -38,7 +38,7 @@ public sealed class UserCredentialTests
     {
         // Arrange
         var credential = CredentialNarrowedTo([MailFathomPermission.MailRead, MailFathomPermission.MailSend]);
-        var userGrant = GrantOf(MailFathomPermission.MailRead, MailFathomPermission.MailAsk);
+        var userGrant = GrantOf(MailFathomPermission.MailRead, MailFathomPermission.AssistantUse);
 
         // Act
         var held = credential.HeldUnder(userGrant);
@@ -61,7 +61,7 @@ public sealed class UserCredentialTests
         Assert.Empty(held);
     }
 
-    /// <summary>A credential that administers is reported holding what it administers with, and nothing of the mail half it is never presented where.</summary>
+    /// <summary>A credential that administers is reported holding what it administers with, and nothing of the user-facing half it is never presented where.</summary>
     [Fact]
     public void HeldUnder_ACredentialPresentedOnlyOnTheAdministrativeEndpoint_HoldsTheAdministrativeHalfOfWhatItsUserHolds()
     {
@@ -89,7 +89,7 @@ public sealed class UserCredentialTests
                 [UserCredentialSurface.Mcp, UserCredentialSurface.Client, UserCredentialSurface.Administration],
                 []),
         };
-        var userGrant = GrantOf(MailFathomPermission.MailRead, MailFathomPermission.MailAsk, MailFathomPermission.AdminRead, MailFathomPermission.AdminOperate);
+        var userGrant = GrantOf(MailFathomPermission.MailRead, MailFathomPermission.AssistantUse, MailFathomPermission.AdminRead, MailFathomPermission.AdminOperate);
 
         // Act
         var held = credential.HeldUnder(userGrant);

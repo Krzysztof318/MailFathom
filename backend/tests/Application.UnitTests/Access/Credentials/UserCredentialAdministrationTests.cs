@@ -274,7 +274,7 @@ public sealed class UserCredentialAdministrationTests
     }
 
     /// <summary>
-    /// An unwritten narrowing is stored as one naming nothing rather than expanded into today's mail half, so the
+    /// An unwritten narrowing is stored as one naming nothing rather than expanded into today's user-facing half, so the
     /// credential goes on holding what its user holds and a permission a later release publishes reaches it only
     /// through a role.
     /// </summary>

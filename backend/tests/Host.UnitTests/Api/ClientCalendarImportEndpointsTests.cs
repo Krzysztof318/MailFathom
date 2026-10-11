@@ -175,7 +175,7 @@ public sealed class ClientCalendarImportEndpointsTests
         zones.ZoneOf(Arg.Any<UserId>()).Returns(UserTimeZone.Coordinated);
 
         return new CalendarFileImport(
-            AccessAuthorizations.ForUserGranted(SyntheticUser.Deployment, MailFathomPermission.MailRead),
+            AccessAuthorizations.ForUserGranted(SyntheticUser.Deployment, MailFathomPermission.CalendarWrite),
             this.reader,
             this.store,
             zones,

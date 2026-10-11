@@ -112,5 +112,7 @@ it is on is one provider call per contact somebody deliberately opened.
 
 [AI configuration § `Chat:ContactRelationship`](../operations/configuration-ai.md#the-relationship-card--chatcontactrelationship)
 holds the key, and [the client endpoint](../operations/client-endpoint.md#the-contact-relationship-route) the route it
-is published on. It is published under `mailfathom.mail.ask` rather than under the reading grant, because that is what
-the derivation does: a correspondence leaves this deployment for a chat provider.
+is published on. It is published under `mailfathom.assistant.use` rather than under the reading grant, because that is what
+the derivation does: a correspondence leaves this deployment for a chat provider. It asks for `mailfathom.mail.read`
+and `mailfathom.contacts.read` beneath it as well, because what is sent is mail exchanged with an entry of the address
+book, and the caller has to be allowed to read both before a model is.

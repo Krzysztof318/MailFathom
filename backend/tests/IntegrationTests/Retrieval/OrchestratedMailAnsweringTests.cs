@@ -396,7 +396,7 @@ public sealed class OrchestratedMailAnsweringTests(MailFathomOrchestrationFixtur
                     Folders = [MailFolderReference.ToAlias(MailFolderAlias.Create(FolderAlias))],
                 },
                 token),
-            [MailFathomPermission.MailAsk],
+            [MailFathomPermission.AssistantUse, MailFathomPermission.MailRead],
             cancellationToken);
 
     /// <summary>Searches the same folder for the same text, which is what a run's reach is measured against.</summary>

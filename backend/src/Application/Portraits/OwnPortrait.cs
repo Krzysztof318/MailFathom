@@ -16,8 +16,8 @@ namespace MailFathom.Application.Portraits;
 /// somebody else is something a caller cannot express rather than something a surface has to refuse.
 /// </para>
 /// <para>
-/// All three acts are admitted under <see cref="MailFathomPermission.MailRead" />, the grant a signed-in person
-/// already holds, and none of them adds a name to the published set. The two writes are deliberately not
+/// Reading is admitted under <see cref="MailFathomPermission.ProfileRead" /> and the two writes under
+/// <see cref="MailFathomPermission.ProfileWrite" />. The writes are deliberately not
 /// <see cref="MailFathomPermission.MailAccountsWrite" />: that grant decides what this deployment reads out of
 /// somebody's mailboxes, somebody whose mail configuration an administrator maintains in full does not hold it, and
 /// what a person is drawn by must not be decided by a grant over their mail configuration.
@@ -59,10 +59,10 @@ public sealed class OwnPortrait
     /// <summary>Reads the picture the signed-in person is drawn by.</summary>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>Their portrait, or <see langword="null" /> where this deployment holds none for them.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.ProfileRead" />.</exception>
     public async Task<UserPortrait?> ReadAsync(CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.MailRead);
+        this.authorization.RequirePermission(MailFathomPermission.ProfileRead);
 
         var user = this.authorization.RequireUser();
 
@@ -81,13 +81,13 @@ public sealed class OwnPortrait
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>Whether this deployment holds a record for the caller, and the sentence saying why where the change was refused: who holds the portrait where it is not theirs to change, or which settings policy holds their whole record where this build does not read it.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="portrait" /> is <see langword="null" />.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.ProfileWrite" />.</exception>
     /// <remarks>A refused portrait leaves the file written for it removed again, so a refusal stores nothing.</remarks>
     public async Task<PortraitChange> ReplaceAsync(UserPortrait portrait, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(portrait);
 
-        this.authorization.RequirePermission(MailFathomPermission.MailRead);
+        this.authorization.RequirePermission(MailFathomPermission.ProfileWrite);
 
         var user = this.authorization.RequireUser();
 
@@ -121,14 +121,14 @@ public sealed class OwnPortrait
     /// <summary>Removes the picture the signed-in person is drawn by.</summary>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>Whether this deployment holds a record for the caller, and the sentence saying why where the change was refused: who holds the portrait where it is not theirs to change, or which settings policy holds their whole record where this build does not read it.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.ProfileWrite" />.</exception>
     /// <remarks>
     /// Nothing else about the person is touched, and the removal is silent about whether there was one to remove. The
     /// link goes before the file does, for the reason a replacement orders its steps.
     /// </remarks>
     public async Task<PortraitChange> RemoveAsync(CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.MailRead);
+        this.authorization.RequirePermission(MailFathomPermission.ProfileWrite);
 
         var user = this.authorization.RequireUser();
         var relinked = await this.links.RelinkOwnPortraitAsync(null, cancellationToken);

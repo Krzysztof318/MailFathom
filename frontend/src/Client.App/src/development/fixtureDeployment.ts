@@ -4,7 +4,7 @@
 
 import {
     clientRoutePrefix,
-    mailPermissions,
+    clientPermissions,
     protectedResourceMetadataRoute,
     sessionExchangeRoute,
     sessionRevocationRoute,
@@ -180,7 +180,7 @@ export function fixtureAnswer(
     if (route === '/session') {
         return options.expiredSession || request.headers['Authorization'] === undefined
             ? { status: 401, body: '', headers: { 'www-authenticate': 'Bearer, Basic realm="MailFathom"' } }
-            : answering({ ...deployment.sessionAnswer, version: __MAILFATHOM_VERSION__, permissions: mailPermissions });
+            : answering({ ...deployment.sessionAnswer, version: __MAILFATHOM_VERSION__, permissions: clientPermissions });
     }
 
     if (options.expiredSession) {

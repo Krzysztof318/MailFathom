@@ -25,6 +25,14 @@ const capabilityNotices: Readonly<Record<ClientCapability, MessageKey>> = {
     manageFolders: 'grant.manageFolders',
     readContacts: 'grant.readContacts',
     writeContacts: 'grant.writeContacts',
+    readTasks: 'grant.readTasks',
+    writeTasks: 'grant.writeTasks',
+    readCalendar: 'grant.readCalendar',
+    writeCalendar: 'grant.writeCalendar',
+    readNotifications: 'grant.readNotifications',
+    writeNotifications: 'grant.writeNotifications',
+    readProfile: 'grant.readProfile',
+    writeProfile: 'grant.writeProfile',
 };
 
 export function GrantNotice({ withheld }: { readonly withheld: readonly ClientCapability[] }) {

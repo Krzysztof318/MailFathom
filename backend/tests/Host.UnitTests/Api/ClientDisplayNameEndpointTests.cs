@@ -33,7 +33,7 @@ public sealed class ClientDisplayNameEndpointTests
     public async Task ReadAsync_APersonThisDeploymentHolds_HandsThemTheirNameAndWhetherTheyMayChangeIt()
     {
         // Arrange
-        var names = SignedIn(MailFathomPermission.MailRead, MailFathomPermission.MailAccountsWrite);
+        var names = SignedIn(MailFathomPermission.ProfileRead, MailFathomPermission.ProfileWrite);
         names.Recording("Ada Lovelace");
 
         // Act
@@ -51,7 +51,7 @@ public sealed class ClientDisplayNameEndpointTests
     public async Task ReadAsync_APersonWhoMayNotChangeTheirName_StillHandsThemTheName()
     {
         // Arrange
-        var names = SignedIn(MailFathomPermission.MailRead);
+        var names = SignedIn(MailFathomPermission.ProfileRead);
         names.Recording("Ada Lovelace");
 
         // Act
@@ -68,7 +68,7 @@ public sealed class ClientDisplayNameEndpointTests
     public async Task ReadAsync_ACallerWhoseRowHasGone_AnswersThatThereIsNoRecord()
     {
         // Arrange
-        var names = SignedIn(MailFathomPermission.MailRead);
+        var names = SignedIn(MailFathomPermission.ProfileRead);
 
         // Act
         var result = await ClientDisplayNameEndpoint.ReadAsync(names.Names, TestContext.Current.CancellationToken);
@@ -83,7 +83,7 @@ public sealed class ClientDisplayNameEndpointTests
     public async Task ChangeAsync_APersonCorrectingTheirName_AnswersTheNameNowRecorded()
     {
         // Arrange
-        var names = SignedIn(MailFathomPermission.MailAccountsWrite);
+        var names = SignedIn(MailFathomPermission.ProfileWrite);
         names.Recording("Ada Lovelace");
 
         // Act
@@ -104,7 +104,7 @@ public sealed class ClientDisplayNameEndpointTests
     public async Task ChangeAsync_ANameThisDeploymentWillNotRecord_RefusesNamingWhatToCorrect()
     {
         // Arrange
-        var names = SignedIn(MailFathomPermission.MailAccountsWrite);
+        var names = SignedIn(MailFathomPermission.ProfileWrite);
         names.Recording("Ada Lovelace");
 
         // Act
@@ -124,7 +124,7 @@ public sealed class ClientDisplayNameEndpointTests
     public async Task ChangeAsync_ACallerWhoseRowHasGone_AnswersThatThereIsNoRecord()
     {
         // Arrange
-        var names = SignedIn(MailFathomPermission.MailAccountsWrite);
+        var names = SignedIn(MailFathomPermission.ProfileWrite);
 
         // Act
         var result = await ClientDisplayNameEndpoint.ChangeAsync(
@@ -168,7 +168,7 @@ public sealed class ClientDisplayNameEndpointTests
     public async Task ChangeAsync_ANameASettingsPolicyHolds_RefusesNamingWhoHoldsIt()
     {
         // Arrange
-        var deployment = SignedIn(MailFathomPermission.MailRead, MailFathomPermission.MailAccountsWrite);
+        var deployment = SignedIn(MailFathomPermission.ProfileRead, MailFathomPermission.ProfileWrite);
         deployment.Recording("Ada Lovelace");
         deployment.GovernedBy(StatedPolicies.Governing(deployment: WithholdingTheName));
 
@@ -193,7 +193,7 @@ public sealed class ClientDisplayNameEndpointTests
     public async Task ChangeAsync_AHeldNameSentBackAsItStands_AnswersItAsUnchangeable()
     {
         // Arrange
-        var deployment = SignedIn(MailFathomPermission.MailRead, MailFathomPermission.MailAccountsWrite);
+        var deployment = SignedIn(MailFathomPermission.ProfileRead, MailFathomPermission.ProfileWrite);
         deployment.Recording("Ada Lovelace");
         deployment.GovernedBy(StatedPolicies.Governing(deployment: WithholdingTheName));
 

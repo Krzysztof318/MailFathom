@@ -227,11 +227,55 @@ public sealed class TodayLayoutTests
             PlannerAnswering(_ => DayLayoutDerivation.Settled(new DayLayoutSuggestion([], []))),
             owed: [Owed("Answer the supplier", Day)],
             committed: [],
-            authorization: AccessAuthorizations.ForUserGranted(Person, MailFathomPermission.MailAsk));
+            authorization: AccessAuthorizations.ForUserGranted(Person, MailFathomPermission.AssistantUse));
 
         // Act and assert
         await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
             () => layout.SuggestAsync(DayStart, DayEnd, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>An arrangement reads the calendar as well as the list, so a caller who may read only one of them is refused, naming the other.</summary>
+    [Fact]
+    public async Task SuggestAsync_ACallerWhoMayNotReadTheCalendar_IsRefusedNamingThatGrant()
+    {
+        // Arrange
+        var layout = Compose(
+            PlannerAnswering(_ => DayLayoutDerivation.Settled(new DayLayoutSuggestion([], []))),
+            owed: [Owed("Answer the supplier", Day)],
+            committed: [],
+            authorization: AccessAuthorizations.ForUserGranted(
+                Person,
+                MailFathomPermission.AssistantUse,
+                MailFathomPermission.TasksRead));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
+            () => layout.SuggestAsync(DayStart, DayEnd, TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.CalendarRead, refusal.RequiredPermission);
+    }
+
+    /// <summary>Reading the two records is not asking a model about them, so the reading grants alone arrange nothing.</summary>
+    [Fact]
+    public async Task SuggestAsync_ACallerWhoMayNotAsk_IsRefusedNamingThatGrant()
+    {
+        // Arrange
+        var layout = Compose(
+            PlannerAnswering(_ => DayLayoutDerivation.Settled(new DayLayoutSuggestion([], []))),
+            owed: [Owed("Answer the supplier", Day)],
+            committed: [],
+            authorization: AccessAuthorizations.ForUserGranted(
+                Person,
+                MailFathomPermission.TasksRead,
+                MailFathomPermission.CalendarRead));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
+            () => layout.SuggestAsync(DayStart, DayEnd, TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.AssistantUse, refusal.RequiredPermission);
     }
 
     private static IDayLayoutPlanner PlannerAnswering(Func<DayLayoutQuestion, DayLayoutDerivation> answer)
@@ -292,7 +336,11 @@ public sealed class TodayLayoutTests
         AccessAuthorization? authorization = null)
     {
         var clock = new FakeTimeProvider(DayStart);
-        authorization ??= AccessAuthorizations.ForUserGranted(Person, MailFathomPermission.MailRead);
+        authorization ??= AccessAuthorizations.ForUserGranted(
+            Person,
+            MailFathomPermission.AssistantUse,
+            MailFathomPermission.TasksRead,
+            MailFathomPermission.CalendarRead);
         var tasks = taskStore ?? TaskStoreHolding(owed);
         var events = calendarStore ?? Substitute.For<ICalendarEventStore>();
 

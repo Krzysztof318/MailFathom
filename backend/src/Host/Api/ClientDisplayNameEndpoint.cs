@@ -25,9 +25,9 @@ namespace MailFathom.Host.Api;
 /// authenticated, resolved from the request rather than read out of the body or the path.
 /// </para>
 /// <para>
-/// The read is <see cref="MailFathomPermission.MailRead" /> and the write is
-/// <see cref="MailFathomPermission.MailAccountsWrite" />, which is the record's own write and is granted separately.
-/// Neither adds a name to the published permission set. The read reports whether a write would be accepted — the grant
+/// The read is <see cref="MailFathomPermission.ProfileRead" /> and the write is
+/// <see cref="MailFathomPermission.ProfileWrite" />, granted apart so that a person who may not change their name is
+/// still shown it. The read reports whether a write would be accepted — the grant
 /// and the source this deployment reads the person's mail accounts from, both asked without attempting one — so
 /// somebody an administrator maintains the mailboxes of sees their name as text rather than meeting an unexplained
 /// refusal on a field the client should never have offered them.
@@ -55,13 +55,13 @@ internal static class ClientDisplayNameEndpoint
         ArgumentNullException.ThrowIfNull(api);
 
         api.MapGet(DisplayNameRoute, ReadAsync)
-            .RequirePermission(MailFathomPermission.MailRead);
+            .RequirePermission(MailFathomPermission.ProfileRead);
 
         // The attribute is reached for its metadata rather than as an MVC filter, for the reason the record routes
         // state: it implements IRequestSizeLimitMetadata, which the routing pipeline applies to the request body.
         api.MapPost(DisplayNameRoute, ChangeAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxWriteRequestBytes))
-            .RequirePermission(MailFathomPermission.MailAccountsWrite);
+            .RequirePermission(MailFathomPermission.ProfileWrite);
     }
 
     /// <summary>Hands the acting person the name this deployment records them under.</summary>
