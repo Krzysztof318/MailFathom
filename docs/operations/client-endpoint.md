@@ -2528,6 +2528,14 @@ than stored, a theme this deployment does not publish is refused naming the thre
 omits is committed as its own default rather than left at whatever was there. The body is bounded like every other on
 this surface, and one past the bound is answered `413`.
 
+**`telemetryEnabled` is the one preference whose omission is not its default.** A body that leaves it out, or states it
+as `null`, says nothing about the switch, and the write keeps the answer the person stored. Both halves of the reason
+are about them: the default is on, so a writer with nothing to say about telemetry would otherwise opt somebody in,
+and a read answers the switch [as it is applied](#a-settings-policy-may-hold-the-telemetry-switch) rather than as it
+is stored — so a client that sent back what it read would state a policy's answer as the person's own, and leave them
+on it after the policy is gone. A client therefore states the switch in the one write the person moved it with, and
+the client in this repository states it in no other.
+
 **It carries no version, and the last write wins.** The only writers are one person's own devices, so there is nobody
 whose change could be lost — and a superseded refusal here would be a conflict screen over a checkbox. That is the one
 way these routes differ from [the record routes](#the-record-routes), which are written by an administrator too.
@@ -2575,7 +2583,9 @@ repository does that after every refused write.
 A write that passes while the switch is held carries the stored answer forward instead of replacing it with what the
 body said — the write is the whole document, so storing the body's value would turn the policy's answer into the
 person's — and the answer they gave is the one in force again once no policy forces the switch. Nobody is left opted in,
-or out, by a rule that no longer exists. A person who never answered stands on the unset answer, which is on. A stored
+or out, by a rule that no longer exists, and that holds across the moment a force is lifted as well: a client still
+holding the forced value it read states nothing about the switch in its next write, so there is no body through which
+the policy's answer could arrive as theirs. A person who never answered stands on the unset answer, which is on. A stored
 row that cannot be read as a preferences document holds no answer to carry, and the write replacing it stores a
 refusal, which is how the telemetry routes read that row.
 

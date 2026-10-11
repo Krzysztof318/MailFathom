@@ -35,7 +35,8 @@ namespace MailFathom.Host.Api;
 /// </para>
 /// <para>
 /// A write states the whole document, which is what makes it a closed set rather than a patch: a preference the body
-/// omits is stored as its own unset answer rather than left at whatever the row held. It carries no version and is
+/// omits is stored as its own unset answer rather than left at whatever the row held — every one but the telemetry
+/// switch, whose omission leaves the stored answer as it was. It carries no version and is
 /// last-write-wins, because the only writers are one person's own devices and a conflict screen over a checkbox would
 /// be a worse answer than the second device winning.
 /// </para>
@@ -130,7 +131,7 @@ internal static class ClientPreferencesEndpoint
     /// <param name="preferences">The acting person's own preferences.</param>
     /// <param name="authorization">Names the acting person, whose served composition holds what a policy forces.</param>
     /// <param name="servedUsers">The served-user cache this request's acting person was read into when its scope was prepared.</param>
-    /// <param name="request">The whole document, with an omitted preference stored as its unset answer.</param>
+    /// <param name="request">The whole document, with an omitted preference stored as its unset answer and an omitted telemetry switch left as it was stored.</param>
     /// <param name="cancellationToken">Cancels the commit.</param>
     /// <returns>
     /// <c>200</c> with what is now in force, <c>404</c> when this deployment holds no record for the caller, or
@@ -147,6 +148,14 @@ internal static class ClientPreferencesEndpoint
     /// A write for somebody this replica holds no composition of does not write the switch either. Whether a policy
     /// holds it cannot be known here, and the body may be stating a forced answer another replica read to their
     /// client, so the other seven are committed and the stored answer is left as it was.
+    /// </para>
+    /// <para>
+    /// A body stating no answer to the switch never writes it, whoever sends it and whether or not a policy holds it.
+    /// It is the one preference whose omission is not its unset answer, and both halves of that are about the person:
+    /// the unset answer is on, so a writer with nothing to say about telemetry would otherwise opt them in, and a
+    /// client that read a forced value has no answer of theirs to state — restating what it read would store the
+    /// policy's answer as the person's once the policy is gone. A client therefore states the switch only when the
+    /// person moved it.
     /// </para>
     /// </remarks>
     internal static async Task<Results<Ok<ClientPreferencesResponse>, NotFound<ProblemDetails>, ProblemHttpResult>> SaveAsync(
@@ -182,7 +191,7 @@ internal static class ClientPreferencesEndpoint
             return Refusal(held.DescribeRefusal());
         }
 
-        if (served is null || held is not null)
+        if (served is null || held is not null || request.TelemetryEnabled is null)
         {
             stated = stated with { TelemetryEnabled = await OwnTelemetryAnswerAsync(preferences, cancellationToken) };
         }
@@ -226,7 +235,7 @@ internal static class ClientPreferencesEndpoint
 }
 
 /// <summary>What a person states about their own client.</summary>
-/// <param name="TelemetryEnabled">Whether this deployment may be told what their client is doing, or nothing to say what an unset switch says.</param>
+/// <param name="TelemetryEnabled">Whether this deployment may be told what their client is doing, or nothing to leave the answer they stored as it is.</param>
 /// <param name="Theme">The name of what the client is painted in, or nothing to follow the machine.</param>
 /// <param name="OpenMailInTabs">Whether opening a message opens a tab, or nothing for the unset answer.</param>
 /// <param name="MarkReadOnOpen">Whether opening a message marks it read on their mail server, or nothing for the unset answer.</param>
@@ -239,7 +248,8 @@ internal static class ClientPreferencesEndpoint
 /// Bound strictly: a key nothing here binds fails the bind rather than being stored, which is what keeps the document
 /// closed — it holds eight preferences because eight is what a client can state, not because a writer happened to send
 /// eight. Every one of them is optional, and an omitted one is committed as its unset answer rather than left at
-/// whatever the row held.
+/// whatever the row held. The telemetry switch is the exception, for the reason
+/// <see cref="ClientPreferencesEndpoint.SaveAsync" /> gives: stating nothing about it leaves the stored answer alone.
 /// </para>
 /// <para>
 /// The theme travels as its name rather than as <see cref="ClientThemeChoice" /> itself, for the reason the
@@ -260,7 +270,7 @@ internal sealed record ClientPreferencesRequest(
     int? NotificationSeconds = null)
 {
     /// <summary>Reads the request as the whole set the write commits.</summary>
-    /// <returns>The preferences, with every one the body omitted answered as unset, or <see langword="null" /> when the body names a theme or a message view this build does not publish.</returns>
+    /// <returns>The preferences, with every one the body omitted answered as unset — the telemetry switch included, which the write then replaces with the stored answer — or <see langword="null" /> when the body names a theme or a message view this build does not publish.</returns>
     internal ClientPreferences? Stated()
     {
         var theme = ClientPreferences.Unset.Theme;

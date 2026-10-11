@@ -110,12 +110,21 @@ interface HeldPreferences {
     readonly session: ClientSession | null;
     readonly preferences: ClientPreferences;
     readonly notStated: boolean;
+
+    // Whether the person moved the telemetry switch here and the deployment has not taken that answer yet, which is
+    // the one case a write states the switch at all. Everywhere else the value this holds is not theirs to state: a
+    // read answers the switch as it is applied, which under a settings policy is the policy's answer, and before any
+    // read it is what this device remembers. Sending either back would have the deployment keep it as the person's
+    // own — a forced on outliving the policy that forced it — so a write says nothing about the switch and the
+    // deployment leaves what it holds for them as it is.
+    readonly telemetryOwed: boolean;
 }
 
 const heldForNobody: HeldPreferences = {
     session: null,
     preferences: unsetClientPreferences,
     notStated: false,
+    telemetryOwed: false,
 };
 
 /**
@@ -180,7 +189,7 @@ export function useClientPreferences(
                 return;
             }
 
-            const read = { session, preferences: answer.value, notStated: false };
+            const read = { session, preferences: answer.value, notStated: false, telemetryOwed: false };
 
             latest.current = read;
             rememberTelemetry(person, answer.value.telemetryEnabled);
@@ -200,10 +209,11 @@ export function useClientPreferences(
     // effect watching what the handler set. The write states the whole document — the route takes nothing less — which
     // is why what was last read is kept: a preference this screen does not offer is sent back unchanged rather than
     // reset to its unset answer by a client that had no opinion about it.
-    function state(preferences: ClientPreferences): void {
+    function state(preferences: ClientPreferences, telemetryMoved = false): void {
         reading.current?.abort();
 
-        const chosen = { session, preferences, notStated: false };
+        const telemetryOwed = telemetryMoved || (latest.current.session === session && latest.current.telemetryOwed);
+        const chosen = { session, preferences, notStated: false, telemetryOwed };
 
         latest.current = chosen;
         rememberTelemetry(person, preferences.telemetryEnabled);
@@ -213,7 +223,9 @@ export function useClientPreferences(
             return;
         }
 
-        void writeClientPreferences(session, transport, preferences).then(async (answer) => {
+        const stated = telemetryOwed ? preferences : { ...preferences, telemetryEnabled: null };
+
+        void writeClientPreferences(session, transport, stated).then(async (answer) => {
             setHeld((current) =>
                 current.session === session ? { ...current, notStated: answer.outcome !== 'read' } : current,
             );
@@ -228,6 +240,12 @@ export function useClientPreferences(
             });
 
             if (answer.outcome === 'read') {
+                // Taken, so the switch is the deployment's to keep again and the next write says nothing about it.
+                // Only where this is still the latest document: a switch moved again since is owed by that write.
+                if (latest.current === chosen) {
+                    latest.current = { ...chosen, telemetryOwed: false };
+                }
+
                 return;
             }
 
@@ -243,7 +261,7 @@ export function useClientPreferences(
                 return;
             }
 
-            const reread = { session, preferences: holding.value, notStated: true };
+            const reread = { session, preferences: holding.value, notStated: true, telemetryOwed: false };
 
             latest.current = reread;
             rememberTelemetry(person, holding.value.telemetryEnabled);
@@ -256,11 +274,12 @@ export function useClientPreferences(
     // belongs to a session this is no longer.
     //
     // One value is not taken from the unset document there, and it is the same one the return below derives rather
-    // than holds. A write states the whole document, and the account menu offers the theme and the tab mode from the
-    // moment it is drawn — so somebody who had declined telemetry and changes either of those before the read comes
-    // back would send `telemetryEnabled: true` under their own credential, abandon the read that would have said
-    // otherwise, and have the device's copy rewritten to match. Nobody stated that value; it is the shape of the
-    // route's answer standing in for an answer, and the device is holding the one they actually gave.
+    // than holds. The account menu offers the theme and the tab mode from the moment it is drawn, and a choice made
+    // there abandons the read that would have answered — so the document composed here is what the client stands on
+    // for the rest of the session. Taking the unset switch into it would turn recording back on for somebody who had
+    // declined and rewrite the device's copy to match. Nobody stated that value; the device is holding the one they
+    // actually gave. It is held and not written: `state` says nothing about the switch to the deployment unless the
+    // person moved it.
     function composedFrom(): ClientPreferences {
         if (latest.current.session === session) {
             return latest.current.preferences;
@@ -295,7 +314,7 @@ export function useClientPreferences(
             state({ ...composedFrom(), openMailInTabs });
         },
         chooseTelemetry: (telemetryEnabled) => {
-            state({ ...composedFrom(), telemetryEnabled });
+            state({ ...composedFrom(), telemetryEnabled }, true);
         },
         chooseThreadExpansion: (expandWholeThread) => {
             state({ ...composedFrom(), expandWholeThread });

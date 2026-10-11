@@ -286,6 +286,51 @@ public sealed class ClientPreferencesEndpointTests
             Arg.Any<CancellationToken>());
     }
 
+    /// <summary>
+    /// A client that read a forced value has no answer of the person's to state, so it states none. That has to bind
+    /// as a body saying nothing about the switch whether the key is left out or written as <c>null</c>, or the write
+    /// that keeps their stored answer would be refused as malformed instead.
+    /// </summary>
+    [Theory]
+    [InlineData("""{"theme":"dark"}""")]
+    [InlineData("""{"telemetryEnabled":null,"theme":"dark"}""")]
+    public void Deserialize_ABodyStatingNoAnswerToTheTelemetrySwitch_BindsAsOneThatOmitsIt(string body)
+    {
+        // Act
+        var request = JsonSerializer.Deserialize<ClientPreferencesRequest>(body, WebFormat);
+
+        // Assert
+        Assert.Null(request!.TelemetryEnabled);
+    }
+
+    /// <summary>
+    /// The case a lifted force leaves behind: a client still holding the forced value it read states nothing about
+    /// the switch, and the write must not answer that omission with the unset answer, which is on. The refusal the
+    /// person stored before the force is what stands, so nobody is opted in by a rule that no longer exists.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task SaveAsync_AWriteOmittingTheSwitchWhereNoPolicyHoldsIt_KeepsTheStoredAnswerAndCommitsTheRest(bool stored)
+    {
+        // Arrange
+        var store = Holding(ClientPreferences.Unset with { TelemetryEnabled = stored });
+
+        // Act
+        var result = await ClientPreferencesEndpoint.SaveAsync(
+            SignedIn(store),
+            Acting(),
+            Serving(),
+            new ClientPreferencesRequest(Theme: "dark"),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var answered = Assert.IsType<Ok<ClientPreferencesResponse>>(result.Result).Value!;
+        Assert.Equal(
+            (stored, ClientThemeChoice.Dark, stored),
+            (store.Stored!.TelemetryEnabled, store.Stored.Theme, answered.TelemetryEnabled));
+    }
+
     /// <summary>The fifth preference binds like the four beside it, and a body written before it existed still states the rest.</summary>
     [Fact]
     public void Deserialize_ABodyOmittingThreadExpansion_StatesItAsTheUnsetAnswer()

@@ -60,6 +60,41 @@ function recording(body: string, status = 200): { transport: MailFathomTransport
     };
 }
 
+// A deployment whose settings policy forces the telemetry switch on, answering as the routes do: the forced value and
+// who holds it on every read, a refusal to a write stating the other answer, and a write stating the forced answer or
+// none taken with the rest of what it stated.
+function forcingTelemetryOn(): { transport: MailFathomTransport; requests: ClientRequest[] } {
+    const requests: ClientRequest[] = [];
+    let theme = 'light';
+
+    const answering = (): string =>
+        JSON.stringify({
+            ...(JSON.parse(stored({ telemetryEnabled: true, theme, openMailInTabs: false })) as object),
+            telemetryHeldBy: 'Organization',
+        });
+
+    return {
+        requests,
+        transport: (request) => {
+            requests.push(request);
+
+            if (request.method !== 'POST') {
+                return Promise.resolve({ status: 200, body: answering(), headers: {} });
+            }
+
+            const stating = JSON.parse(request.body ?? '') as { telemetryEnabled: boolean | null; theme: string };
+
+            if (stating.telemetryEnabled === false) {
+                return Promise.resolve({ status: 400, body: '', headers: {} });
+            }
+
+            theme = stating.theme;
+
+            return Promise.resolve({ status: 200, body: answering(), headers: {} });
+        },
+    };
+}
+
 // The theme is read beside the settings because it is the one of them the device also holds, so what the deployment
 // did to it is only visible through the provider that paints it.
 function reading(
@@ -212,7 +247,7 @@ describe('useClientPreferences', () => {
         expect(requests[1]?.method).toBe('POST');
         expect(requests[1]?.headers['Content-Type']).toBe('application/json');
         expect(JSON.parse(requests[1]?.body ?? '')).toStrictEqual({
-            telemetryEnabled: false,
+            telemetryEnabled: null,
             theme: 'light',
             openMailInTabs: true,
             markReadOnOpen: true,
@@ -260,7 +295,7 @@ describe('useClientPreferences', () => {
         });
 
         expect(JSON.parse(requests[1]?.body ?? '')).toStrictEqual({
-            telemetryEnabled: false,
+            telemetryEnabled: null,
             theme: 'light',
             openMailInTabs: false,
             markReadOnOpen: true,
@@ -290,7 +325,7 @@ describe('useClientPreferences', () => {
         });
 
         expect(JSON.parse(requests[1]?.body ?? '')).toStrictEqual({
-            telemetryEnabled: false,
+            telemetryEnabled: null,
             theme: 'light',
             openMailInTabs: false,
             markReadOnOpen: true,
@@ -347,7 +382,7 @@ describe('useClientPreferences', () => {
 
         await waitFor(() => {
             expect(JSON.parse(requests[1]?.body ?? '')).toStrictEqual({
-                telemetryEnabled: true,
+                telemetryEnabled: null,
                 theme: 'light',
                 openMailInTabs: false,
                 markReadOnOpen: true,
@@ -376,23 +411,7 @@ describe('useClientPreferences', () => {
     // The refused document is not what the next write may be composed from: every later change would restate the
     // refused answer beside its own, and a theme nobody may be stopped from choosing would be refused with it.
     it('reads again after a refused change, so the next change is not refused with it', async () => {
-        const holding = stored({ telemetryEnabled: true, theme: 'light', openMailInTabs: false });
-        const requests: ClientRequest[] = [];
-        const transport: MailFathomTransport = (request) => {
-            requests.push(request);
-
-            if (request.method !== 'POST') {
-                return Promise.resolve({ status: 200, body: holding, headers: {} });
-            }
-
-            // What a deployment forcing the switch on does with a write: the other answer is refused, and a document
-            // stating the forced one is taken and answered back.
-            return Promise.resolve(
-                request.body?.includes('"telemetryEnabled":false') === true
-                    ? { status: 400, body: '', headers: {} }
-                    : { status: 200, body: request.body ?? '', headers: {} },
-            );
-        };
+        const { transport, requests } = forcingTelemetryOn();
         const { result } = reading(transport);
 
         await waitFor(() => {
@@ -418,8 +437,145 @@ describe('useClientPreferences', () => {
             expect(result.current.preferences.notStated).toBe(false);
         });
 
-        expect(JSON.parse(requests.at(-1)?.body ?? '')).toMatchObject({ telemetryEnabled: true, theme: 'dark' });
+        // The forced value the client read back is not the person's to state, so the accepted write says nothing
+        // about the switch — which is what leaves the refusal they stored standing once the policy is gone.
+        expect(JSON.parse(requests.at(-1)?.body ?? '')).toMatchObject({ telemetryEnabled: null, theme: 'dark' });
         expect(window.localStorage.getItem(telemetryKey(anna))).toBe('true');
+    });
+
+    // The read that follows a refused write answers an older question than a choice made while it was out. Applying
+    // it on arrival would put the screen back on what the deployment held before that choice, and the next write
+    // would carry the reverted document.
+    it('lets a choice made while that read is still out stand rather than being read over', async () => {
+        const held = stored({ telemetryEnabled: true, theme: 'light', openMailInTabs: false });
+        const requests: ClientRequest[] = [];
+        const releases: (() => void)[] = [];
+        const recorded = recordingTelemetry();
+        const transport: MailFathomTransport = (request) => {
+            requests.push(request);
+
+            // The first read answers, the first write is refused, and the read that follows it is held unanswered.
+            if (requests.length === 2) {
+                return Promise.resolve({ status: 503, body: '', headers: {} });
+            }
+
+            if (requests.length === 3) {
+                return new Promise((resolve) => {
+                    releases.push(() => {
+                        resolve({ status: 200, body: held, headers: {} });
+                    });
+                });
+            }
+
+            return Promise.resolve({ status: 200, body: held, headers: {} });
+        };
+        const { result } = reading(transport, session, anna, recorded.telemetry);
+
+        await waitFor(() => {
+            expect(result.current.theme.choice).toBe('light');
+        });
+
+        act(() => {
+            result.current.preferences.chooseTabMode(true);
+        });
+
+        await waitFor(() => {
+            expect(requests).toHaveLength(3);
+        });
+
+        act(() => {
+            result.current.preferences.chooseTheme('dark');
+        });
+
+        // The held read answers, and one more change goes out behind it: by the time the deployment has taken that
+        // one, the answer released ahead of it has been either applied or let go.
+        act(() => {
+            releases[0]?.();
+            result.current.preferences.chooseThreadExpansion(true);
+        });
+
+        await waitFor(() => {
+            expect(recordsOf(recorded.recorded, 'preferences_stated')).toHaveLength(3);
+        });
+
+        expect(result.current.theme.choice).toBe('dark');
+        expect(result.current.preferences.openMailInTabs).toBe(true);
+    });
+
+    // A deployment that cannot be reached answers nothing to the read either. The choice is then all there is, so it
+    // stays on the screen marked as not saved, and a switch the person moved is still owed: the next write states it
+    // again rather than leaving the deployment on the answer they moved away from.
+    it('leaves a refused choice standing where the deployment cannot be read again, and states it again', async () => {
+        const requests: ClientRequest[] = [];
+        const transport: MailFathomTransport = (request) => {
+            requests.push(request);
+
+            return Promise.resolve(
+                requests.length === 1
+                    ? {
+                          status: 200,
+                          body: stored({ telemetryEnabled: true, theme: 'light', openMailInTabs: false }),
+                          headers: {},
+                      }
+                    : { status: 503, body: '', headers: {} },
+            );
+        };
+        const { result } = reading(transport);
+
+        await waitFor(() => {
+            expect(result.current.theme.choice).toBe('light');
+        });
+
+        act(() => {
+            result.current.preferences.chooseTelemetry(false);
+        });
+
+        // The read, the refused write, and the read that followed it.
+        await waitFor(() => {
+            expect(requests).toHaveLength(3);
+            expect(result.current.preferences.notStated).toBe(true);
+        });
+
+        expect(result.current.preferences.telemetryEnabled).toBe(false);
+
+        act(() => {
+            result.current.preferences.chooseTheme('dark');
+        });
+
+        expect(JSON.parse(requests.at(-1)?.body ?? '')).toMatchObject({ telemetryEnabled: false, theme: 'dark' });
+    });
+
+    // The switch is stated once, by the write the person moved it with. Every write after the deployment has taken
+    // that answer says nothing about it, so no later change can restate a value the deployment may since have been
+    // told to hold differently.
+    it('states the switch a person moved, and nothing about it once the deployment has taken it', async () => {
+        const { transport, requests } = recording(
+            stored({ telemetryEnabled: false, theme: 'light', openMailInTabs: false }),
+        );
+        const recorded = recordingTelemetry();
+        const { result } = reading(transport, session, anna, recorded.telemetry);
+
+        await waitFor(() => {
+            expect(result.current.theme.choice).toBe('light');
+        });
+
+        act(() => {
+            result.current.preferences.chooseTelemetry(true);
+        });
+
+        await waitFor(() => {
+            expect(recordsOf(recorded.recorded, 'preferences_stated')).toHaveLength(1);
+        });
+
+        act(() => {
+            result.current.preferences.chooseTabMode(true);
+        });
+
+        const switches = requests
+            .filter((asked) => asked.method === 'POST')
+            .map((asked) => (JSON.parse(asked.body ?? '') as { telemetryEnabled: unknown }).telemetryEnabled);
+
+        expect(switches).toStrictEqual([true, null]);
     });
 
     // Which preference somebody changed and what they set it to is not written down: a preference document is what a
@@ -550,7 +706,7 @@ describe('useClientPreferences', () => {
         const written = requests.find((asked) => asked.method === 'POST');
 
         expect(JSON.parse(written?.body ?? '')).toStrictEqual({
-            telemetryEnabled: true,
+            telemetryEnabled: null,
             theme: 'system',
             openMailInTabs: true,
             markReadOnOpen: true,
@@ -563,9 +719,11 @@ describe('useClientPreferences', () => {
 
     // A write states the whole document, and the account menu offers the theme from the moment it is drawn — so this
     // is the window between signing in and the read coming back, in which every other value is the route's own unset
-    // answer. Telemetry may not be: the device is holding the answer this person actually gave, and sending the unset
-    // one would turn their refusal into permission on the deployment, in the cache, and on the screen, silently.
-    it('composes a write made before the read returns from what this device remembers', () => {
+    // answer. Telemetry may not be: the device is holding the answer this person actually gave, and standing on the
+    // unset one would turn their refusal into permission in the cache and on the screen, silently. What the device
+    // remembers is not theirs to state to the deployment either — it may be a forced value an earlier session read —
+    // so the write says nothing about the switch and the deployment keeps what it holds.
+    it('stands on what this device remembers for a write made before the read returns, and states no switch', () => {
         window.localStorage.setItem(telemetryKey(anna), 'false');
 
         const requests: ClientRequest[] = [];
@@ -584,7 +742,7 @@ describe('useClientPreferences', () => {
         const written = requests.find((asked) => asked.method === 'POST');
 
         expect(JSON.parse(written?.body ?? '')).toStrictEqual({
-            telemetryEnabled: false,
+            telemetryEnabled: null,
             theme: 'dark',
             openMailInTabs: false,
             markReadOnOpen: true,

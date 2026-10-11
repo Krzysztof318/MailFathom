@@ -111,16 +111,30 @@ export function readClientPreferences(
 }
 
 /**
+ * What a write states: the whole document, with the telemetry switch stated only as the person's own answer.
+ *
+ * `telemetryEnabled` is `null` wherever the value a caller holds is not one the person gave it. A read answers the
+ * switch as it is applied, which under a settings policy is the policy's answer rather than theirs — so a caller that
+ * sent back what it read would state the policy's answer as the person's, and the deployment would keep it for them
+ * after the policy is gone. Stating nothing leaves what the deployment holds for them exactly as it is, which is the
+ * one preference whose omission is not its unset answer.
+ */
+export type StatedClientPreferences = Omit<ClientPreferences, 'telemetryEnabled'> & {
+    readonly telemetryEnabled: boolean | null;
+};
+
+/**
  * States the whole document, and answers with what is now stored.
  *
  * The whole of it rather than the part that changed, because that is what the route accepts: a preference the body
  * omits is committed as its own unset answer rather than left at whatever the row held. A caller therefore sends back
- * what it last read with one value replaced, which is also why nothing here merges anything.
+ * what it last read with one value replaced, which is also why nothing here merges anything — and states the
+ * telemetry switch only where {@link StatedClientPreferences} says it may.
  */
 export function writeClientPreferences(
     session: ClientSession,
     transport: MailFathomTransport,
-    stated: ClientPreferences,
+    stated: StatedClientPreferences,
 ): Promise<ClientResult<ClientPreferences>> {
     return spanned(`POST ${clientPreferencesRoute}`, async () => {
         return answerOf(
