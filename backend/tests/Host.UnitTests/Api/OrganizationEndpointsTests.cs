@@ -207,7 +207,7 @@ public sealed class OrganizationEndpointsTests
         // Arrange
         var harness = new EndpointHarness(MailFathomPermission.AdminConfigurationWrite);
         var mailAccount = Guid.CreateVersion7();
-        harness.Organizations.SetMailAccountOrganizationAsync(mailAccount, null, Arg.Any<CancellationToken>())
+        harness.Organizations.SetMailAccountOrganizationAsync(mailAccount, null, Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(new OrganizationWriteResult(OrganizationWriteOutcome.AssignmentsOutsideOrganization, StandingAssignments: 3));
 
         // Act
@@ -223,6 +223,37 @@ public sealed class OrganizationEndpointsTests
         Assert.Contains("3 user", problem.ProblemDetails.Detail, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A move changes which settings policy governs the account, so one the target's policy would refuse — an account
+    /// it would leave unservable, or one whose effective settings the caller's grant may not move — is a conflict
+    /// carrying what refuses it, and nothing is rewritten on the account to make the move pass.
+    /// </summary>
+    [Fact]
+    public async Task SetMailAccountOrganizationAsync_AnAccountTheTargetsPolicyRefuses_IsAConflictNamingWhatRefusesIt()
+    {
+        // Arrange
+        var harness = new EndpointHarness(MailFathomPermission.AdminConfigurationWrite);
+        var mailAccount = Guid.CreateVersion7();
+        harness.Organizations.SetMailAccountOrganizationAsync(mailAccount, OrganizationId, Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .Returns(new OrganizationWriteResult(OrganizationWriteOutcome.RecordLeftInvalid)
+            {
+                Corrections = ["Account 'Work': Language is not stated."],
+            });
+
+        // Act
+        var result = await OrganizationEndpoints.SetMailAccountOrganizationAsync(
+            mailAccount,
+            new MailAccountOrganizationRequest(OrganizationId, None: null),
+            harness.Administration,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var problem = Assert.IsType<ProblemHttpResult>(result.Result);
+        Assert.Equal(StatusCodes.Status409Conflict, problem.StatusCode);
+        Assert.Contains("Account 'Work': Language is not stated.", problem.ProblemDetails.Detail, StringComparison.Ordinal);
+        Assert.Contains("it was not moved", problem.ProblemDetails.Detail, StringComparison.Ordinal);
+    }
+
     /// <summary>A shared account is not taken out of every organization, because an account in none is one person's, and the refusal says how many it is assigned to and that nobody was unassigned.</summary>
     [Fact]
     public async Task SetMailAccountOrganizationAsync_ASharedAccountLeavingEveryOrganization_IsAConflictNamingHowManyItIsAssignedTo()
@@ -230,7 +261,7 @@ public sealed class OrganizationEndpointsTests
         // Arrange
         var harness = new EndpointHarness(MailFathomPermission.AdminConfigurationWrite);
         var mailAccount = Guid.CreateVersion7();
-        harness.Organizations.SetMailAccountOrganizationAsync(mailAccount, null, Arg.Any<CancellationToken>())
+        harness.Organizations.SetMailAccountOrganizationAsync(mailAccount, null, Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(new OrganizationWriteResult(OrganizationWriteOutcome.SharedOnlyInOrganization, StandingAssignments: 3));
 
         // Act
@@ -278,7 +309,7 @@ public sealed class OrganizationEndpointsTests
     {
         // Arrange
         var harness = new EndpointHarness(MailFathomPermission.AdminConfigurationWrite);
-        harness.Organizations.SetMailAccountOrganizationAsync(Arg.Any<Guid>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+        harness.Organizations.SetMailAccountOrganizationAsync(Arg.Any<Guid>(), Arg.Any<Guid?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(OrganizationWriteResult.Of(OrganizationWriteOutcome.UnknownMailAccount));
 
         // Act

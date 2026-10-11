@@ -923,9 +923,13 @@ What a policy states for people takes effect when it is saved: each person's set
 policy and their company's, a forced value wins over what their record says, and a default fills in what the record
 leaves out. A save that would leave somebody's record without something it needs — the language a default used to
 supply, say — is refused naming those people. `mfctl user show --effective` shows one person's settings as they are
-served, with what supplied each. What a policy states for mail accounts is stored and changes no mailbox. [Settings
-policies](../operations/admin-endpoint.md#settings-policies) holds what a policy may state and what a save is refused
-over.
+served, with what supplied each. What a policy states for mail accounts works the same way for every mailbox in its
+scope: the server, the folders, or the scanning posture a company states once is what each of its mailboxes is read
+with, a mailbox's own declaration states only what the policy leaves to it, and `mfctl account show --effective`
+shows one mailbox as it is served. [Settings policies](../operations/admin-endpoint.md#settings-policies) holds what a
+policy may state and what a save is refused over, and
+[how a settings policy resolves a mail account](../operations/configuration-mail.md#how-a-settings-policy-resolves-a-mail-account)
+what that means for a mailbox.
 
 **Sharing a mailbox is something a company does.** An account in an organization can be assigned to any number of its
 members, and an account in none belongs to one person: `mfctl account assign` refuses a second person for it and tells

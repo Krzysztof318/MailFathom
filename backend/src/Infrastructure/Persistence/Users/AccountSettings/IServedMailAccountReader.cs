@@ -51,7 +51,7 @@ public interface IServedMailAccountReader
 
     /// <summary>Reads every account this deployment serves whole, document included.</summary>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The served accounts, in the ordinal order of their identifiers.</returns>
+    /// <returns>The served accounts, in the ordinal order of their identifiers, each with the settings policies of its own organization and of the deployment read beside it.</returns>
     Task<IReadOnlyList<MailAccountRecord>> ReadServedRecordsAsync(CancellationToken cancellationToken);
 
     /// <summary>Reads accounts whose settings columns were not read out of the document they now hold, served or not.</summary>

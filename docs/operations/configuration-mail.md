@@ -267,6 +267,77 @@ schedules it.
 states all three switches together, what an unmapped folder is instead, and what becomes of the local copy of a message
 relocated into a folder nothing mirrors.
 
+### How a settings policy resolves a mail account
+
+A [settings policy](admin-endpoint.md#settings-policies) of the deployment governs every mail account, and one of an
+organization governs the accounts that belong to it. **Every reader of an account reads the value the policies
+resolve rather than the one its declaration states** — synchronization, delivery, the rules, classification,
+scanning, and contact collection all bind the account out of the record its user is served, and that record is
+composed from the account as resolved.
+
+**Each setting resolves on its own**, in the order
+[a user's record resolves in](configuration-sources.md#how-a-settings-policy-resolves-a-users-record): what the
+deployment forces, what the account's organization forces, what the declaration states, the organization's default,
+the deployment's default, and last what the *Default* column above says. A setting is a leaf of the declaration, so
+forcing `TransportSecurity:ConnectionSecurity` leaves every other key of that block to resolve on its own. An account
+in no organization is governed by the deployment's policy alone.
+
+**A list is one value across the layers, and no two layers are ever merged.** `Folders`, `TrustedSenders`,
+`ContactCollection:Exclusions`, `SpamClassification:ScannedFolders`, `SensitiveContent:ScreenOutgoingMailFor`, and
+`TransportSecurity:PermittedAuthenticationMechanisms` are each supplied whole by the first layer that states them: a
+declaration stating one folder is served that folder and none of a default's, and a forced list replaces whatever
+the declaration states. So a default list is a starting set an account replaces by stating its own, never a set its
+own entries are added to. One consequence reaches the person: [the folder routes](client-endpoint.md#the-record-routes)
+change one folder of the list the account is *served*, so the first folder a person adds, restates, or withdraws on an
+account that was served a default's folders writes the whole resulting list onto that account, which from then on
+states its own.
+
+**The identity properties take no value from a policy.** `EmailAddress`, `DisplayName`, `UserName`,
+`Delivery:UserName`, `Delivery:FromAddress`, and `Delivery:FromDisplayName` say who or which rather than how, and the
+five secret blocks — `Secrets:Password`, `OAuth:ClientSecret`, `OAuth:RefreshToken`,
+`TransportSecurity:TrustedCertificateAuthority`, and `Delivery:Secrets:Password` — name material admissible for one
+user, so no policy states a default or a forced value for any of them and each is always the declaration's own. What
+a policy may still say about them is who changes them, through its `Editing` block. `AccountId` is outside every
+policy: the deployment generates it.
+
+**A default satisfies a requirement.** What the table above calls *Required* is asked of the account as resolved, so
+a declaration may leave out `Host`, `Language`, or any other setting a default or a forced value of a governing
+policy supplies, and the account's own record keeps only what the declaration stated — which is what
+`mfctl account show` prints, what a save is composed over, and what the account is left with the moment the policy
+stops supplying the rest. The requirements that stay the declaration's own are the identity properties above, which
+no policy supplies. Every rule a declaration is held to is asked the same way, the scanner rule among them: an
+account [may switch a scanner on and never off](#scanning-this-accounts-mail--sensitivecontent) whichever layer
+supplied the switch, so a default that switches off a scanner the deployment requires is refused when the policy is
+saved, over the accounts it would reach.
+
+**A write may not move a held setting, and may carry it through.** A forced value binds everybody, an administrator
+included: a declaration stating another value is refused naming the setting and whether the organization or the
+deployment holds it. An editing restriction binds the people the account is assigned to and nobody administering it,
+on every route of theirs that writes an account — declaring a mailbox, and adding, restating, or withdrawing a folder.
+It is asked when a mailbox is declared as well, so a policy that leaves a person only `Folders` leaves declaring a
+mailbox to an administrator: the declaration states an address and a name, and the restriction withholds both. A held
+setting stated as a read showed it — unchanged from the declaration's own value, or as the value in force — passes
+and writes nothing over the declaration's own value.
+
+**The same commit keeps what the deployment reads across accounts in step.** The columns and folder rows written
+beside a declaration — the mode, whether the account classifies and scans, and each folder's mapping — hold what the
+account is served, and are rewritten by every commit that can move that: a write of the account, a write of a policy
+governing it, and a move of the account into or out of an organization. The declaration itself is never rewritten by
+a policy.
+
+**A committed policy is adopted without a restart.** An account run composes its settings from the account, its
+users' records, and the versions of the two policies governing it, so the run that starts after a policy commits is
+composed under it, while a run already in flight finishes on the settings it took.
+
+**A policy a replica's build does not read holds the accounts it governs back**, exactly as it
+[holds back the users it governs](configuration-sources.md#how-a-settings-policy-resolves-a-users-record): the
+account is not served on part of what governs it, writes of it through that replica are refused naming the policy,
+and the columns beside it stay as they stand until a build that reads the policy reaches them.
+
+`mfctl account show --effective` and the `properties` of
+[an account read](admin-endpoint.md#mail-accounts-and-who-they-are-assigned-to) answer each setting as the account is
+served it, which step supplied it, and who holds it.
+
 ### What a deletion does — three settings
 
 Three keys of one account decide what a deletion leaves behind, and they are read together because they answer the

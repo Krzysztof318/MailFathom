@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text.Json.Serialization;
+using MailFathom.Cli.Administration.Users;
 
 namespace MailFathom.Cli.Administration.Accounts;
 
@@ -32,14 +33,28 @@ internal sealed record MailAccountSummary(
 /// <param name="Id">The identifier the deployment generated for the account.</param>
 /// <param name="Version">The version the account was read at, which the next save is composed over.</param>
 /// <param name="Users">The users the account is assigned to.</param>
-/// <param name="Declaration">The address, the display name, and the settings, with every secret-bearing value replaced by the deployment's redaction marker.</param>
+/// <param name="Declaration">The address, the display name, and the settings the account itself states, with every secret-bearing value replaced by the deployment's redaction marker.</param>
 /// <param name="OrganizationId">The organization the account belongs to, or nothing where it belongs to none.</param>
+/// <remarks>
+/// The declaration is what somebody stated on the account, which is what an editing session saves back. What the
+/// account is served with is carried beside it per property, because a settings policy may force a value over the
+/// account's or supply one it leaves out.
+/// </remarks>
 internal sealed record MailAccountEntry(
     [property: JsonPropertyName("id")] Guid Id,
     [property: JsonPropertyName("version")] long Version,
     [property: JsonPropertyName("users")] IReadOnlyList<Guid>? Users,
     [property: JsonPropertyName("declaration")] string? Declaration,
-    [property: JsonPropertyName("organizationId")] Guid? OrganizationId);
+    [property: JsonPropertyName("organizationId")] Guid? OrganizationId)
+{
+    /// <summary>Gets every property of the account as the settings policies governing it resolve it, or <see langword="null" /> from a deployment that reports none.</summary>
+    [JsonPropertyName("properties")]
+    public IReadOnlyList<UserRecordProperty>? Properties { get; init; }
+
+    /// <summary>Gets the sentence saying which settings policy the deployment could not read, where the properties were not resolved.</summary>
+    [JsonPropertyName("unresolved")]
+    public string? Unresolved { get; init; }
+}
 
 /// <summary>A mail account created for one user.</summary>
 /// <param name="UserId">The user the account is created for.</param>

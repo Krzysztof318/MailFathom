@@ -5,6 +5,7 @@
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Persistence.Policies;
+using MailFathom.Infrastructure.Persistence.Policies.MailAccounts;
 using MailFathom.Infrastructure.Persistence.Settings;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
@@ -20,6 +21,8 @@ public sealed class PersistedSettingsPoliciesTests
 {
     private static readonly Guid Organization = new("22222222-2222-4222-8222-222222222222");
 
+    private static readonly GovernedRecordsToJudge JudgingNoRecord = new(Users: false, MailAccounts: false, Maximum: 1);
+
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
@@ -30,14 +33,18 @@ public sealed class PersistedSettingsPoliciesTests
     {
         // Arrange
         await using var context = CreateContext();
-        var store = new PersistedSettingsPolicies(context, Substitute.For<IUserRecordPolicyJudge>(), new FakeTimeProvider());
+        var store = new PersistedSettingsPolicies(
+            context,
+            Substitute.For<IUserRecordPolicyJudge>(),
+            Substitute.For<IMailAccountPolicyJudge>(),
+            new FakeTimeProvider());
 
         // Act
         var refusal = await Record.ExceptionAsync(() => store.CommitAsync(
             Organization,
             json,
             expectedVersion: 0,
-            maximumUserRecordsJudged: null,
+            JudgingNoRecord,
             TestContext.Current.CancellationToken));
 
         // Assert
@@ -50,7 +57,11 @@ public sealed class PersistedSettingsPoliciesTests
     {
         // Arrange
         await using var context = CreateContext();
-        var store = new PersistedSettingsPolicies(context, Substitute.For<IUserRecordPolicyJudge>(), new FakeTimeProvider());
+        var store = new PersistedSettingsPolicies(
+            context,
+            Substitute.For<IUserRecordPolicyJudge>(),
+            Substitute.For<IMailAccountPolicyJudge>(),
+            new FakeTimeProvider());
         var oversized = $$$$"""{"Users":{"Defaults":{"Language":"{{{{new string('a', SettingsPolicyDocument.MaximumOctets)}}}}"}}}""";
 
         // Act
@@ -58,7 +69,7 @@ public sealed class PersistedSettingsPoliciesTests
             organizationId: null,
             oversized,
             expectedVersion: 3,
-            maximumUserRecordsJudged: null,
+            JudgingNoRecord,
             TestContext.Current.CancellationToken));
 
         // Assert
@@ -72,14 +83,18 @@ public sealed class PersistedSettingsPoliciesTests
     {
         // Arrange
         await using var context = CreateContext();
-        var store = new PersistedSettingsPolicies(context, Substitute.For<IUserRecordPolicyJudge>(), new FakeTimeProvider());
+        var store = new PersistedSettingsPolicies(
+            context,
+            Substitute.For<IUserRecordPolicyJudge>(),
+            Substitute.For<IMailAccountPolicyJudge>(),
+            new FakeTimeProvider());
 
         // Act
         var refusal = await Record.ExceptionAsync(() => store.CommitAsync(
             organizationId: null,
             "{}",
             expectedVersion: -1,
-            maximumUserRecordsJudged: null,
+            JudgingNoRecord,
             TestContext.Current.CancellationToken));
 
         // Assert

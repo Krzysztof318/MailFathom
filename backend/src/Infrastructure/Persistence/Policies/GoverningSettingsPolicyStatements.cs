@@ -36,7 +36,7 @@ internal static class GoverningSettingsPolicyStatements
     /// <summary>Holds the lock as a policy write does, against every writer of a governed record and every other policy write.</summary>
     internal const string HoldAgainstRecordWrites = "SELECT pg_advisory_xact_lock(5263456017113920037);";
 
-    /// <summary>Reads the deployment's policy and one organization's, each only where it is within what this build reads a policy from.</summary>
+    /// <summary>Reads the deployment's policy and those of some organizations, each only where it is within what this build reads a policy from.</summary>
     private const string SelectGoverning =
         """
         SELECT
@@ -44,7 +44,7 @@ internal static class GoverningSettingsPolicyStatements
             CASE WHEN octet_length("Document"::text) <= @maximumOctets THEN "Document"::text END AS "Document",
             "Version"
         FROM settings_policies
-        WHERE "OrganizationId" IS NULL OR "OrganizationId" = @organization;
+        WHERE "OrganizationId" IS NULL OR "OrganizationId" = ANY(@organizations);
         """;
 
     /// <summary>Reads the policies that govern a record of one organization, or of none.</summary>
@@ -59,38 +59,49 @@ internal static class GoverningSettingsPolicyStatements
         NpgsqlTransaction? transaction,
         Guid? organizationId,
         int commandTimeoutSeconds,
+        CancellationToken cancellationToken) =>
+        GoverningSettingsPolicies.Among(
+            await ReadStoredAsync(
+                connection,
+                transaction,
+                organizationId is { } named ? [named] : [],
+                commandTimeoutSeconds,
+                cancellationToken),
+            organizationId);
+
+    /// <summary>Reads, in one statement, the deployment's policy and the policy of each of some organizations, where each scope stores one.</summary>
+    /// <param name="connection">The connection the records are read or written on.</param>
+    /// <param name="transaction">The transaction the read joins, or <see langword="null" /> for a read outside one.</param>
+    /// <param name="organizations">The organizations whose records are being read; none for records in no organization.</param>
+    /// <param name="commandTimeoutSeconds">The bound on the statement.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The stored policies, for <see cref="GoverningSettingsPolicies.Among" /> to pick each record's out of; a scope that stores none has no entry.</returns>
+    internal static async Task<IReadOnlyCollection<SettingsPolicyDocument>> ReadStoredAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
+        Guid[] organizations,
+        int commandTimeoutSeconds,
         CancellationToken cancellationToken)
     {
         await using var command = new NpgsqlCommand(SelectGoverning, connection, transaction);
 
         command.CommandTimeout = commandTimeoutSeconds;
         command.Parameters.AddWithValue("maximumOctets", SettingsPolicyDocument.MaximumOctets);
-        command.Parameters.Add(new NpgsqlParameter("organization", NpgsqlDbType.Uuid)
-        {
-            Value = organizationId is { } named ? named : DBNull.Value,
-        });
+        command.Parameters.Add(new NpgsqlParameter("organizations", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = organizations });
 
-        var deployment = SettingsPolicyDocument.Unwritten(organizationId: null);
-        var organization = organizationId is null ? null : SettingsPolicyDocument.Unwritten(organizationId);
+        var stored = new List<SettingsPolicyDocument>();
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 
         while (await reader.ReadAsync(cancellationToken))
         {
-            // A document past the bound is not sent, and is handed on as text no build judges as a policy.
-            var json = await reader.IsDBNullAsync(1, cancellationToken) ? string.Empty : reader.GetString(1);
-            var version = reader.GetInt64(2);
-
-            if (await reader.IsDBNullAsync(0, cancellationToken))
-            {
-                deployment = new SettingsPolicyDocument(OrganizationId: null, json, version);
-            }
-            else
-            {
-                organization = new SettingsPolicyDocument(reader.GetGuid(0), json, version);
-            }
+            stored.Add(new SettingsPolicyDocument(
+                await reader.IsDBNullAsync(0, cancellationToken) ? null : reader.GetGuid(0),
+                // A document past the bound is not sent, and is handed on as text no build judges as a policy.
+                await reader.IsDBNullAsync(1, cancellationToken) ? string.Empty : reader.GetString(1),
+                reader.GetInt64(2)));
         }
 
-        return new GoverningSettingsPolicies(deployment, organization);
+        return stored;
     }
 }

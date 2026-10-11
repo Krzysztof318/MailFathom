@@ -99,15 +99,20 @@ public interface IOrganizationStore
     /// <summary>Moves a mail account into an organization or out of every organization.</summary>
     /// <param name="mailAccountId">The mail account being moved.</param>
     /// <param name="organizationId">The organization to move it into, or <see langword="null" /> to leave it in none.</param>
+    /// <param name="underANarrowerGrant">Whether the move is made under a grant held below the deployment, which may not move the effective settings of an account naming a secret that was not provisioned for one of its users.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
-    /// <returns><see cref="OrganizationWriteOutcome.Written" />, <see cref="OrganizationWriteOutcome.UnknownMailAccount" />, <see cref="OrganizationWriteOutcome.UnknownOrganization" />, <see cref="OrganizationWriteOutcome.AssignmentsOutsideOrganization" /> carrying how many of its users stand outside the target, or <see cref="OrganizationWriteOutcome.SharedOnlyInOrganization" /> carrying how many users an account leaving every organization is assigned to.</returns>
+    /// <returns><see cref="OrganizationWriteOutcome.Written" />, <see cref="OrganizationWriteOutcome.UnknownMailAccount" />, <see cref="OrganizationWriteOutcome.UnknownOrganization" />, <see cref="OrganizationWriteOutcome.AssignmentsOutsideOrganization" /> carrying how many of its users stand outside the target, <see cref="OrganizationWriteOutcome.SharedOnlyInOrganization" /> carrying how many users an account leaving every organization is assigned to, or <see cref="OrganizationWriteOutcome.RecordLeftInvalid" /> carrying what refuses the account under the settings policy of the target.</returns>
     /// <remarks>
     /// Nothing is unassigned on the administrator's behalf: an account assigned to a user the target would not admit
     /// stays where it is, and so does an account assigned to more than one user that was asked to leave every
-    /// organization, because an account in none is one person's.
+    /// organization, because an account in none is one person's. A move changes which settings policy governs the
+    /// account, so the same commit writes the queryable settings it resolves to under the target's policy and moves
+    /// the record version of every user it is assigned to; and nothing is rewritten on the account itself to make a
+    /// move pass.
     /// </remarks>
     Task<OrganizationWriteResult> SetMailAccountOrganizationAsync(
         Guid mailAccountId,
         Guid? organizationId,
+        bool underANarrowerGrant,
         CancellationToken cancellationToken);
 }

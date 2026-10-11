@@ -103,7 +103,7 @@ public sealed class OrganizationAdministrationTests
         // Arrange
         var harness = new AdministrationHarness(MailFathomPermission.AdminConfigurationWrite);
         var mailAccount = new Guid("0197c0de-0000-4000-8000-000000000003");
-        harness.Organizations.SetMailAccountOrganizationAsync(mailAccount, OrganizationId, Arg.Any<CancellationToken>())
+        harness.Organizations.SetMailAccountOrganizationAsync(mailAccount, OrganizationId, underANarrowerGrant: false, Arg.Any<CancellationToken>())
             .Returns(new OrganizationWriteResult(OrganizationWriteOutcome.AssignmentsOutsideOrganization, StandingAssignments: 2));
 
         // Act
@@ -202,6 +202,7 @@ public sealed class OrganizationAdministrationTests
         harness.Organizations.SetMailAccountOrganizationAsync(
                 ScopedMailAccount,
                 OrganizationAdministrators.AdministeredOrganization,
+                underANarrowerGrant: true,
                 Arg.Any<CancellationToken>())
             .Returns(OrganizationWriteResult.Of(OrganizationWriteOutcome.Written));
 

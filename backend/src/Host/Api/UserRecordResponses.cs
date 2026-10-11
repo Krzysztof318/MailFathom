@@ -128,20 +128,15 @@ internal sealed record UserRecordResponse(
             record.Version,
             record.Json)
         {
-            Properties =
-            [
-                .. record.Properties.Select(property => UserRecordPropertyResponse.For(
-                    property,
-                    record.Changeable.Contains(property.Property.Path))),
-            ],
+            Properties = UserRecordPropertyResponse.ForEvery(record.Properties, record.Changeable),
             Unresolved = record.Unresolved,
         };
     }
 }
 
-/// <summary>One property of a user's record as the settings policies governing the user resolve it.</summary>
+/// <summary>One property of a governed record — a user's record or a mail account — as the settings policies governing it resolve it.</summary>
 /// <param name="Path">The property, as the colon-separated path a policy and a configuration key name it by.</param>
-/// <param name="Value">The value the user is served with, or <see langword="null" /> where nothing states one and the build takes none either.</param>
+/// <param name="Value">The value the record is served with, or <see langword="null" /> where nothing states one and the build takes none either, and for every secret-bearing property.</param>
 /// <param name="Source">Which step of the resolution order supplied the value: <c>DeploymentForced</c>, <c>OrganizationForced</c>, <c>Record</c>, <c>OrganizationDefault</c>, <c>DeploymentDefault</c>, or <c>BuiltIn</c>.</param>
 /// <param name="HeldBy">Whose policy holds the property against the person the record is about — <c>Deployment</c> or <c>Organization</c> — or <see langword="null" /> where no policy does.</param>
 /// <param name="Changeable">Whether a change to the property from whoever read the record would be accepted: no settings policy holds it against them, and their grant reaches a write of it.</param>
@@ -164,10 +159,78 @@ internal sealed record UserRecordPropertyResponse(
         return new UserRecordPropertyResponse(
             property.Property.Path,
             // A secret-bearing value is redacted in the document beside this, and must not come back through here.
-            SecretPropertyNaming.NamesASecret(property.Property.Path.Split(':')[^1]) ? null : property.EffectiveValue,
+            property.Property.Shape == GovernablePropertyShape.Secret
+            || SecretPropertyNaming.NamesASecret(property.Property.Path.Split(':')[^1])
+                ? null
+                : property.EffectiveValue,
             property.Source.Name,
             property.HeldBy?.Name,
             changeable);
+    }
+
+    /// <summary>Builds the response for every property of one resolved record.</summary>
+    /// <param name="properties">The properties as they resolved.</param>
+    /// <param name="changeable">The paths of the ones whoever read the record may change.</param>
+    /// <returns>One response per property, in the order they resolved.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    internal static IReadOnlyList<UserRecordPropertyResponse> ForEvery(
+        IReadOnlyList<ResolvedProperty> properties,
+        IReadOnlyList<string> changeable)
+    {
+        ArgumentNullException.ThrowIfNull(properties);
+        ArgumentNullException.ThrowIfNull(changeable);
+
+        return [.. properties.Select(property => For(property, changeable.Contains(property.Property.Path)))];
+    }
+}
+
+/// <summary>The acting user's mail accounts as the settings policies governing them resolve each.</summary>
+/// <param name="Accounts">One entry per account the caller is assigned, in identifier order.</param>
+/// <param name="NewAccount">What an account the caller declared now would start from: each property as it resolves where a declaration states nothing, and whether it is the caller's to state.</param>
+internal sealed record UserMailAccountsResponse(
+    IReadOnlyList<UserMailAccountResponse> Accounts,
+    UserMailAccountResponse NewAccount)
+{
+    /// <summary>Builds the response for one reading.</summary>
+    /// <param name="reading">The accounts as they were read.</param>
+    /// <returns>The response.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="reading" /> is <see langword="null" />.</exception>
+    internal static UserMailAccountsResponse For(OwnMailAccountsPolicyReading reading)
+    {
+        ArgumentNullException.ThrowIfNull(reading);
+
+        return new UserMailAccountsResponse(
+            [
+                .. reading.Accounts
+                    .OrderBy(account => account.Key.ToString("D"), StringComparer.Ordinal)
+                    .Select(account => UserMailAccountResponse.For(account.Key.ToString("D"), account.Value)),
+            ],
+            UserMailAccountResponse.For(id: null, reading.NewAccount));
+    }
+}
+
+/// <summary>One mail account of the acting user's as the settings policies governing it resolve it.</summary>
+/// <param name="Id">The identifier the deployment generated for the account, or <see langword="null" /> for the account the caller has not declared yet.</param>
+/// <param name="Properties">Every property of the account, in path order; empty where <paramref name="Unresolved" /> says why it could not be resolved.</param>
+/// <param name="Unresolved">The sentence saying which settings policy this build does not read, or <see langword="null" /> where the account was resolved.</param>
+internal sealed record UserMailAccountResponse(
+    string? Id,
+    IReadOnlyList<UserRecordPropertyResponse> Properties,
+    string? Unresolved)
+{
+    /// <summary>Builds the response for one account.</summary>
+    /// <param name="id">The account's identifier, or <see langword="null" /> for one not declared yet.</param>
+    /// <param name="policy">The account as it resolved.</param>
+    /// <returns>The response.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="policy" /> is <see langword="null" />.</exception>
+    internal static UserMailAccountResponse For(string? id, MailAccountPolicyReading policy)
+    {
+        ArgumentNullException.ThrowIfNull(policy);
+
+        return new UserMailAccountResponse(
+            id,
+            UserRecordPropertyResponse.ForEvery(policy.Properties, policy.Changeable),
+            policy.Unresolved);
     }
 }
 

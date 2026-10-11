@@ -8,7 +8,7 @@ using MailFathom.Infrastructure.Persistence.Users.AccountSettings;
 
 namespace MailFathom.Host.Configuration.UserSettings;
 
-/// <summary>Reads the settings columns of every account an older build wrote out of the document it wrote.</summary>
+/// <summary>Reads the settings columns of every account an older build wrote out of the account as its policies resolve it.</summary>
 /// <remarks>
 /// <para>
 /// During a rolling upgrade a build older than the columns every question about every account filters on still creates
@@ -22,6 +22,12 @@ namespace MailFathom.Host.Configuration.UserSettings;
 /// <para>
 /// Every replica runs it, and two that reach one row both read the same document: the record is conditional on the
 /// version they read, so the slower one either writes the same settings again or, where the account moved on, nothing.
+/// </para>
+/// <para>
+/// What is recorded is derived from the effective account, like every other writer of those columns, and from the
+/// policies in force when the record commits: the store hands them over inside its own transaction, under the lock a
+/// policy write excludes record writes with. An account a policy this build does not read governs is left as it
+/// stands and read again on the next interval.
 /// </para>
 /// <para>
 /// One account whose reading fails is reported and stepped over rather than ending the reading, because the rows are
@@ -58,11 +64,13 @@ internal sealed partial class MailAccountSettingsReconciliation(
         {
             try
             {
-                var settings = account.Account is { } record
-                    ? MailAccountQueryableSettingsReading.Of(record)
-                    : MailAccountQueryableSettings.Unreadable;
-
-                await accounts.RecordSettingsAsync(account.Id, account.Version, settings, cancellationToken);
+                await accounts.RecordSettingsAsync(
+                    account.Id,
+                    account.Version,
+                    policies => account.Account is { } record
+                        ? MailAccountQueryableSettingsReading.Of(record with { Policies = policies })
+                        : MailAccountQueryableSettings.Unreadable,
+                    cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {

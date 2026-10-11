@@ -6587,6 +6587,18 @@
               "string"
             ]
           },
+          "properties": {
+            "items": {
+              "$ref": "#/components/schemas/UserRecordPropertyResponse"
+            },
+            "type": "array"
+          },
+          "unresolved": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "users": {
             "items": {
               "format": "uuid",
@@ -11304,6 +11316,52 @@
         "required": [
           "version",
           "account"
+        ],
+        "type": "object"
+      },
+      "UserMailAccountResponse": {
+        "properties": {
+          "id": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "properties": {
+            "items": {
+              "$ref": "#/components/schemas/UserRecordPropertyResponse"
+            },
+            "type": "array"
+          },
+          "unresolved": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "properties",
+          "unresolved"
+        ],
+        "type": "object"
+      },
+      "UserMailAccountsResponse": {
+        "properties": {
+          "accounts": {
+            "items": {
+              "$ref": "#/components/schemas/UserMailAccountResponse"
+            },
+            "type": "array"
+          },
+          "newAccount": {
+            "$ref": "#/components/schemas/UserMailAccountResponse"
+          }
+        },
+        "required": [
+          "accounts",
+          "newAccount"
         ],
         "type": "object"
       },
@@ -19368,6 +19426,38 @@
       }
     },
     "/api/client/record/mail-accounts": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserMailAccountsResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      },
       "post": {
         "requestBody": {
           "content": {

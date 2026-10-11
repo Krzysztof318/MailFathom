@@ -61,6 +61,14 @@ internal static class FakeMailAccountDeployment
         Committed,
         """{"unassigned":true,"accountErased":false}""");
 
+    /// <summary>Builds a deployment whose account a policy this deployment could not read left unresolved.</summary>
+    /// <returns>The deployment, whose account read answers no property and the sentence saying why.</returns>
+    internal static FakeHttpMessageHandler HoldingAnAccountLeftUnresolved() =>
+        new((request, _) => Task.FromResult(
+            request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == AdminEndpointRoutes.MailAccountPath(Account)
+                ? FakeAdminEndpoint.Json(HttpStatusCode.OK, EntryLeftUnresolved())
+                : Answer(request, Committed, Committed, """{"unassigned":true,"accountErased":false}""", ListingShape.OnePage)));
+
     /// <summary>Gets the account the second page of a listing spread over two pages holds.</summary>
     internal static Guid SecondAccount { get; } = new("88888888-8888-8888-8888-888888888888");
 
@@ -168,7 +176,25 @@ internal static class FakeMailAccountDeployment
         CultureInfo.InvariantCulture,
         $$"""{"id":"{{SecondAccount:D}}","version":1,"users":["{{User:D}}"],"emailAddress":"sam@example.test","displayName":"Home","organizationId":null}""");
 
+    /// <summary>The account as a read answers it: its own declaration, and beside it each property as the policies governing it resolve it.</summary>
+    /// <remarks>One value carries an escape sequence and a bidirectional override, because it is text somebody stated and a terminal would act on.</remarks>
     private static string Entry() => string.Create(
         CultureInfo.InvariantCulture,
-        $$"""{"id":"{{Account:D}}","version":{{AccountVersion}},"users":["{{User:D}}"],"declaration":{{JsonSerializer.Serialize(Declaration)}},"organizationId":null}""");
+        $$"""
+          {"id":"{{Account:D}}","version":{{AccountVersion}},"users":["{{User:D}}"],"declaration":{{JsonSerializer.Serialize(Declaration)}},"organizationId":null,
+          "properties":[
+            {"path":"DisplayName","value":"Work\u001b[2J\u202e","source":"Record","heldBy":null,"changeable":true},
+            {"path":"Host","value":"imap.corp.example.test","source":"OrganizationForced","heldBy":"Organization","changeable":false},
+            {"path":"Port","value":null,"source":"BuiltIn","heldBy":null,"changeable":true},
+            {"path":"Secrets:Password","value":null,"source":"Record","heldBy":null,"changeable":true}],
+          "unresolved":null}
+          """);
+
+    private static string EntryLeftUnresolved() => string.Create(
+        CultureInfo.InvariantCulture,
+        $$"""
+          {"id":"{{Account:D}}","version":{{AccountVersion}},"users":["{{User:D}}"],"declaration":{{JsonSerializer.Serialize(Declaration)}},"organizationId":null,
+          "properties":[],
+          "unresolved":"The settings policy of the deployment\u001b[2J\u202e is not one this build reads as a settings policy, so the record is not resolved through it and is held back rather than served on part of what governs it. Correct the policy with 'mfctl policy edit', or bring this replica to the build that wrote it."}
+          """);
 }

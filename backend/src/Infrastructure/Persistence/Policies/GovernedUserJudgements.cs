@@ -22,23 +22,23 @@ internal static class GovernedUserJudgements
     /// <exception cref="ArgumentException">Thrown when the two lists differ in length, which is a judge that did not answer for every record.</exception>
     internal static SettingsPolicyCommit? FindRecordsInTheWay(
         IReadOnlyList<StoredGovernedUserRow> users,
-        IReadOnlyList<UserRecordPolicyJudgement> judgements)
-    {
-        var inTheWay = Paired(users, judgements).Where(user => user.Judgement.Refusals.Count > 0).ToArray();
+        IReadOnlyList<UserRecordPolicyJudgement> judgements) =>
+        SettingsPolicyCommit.RefusedOver(users.Count, FindUsersInTheWay(users, judgements));
 
-        return inTheWay.Length == 0
-            ? null
-            : new SettingsPolicyCommit(
-                SettingsPolicyCommitResult.RecordsLeftInvalid,
-                GovernedRecords: users.Count,
-                RecordsInTheWay:
-                [
-                    .. inTheWay
-                        .Take(SettingsPolicyCommit.MaximumRecordsNamed)
-                        .Select(user => new SettingsPolicyRecordInTheWay(user.Row.Id, user.Row.DisplayName, user.Judgement.Refusals)),
-                ],
-                RecordsLeftInvalid: inTheWay.Length);
-    }
+    /// <summary>Finds the users whose record a policy write would leave unservable.</summary>
+    /// <param name="users">The governed users' rows.</param>
+    /// <param name="judgements">One judgement per row, in the same order.</param>
+    /// <returns>Every user in the way, in the order given, each with what refuses it.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when the two lists differ in length, which is a judge that did not answer for every record.</exception>
+    internal static IReadOnlyList<SettingsPolicyRecordInTheWay> FindUsersInTheWay(
+        IReadOnlyList<StoredGovernedUserRow> users,
+        IReadOnlyList<UserRecordPolicyJudgement> judgements) =>
+        [
+            .. Paired(users, judgements)
+                .Where(user => user.Judgement.Refusals.Count > 0)
+                .Select(user => new SettingsPolicyRecordInTheWay(user.Row.Id, user.Row.DisplayName, user.Judgement.Refusals)),
+        ];
 
     /// <summary>Finds the rows whose endpoint switches a policy write moves, grouped by the switches each is to carry.</summary>
     /// <param name="users">The governed users' rows.</param>

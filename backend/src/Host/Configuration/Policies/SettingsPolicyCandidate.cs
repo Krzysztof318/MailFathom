@@ -70,8 +70,6 @@ internal sealed class SettingsPolicyCandidate
 
     private readonly List<string> refusals = [];
 
-    private readonly HashSet<string> mailAccountValues = new(StringComparer.Ordinal);
-
     private SettingsPolicyCandidate()
     {
     }
@@ -81,14 +79,6 @@ internal sealed class SettingsPolicyCandidate
 
     /// <summary>Gets one sentence per fault, each naming what to correct; empty where the policy may be committed.</summary>
     internal IReadOnlyList<string> Refusals => this.refusals;
-
-    /// <summary>Gets every default and forced value the policy states for a mail account, each as its statement, its property, and its value.</summary>
-    /// <remarks>
-    /// What comparing two policies needs and their documents do not give: a property is named here by the record's own
-    /// path whatever case its keys were written in, so one statement reads the same however it was typed. An editing
-    /// restriction is not among them, because it moves no value an account is served.
-    /// </remarks>
-    internal IReadOnlySet<string> MailAccountValues => this.mailAccountValues;
 
     /// <summary>Judges a saved policy on its own.</summary>
     /// <param name="documentJson">The policy as it was saved.</param>
@@ -208,12 +198,6 @@ internal sealed class SettingsPolicyCandidate
         var values = new List<(GovernableProperty Property, JsonNode Value)>();
 
         this.Walk(section, statement, document, prefix: string.Empty, values);
-
-        if (section == SettingsPolicySection.MailAccounts)
-        {
-            this.mailAccountValues.UnionWith(
-                values.Select(stated => $"{statement}:{stated.Property.Path}={stated.Value.ToJsonString()}"));
-        }
 
         // Each stated value is bound on its own, as the one property it is stated for. The binder stops at the first
         // value it cannot convert, so a statement bound whole would report one fault of several and leave the rest to

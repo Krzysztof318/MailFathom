@@ -80,9 +80,12 @@ internal sealed class PersistedMailSynchronizationAccounts(
 
     /// <inheritdoc />
     /// <remarks>
-    /// Whether anything changed is read off the users' record versions rather than off the settings themselves, because
-    /// every write of an account, and every assignment made or withdrawn, moves the version of each user it is assigned
-    /// to. The records are still read on every run; what an unchanged answer saves is composing them again and the push
+    /// Whether anything changed is read off the users' record versions and the versions of the settings policies
+    /// governing them rather than off the settings themselves, because every write of an account, and every assignment
+    /// made or withdrawn, moves the version of each user it is assigned to, and a policy write — which moves what an
+    /// account is served with and writes nothing on it — moves the policy's own. So a committed policy change reaches
+    /// the next run of every account it governs, while a run in flight drains on the settings it began with. The
+    /// records are still read on every run; what an unchanged answer saves is composing them again and the push
     /// sessions a new instance would recycle.
     /// </remarks>
     public async Task<MailSynchronizationOptions?> ReadRunSettingsAsync(
@@ -108,7 +111,8 @@ internal sealed class PersistedMailSynchronizationAccounts(
 
         var readFrom = new RunComposition(
             boundSettings.Current,
-            string.Join(',', records.Select(static record => $"{record.User.Value:D}@{record.Version}")));
+            string.Join(',', records.Select(static record =>
+                $"{record.User.Value:D}@{record.Version}/{record.Policies.Deployment.Version}/{record.Policies.Organization?.Version}")));
 
         if (previous is not null
             && this.compositions.TryGetValue(previous, out var previousReadFrom)
@@ -194,8 +198,8 @@ internal sealed class PersistedMailSynchronizationAccounts(
     /// <param name="Settings">The bound settings carrying the user's accounts.</param>
     private sealed record UserComposition(MailSynchronizationOptions Bound, MailSynchronizationOptions Settings);
 
-    /// <summary>What one run's settings were composed from: the bound settings, and each user's record at the version read.</summary>
+    /// <summary>What one run's settings were composed from: the bound settings, and each user's record at the version read, under the policies read with it.</summary>
     /// <param name="Bound">The bound settings instance, compared by reference because a reload binds a new one.</param>
-    /// <param name="UserVersions">Each user read and the version their record stood at, in the order they were read.</param>
+    /// <param name="UserVersions">Each user read, the version their record stood at, and the versions of the deployment's policy and of their organization's, in the order they were read.</param>
     private sealed record RunComposition(MailSynchronizationOptions Bound, string UserVersions);
 }

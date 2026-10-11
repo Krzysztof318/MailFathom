@@ -11,6 +11,7 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Synchronization;
 using MailFathom.Infrastructure.Persistence.Connections;
+using MailFathom.Infrastructure.Persistence.Policies;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -21,8 +22,9 @@ namespace MailFathom.Infrastructure.Persistence.Users.AccountSettings;
 /// <para>
 /// A singleton over the pool rather than a scoped context, because what asks is as often a singleton — the scanning
 /// postures, the reload of the rule set — as a work unit, and every answer is one short statement that joins no
-/// transaction. The statements are written out rather than composed, so what runs against the database is exactly what
-/// is read here.
+/// transaction, or two where the records are handed on with the settings policies governing them. The statements are
+/// written out rather than composed, so what runs against the database is exactly what is read here and in
+/// <see cref="GoverningSettingsPolicyStatements" />.
 /// </para>
 /// <para>
 /// The served predicate is one fragment every statement shares, which is what keeps every answer about the same set of
@@ -68,7 +70,8 @@ internal sealed class PersistedServedMailAccounts(
 
     private const string SelectServedRecords =
         $"""
-         SELECT account."Id", account."EmailAddress", account."DisplayName", account."Document"::text, account."Version"
+         SELECT account."Id", account."EmailAddress", account."DisplayName", account."Document"::text, account."Version",
+                account."OrganizationId"
          FROM settings_mail_accounts AS account
          WHERE {Served}
            AND octet_length(account."Document"::text) <= @maximumOctets
@@ -182,23 +185,47 @@ internal sealed class PersistedServedMailAccounts(
     public async Task<IReadOnlyList<MailAccountRecord>> ReadServedRecordsAsync(CancellationToken cancellationToken)
     {
         await using var connection = await dataSource().OpenConnectionAsync(cancellationToken);
-        await using var command = new NpgsqlCommand(SelectServedRecords, connection) { CommandTimeout = this.CommandTimeoutSeconds };
-        command.Parameters.AddWithValue("maximumOctets", UserSettingsDocument.MaximumOctets);
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var records = new List<(MailAccountRecord Account, Guid? OrganizationId)>();
 
-        var records = new List<MailAccountRecord>();
-
-        while (await reader.ReadAsync(cancellationToken))
+        await using (var command = new NpgsqlCommand(SelectServedRecords, connection) { CommandTimeout = this.CommandTimeoutSeconds })
         {
-            records.Add(new MailAccountRecord(
-                reader.GetGuid(0),
-                reader.IsDBNull(1) ? null : reader.GetString(1),
-                reader.GetString(2),
-                reader.GetString(3),
-                reader.GetInt64(4)));
+            command.Parameters.AddWithValue("maximumOctets", UserSettingsDocument.MaximumOctets);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                records.Add((
+                    new MailAccountRecord(
+                        reader.GetGuid(0),
+                        reader.IsDBNull(1) ? null : reader.GetString(1),
+                        reader.GetString(2),
+                        reader.GetString(3),
+                        reader.GetInt64(4)),
+                    reader.IsDBNull(5) ? null : reader.GetGuid(5)));
+            }
         }
 
-        return [.. records.OrderBy(account => account.Id.ToString("D"), StringComparer.Ordinal)];
+        // What an account declares is its settings as the policies governing it resolve them, so each record is
+        // handed on with the policies of its own organization, read for all of them in one second statement.
+        var stored = await GoverningSettingsPolicyStatements.ReadStoredAsync(
+            connection,
+            transaction: null,
+            [.. records.Select(static record => record.OrganizationId).OfType<Guid>().Distinct()],
+            this.CommandTimeoutSeconds,
+            cancellationToken);
+        var policies = records
+            .Select(static record => record.OrganizationId)
+            .Distinct()
+            .ToDictionary(
+                static organization => organization ?? Guid.Empty,
+                organization => GoverningSettingsPolicies.Among(stored, organization));
+
+        return
+        [
+            .. records
+                .Select(record => record.Account with { Policies = policies[record.OrganizationId ?? Guid.Empty] })
+                .OrderBy(account => account.Id.ToString("D"), StringComparer.Ordinal),
+        ];
     }
 
     /// <inheritdoc />

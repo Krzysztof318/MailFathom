@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Paging;
 using MailFathom.Domain.Access;
+using MailFathom.Infrastructure.Persistence.Policies;
 using MailFathom.Infrastructure.Persistence.Users;
 using MailFathom.Infrastructure.Persistence.Users.AccountSettings;
 
@@ -30,6 +31,12 @@ internal sealed class InMemoryMailAccountRecordStore : IMailAccountRecordStore
 
     /// <summary>Gets the queryable settings the last write of each account carried, by account.</summary>
     internal Dictionary<Guid, MailAccountQueryableSettings> Settings { get; } = [];
+
+    /// <summary>Gets or sets the settings policies every account is read beside.</summary>
+    internal GoverningSettingsPolicies Policies { get; set; } = GoverningSettingsPolicies.Unwritten;
+
+    /// <summary>Gets or sets the policies a commit reads inside its own transaction, where a test states a policy that moved after the account was read; otherwise the ones it was read beside.</summary>
+    internal GoverningSettingsPolicies? PoliciesAtCommit { get; set; }
 
     /// <summary>Gets or sets what another writer commits between a caller's read of an account and its assignment of it.</summary>
     /// <remarks>Run as an assignment begins, so a test states the write a competing replica landed first and reads what the later one is answered with.</remarks>
@@ -85,7 +92,13 @@ internal sealed class InMemoryMailAccountRecordStore : IMailAccountRecordStore
         this.users.TryGetValue(user, out var held)
             ? new UserSettingsDocument(user, $"user-{user.Value:D}", held.Json, held.Version)
             {
-                MailAccounts = [.. this.accounts.Where(account => this.assignments[account.Id].Contains(user))],
+                MailAccounts =
+                [
+                    .. this.accounts
+                        .Where(account => this.assignments[account.Id].Contains(user))
+                        .Select(account => account with { Policies = this.Policies }),
+                ],
+                Policies = this.Policies,
             }
             : null;
 
@@ -124,14 +137,20 @@ internal sealed class InMemoryMailAccountRecordStore : IMailAccountRecordStore
     public Task<MailAccountWrite> CreateAsync(
         UserId user,
         long expectedUserVersion,
-        MailAccountRecord account,
-        MailAccountQueryableSettings settings,
+        Func<GoverningSettingsPolicies, MailAccountCandidate?> compose,
         CancellationToken cancellationToken)
     {
         if (!this.users.TryGetValue(user, out var held))
         {
-            return Written(MailAccountWriteResult.NotFound, 0);
+            return Written(MailAccountWriteResult.VersionSuperseded, 0);
         }
+
+        if (compose(this.PoliciesAtCommit ?? this.Policies) is not { } candidate)
+        {
+            return Written(MailAccountWriteResult.NothingComposed, 0);
+        }
+
+        var account = candidate.Account;
 
         if (held.Version != expectedUserVersion)
         {
@@ -143,8 +162,8 @@ internal sealed class InMemoryMailAccountRecordStore : IMailAccountRecordStore
             return Written(MailAccountWriteResult.AddressHeld, held.Version);
         }
 
-        this.accounts.Add(account with { Version = 1 });
-        this.Settings[account.Id] = settings;
+        this.accounts.Add(account with { Version = 1, Policies = GoverningSettingsPolicies.Unwritten });
+        this.Settings[account.Id] = candidate.Settings;
         this.assignments[account.Id] = [user];
         this.accountOrganizations[account.Id] = held.OrganizationId;
         this.MoveVersionOf(user);
@@ -154,30 +173,43 @@ internal sealed class InMemoryMailAccountRecordStore : IMailAccountRecordStore
 
     /// <inheritdoc />
     public Task<MailAccountWrite> SaveAsync(
-        MailAccountRecord account,
-        MailAccountQueryableSettings settings,
+        Guid accountId,
+        long expectedVersion,
+        Func<GoverningSettingsPolicies, MailAccountCandidate?> compose,
         CancellationToken cancellationToken)
     {
-        if (this.Find(account.Id) is not { } standing)
+        if (this.Find(accountId) is not { } standing)
         {
             return Written(MailAccountWriteResult.NotFound, 0);
         }
 
-        if (standing.Version != account.Version)
+        if (compose(this.PoliciesAtCommit ?? this.Policies) is not { } candidate)
+        {
+            return Written(MailAccountWriteResult.NothingComposed, expectedVersion);
+        }
+
+        var account = candidate.Account;
+
+        if (standing.Version != expectedVersion)
         {
             return Written(MailAccountWriteResult.VersionSuperseded, standing.Version);
         }
 
-        if (this.HoldsAddress(account.EmailAddress, exceptAccount: account.Id))
+        if (this.HoldsAddress(account.EmailAddress, exceptAccount: accountId))
         {
             return Written(MailAccountWriteResult.AddressHeld, standing.Version);
         }
 
-        var saved = account with { Version = standing.Version + 1 };
+        var saved = account with
+        {
+            Id = accountId,
+            Version = standing.Version + 1,
+            Policies = GoverningSettingsPolicies.Unwritten,
+        };
 
         this.accounts[this.accounts.IndexOf(standing)] = saved;
-        this.Settings[account.Id] = settings;
-        this.assignments[account.Id].ForEach(this.MoveVersionOf);
+        this.Settings[accountId] = candidate.Settings;
+        this.assignments[accountId].ForEach(this.MoveVersionOf);
 
         return Written(MailAccountWriteResult.Committed, saved.Version);
     }
@@ -277,10 +309,11 @@ internal sealed class InMemoryMailAccountRecordStore : IMailAccountRecordStore
     public Task<bool> RecordSettingsAsync(
         Guid accountId,
         long readFrom,
-        MailAccountQueryableSettings settings,
+        Func<GoverningSettingsPolicies, MailAccountQueryableSettings?> derive,
         CancellationToken cancellationToken)
     {
-        if (this.Find(accountId)?.Version != readFrom)
+        if (this.Find(accountId)?.Version != readFrom
+            || derive(this.PoliciesAtCommit ?? this.Policies) is not { } settings)
         {
             return Task.FromResult(false);
         }
@@ -296,7 +329,7 @@ internal sealed class InMemoryMailAccountRecordStore : IMailAccountRecordStore
     private MailAccountRecord? Find(Guid accountId) => this.accounts.FirstOrDefault(account => account.Id == accountId);
 
     private MailAccountHolding HoldingOf(MailAccountRecord account) =>
-        new(account, [.. this.assignments[account.Id]], this.OrganizationOf(account.Id));
+        new(account with { Policies = this.Policies }, [.. this.assignments[account.Id]], this.OrganizationOf(account.Id));
 
     private Guid? OrganizationOf(Guid accountId) => this.accountOrganizations.GetValueOrDefault(accountId);
 

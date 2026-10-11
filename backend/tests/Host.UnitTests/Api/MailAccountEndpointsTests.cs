@@ -119,6 +119,41 @@ public sealed class MailAccountEndpointsTests
         Assert.IsType<NotFound<ProblemDetails>>(result.Result);
     }
 
+    /// <summary>
+    /// The read answers the account's own declaration and, beside it, each property as the policies governing the
+    /// account resolve it, so an administrator sees what the account is served and why before changing it.
+    /// </summary>
+    [Fact]
+    public async Task ReadAsync_AnAccountUnderAPolicy_AnswersEachPropertyAsItIsServedBesideTheDeclaration()
+    {
+        // Arrange
+        var work = new MailAccountRecord(
+            Guid.NewGuid(),
+            "work@example.test",
+            "work",
+            """{"Language":"English","Host":"imap.example.test","UserName":"work@example.test","Secrets":{"Password":{"Name":"work-password","SecretReference":"file:/run/secrets/work-password"}}}""",
+            Version: 1);
+        var deployment = new UserRecordDeployment([MailFathomPermission.AdminRead, MailFathomPermission.AdminConfigurationWrite]);
+        deployment.Holding(SyntheticUser.Deployment, "{}", version: 1, work);
+        deployment.GovernedBy(
+            SyntheticUser.Deployment,
+            StatedPolicies.Governing(organization: """{"MailAccounts":{"Forced":{"Host":"imap.corp.example.test"}}}"""));
+
+        // Act
+        var result = await MailAccountEndpoints.ReadAsync(work.Id, deployment.MailAccounts, TestContext.Current.CancellationToken);
+
+        // Assert
+        var account = Assert.IsType<Ok<MailAccountResponse>>(result.Result).Value!;
+        var host = account.Properties.Single(property => property.Path == "Host");
+
+        Assert.Contains("imap.example.test", account.Declaration, StringComparison.Ordinal);
+        Assert.Null(account.Unresolved);
+        Assert.Equal("imap.corp.example.test", host.Value!.GetValue<string>());
+        Assert.Equal(("OrganizationForced", "Organization", false), (host.Source, host.HeldBy, host.Changeable));
+        Assert.True(account.Properties.Single(property => property.Path == "Language").Changeable);
+        Assert.Null(account.Properties.Single(property => property.Path == "Secrets:Password").Value);
+    }
+
     /// <summary>One unreadable row is answered with what to correct rather than a fault, so the administrator can still reach it to repair it.</summary>
     [Fact]
     public async Task ReadAsync_AnAccountWhoseStoredSettingsAreNotADeclaration_IsRefused()

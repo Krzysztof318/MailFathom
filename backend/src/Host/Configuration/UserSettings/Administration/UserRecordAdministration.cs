@@ -809,11 +809,13 @@ internal sealed class UserRecordAdministration(
         // a name, that a junk destination resolves within them — is only askable against it. The blocks themselves
         // arrive as records the deployment already holds, because this route cannot write one — a saved record naming
         // MailAccounts is refused above — so judging them here would refuse a user's own record over a posture or a
-        // language the account route is the only thing that could correct.
+        // language the account route is the only thing that could correct. Each is resolved under the policies this
+        // judgement is made under rather than the ones it was read with, since an account is governed by the policies
+        // of the organization its users stand in.
         var binding = binder.Bind(
             MailAccountRecordComposition.Compose(
                 GovernedRecordResolution.Resolve(SettingsPolicySection.Users, layers, change.Json).EffectiveJson,
-                inForce.MailAccounts),
+                inForce.MailAccounts.Select(account => account with { Policies = policies })),
             UserRecordArrival.AlreadyHeld);
 
         if (binding.User is not { } bound)

@@ -17,4 +17,22 @@ public sealed record GoverningSettingsPolicies(SettingsPolicyDocument Deployment
     /// <summary>Gets the policies of a deployment that stores none, for a record in no organization.</summary>
     public static GoverningSettingsPolicies Unwritten { get; } =
         new(SettingsPolicyDocument.Unwritten(organizationId: null), Organization: null);
+
+    /// <summary>Picks the policies governing a record of one organization, or of none, out of the policies a read found stored.</summary>
+    /// <param name="stored">The stored policies: the deployment's where it stores one, and those of the organizations asked about that store one.</param>
+    /// <param name="organizationId">The organization the record belongs to, or <see langword="null" /> for none.</param>
+    /// <returns>The deployment's policy and, for a record in an organization, that organization's; each stating nothing where <paramref name="stored" /> holds none for its scope.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="stored" /> is <see langword="null" />.</exception>
+    internal static GoverningSettingsPolicies Among(IReadOnlyCollection<SettingsPolicyDocument> stored, Guid? organizationId)
+    {
+        ArgumentNullException.ThrowIfNull(stored);
+
+        return new GoverningSettingsPolicies(
+            stored.FirstOrDefault(static policy => policy.OrganizationId is null)
+                ?? SettingsPolicyDocument.Unwritten(organizationId: null),
+            organizationId is null
+                ? null
+                : stored.FirstOrDefault(policy => policy.OrganizationId == organizationId)
+                    ?? SettingsPolicyDocument.Unwritten(organizationId));
+    }
 }

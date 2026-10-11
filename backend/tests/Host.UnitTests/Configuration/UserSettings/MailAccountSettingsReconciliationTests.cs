@@ -5,6 +5,7 @@
 using MailFathom.Domain.Synchronization;
 using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.UnitTests.TestDoubles;
+using MailFathom.Infrastructure.Persistence.Policies;
 using MailFathom.Infrastructure.Persistence.Users;
 using MailFathom.Infrastructure.Persistence.Users.AccountSettings;
 using NSubstitute;
@@ -46,6 +47,50 @@ public sealed class MailAccountSettingsReconciliationTests
         Assert.Equal(MailSynchronizationMode.Push, recorded.SynchronizationMode);
     }
 
+    /// <summary>
+    /// The columns hold what an account is served, so they are derived under the policies the store reads inside its
+    /// own write rather than from the document alone — a policy forcing the mode is what the row records.
+    /// </summary>
+    [Fact]
+    public async Task ReconcileAsync_AnAccountAPolicyGoverns_RecordsWhatItIsServedRatherThanWhatItsDocumentStates()
+    {
+        // Arrange
+        var accounts = new InMemoryMailAccountRecordStore
+        {
+            Policies = StatedPolicies.Governing(deployment: """{"MailAccounts":{"Forced":{"Mode":"Polling"}}}"""),
+        };
+        var account = Account(1, ServableDocument);
+        accounts.HoldAccount(account);
+
+        // Act
+        await Reconciliation(accounts, Trailing(account)).ReconcileAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailSynchronizationMode.Polling, Assert.Contains(account.Id, accounts.Settings).SynchronizationMode);
+    }
+
+    /// <summary>
+    /// A policy this build does not read resolves nothing, so there is nothing to derive the columns from and the row
+    /// keeps the ones it has until a build that reads the policy reaches it.
+    /// </summary>
+    [Fact]
+    public async Task ReconcileAsync_AnAccountGovernedByAPolicyThisBuildDoesNotRead_LeavesItsRowAsItStands()
+    {
+        // Arrange
+        var accounts = new InMemoryMailAccountRecordStore
+        {
+            Policies = StatedPolicies.Governing(deployment: """{"MailAccounts":{"Forced":{"Dialect":"Silesian"}}}"""),
+        };
+        var account = Account(1, ServableDocument);
+        accounts.HoldAccount(account);
+
+        // Act
+        await Reconciliation(accounts, Trailing(account)).ReconcileAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.DoesNotContain(account.Id, accounts.Settings);
+    }
+
     /// <summary>A document past the size MailFathom binds one from is never sent, and is recorded as taking part in nothing.</summary>
     [Fact]
     public async Task ReconcileAsync_ADocumentLeftInTheDatabaseForItsSize_RecordsItAsTakingPartInNothing()
@@ -72,7 +117,7 @@ public sealed class MailAccountSettingsReconciliationTests
         var behind = Account(2, ServableDocument);
         var accounts = Substitute.For<IMailAccountRecordStore>();
         accounts
-            .RecordSettingsAsync(failing.Id, Arg.Any<long>(), Arg.Any<MailAccountQueryableSettings>(), Arg.Any<CancellationToken>())
+            .RecordSettingsAsync(failing.Id, Arg.Any<long>(), Arg.Any<Func<GoverningSettingsPolicies, MailAccountQueryableSettings?>>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("The folder rows were refused."));
         var logger = new RecordingLogger<MailAccountSettingsReconciliation>();
 
@@ -84,7 +129,7 @@ public sealed class MailAccountSettingsReconciliationTests
         await accounts.Received(1).RecordSettingsAsync(
             behind.Id,
             behind.Version,
-            Arg.Is<MailAccountQueryableSettings>(settings => settings != null && settings.IsReadable),
+            Arg.Is<Func<GoverningSettingsPolicies, MailAccountQueryableSettings?>>(derive => derive!(GoverningSettingsPolicies.Unwritten)!.IsReadable),
             Arg.Any<CancellationToken>());
         Assert.Contains(failing.Id.ToString(), Assert.Single(logger.Messages), StringComparison.Ordinal);
     }
@@ -98,7 +143,7 @@ public sealed class MailAccountSettingsReconciliationTests
         var account = Account(1, ServableDocument);
         var accounts = Substitute.For<IMailAccountRecordStore>();
         accounts
-            .RecordSettingsAsync(Arg.Any<Guid>(), Arg.Any<long>(), Arg.Any<MailAccountQueryableSettings>(), Arg.Any<CancellationToken>())
+            .RecordSettingsAsync(Arg.Any<Guid>(), Arg.Any<long>(), Arg.Any<Func<GoverningSettingsPolicies, MailAccountQueryableSettings?>>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new OperationCanceledException(cancellation.Token));
 
         // Act, Assert

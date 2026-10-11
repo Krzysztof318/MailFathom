@@ -11,6 +11,7 @@ using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.Hosting.Workers;
 using MailFathom.Host.Signals;
 using MailFathom.Host.UnitTests.TestDoubles;
+using MailFathom.Infrastructure.Persistence.Policies;
 using MailFathom.Infrastructure.Persistence.Users;
 using MailFathom.Infrastructure.Persistence.Users.AccountSettings;
 using MailFathom.TestSupport;
@@ -150,6 +151,40 @@ public sealed class PersistedMailSynchronizationAccountsTests
         Assert.Same(previous, unchanged);
         Assert.NotNull(changed);
         Assert.NotSame(previous, changed);
+    }
+
+    /// <summary>
+    /// A committed policy change moves no record's version, so the settings a run holds are composed afresh when the
+    /// version of a policy governing the account moves — which is how an account adopts a policy without a restart,
+    /// while a run already in flight drains on the settings it took.
+    /// </summary>
+    [Fact]
+    public async Task ReadRunSettingsAsync_APolicyGoverningTheAccountMoved_ComposesTheSettingsItNowServes()
+    {
+        // Arrange
+        var harness = new SourceHarness();
+        harness.Assignments.Assigning(Alex, Account(AlexWork));
+        harness.Holding(Governed(HeldRecord(Alex, version: 3, Mailbox(AlexWork, "alex@work.test")), StatedPolicies.Governing()));
+        var previous = await harness.Source.ReadRunSettingsAsync(
+            Account(AlexWork),
+            previous: null,
+            TestContext.Current.CancellationToken);
+
+        // Act
+        harness.Holding(Governed(
+            HeldRecord(Alex, version: 3, Mailbox(AlexWork, "alex@work.test")),
+            StatedPolicies.Governing(deployment: """{"MailAccounts":{"Forced":{"Port":1993}}}""", deploymentVersion: 2)));
+        var adopted = await harness.Source.ReadRunSettingsAsync(
+            Account(AlexWork),
+            previous,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotNull(previous);
+        Assert.NotNull(adopted);
+        Assert.NotSame(previous, adopted);
+        Assert.Equal(993, Assert.Single(previous.DeclaredAccounts).Port);
+        Assert.Equal(1993, Assert.Single(adopted.DeclaredAccounts).Port);
     }
 
     /// <summary>
@@ -336,6 +371,14 @@ public sealed class PersistedMailSynchronizationAccountsTests
               }
               """,
             Version: 1);
+
+    /// <summary>States the policies a record and every account assigned through it were read beside.</summary>
+    private static UserSettingsDocument Governed(UserSettingsDocument record, GoverningSettingsPolicies policies) =>
+        record with
+        {
+            Policies = policies,
+            MailAccounts = [.. record.MailAccounts.Select(account => account with { Policies = policies })],
+        };
 
     private static UserSettingsDocument HeldRecord(UserId user, long version, params MailAccountRecord[] accounts) =>
         new(user, $"user-{user.Value:D}", "{}", version) { MailAccounts = accounts };

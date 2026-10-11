@@ -256,8 +256,10 @@ mailbox this deployment reads are governed by the account's own
 **`MaximumRecordsJudgedPerPolicyWrite` bounds one save of a settings policy, not what a policy may govern.** A save
 that changes a default or a forced value for users is
 [judged against every user record the policy governs](admin-endpoint.md#settings-policies) inside its own transaction,
-and a save of any of those records waits for it. A policy governing more records than this is refused before any is
-read, with a sentence naming this key. Raise it for a deployment holding more users than the default, knowing that the
+one that changes a default or a forced value for mail accounts against every mail account it governs, and a save of
+any of those records waits for it. The users and the mail accounts one save judges are counted together, and a
+policy governing more records than this is refused before any is read, with a sentence naming this key. Raise it for
+a deployment holding more users and mail accounts than the default, knowing that the
 judgement of that many records is how long record saves wait behind one policy write; the bound is each replica's own
 reading of the setting and the judgement runs on the replica the save reached.
 

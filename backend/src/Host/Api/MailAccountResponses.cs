@@ -49,8 +49,13 @@ internal sealed record MailAccountSummaryResponse(
 /// <param name="Id">The identifier the deployment generated for the account, which every other act names it by.</param>
 /// <param name="Version">The version a save states.</param>
 /// <param name="Users">The users the account is assigned to.</param>
-/// <param name="Declaration">The address, the display name, and the settings, with every secret-bearing value replaced by the redaction marker.</param>
+/// <param name="Declaration">The address, the display name, and the settings the account itself states, with every secret-bearing value replaced by the redaction marker.</param>
 /// <param name="OrganizationId">The organization the account belongs to, or <see langword="null" /> for none.</param>
+/// <remarks>
+/// The declaration is never the account as it is served. A settings policy may force a value over the account's or
+/// supply one it leaves out, and neither is written into the declaration, so what the account is served with is
+/// answered per property beside it.
+/// </remarks>
 internal sealed record MailAccountResponse(
     Guid Id,
     long Version,
@@ -58,6 +63,12 @@ internal sealed record MailAccountResponse(
     string Declaration,
     Guid? OrganizationId)
 {
+    /// <summary>Gets every property of the account as the settings policies governing it resolve it, in path order.</summary>
+    public IReadOnlyList<UserRecordPropertyResponse> Properties { get; init; } = [];
+
+    /// <summary>Gets the sentence saying which settings policy this build does not read, where the properties could not be resolved; otherwise <see langword="null" />.</summary>
+    public string? Unresolved { get; init; }
+
     /// <summary>Describes one account reading.</summary>
     /// <param name="reading">The account as the administration read it.</param>
     /// <returns>The response body.</returns>
@@ -71,7 +82,11 @@ internal sealed record MailAccountResponse(
             reading.Version,
             [.. reading.Users.Select(user => user.Value)],
             reading.Declaration,
-            reading.OrganizationId);
+            reading.OrganizationId)
+        {
+            Properties = UserRecordPropertyResponse.ForEvery(reading.Policy.Properties, reading.Policy.Changeable),
+            Unresolved = reading.Policy.Unresolved,
+        };
     }
 }
 

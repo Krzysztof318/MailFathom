@@ -44,7 +44,7 @@ internal static class ClientUserRecordEndpoint
     /// <summary>The route the acting user's record is read at and saved back to, relative to the client prefix.</summary>
     internal const string RecordRoute = "/record";
 
-    /// <summary>The route one mail account is declared at.</summary>
+    /// <summary>The route one mail account is declared at, and the one the acting user's accounts are read at as the settings policies governing them resolve each.</summary>
     internal const string MailAccountsRoute = $"{RecordRoute}/mail-accounts";
 
     /// <summary>The route one mail account is withdrawn at.</summary>
@@ -83,6 +83,9 @@ internal static class ClientUserRecordEndpoint
         api.MapPost(RecordRoute, SaveAsync)
             .WithMetadata(new RequestSizeLimitAttribute(UserRecordEndpoints.MaxWriteRequestBytes))
             .RequirePermission(MailFathomPermission.MailAccountsWrite);
+
+        api.MapGet(MailAccountsRoute, ReadMailAccountsAsync)
+            .RequirePermission(MailFathomPermission.MailRead);
 
         api.MapPost(MailAccountsRoute, AddMailAccountAsync)
             .WithMetadata(new RequestSizeLimitAttribute(UserRecordEndpoints.MaxWriteRequestBytes))
@@ -132,6 +135,27 @@ internal static class ClientUserRecordEndpoint
         return record is null
             ? NoRecord()
             : TypedResults.Ok(UserRecordResponse.For(record));
+    }
+
+    /// <summary>Hands the acting user each of their mail accounts as the settings policies governing it resolve it.</summary>
+    /// <param name="accounts">The account administration.</param>
+    /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
+    /// <returns><c>200</c> with every account the caller is assigned and what an account they declared now would start from, each property carrying its effective value, the source that supplied it, who holds it, and whether the caller may change it; or <c>404</c> when this deployment holds no record for the caller.</returns>
+    /// <remarks>
+    /// What it answers is the settings of mailboxes the caller is already served, so it names their server and their
+    /// login and never a credential: every secret-bearing property is answered without its value. It is apart from
+    /// <see cref="ClientMailAccountsEndpoint" /> for that reason — that route is read before anything is drawn and
+    /// carries nothing of a mailbox beyond its identity.
+    /// </remarks>
+    internal static async Task<Results<Ok<UserMailAccountsResponse>, NotFound<ProblemDetails>>> ReadMailAccountsAsync(
+        [FromServices] MailAccountAdministration accounts,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(accounts);
+
+        return await accounts.ReadOwnAccountPoliciesAsync(cancellationToken) is { } reading
+            ? TypedResults.Ok(UserMailAccountsResponse.For(reading))
+            : NoRecord();
     }
 
     /// <summary>Takes back the record the acting user saved.</summary>

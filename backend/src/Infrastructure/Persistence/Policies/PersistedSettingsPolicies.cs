@@ -6,7 +6,9 @@ using System.Globalization;
 using System.Text.Json;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Access;
+using MailFathom.Infrastructure.Persistence.Policies.MailAccounts;
 using MailFathom.Infrastructure.Persistence.Settings;
+using MailFathom.Infrastructure.Persistence.Users;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -17,7 +19,9 @@ namespace MailFathom.Infrastructure.Persistence.Policies;
 /// <para>
 /// A write is one transaction under the lock that excludes every write of a governed record. Inside it the policy is
 /// checked against the version the candidate was composed over, the user records it governs are judged and their
-/// endpoint switches derived where the candidate changes what a user is served on, and the policy is then stored: a
+/// endpoint switches derived where the candidate changes what a user is served on, the mail accounts it governs are
+/// judged and their queryable settings derived where it changes what an account is served on, and the policy is then
+/// stored: a
 /// first policy as an insert the scope's unique index admits once, a later one as an update conditional on the
 /// version it replaces. Two replicas reaching one scope wait on the lock in turn, and the second finds the version
 /// moved.
@@ -31,6 +35,7 @@ namespace MailFathom.Infrastructure.Persistence.Policies;
 internal sealed class PersistedSettingsPolicies(
     MailFathomDbContext dbContext,
     IUserRecordPolicyJudge judge,
+    IMailAccountPolicyJudge accountJudge,
     TimeProvider timeProvider)
     : ISettingsPolicyStore
 {
@@ -64,15 +69,12 @@ internal sealed class PersistedSettingsPolicies(
         Guid? organizationId,
         string json,
         long expectedVersion,
-        int? maximumUserRecordsJudged,
+        GovernedRecordsToJudge judged,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(judged);
         RefuseWhatCannotBeCommitted(json, expectedVersion);
-
-        if (maximumUserRecordsJudged is { } stated)
-        {
-            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(stated, nameof(maximumUserRecordsJudged));
-        }
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(judged.Maximum, nameof(judged));
 
         var now = timeProvider.GetUtcNow();
 
@@ -92,8 +94,7 @@ internal sealed class PersistedSettingsPolicies(
 
             var candidate = new SettingsPolicyDocument(organizationId, json, expectedVersion + 1);
 
-            if (maximumUserRecordsJudged is { } maximum
-                && await this.JudgeAndProjectAsync(standing, candidate, maximum, cancellationToken) is { } refused)
+            if (await this.JudgeAndProjectAsync(standing, candidate, judged, cancellationToken) is { } refused)
             {
                 return refused;
             }
@@ -171,54 +172,105 @@ internal sealed class PersistedSettingsPolicies(
             CultureInfo.InvariantCulture,
             $"The settings policy of {(organizationId is { } named ? $"organization {named:D}" : "the deployment")} is {length} octets, past the {SettingsPolicyDocument.MaximumOctets} MailFathom reads a settings policy from, so it was not read. A policy states defaults and forced values rather than carrying a payload: check what wrote the settings_policies row."));
 
-    /// <summary>Judges every user record the candidate governs, and writes the endpoint switches of each one it moves.</summary>
+    /// <summary>Judges every record the candidate governs, and writes the stored projection of each one it moves.</summary>
     /// <returns>The refusal that stops the write, or <see langword="null" /> where the candidate may be stored.</returns>
     /// <remarks>
-    /// Counted before anything is read, so a policy governing more records than one write judges costs a count and
-    /// no document. The switches are written per value rather than per user: there are four pairs a row can hold, so
-    /// a policy that moves ten thousand users issues at most four statements.
+    /// <para>
+    /// Counted before anything is read, so a policy governing more records than one write judges costs two counts and
+    /// no document. Both kinds are judged before either is written, so a refusal names the users and the mail
+    /// accounts in the way together rather than whichever kind happened to be read first.
+    /// </para>
+    /// <para>
+    /// The switches are written per value rather than per user: there are four pairs a row can hold, so a policy
+    /// that moves ten thousand users issues at most four statements. An account's settings are written per account,
+    /// and only for an account whose queryable settings the candidate moves, which a default host or a forced port
+    /// does not.
+    /// </para>
     /// </remarks>
+    // ponytail: one run of statements per account whose queryable settings moved. Batch them through unnest if a
+    // policy write that forces a mode or a folder list over many thousands of accounts measures slow.
     private async Task<SettingsPolicyCommit?> JudgeAndProjectAsync(
         SettingsPolicyDocument standing,
         SettingsPolicyDocument candidate,
-        int maximum,
+        GovernedRecordsToJudge judged,
         CancellationToken cancellationToken)
     {
         var scope = candidate.OrganizationId;
-        var governed = await dbContext.UserAccounts
-            .CountAsync(user => scope == null || user.OrganizationId == scope, cancellationToken);
 
-        if (governed > maximum)
+        var governedUsers = judged.Users
+            ? await dbContext.UserAccounts.CountAsync(user => scope == null || user.OrganizationId == scope, cancellationToken)
+            : 0;
+
+        var governedAccounts = judged.MailAccounts
+            ? await dbContext.MailAccountRecords.CountAsync(account => scope == null || account.OrganizationId == scope, cancellationToken)
+            : 0;
+
+        var governed = governedUsers + governedAccounts;
+
+        if (governed > judged.Maximum)
         {
             return new SettingsPolicyCommit(SettingsPolicyCommitResult.TooManyRecords, GovernedRecords: governed);
         }
 
-        var users = await GovernedUserRows.Of(dbContext)
-            .Where(user => scope == null || user.OrganizationId == scope)
-            .OrderBy(user => user.Id)
-            .ToListAsync(cancellationToken);
+        if (governed == 0)
+        {
+            return null;
+        }
 
-        var others = await this.ReadTheOtherScopesAsync(scope, users, cancellationToken);
+        var users = judged.Users
+            ? await GovernedUserRows.Of(dbContext)
+                .Where(user => scope == null || user.OrganizationId == scope)
+                .OrderBy(user => user.Id)
+                .ToListAsync(cancellationToken)
+            : [];
 
-        var judgements = judge.Judge(
+        // An account whose settings were not sent is one this build binds nothing from, so its row is left as it
+        // stands rather than judged on a document nobody read.
+        var accounts = judged.MailAccounts
+            ? await GovernedMailAccountRows.Of(dbContext)
+                .Where(account => (scope == null || account.OrganizationId == scope) && account.Document != null)
+                .OrderBy(account => account.Id)
+                .ToListAsync(cancellationToken)
+            : [];
+
+        var others = await this.ReadTheOtherScopesAsync(
+            scope,
+            [.. users.Select(user => user.OrganizationId).Concat(accounts.Select(account => account.OrganizationId)).OfType<Guid>().Distinct()],
+            cancellationToken);
+
+        var userJudgements = judge.Judge(
         [
             .. users.Select(user => new GovernedUserRecord(
                 UserId.Create(user.Id),
                 user.DisplayName,
                 user.Document,
                 new UserEndpointAccess(user.McpEndpointEnabled, user.ClientEndpointEnabled),
-                GoverningOf(user, standing, others),
-                GoverningOf(user, candidate, others))),
+                GoverningOf(user.OrganizationId, standing, others),
+                GoverningOf(user.OrganizationId, candidate, others))),
         ]);
 
-        if (GovernedUserJudgements.FindRecordsInTheWay(users, judgements) is { } refused)
+        var accountJudgements = accountJudge.Judge(
+            [
+                .. accounts.Select(account => GovernedMailAccountJudgements.GovernedOf(
+                    account,
+                    GoverningOf(account.OrganizationId, standing, others),
+                    GoverningOf(account.OrganizationId, candidate, others))),
+            ],
+            judged.UnderANarrowerGrant);
+
+        if (SettingsPolicyCommit.RefusedOver(
+                governed,
+                [
+                    .. GovernedUserJudgements.FindUsersInTheWay(users, userJudgements),
+                    .. GovernedMailAccountJudgements.FindAccountsInTheWay(accounts, accountJudgements),
+                ]) is { } refused)
         {
             return refused;
         }
 
         // The rows alone, with no version moved: a record's version says the record changed, and what moved here is
         // the policy, whose own version is what has every replica compose these users again.
-        foreach (var (served, rows) in GovernedUserJudgements.FindMovedSwitches(users, judgements))
+        foreach (var (served, rows) in GovernedUserJudgements.FindMovedSwitches(users, userJudgements))
         {
             await dbContext.UserAccounts
                 .Where(user => rows.Contains(user.Id))
@@ -229,30 +281,34 @@ internal sealed class PersistedSettingsPolicies(
                     cancellationToken);
         }
 
+        foreach (var (id, version, settings) in GovernedMailAccountJudgements.FindMovedSettings(accounts, accountJudgements))
+        {
+            await PersistedMailAccountRecordStore.WriteQueryableSettingsAsync(dbContext, id, version, settings, cancellationToken);
+        }
+
         return null;
     }
 
     /// <summary>Reads the policies of the scopes a write does not replace, which the records it judges are governed by as well.</summary>
-    /// <returns>For an organization's write, the deployment's policy alone; for the deployment's, the policy of every organization a judged user belongs to. The deployment's is keyed by the empty identifier.</returns>
+    /// <returns>For an organization's write, the deployment's policy alone; for the deployment's, the policy of every organization a judged record belongs to. The deployment's is keyed by the empty identifier.</returns>
     /// <remarks>
     /// <para>
-    /// Only the organizations of the users being judged are read, so what the deployment's write reads is bounded by
+    /// Only the organizations of the records being judged are read, so what the deployment's write reads is bounded by
     /// the records it was already allowed to judge rather than by how many organizations store a policy.
     /// </para>
     /// <para>
     /// A policy past what this build reads one from is answered as empty text, as it is to every other reader, which
-    /// no build judges as a policy: its users are then judged as unreadable under the policy that stands and under
+    /// no build judges as a policy: its records are then judged as unreadable under the policy that stands and under
     /// the candidate alike, so they refuse nothing, instead of one organization's row stopping a write for the whole
-    /// deployment. Their rows keep the switches they hold, except for each switch the deployment's candidate policy
-    /// forces, which is written over them: a force reaches a user whatever else governing them cannot be read.
+    /// deployment. Their rows keep what they hold, except for each endpoint switch the deployment's candidate policy
+    /// forces, which is written over a user's: a force reaches a user whatever else governing them cannot be read.
     /// </para>
     /// </remarks>
     private async Task<Dictionary<Guid, SettingsPolicyDocument>> ReadTheOtherScopesAsync(
         Guid? written,
-        List<StoredGovernedUserRow> judged,
+        Guid[] organizations,
         CancellationToken cancellationToken)
     {
-        Guid[] organizations = [.. judged.Select(user => user.OrganizationId).OfType<Guid>().Distinct()];
         var policies = StoredPolicies(dbContext);
 
         var stored = await (written is null
@@ -265,9 +321,9 @@ internal sealed class PersistedSettingsPolicies(
             policy => new SettingsPolicyDocument(policy.OrganizationId, policy.Document ?? string.Empty, policy.Version));
     }
 
-    /// <summary>Composes the policies governing one user from the one a write replaces and the ones it leaves.</summary>
+    /// <summary>Composes the policies governing one record from the one a write replaces and the ones it leaves.</summary>
     private static GoverningSettingsPolicies GoverningOf(
-        StoredGovernedUserRow user,
+        Guid? recordOrganization,
         SettingsPolicyDocument written,
         Dictionary<Guid, SettingsPolicyDocument> others)
     {
@@ -280,7 +336,7 @@ internal sealed class PersistedSettingsPolicies(
 
         return new GoverningSettingsPolicies(
             written,
-            user.OrganizationId is { } organization
+            recordOrganization is { } organization
                 ? others.GetValueOrDefault(organization, SettingsPolicyDocument.Unwritten(organization))
                 : null);
     }

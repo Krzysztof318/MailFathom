@@ -6,11 +6,14 @@ using System.Text.Json.Nodes;
 using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Failures;
+using MailFathom.Domain.Folders;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Policies;
+using MailFathom.Host.Configuration.SensitiveContent;
 using MailFathom.Host.Signals;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Persistence.Policies;
+using MailFathom.Infrastructure.Persistence.Users;
 using MailFathom.TestSupport;
 using Xunit;
 
@@ -24,6 +27,8 @@ namespace MailFathom.Host.UnitTests.Configuration.Policies;
 public sealed class SettingsPolicyAdministrationTests
 {
     private const string ForcingPolling = """{"MailAccounts":{"Forced":{"Mode":"Polling"}}}""";
+
+    private const string ForcingPush = """{"MailAccounts":{"Forced":{"Mode":"Push"}}}""";
 
     private const string DefaultingPolish = """{"Users":{"Defaults":{"Language":"Polish"}}}""";
 
@@ -220,24 +225,25 @@ public sealed class SettingsPolicyAdministrationTests
     }
 
     /// <summary>
-    /// A default or a forced value for a mail account can decide where a mailbox's credential is presented, and nothing
-    /// here reads the accounts it would govern, so a grant held below the deployment does not state one — whichever
-    /// setting it is, and whether the write adds it, changes it, or takes it away.
+    /// A default or a forced value for a mail account can decide where a mailbox's credential is presented. A grant
+    /// held below the deployment therefore may not move the effective settings of an account naming a secret that
+    /// was not provisioned for a user it is assigned to — whichever setting moves, and whether the write adds it,
+    /// changes it, or takes it away — and the refusal names the account.
     /// </summary>
     [Theory]
     [InlineData("{}", """{"MailAccounts":{"Forced":{"Host":"mail.example.org"}}}""")]
-    [InlineData("{}", """{"MailAccounts":{"Defaults":{"Port":993}}}""")]
-    [InlineData("{}", ForcingPolling)]
-    [InlineData(ForcingPolling, """{"MailAccounts":{"Forced":{"Mode":"Push"}}}""")]
-    [InlineData(ForcingPolling, """{"MailAccounts":{"Defaults":{"Mode":"Polling"}}}""")]
-    [InlineData(ForcingPolling, DefaultingPolish)]
-    public async Task ApplyAsync_AMailAccountValueChangedUnderAGrantHeldAtTheOrganization_IsRefusedAndWritesNothing(
+    [InlineData("{}", """{"MailAccounts":{"Defaults":{"Port":1993}}}""")]
+    [InlineData(ForcingPush, ForcingPolling)]
+    [InlineData(ForcingPush, "{}")]
+    public async Task ApplyAsync_AGrantHeldAtTheOrganizationMovingAnAccountNamingASecretNotItsUsers_IsRefusedNamingTheAccount(
         string inForce,
         string saved)
     {
         // Arrange
         var harness = PolicyHarness.ForTheOrganizationsAdministrator();
         harness.Store.Holding(Organization, inForce, version: 4);
+        var shared = Mailbox("shared", "file:/run/secrets/shared-password");
+        harness.Store.HoldingAccount(shared, Organization, SyntheticUser.Deployment);
 
         // Act
         var outcome = await harness.Policies.ApplyAsync(Organization, saved, expectedVersion: 4, TestContext.Current.CancellationToken);
@@ -246,19 +252,70 @@ public sealed class SettingsPolicyAdministrationTests
         Assert.False(outcome!.IsCommitted);
         Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome.Refusal);
         Assert.Equal(4, outcome.Version);
-        Assert.Contains("held over an organization rather than over the whole deployment", Assert.Single(outcome.Messages), StringComparison.Ordinal);
+        Assert.StartsWith("The saved policy is refused over 1 of the 1 records", outcome.Messages[0], StringComparison.Ordinal);
+        Assert.StartsWith($"Mail account 'shared' ({shared.Id:D})", outcome.Messages[1], StringComparison.Ordinal);
+        Assert.Contains("was not provisioned for a user this mail account is assigned to", outcome.Messages[1], StringComparison.Ordinal);
         Assert.Equal(0, harness.Store.Commits);
     }
 
     /// <summary>
-    /// A policy outlives the build that stored it, and during an upgrade two builds serve one. A statement this build
-    /// does not know is in neither set of values it compares, so a save that dropped it would read as leaving the
-    /// values alone. The policy in force is therefore not compared at all where it cannot be judged whole.
+    /// The bound is on what the write moves and for whom. The same grant states a mail-account value where every
+    /// account it moves names its own user's material, and where the account naming somebody else's states the
+    /// setting itself and so is served what it was.
+    /// </summary>
+    [Theory]
+    [InlineData(true, ForcingPolling)]
+    [InlineData(false, """{"MailAccounts":{"Defaults":{"Host":"mail.example.org"}}}""")]
+    public async Task ApplyAsync_AGrantHeldAtTheOrganizationMovingNoAccountNamingASecretNotItsUsers_Commits(
+        bool provisionedForItsUser,
+        string saved)
+    {
+        // Arrange
+        var harness = PolicyHarness.ForTheOrganizationsAdministrator();
+        harness.Store.HoldingAccount(
+            Mailbox(
+                "work",
+                provisionedForItsUser
+                    ? $"file:/run/secrets/user-{SyntheticUser.Deployment.Value:D}-work"
+                    : "file:/run/secrets/shared-password"),
+            Organization,
+            SyntheticUser.Deployment);
+
+        // Act
+        var outcome = await harness.Policies.ApplyAsync(Organization, saved, expectedVersion: 0, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(outcome!.IsCommitted);
+    }
+
+    /// <summary>A grant held over the whole deployment names any secret, so the same write passes under it.</summary>
+    [Fact]
+    public async Task ApplyAsync_AGrantHeldAtTheDeploymentMovingAnAccountNamingASecretNotItsUsers_Commits()
+    {
+        // Arrange
+        var harness = PolicyHarness.ForTheDeploymentsAdministrator();
+        harness.Store.HoldingAccount(Mailbox("shared", "file:/run/secrets/shared-password"), Organization, SyntheticUser.Deployment);
+
+        // Act
+        var outcome = await harness.Policies.ApplyAsync(
+            Organization,
+            """{"MailAccounts":{"Forced":{"Host":"mail.example.org"}}}""",
+            expectedVersion: 0,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(outcome!.IsCommitted);
+    }
+
+    /// <summary>
+    /// A policy outlives the build that stored it, and during an upgrade two builds serve one. What an account was
+    /// served under a policy this build does not judge whole is unknown here, so a grant held below the deployment is
+    /// not given the benefit of that doubt: replacing such a policy counts as moving every account it governs.
     /// </summary>
     [Theory]
     [InlineData(ForcingPolling)]
     [InlineData(DefaultingPolish)]
-    public async Task ApplyAsync_APolicyInForceThisBuildCannotJudgeUnderAGrantHeldAtTheOrganization_IsRefusedAndWritesNothing(string saved)
+    public async Task ApplyAsync_APolicyInForceThisBuildCannotJudgeUnderAGrantHeldAtTheOrganization_IsRefusedOverAnAccountNamingASecretNotItsUsers(string saved)
     {
         // Arrange
         var harness = PolicyHarness.ForTheOrganizationsAdministrator();
@@ -266,6 +323,7 @@ public sealed class SettingsPolicyAdministrationTests
             Organization,
             """{"MailAccounts":{"Forced":{"Mode":"Polling","SettingALaterBuildGoverns":true}}}""",
             version: 4);
+        harness.Store.HoldingAccount(Mailbox("shared", "file:/run/secrets/shared-password"), Organization, SyntheticUser.Deployment);
 
         // Act
         var outcome = await harness.Policies.ApplyAsync(Organization, saved, expectedVersion: 4, TestContext.Current.CancellationToken);
@@ -273,7 +331,7 @@ public sealed class SettingsPolicyAdministrationTests
         // Assert
         Assert.False(outcome!.IsCommitted);
         Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome.Refusal);
-        Assert.Contains("states something this build does not judge as a settings policy", Assert.Single(outcome.Messages), StringComparison.Ordinal);
+        Assert.Contains("Mail account 'shared'", outcome.Messages[1], StringComparison.Ordinal);
         Assert.Equal(0, harness.Store.Commits);
     }
 
@@ -593,7 +651,7 @@ public sealed class SettingsPolicyAdministrationTests
 
         // Assert
         Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
-        Assert.StartsWith("The saved policy would leave 1 of the 1 user records", outcome.Messages[0], StringComparison.Ordinal);
+        Assert.StartsWith("The saved policy is refused over 1 of the 1 records", outcome.Messages[0], StringComparison.Ordinal);
         Assert.Contains("User 'alex'", outcome.Messages[1], StringComparison.Ordinal);
         Assert.Contains("Language is not stated", outcome.Messages[1], StringComparison.Ordinal);
         Assert.Equal(0, harness.Store.Commits);
@@ -653,16 +711,123 @@ public sealed class SettingsPolicyAdministrationTests
     }
 
     /// <summary>
-    /// Only a default or a forced value for users can break a record or move a switch, so a write that changes
-    /// neither judges no record — an editing restriction and a statement about mail accounts among them.
+    /// A policy may not leave an account it governs one no start would serve, so a write that takes away the language
+    /// an account relied on is refused naming the account by its label, never by its address.
+    /// </summary>
+    [Fact]
+    public async Task ApplyAsync_APolicyThatWouldLeaveAMailAccountWithoutWhatItReliesOn_IsRefusedNamingTheAccountAndWritesNothing()
+    {
+        // Arrange
+        var harness = PolicyHarness.ForTheDeploymentsAdministrator();
+        harness.Store.Holding(Organization, """{"MailAccounts":{"Defaults":{"Language":"Polish"}}}""", version: 2);
+        var work = Mailbox("work", "file:/run/secrets/work-password", language: null);
+        harness.Store.HoldingAccount(work, Organization, SyntheticUser.Deployment);
+
+        // Act
+        var outcome = await harness.Policies.ApplyAsync(Organization, "{}", expectedVersion: 2, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
+        Assert.StartsWith("The saved policy is refused over 1 of the 1 records", outcome.Messages[0], StringComparison.Ordinal);
+        Assert.StartsWith($"Mail account 'work' ({work.Id:D})", outcome.Messages[1], StringComparison.Ordinal);
+        Assert.Contains("Language", outcome.Messages[1], StringComparison.Ordinal);
+        Assert.DoesNotContain("work@example.test", string.Concat(outcome.Messages), StringComparison.Ordinal);
+        Assert.Equal(0, harness.Store.Commits);
+    }
+
+    /// <summary>
+    /// What a deployment reads across accounts is a row's columns, so a policy that moves what the accounts it governs
+    /// are served rewrites their columns in its own commit, and leaves every account it does not govern where it was.
+    /// </summary>
+    [Fact]
+    public async Task ApplyAsync_APolicyForcingTheFolders_RewritesTheSettingsOfTheAccountsItGovernsAndNoOthers()
+    {
+        // Arrange
+        var harness = PolicyHarness.ForTheDeploymentsAdministrator();
+        var governed = Mailbox("work", "file:/run/secrets/work-password");
+        var elsewhere = Mailbox("home", "file:/run/secrets/home-password");
+        harness.Store.HoldingAccount(governed, Organization, SyntheticUser.Deployment);
+        harness.Store.HoldingAccount(elsewhere, organizationId: null, SyntheticUser.Another);
+
+        // Act
+        var outcome = await harness.Policies.ApplyAsync(
+            Organization,
+            """{"MailAccounts":{"Forced":{"Folders":[{"Alias":"INBOX","RemotePath":"INBOX"}]}}}""",
+            expectedVersion: 0,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(outcome!.IsCommitted);
+        Assert.Equal([MailFolderAlias.Create("INBOX")], harness.Store.SettingsOf(governed.Id)!.Folders.Select(folder => folder.Alias));
+        Assert.Null(harness.Store.SettingsOf(elsewhere.Id));
+    }
+
+    /// <summary>
+    /// The rule that an account may switch a scanner on and never off is asked of the account as the policy would
+    /// leave it served, so a default switching one off under a deployment that requires it is refused over an account
+    /// stating nothing about scanning.
+    /// </summary>
+    [Fact]
+    public async Task ApplyAsync_ADefaultSwitchingOffAScannerTheDeploymentRequires_IsRefusedOverTheAccountsItWouldReach()
+    {
+        // Arrange
+        var scanning = new SensitiveContentOptions();
+        scanning.Secrets.Enabled = true;
+        var harness = new PolicyHarness(
+            AccessAuthorizations.ForAdministratorGranted(MailFathomPermission.AdminRead, MailFathomPermission.AdminConfigurationWrite),
+            InMemorySettingsPolicies.JudgingRecords(scanning));
+        harness.Store.HoldingAccount(Mailbox("work", "file:/run/secrets/work-password"), Organization, SyntheticUser.Deployment);
+
+        // Act
+        var outcome = await harness.Policies.ApplyAsync(
+            Organization,
+            """{"MailAccounts":{"Defaults":{"SensitiveContent":{"Secrets":{"Enabled":false}}}}}""",
+            expectedVersion: 0,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
+        Assert.Contains("SensitiveContent:Secrets:Enabled", outcome.Messages[1], StringComparison.Ordinal);
+        Assert.Equal(0, harness.Store.Commits);
+    }
+
+    /// <summary>One bound covers the write, so the users and the mail accounts it would judge are counted together.</summary>
+    [Fact]
+    public async Task ApplyAsync_APolicyGoverningAUserAndAMailAccountPastTheBoundTogether_IsRefusedCountingBoth()
+    {
+        // Arrange
+        var harness = PolicyHarness.ForTheDeploymentsAdministrator();
+        harness.Deployment.ReportReload(new DeploymentOptions { MaximumRecordsJudgedPerPolicyWrite = 1 });
+        harness.Store.HoldingUser(SyntheticUser.Deployment, "alex", organizationId: null, """{"Language":"English"}""");
+        harness.Store.HoldingAccount(Mailbox("work", "file:/run/secrets/work-password"), organizationId: null, SyntheticUser.Deployment);
+
+        // Act
+        var outcome = await harness.Policies.ApplyAsync(
+            organizationId: null,
+            """{"Users":{"Defaults":{"Language":"Polish"}},"MailAccounts":{"Defaults":{"Port":1993}}}""",
+            expectedVersion: 0,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
+        Assert.Contains("for 2 records", Assert.Single(outcome.Messages), StringComparison.Ordinal);
+        Assert.Equal(0, harness.Store.Commits);
+    }
+
+    /// <summary>
+    /// Only a default or a forced value can break a record or move what it is served, and only for the kind of record
+    /// it is stated about, so a write judges the users where it moves one for users, the mail accounts where it moves
+    /// one for mail accounts, and nothing where it states an editing restriction alone.
     /// </summary>
     [Theory]
-    [InlineData(DefaultingPolish, true)]
-    [InlineData("""{"Users":{"Editing":{"Mode":"AllExcept","Properties":["TimeZone"]}}}""", false)]
-    [InlineData(ForcingPolling, false)]
-    public async Task ApplyAsync_AnyPolicy_JudgesTheRecordsItGovernsOnlyWhereItMovesADefaultOrAForcedValueForUsers(
+    [InlineData(DefaultingPolish, true, false)]
+    [InlineData("""{"Users":{"Editing":{"Mode":"AllExcept","Properties":["TimeZone"]}}}""", false, false)]
+    [InlineData("""{"MailAccounts":{"Editing":{"Mode":"AllExcept","Properties":["Folders"]}}}""", false, false)]
+    [InlineData(ForcingPolling, false, true)]
+    public async Task ApplyAsync_AnyPolicy_JudgesTheRecordsOfTheKindItMovesADefaultOrAForcedValueFor(
         string policy,
-        bool judged)
+        bool users,
+        bool mailAccounts)
     {
         // Arrange
         var harness = PolicyHarness.ForTheDeploymentsAdministrator();
@@ -676,13 +841,36 @@ public sealed class SettingsPolicyAdministrationTests
 
         // Assert
         Assert.True(outcome!.IsCommitted);
-        Assert.Equal(judged ? (int?)new DeploymentOptions().MaximumRecordsJudgedPerPolicyWrite : null, harness.Store.LastMaximumJudged);
+        Assert.Equal(
+            new GovernedRecordsToJudge(users, mailAccounts, new DeploymentOptions().MaximumRecordsJudgedPerPolicyWrite),
+            harness.Store.LastJudged);
+    }
+
+    /// <summary>A mailbox a policy write reaches, named by its label and reading its credential from one reference.</summary>
+    private static MailAccountRecord Mailbox(string label, string secretReference, string? language = "English")
+    {
+        var statedLanguage = language is null ? string.Empty : $"\"Language\": \"{language}\",";
+
+        return new MailAccountRecord(
+            Guid.NewGuid(),
+            $"{label}@example.test",
+            label,
+            $$"""
+              {
+                {{statedLanguage}}
+                "Host": "imap.example.test",
+                "UserName": "{{label}}@example.test",
+                "Secrets": { "Password": { "Name": "{{label}}-password", "SecretReference": "{{secretReference}}" } }
+              }
+              """,
+            Version: 1);
     }
 
     private sealed class PolicyHarness
     {
-        internal PolicyHarness(AccessAuthorization authorization)
+        internal PolicyHarness(AccessAuthorization authorization, InMemorySettingsPolicies? store = null)
         {
+            this.Store = store ?? InMemorySettingsPolicies.JudgingRecords();
             this.Store.HoldingOrganization(Organization);
 
             this.Policies = new SettingsPolicyAdministration(
@@ -697,7 +885,7 @@ public sealed class SettingsPolicyAdministrationTests
         internal SettingsPolicyAdministration Policies { get; }
 
         /// <summary>Gets the policies this deployment holds, which is none for either scope until a test says otherwise.</summary>
-        internal InMemorySettingsPolicies Store { get; } = InMemorySettingsPolicies.JudgingRecords();
+        internal InMemorySettingsPolicies Store { get; }
 
         /// <summary>Gets the deployment's own options, which bound how many records one policy write judges.</summary>
         internal TestOptionsMonitor<DeploymentOptions> Deployment { get; } = new(new DeploymentOptions());

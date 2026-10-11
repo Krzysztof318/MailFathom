@@ -310,15 +310,21 @@ internal sealed class PersistedUserSettingsDocumentReader(
                     };
                 }
 
+                var accounts = await this.ReadAssignedAccountsAsync(connection, user, cancellationToken);
+
+                var policies = await GoverningSettingsPolicyStatements.ReadAsync(
+                    connection,
+                    transaction: null,
+                    record.OrganizationId,
+                    (int)commandTimeout.Value.TotalSeconds,
+                    cancellationToken);
+
+                // An account is assigned only inside its own organization, so the policies governing the user are the
+                // ones governing every account read for them.
                 return record with
                 {
-                    MailAccounts = await this.ReadAssignedAccountsAsync(connection, user, cancellationToken),
-                    Policies = await GoverningSettingsPolicyStatements.ReadAsync(
-                        connection,
-                        transaction: null,
-                        record.OrganizationId,
-                        (int)commandTimeout.Value.TotalSeconds,
-                        cancellationToken),
+                    MailAccounts = [.. accounts.Select(account => account with { Policies = policies })],
+                    Policies = policies,
                 };
             }
             catch (NpgsqlException exception)

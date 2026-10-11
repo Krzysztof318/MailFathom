@@ -26,7 +26,7 @@ public sealed class MailAccountQueryableSettingsReadingTests
     public void Of_ADocumentStatingAMode_ReadsThatMode()
     {
         // Act
-        var settings = MailAccountQueryableSettingsReading.Of(Record("""{"Mode":"Push"}"""));
+        var settings = Read(Record("""{"Mode":"Push"}"""));
 
         // Assert
         Assert.True(settings.IsReadable);
@@ -40,7 +40,7 @@ public sealed class MailAccountQueryableSettingsReadingTests
     public void Of_ASpamClassificationPosture_ReadsWhetherTheAccountClassifies(string document, bool classifies)
     {
         // Act
-        var settings = MailAccountQueryableSettingsReading.Of(Record(document));
+        var settings = Read(Record(document));
 
         // Assert
         Assert.Equal(classifies, settings.ClassifiesSpam);
@@ -51,7 +51,7 @@ public sealed class MailAccountQueryableSettingsReadingTests
     public void Of_OneScannerSwitchedOnAndOneOff_ScansForTheOneSwitchedOn()
     {
         // Act
-        var settings = MailAccountQueryableSettingsReading.Of(
+        var settings = Read(
             Record("""{"SensitiveContent":{"Secrets":{"Enabled":true},"Pii":{"Enabled":false}}}"""));
 
         // Assert
@@ -63,7 +63,7 @@ public sealed class MailAccountQueryableSettingsReadingTests
     public void Of_ScreenedScannersNamedInAnyCaseAndRepeated_ReadsEachKnownScannerOnceInOrder()
     {
         // Act
-        var settings = MailAccountQueryableSettingsReading.Of(
+        var settings = Read(
             Record("""{"SensitiveContent":{"ScreenOutgoingMailFor":["pii","SECRETS","Pii","NoSuchScanner","7"]}}"""));
 
         // Assert
@@ -75,7 +75,7 @@ public sealed class MailAccountQueryableSettingsReadingTests
     public void Of_DeclaredFolders_ReadsEachWithItsParticipationAndRole()
     {
         // Act
-        var settings = MailAccountQueryableSettingsReading.Of(Record(
+        var settings = Read(Record(
             """
             {
               "Folders": [
@@ -99,7 +99,7 @@ public sealed class MailAccountQueryableSettingsReadingTests
     public void Of_NoFolderDeclared_ReadsTheDefaultInbox()
     {
         // Act
-        var settings = MailAccountQueryableSettingsReading.Of(Record("{}"));
+        var settings = Read(Record("{}"));
 
         // Assert
         var folder = Assert.Single(settings.Folders);
@@ -112,7 +112,7 @@ public sealed class MailAccountQueryableSettingsReadingTests
     public void Of_AClassifyingAccountNamingNoScannedFolders_ClassifiesItsInboxAlone()
     {
         // Act
-        var settings = MailAccountQueryableSettingsReading.Of(Record(
+        var settings = Read(Record(
             """
             {
               "SpamClassification": { "Enabled": true },
@@ -129,7 +129,7 @@ public sealed class MailAccountQueryableSettingsReadingTests
     public void Of_AClassifyingAccountNamingItsScannedFolders_ClassifiesThoseFolders()
     {
         // Act
-        var settings = MailAccountQueryableSettingsReading.Of(Record(
+        var settings = Read(Record(
             """
             {
               "SpamClassification": { "Enabled": true, "ScannedFolders": ["ARCHIVE"] },
@@ -146,7 +146,7 @@ public sealed class MailAccountQueryableSettingsReadingTests
     public void Of_AClassifyingAccountNamingAnEmptyListOfFolders_ClassifiesNoFolder()
     {
         // Act
-        var settings = MailAccountQueryableSettingsReading.Of(Record(
+        var settings = Read(Record(
             """
             {
               "SpamClassification": { "Enabled": true, "ScannedFolders": [] },
@@ -167,7 +167,7 @@ public sealed class MailAccountQueryableSettingsReadingTests
     public void Of_ADocumentThatDoesNotBind_ReadsTheUnreadableSettings(string document)
     {
         // Act
-        var settings = MailAccountQueryableSettingsReading.Of(Record(document));
+        var settings = Read(Record(document));
 
         // Assert
         Assert.Same(MailAccountQueryableSettings.Unreadable, settings);
@@ -175,6 +175,10 @@ public sealed class MailAccountQueryableSettingsReadingTests
 
     private static MailFolderAlias[] ClassifiedAliases(MailAccountQueryableSettings settings) =>
         [.. settings.Folders.Where(folder => folder.IsClassifiedForSpam).Select(folder => folder.Alias)];
+
+    /// <summary>Reads an account no settings policy governs, which this build always reads.</summary>
+    private static MailAccountQueryableSettings Read(MailAccountRecord account) =>
+        Assert.IsType<MailAccountQueryableSettings>(MailAccountQueryableSettingsReading.Of(account));
 
     private static MailAccountRecord Record(string document) =>
         new(AccountId, "alex@example.test", "Alex at work", ServableMailAccountDocuments.Completing(document), Version: 1);
