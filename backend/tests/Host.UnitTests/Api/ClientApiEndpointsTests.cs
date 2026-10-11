@@ -1043,7 +1043,7 @@ public sealed class ClientApiEndpointsTests
     [Theory]
     [InlineData(false, true)]
     [InlineData(true, false)]
-    public void IsTelemetryHeldOffFor_AUserWhoseSwitchAPolicyForces_AnswersWhetherItIsForcedOff(bool forcedTo, bool expected)
+    public void TakesNoTelemetryFrom_AUserWhoseSwitchAPolicyForces_AnswersWhetherItIsForcedOff(bool forcedTo, bool expected)
     {
         // Arrange
         var roster = ResolvedServedUsers.Serving(new ServedUser(SyntheticUser.Deployment, "alex", [])
@@ -1052,15 +1052,26 @@ public sealed class ClientApiEndpointsTests
         });
 
         // Act
-        var heldOff = ClientApiEndpoints.IsTelemetryHeldOffFor(roster, ActingFor(SyntheticUser.Deployment));
+        var refused = ClientApiEndpoints.TakesNoTelemetryFrom(roster, ActingFor(SyntheticUser.Deployment));
 
         // Assert
-        Assert.Equal(expected, heldOff);
+        Assert.Equal(expected, refused);
     }
 
-    /// <summary>Nobody's switch is held off where no policy forces it, where the request names no user, and where it established no principal at all.</summary>
+    /// <summary>
+    /// Somebody this replica holds no composition of may be governed by a force it cannot read, and the telemetry
+    /// routes refuse them for it. The session answers as it does for a force known to be off, so the two stay one
+    /// decision instead of a level answered to a client whose every batch is refused.
+    /// </summary>
     [Fact]
-    public void IsTelemetryHeldOffFor_NobodyWhoseSwitchIsForcedOff_AnswersThatItIsNot()
+    public void TakesNoTelemetryFrom_AUserThisReplicaHoldsNoCompositionOf_AnswersThatNothingIsTaken() =>
+        Assert.True(ClientApiEndpoints.TakesNoTelemetryFrom(
+            ResolvedServedUsers.Serving(),
+            ActingFor(SyntheticUser.Deployment)));
+
+    /// <summary>Telemetry is taken where no policy forces the switch, where the request names no user, and where it established no principal at all.</summary>
+    [Fact]
+    public void TakesNoTelemetryFrom_NobodyWhoseSwitchIsForcedOff_AnswersThatItIsTaken()
     {
         // Arrange
         var roster = ResolvedServedUsers.Serving(
@@ -1071,15 +1082,15 @@ public sealed class ClientApiEndpointsTests
             });
 
         // Act
-        bool[] heldOff =
+        bool[] refused =
         [
-            ClientApiEndpoints.IsTelemetryHeldOffFor(roster, ActingFor(SyntheticUser.Deployment)),
-            ClientApiEndpoints.IsTelemetryHeldOffFor(roster, AuthorizedPrincipal.Caller("reader", [MailFathomPermission.MailRead])),
-            ClientApiEndpoints.IsTelemetryHeldOffFor(roster, principal: null),
+            ClientApiEndpoints.TakesNoTelemetryFrom(roster, ActingFor(SyntheticUser.Deployment)),
+            ClientApiEndpoints.TakesNoTelemetryFrom(roster, AuthorizedPrincipal.Caller("reader", [MailFathomPermission.MailRead])),
+            ClientApiEndpoints.TakesNoTelemetryFrom(roster, principal: null),
         ];
 
         // Assert
-        Assert.Equal([false, false, false], heldOff);
+        Assert.Equal([false, false, false], refused);
     }
 
     /// <summary>Builds the roster entry of a person an operator raised, which is the one shape the reading above is about.</summary>

@@ -249,6 +249,12 @@ well as answered: [the telemetry routes](#the-telemetry-routes) refuse every bat
 that offers a person a switch over their own telemetry still offers it under `none`, because there is still something
 behind it.
 
+**Somebody whose record this replica does not serve is answered `off` as well**, which is the one case that is neither
+of those two causes. A credential still authenticates while its holder's record is
+[held back](configuration-sources.md#a-record-this-deployment-will-not-read) — under a policy this build cannot read,
+for one — and what such a policy forces for them cannot be known there. A force that lifted wherever a replica could
+not read it would not be a force, so the telemetry routes refuse that person and this route says so.
+
 **The person's own switch is not answered here.** Somebody who turned their telemetry off themselves is still answered
 the level, because `off` tells a client there is nothing behind its switch, and that would take from them the control
 they turned it off with. Their answer travels on [the preferences read](#the-preferences-routes) instead, and the
@@ -2565,7 +2571,13 @@ would be refused.
 A write that passes while the switch is held carries the stored answer forward instead of replacing it with what the
 body said — the write is the whole document, so storing the body's value would turn the policy's answer into the
 person's — and the answer they gave is the one in force again once no policy forces the switch. Nobody is left opted in,
-or out, by a rule that no longer exists. A person who never answered stands on the unset answer, which is on.
+or out, by a rule that no longer exists. A person who never answered stands on the unset answer, which is on. A stored
+row that cannot be read as a preferences document holds no answer to carry, and the write replacing it stores a
+refusal, which is how the telemetry routes read that row.
+
+**A write for somebody whose record this replica does not serve leaves the switch alone too.** Whether a policy holds
+it cannot be known there, and the body may be stating a forced answer another replica read to that person's client, so
+the other seven are committed, the stored answer stays as it was, and the write answers what is stored.
 
 **The deployment's force wins over an organization's**, as it does for every setting a policy forces: an organization
 holding the switch off for its members is overruled by a deployment holding it on, and `telemetryHeldBy` then names
@@ -3827,7 +3839,10 @@ off, and a client that exports regardless reaches a collector with nothing. A po
 what a client sends whatever its holder stored, and compels nothing: a client that sends no batch is refused none. It
 raises nothing else either — not the level a client is asked for, and not a collector this deployment never named. A
 stored answer that cannot be read as a preferences document is treated as a refusal, since taking nothing is the
-reading that says least about its holder.
+reading that says least about its holder. So is every batch from somebody whose record this replica does not serve:
+their credential still authenticates while the record is held back, what a policy forces for them cannot be known
+there, and reading their own answer instead would lift a forced off for exactly the people whose governance did not
+resolve.
 
 **They authenticate exactly as every other route here does**, on this surface's own credentials, and they add no name to
 [the published permission set](permissions.md) — like the session route, and for a narrower reason: a permission would

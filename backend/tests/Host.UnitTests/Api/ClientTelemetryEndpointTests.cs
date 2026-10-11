@@ -578,6 +578,32 @@ public sealed class ClientTelemetryEndpointTests
     }
 
     /// <summary>
+    /// Somebody whose record is held back still authenticates, and what a policy forces for them cannot be known on a
+    /// replica holding no composition of them. Taking their batch on their stored consent would lift a forced off for
+    /// exactly those people, so it is refused before that answer is read.
+    /// </summary>
+    [Fact]
+    public async Task AcceptAsync_ACallerThisReplicaHoldsNoCompositionOf_RefusesWithoutReadingTheirStoredAnswer()
+    {
+        // Arrange
+        using var collector = AcceptingCollector();
+        var consenting = Answering(ClientPreferences.Unset with { TelemetryEnabled = true });
+        var request = Requesting(OtlpExportRequests.Batch([], records: 1));
+
+        // Act
+        var answered = await AcceptAsync(
+            request,
+            collector,
+            preferences: consenting,
+            servedUsers: ResolvedServedUsers.Serving());
+
+        // Assert
+        Assert.Equal(StatusCodes.Status403Forbidden, answered);
+        Assert.Empty(collector.RecordedRequests);
+        await consenting.DidNotReceive().ReadAsync(Arg.Any<UserId>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
     /// The refusal comes before the rate is spent and is counted under a word of its own, for the reasons the level's
     /// refusal is: a client refused every time must not burn its burst on batches nobody takes, and a dashboard has to
     /// tell a switch that is off from a client sending something unreadable.
@@ -642,7 +668,8 @@ public sealed class ClientTelemetryEndpointTests
         ClientTelemetryLevel? statedLevel = null,
         ClientTelemetryProxyTelemetry? telemetry = null,
         IClientPreferencesStore? preferences = null,
-        ForcedClientTelemetry? forced = null)
+        ForcedClientTelemetry? forced = null,
+        ServedUsers? servedUsers = null)
     {
         using var owned = quota is null ? new ClientTelemetryQuota() : null;
 
@@ -650,7 +677,7 @@ public sealed class ClientTelemetryEndpointTests
             signal ?? ClientTelemetrySignal.Traces,
             request,
             authorization ?? AccessAuthorizations.ForUserGranted(AuthenticatedUser),
-            ResolvedServedUsers.Serving(new ServedUser(AuthenticatedUser, "alex", [])
+            servedUsers ?? ResolvedServedUsers.Serving(new ServedUser(AuthenticatedUser, "alex", [])
             {
                 ClientTelemetryLevel = statedLevel,
                 ForcedClientTelemetry = forced,

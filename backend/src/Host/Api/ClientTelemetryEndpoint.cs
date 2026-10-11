@@ -66,8 +66,9 @@ namespace MailFathom.Host.Api;
 /// <para>
 /// <b>Whether a person's client reports at all is held here too.</b> Every route refuses a batch from somebody whose
 /// telemetry switch is off, whether they turned it off themselves or a settings policy holds it off, so a forced off
-/// is enforced rather than trusted to a client. A policy forcing it on takes what a client sends whatever its holder
-/// stored, and compels nothing: a client that sends no batch is refused none.
+/// is enforced rather than trusted to a client — and from somebody this replica holds no composition of, whose force
+/// it therefore cannot know. A policy forcing it on takes what a client sends whatever its holder stored, and compels
+/// nothing: a client that sends no batch is refused none.
 /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0037-a-settings-policy-at-the-deployment-and-at-each-organization.md">ADR 0037</see>
 /// § <em>Client preferences, and what forcing telemetry costs a person</em> holds what a deployment owes somebody it
 /// does that to.
@@ -223,7 +224,7 @@ internal static class ClientTelemetryEndpoint
                 "switched_off",
                 StatusCodes.Status403Forbidden,
                 PermissionDeniedStatus,
-                "This client's telemetry is switched off, by the person it is about or by a settings policy holding it off, so nothing is taken from it.");
+                "Nothing is taken from this client: the person it is about switched its telemetry off, a settings policy holds it off, or what governs them is not resolved here.");
         }
 
         // The record's level over the deployment's, which is the resolution the session route answered this caller
@@ -307,6 +308,12 @@ internal static class ClientTelemetryEndpoint
     /// A stored row that is not a document of preferences is read as a refusal. Nothing can say what its holder
     /// answered, and taking nothing is the reading that says least about them.
     /// </para>
+    /// <para>
+    /// Somebody this replica holds no composition of is refused as well, before their stored answer is read. Their
+    /// credential still authenticates while their record is held back — under a policy this build does not read, for
+    /// one — and what such a policy forces cannot be known here, so reading their own answer instead would lift a
+    /// forced off for exactly the people whose governance did not resolve.
+    /// </para>
     /// </remarks>
     private static async Task<bool> ReportsTelemetryAsync(
         ServedUser? served,
@@ -314,7 +321,12 @@ internal static class ClientTelemetryEndpoint
         UserId user,
         CancellationToken cancellationToken)
     {
-        if (served?.ForcedClientTelemetry is { } forced)
+        if (served is null)
+        {
+            return false;
+        }
+
+        if (served.ForcedClientTelemetry is { } forced)
         {
             return forced.Enabled;
         }

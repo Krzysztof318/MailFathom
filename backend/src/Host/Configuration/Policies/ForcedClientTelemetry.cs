@@ -29,7 +29,13 @@ internal sealed record ForcedClientTelemetry(bool Enabled, SettingsPolicyScope H
     /// <param name="policies">The policies as their rows hold them.</param>
     /// <returns>The forced answer and who holds it, or <see langword="null" /> where neither policy forces the switch or this build does not read one of them as a settings policy.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="policies" /> is <see langword="null" />.</exception>
-    /// <remarks>A policy this build does not read forces nothing here, and does not have to: the record it governs is held back whole, so nobody is served under it.</remarks>
+    /// <remarks>
+    /// A policy this build does not read answers <see langword="null" /> here, and that is not a statement that it
+    /// forces nothing. The record it governs is held back whole, so no composition carries this answer, while the
+    /// credential of the person it governs still authenticates — which is why the telemetry routes and the session
+    /// route treat somebody this replica holds no composition of as held off rather than as unforced, and a
+    /// preferences write leaves their stored answer as it was.
+    /// </remarks>
     internal static ForcedClientTelemetry? Read(GoverningSettingsPolicies policies) =>
         SettingsPolicyLayers.Read(policies, SettingsPolicySection.Users, out _)?.ForcedClientTelemetry;
 

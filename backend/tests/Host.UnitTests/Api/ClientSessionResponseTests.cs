@@ -240,12 +240,12 @@ public sealed class ClientSessionResponseTests
                 .Distinct());
 
     /// <summary>
-    /// A settings policy holding this person's telemetry off is, for them, a deployment that takes nothing: the
-    /// telemetry routes refuse every batch they send, so the session answers <c>off</c> whatever level the deployment
-    /// or their own record asks for.
+    /// Somebody the telemetry routes take nothing from — a settings policy holds their switch off, or this replica
+    /// holds no composition of them — is, for them, on a deployment that takes nothing: every batch they send is
+    /// refused, so the session answers <c>off</c> whatever level the deployment or their own record asks for.
     /// </summary>
     [Fact]
-    public void For_APersonWhoseTelemetryAPolicyHoldsOff_ReportsOffWhateverLevelIsAskedFor() =>
+    public void For_APersonTheTelemetryRoutesTakeNothingFrom_ReportsOffWhateverLevelIsAskedFor() =>
         Assert.Equal(
             ["off"],
             Enum.GetValues<ClientTelemetryLevel>()
@@ -254,6 +254,6 @@ public sealed class ClientSessionResponseTests
                     forwardsTelemetry: true,
                     ClientTelemetryLevel.Info,
                     level,
-                    telemetryHeldOff: true).Telemetry)
+                    telemetryRefused: true).Telemetry)
                 .Distinct());
 }

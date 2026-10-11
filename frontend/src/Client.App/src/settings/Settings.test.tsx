@@ -460,13 +460,15 @@ describe('Settings', () => {
         expect(screen.getByText(/never your mail, your addresses, your folders, or your password/u)).toBeDefined();
     });
 
-    // A deployment that forwards nothing has nothing behind the switch, so it says so rather than offering a control
-    // that decides nothing about a client that is already sending nothing.
-    it('offers no switch where the deployment forwards no telemetry, and says why', () => {
+    // A deployment that takes nothing from this client has nothing behind the switch, so it says so rather than
+    // offering a control that decides nothing about a client that is already sending nothing. The sentence names no
+    // cause, because the session answers `off` for more than one: a deployment forwarding nothing at all, and one
+    // whose settings policy holds this person's switch off.
+    it('offers no switch where the deployment takes no telemetry from this client, and says so', () => {
         renderSettings({ telemetryForwarding: { answered: true, destination: null } });
         openApplication();
 
-        expect(screen.getByText(/forwards no telemetry/u)).toBeDefined();
+        expect(screen.getByText(/takes no telemetry from this client/u)).toBeDefined();
         expect(screen.queryByRole('switch', { name: /Do not send telemetry/u })).toBeNull();
     });
 
@@ -477,7 +479,7 @@ describe('Settings', () => {
         openApplication();
 
         expect(screen.getByText(/Waiting for this deployment to say whether it forwards telemetry/u)).toBeDefined();
-        expect(screen.queryByText(/forwards no telemetry/u)).toBeNull();
+        expect(screen.queryByText(/takes no telemetry from this client/u)).toBeNull();
         expect(screen.queryByRole('switch', { name: /Do not send telemetry/u })).toBeNull();
     });
 

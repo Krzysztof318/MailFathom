@@ -572,9 +572,13 @@ public sealed class ClientPreferencesEndpointTests
         Assert.False(store.Stored!.TelemetryEnabled);
     }
 
-    /// <summary>A row that is not a document of preferences holds no answer to keep, so a write under a force replaces it with the unset one rather than failing.</summary>
+    /// <summary>
+    /// A row that is not a document of preferences holds no answer to keep, and the telemetry routes read it as a
+    /// refusal. A write under a force replaces it with that reading rather than with the unset answer, which is on and
+    /// would leave its holder opted in once the policy is gone.
+    /// </summary>
     [Fact]
-    public async Task SaveAsync_AWriteUnderAForceOverARowThatIsNotADocumentOfPreferences_StoresTheUnsetAnswer()
+    public async Task SaveAsync_AWriteUnderAForceOverARowThatIsNotADocumentOfPreferences_StoresARefusal()
     {
         // Arrange
         var store = Substitute.For<IClientPreferencesStore>();
@@ -592,7 +596,39 @@ public sealed class ClientPreferencesEndpointTests
             TestContext.Current.CancellationToken);
 
         // Assert
-        await store.Received(1).SaveAsync(SyntheticUser.Deployment, ClientPreferences.Unset, Arg.Any<CancellationToken>());
+        await store.Received(1).SaveAsync(
+            SyntheticUser.Deployment,
+            ClientPreferences.Unset with { TelemetryEnabled = false },
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// Somebody this replica holds no composition of may be governed by a force it cannot read, and the body may state
+    /// what another replica answered their client. So the write commits the rest and leaves the stored switch alone.
+    /// </summary>
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task SaveAsync_AWriteForSomebodyThisReplicaHoldsNoCompositionOf_KeepsTheirStoredAnswer(
+        bool stored,
+        bool stated)
+    {
+        // Arrange
+        var store = Holding(ClientPreferences.Unset with { TelemetryEnabled = stored });
+
+        // Act
+        var result = await ClientPreferencesEndpoint.SaveAsync(
+            SignedIn(store),
+            Acting(),
+            ResolvedServedUsers.Serving(),
+            new ClientPreferencesRequest(TelemetryEnabled: stated, MarkReadOnOpen: false),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var answered = Assert.IsType<Ok<ClientPreferencesResponse>>(result.Result).Value!;
+        Assert.Equal(
+            (stored, false, stored),
+            (store.Stored!.TelemetryEnabled, store.Stored.MarkReadOnOpen, answered.TelemetryEnabled));
     }
 
     /// <summary>How the transport reads a body, so the binding these assert is the one a request actually meets.</summary>

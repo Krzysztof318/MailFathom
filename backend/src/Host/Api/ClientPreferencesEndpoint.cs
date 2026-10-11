@@ -44,7 +44,8 @@ namespace MailFathom.Host.Api;
 /// policy or the person's organization's forces it, the read answers the forced value and names who holds it, and a
 /// write stating the other answer is refused in a sentence naming both. What the person stored as their own answer is
 /// neither applied nor replaced while the switch is held — a write that passes commits the other seven and carries
-/// it forward — so it is in force again the moment no policy forces it.
+/// it forward — so it is in force again the moment no policy forces it. A write for somebody this replica holds no
+/// composition of carries it forward as well, since whether a policy holds their switch cannot be known here.
 /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0037-a-settings-policy-at-the-deployment-and-at-each-organization.md">ADR 0037</see>
 /// holds why this preference and no other.
 /// </para>
@@ -128,9 +129,16 @@ internal static class ClientPreferencesEndpoint
     /// outside the bound, or an answer to the telemetry switch other than the one a settings policy forces.
     /// </returns>
     /// <remarks>
+    /// <para>
     /// While a policy holds the telemetry switch, a body stating the forced answer and a body stating none both pass,
     /// and neither writes the switch: the write is the whole document, so committing what the body said would replace
     /// the person's own answer with the policy's and leave them opted in or out after the policy is gone.
+    /// </para>
+    /// <para>
+    /// A write for somebody this replica holds no composition of does not write the switch either. Whether a policy
+    /// holds it cannot be known here, and the body may be stating a forced answer another replica read to their
+    /// client, so the other seven are committed and the stored answer is left as it was.
+    /// </para>
     /// </remarks>
     internal static async Task<Results<Ok<ClientPreferencesResponse>, NotFound<ProblemDetails>, ProblemHttpResult>> SaveAsync(
         [FromServices] OwnClientPreferences preferences,
@@ -157,15 +165,16 @@ internal static class ClientPreferencesEndpoint
             return Refusal(request.Unpublished());
         }
 
-        var held = HeldTelemetryOf(authorization, servedUsers);
+        var served = servedUsers.Peek(authorization.RequireUser());
+        var held = served?.ForcedClientTelemetry;
 
-        if (held is not null)
+        if (held is not null && request.TelemetryEnabled is { } answer && answer != held.Enabled)
         {
-            if (request.TelemetryEnabled is { } answer && answer != held.Enabled)
-            {
-                return Refusal(held.DescribeRefusal());
-            }
+            return Refusal(held.DescribeRefusal());
+        }
 
+        if (served is null || held is not null)
+        {
             stated = stated with { TelemetryEnabled = await OwnTelemetryAnswerAsync(preferences, cancellationToken) };
         }
 
@@ -183,8 +192,12 @@ internal static class ClientPreferencesEndpoint
     private static ForcedClientTelemetry? HeldTelemetryOf(AccessAuthorization authorization, ServedUsers servedUsers) =>
         servedUsers.Peek(authorization.RequireUser())?.ForcedClientTelemetry;
 
-    /// <summary>Reads the answer the person stored for the telemetry switch, which a write made while a policy holds it carries forward unchanged.</summary>
-    /// <remarks>A row that is not a document of preferences holds no answer to keep, so the write replacing it states the unset one.</remarks>
+    /// <summary>Reads the answer the person stored for the telemetry switch, which a write that may not decide the switch carries forward unchanged.</summary>
+    /// <remarks>
+    /// A row that is not a document of preferences holds no answer to keep, and the write replacing it states a
+    /// refusal rather than the unset answer, which is on. That is how the telemetry routes read the same row, and
+    /// storing on would leave its holder opted in, once the policy is gone, by a write made while it held the switch.
+    /// </remarks>
     private static async Task<bool> OwnTelemetryAnswerAsync(
         OwnClientPreferences preferences,
         CancellationToken cancellationToken)
@@ -195,7 +208,7 @@ internal static class ClientPreferencesEndpoint
         }
         catch (JsonException)
         {
-            return ClientPreferences.Unset.TelemetryEnabled;
+            return false;
         }
     }
 

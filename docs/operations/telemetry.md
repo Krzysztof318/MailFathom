@@ -1363,8 +1363,9 @@ what it refuses. `level_none` is a batch of log records from a caller whose leve
 [`None`](client-endpoint.md#the-telemetry-routes), so it is only ever counted under the `logs` signal.
 `switched_off` is a batch of any signal from somebody whose
 [telemetry switch](client-endpoint.md#a-settings-policy-may-hold-the-telemetry-switch) is off, whether they turned it
-off or a settings policy holds it off; a client honouring the switch sends none, so a steady count of it is a client
-that does not. A
+off or a settings policy holds it off, and from somebody whose record the replica does not serve, since what a policy
+forces for them cannot be known there; a client honouring the switch and the session answer sends none, so a steady
+count of it is a client that does not. A
 failure carries `mailfathom.client_telemetry.condition`, written as a past participle like every other outcome here:
 `refused` for a destination that will never take the batch, and `throttled`, `unavailable`, `timed_out`, `unreachable`,
 or `cancelled` for one that might.
@@ -1438,10 +1439,14 @@ before the answer arrived is thrown away rather than flushed: a client that has 
 answer and records into the buffer described below, so an answer of off empties that buffer without ever addressing
 it. Turning it back on begins at that moment and reaches back over nothing.
 
-**A deployment that forwards no telemetry offers no switch, and neither does one holding a person's switch off.** It answers
-[`"telemetry": "off"` on the session route](client-endpoint.md#the-session-route); the client stops recording the moment
-it reads that and throws away what it had held, and the settings screen says so in place of a control that would decide
-nothing. Until a deployment has said either way the client records, because a deployment nobody has reached yet is
+**A deployment that takes no telemetry from a client offers no switch.** That is one that forwards none at all, one
+whose settings policy holds this person's switch off, and one that cannot say on this replica what governs them. Each
+answers [`"telemetry": "off"` on the session route](client-endpoint.md#the-session-route); the client stops recording
+the moment it reads that and throws away what it had held, and the settings screen says, in place of a control that
+would decide nothing, that this deployment takes no telemetry from this client. It is one sentence for all three and
+names none of them: which one applies is not on the session answer, and who holds a forced switch is on
+[the preferences read](client-endpoint.md#a-settings-policy-may-hold-the-telemetry-switch), which the client does not
+draw yet. Until a deployment has said either way the client records, because a deployment nobody has reached yet is
 every cold start and every failed sign-in — which is what the buffer below exists to keep. The screen says that too,
 in place of either of the other two: a deployment that has not answered has not refused, so drawing the sentence above
 over that state would tell somebody nothing is being sent at the one moment something is.
