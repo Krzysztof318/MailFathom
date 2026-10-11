@@ -87,10 +87,19 @@ internal static class ClientPreferencesEndpoint
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
     /// <returns><c>200</c> with the preferences, the unset answers where they have set nothing, or <c>400</c> when the stored row is not a document of preferences.</returns>
     /// <remarks>
+    /// <para>
     /// Setting nothing is answered with the defaults rather than with a refusal, because a first run draws a screen
     /// and an empty store is not an error. A person this deployment no longer holds is answered the same way, since
     /// the answer carries nothing of theirs to withhold. The telemetry switch is answered as it is applied: forced
     /// where a settings policy holds it, and the person's own answer otherwise.
+    /// </para>
+    /// <para>
+    /// One caller is answered what they stored although it is not what is applied: somebody this replica holds no
+    /// composition of. The telemetry routes take nothing from them and the session route answers them <c>off</c>,
+    /// which is what stops their client, but that is this replica not knowing what governs them rather than an
+    /// answer of theirs or of a policy. A client writes back the document it read, so answering off here would
+    /// reach a replica that does serve them as their own refusal and outlast the condition that caused it.
+    /// </para>
     /// </remarks>
     internal static async Task<Results<Ok<ClientPreferencesResponse>, ProblemHttpResult>> ReadAsync(
         [FromServices] OwnClientPreferences preferences,
@@ -312,7 +321,9 @@ internal sealed record ClientPreferencesRequest(
 /// The telemetry switch is answered as it is applied rather than as it is stored, and who holds it travels beside it,
 /// so a person learns that their own answer is not the one in force from the read rather than from a refused write.
 /// The answer they stored is deliberately not reported beside the forced one: a client applies one value, and two
-/// would be a way to apply the wrong one.
+/// would be a way to apply the wrong one. The one caller answered what they stored while something else is applied
+/// is somebody the answering replica holds no composition of, for the reason
+/// <see cref="ClientPreferencesEndpoint.ReadAsync" /> gives.
 /// </para>
 /// </remarks>
 internal sealed record ClientPreferencesResponse(

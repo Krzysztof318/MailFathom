@@ -569,8 +569,7 @@ export const en = {
     'configuration.whereItIsStated':
         'Both settings are read from the arguments MailFathom was started with, from its environment, and from client.conf beside its own configuration, in that order.',
 
-    'preferences.notStated':
-        'That change was not saved to the deployment, so it holds on this machine alone until the next one succeeds.',
+    'preferences.notStated': 'That change was not saved to the deployment.',
 
     'settings.title': 'Settings',
     'settings.close': 'Close settings',

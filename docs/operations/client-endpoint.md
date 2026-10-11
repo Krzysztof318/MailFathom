@@ -234,10 +234,11 @@ issued knows the token works.
 are the level this caller is asked for — whatever
 [`ClientEndpoint:TelemetryLevel`](configuration-endpoints.md#clientendpoint) states, unless this person's own record
 states a [`ClientTelemetryLevel`](configuration-sources.md#the-level-this-persons-client-records-at--clienttelemetrylevel)
-of its own — and `off` is what a deployment that named no collector answers whatever either of them says. Those two
-questions are one field deliberately: whether anything is forwarded is decided by whether there is anywhere to forward
-it to, which is the same condition that decides whether [the telemetry routes](#the-telemetry-routes) are served at
-all, and a second field could disagree with the first about it.
+of its own — and `off` is what a caller none of whose telemetry is taken is answered whatever either of them says.
+Those two questions are one field deliberately: whether anything is taken is decided before any level is — by whether
+the deployment named a collector at all, which is the condition that decides whether
+[the telemetry routes](#the-telemetry-routes) are served, and for one person by whether those routes take anything
+from them — and a second field could disagree with the first about it.
 
 **`none` and `off` both ask for no log record, and they are not one answer.** `none` is a level: this caller's client
 writes no log record whatever its severity, and goes on recording and exporting its traces and metrics, which the
@@ -268,7 +269,8 @@ names no user is answered the deployment's own level, which is what every caller
 state one.
 
 A client reads the field to decide what it records at all and whether its own switch is worth offering; the only other
-way to find out is to export a batch and read the `404`, which is finding out by doing the thing. A client reading an
+way to find out is to export a batch and read the refusal — `404` where the deployment named no collector, `403` where
+this person's telemetry is not taken — which is finding out by doing the thing. A client reading an
 answer that omits the field, or one carrying a level this client does not know, treats it as `off` and sends nothing —
 which is what a client built before `none` existed does with that answer, traces and metrics included, until it is
 updated.
@@ -2565,7 +2567,9 @@ holds why this one, and what forcing it on takes from the person it is about.
 
 **`telemetryHeldBy` is `null` wherever the answer is the person's own**, so a client reads one field to know whether
 the control is theirs: where it names a holder, their own answer is not what is being applied, and moving the switch
-would be refused.
+would be refused. A client that moves it anyway is answered the `400` above and holds a document the deployment did
+not take; reading the preferences again is what gives it one the next write can state, and the client in this
+repository does that after every refused write.
 
 **The person's own answer is kept, and it comes back.** A forced value is never written into anybody's preferences.
 A write that passes while the switch is held carries the stored answer forward instead of replacing it with what the
@@ -2587,6 +2591,14 @@ the deployment. A person in no organization is governed by the deployment's poli
 refuse a client's batches by it, so a switch that is off — the person's own or a forced one — is kept by the
 deployment rather than left to a client to honour. A force takes effect on a replica when that replica has adopted
 the policy, which is [within thirty seconds](configuration-sources.md#what-reaches-every-replica) of the save.
+
+**One caller is answered what they stored while something else is applied: somebody whose record the answering replica
+does not serve.** Their batches are refused and [the session route](#the-session-route) answers them `off`, which is
+what stops their client, and the read still answers their stored `telemetryEnabled` with `telemetryHeldBy` as `null`.
+That is deliberate. Nothing forced the switch and they did not refuse — the replica does not know what governs them —
+and a client writes back the document it read, so answering `false` here would arrive at a replica that does serve
+them as their own refusal and outlast the condition that caused it. For that caller alone a `null` holder does not say
+the control is theirs; the session answer is what says nothing is taken.
 
 ### The portrait routes
 

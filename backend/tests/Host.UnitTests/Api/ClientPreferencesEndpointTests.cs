@@ -384,6 +384,31 @@ public sealed class ClientPreferencesEndpointTests
         Assert.Equal("Organization", preferences.TelemetryHeldBy);
     }
 
+    /// <summary>
+    /// The one caller answered what they stored while something else is applied. A replica holding no composition of
+    /// somebody takes no telemetry from them, but answering off here would be written back by their client as their
+    /// own refusal, on a replica that does serve them, and outlast the condition that caused it.
+    /// </summary>
+    [Fact]
+    public async Task ReadAsync_SomebodyThisReplicaHoldsNoCompositionOf_AnswersWhatTheyStoredAndNamesNobodyHoldingIt()
+    {
+        // Arrange
+        var store = Holding(Chosen with { TelemetryEnabled = true });
+
+        // Act
+        var result = await ClientPreferencesEndpoint.ReadAsync(
+            SignedIn(store),
+            Acting(),
+            ResolvedServedUsers.Serving(),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var preferences = Assert.IsType<Ok<ClientPreferencesResponse>>(result.Result).Value!;
+
+        Assert.True(preferences.TelemetryEnabled);
+        Assert.Null(preferences.TelemetryHeldBy);
+    }
+
     [Fact]
     public async Task ReadAsync_APolicyForcingTelemetryOffOverAStoredConsent_AnswersOffAndNamesWhoHoldsIt()
     {

@@ -578,8 +578,7 @@ export const pl: Catalogue = {
     'configuration.whereItIsStated':
         'Oba ustawienia są odczytywane z argumentów uruchomienia MailFathom, z jego środowiska oraz z pliku client.conf obok jego własnej konfiguracji — w tej kolejności.',
 
-    'preferences.notStated':
-        'Ta zmiana nie została zapisana na wdrożeniu, więc obowiązuje tylko na tym urządzeniu do czasu, aż kolejna się powiedzie.',
+    'preferences.notStated': 'Ta zmiana nie została zapisana na wdrożeniu.',
 
     'settings.title': 'Ustawienia',
     'settings.close': 'Zamknij ustawienia',

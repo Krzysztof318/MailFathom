@@ -372,6 +372,56 @@ describe('useClientPreferences', () => {
         });
     });
 
+    // A settings policy may hold the telemetry switch, and the route then refuses a document stating the other answer.
+    // The refused document is not what the next write may be composed from: every later change would restate the
+    // refused answer beside its own, and a theme nobody may be stopped from choosing would be refused with it.
+    it('reads again after a refused change, so the next change is not refused with it', async () => {
+        const holding = stored({ telemetryEnabled: true, theme: 'light', openMailInTabs: false });
+        const requests: ClientRequest[] = [];
+        const transport: MailFathomTransport = (request) => {
+            requests.push(request);
+
+            if (request.method !== 'POST') {
+                return Promise.resolve({ status: 200, body: holding, headers: {} });
+            }
+
+            // What a deployment forcing the switch on does with a write: the other answer is refused, and a document
+            // stating the forced one is taken and answered back.
+            return Promise.resolve(
+                request.body?.includes('"telemetryEnabled":false') === true
+                    ? { status: 400, body: '', headers: {} }
+                    : { status: 200, body: request.body ?? '', headers: {} },
+            );
+        };
+        const { result } = reading(transport);
+
+        await waitFor(() => {
+            expect(result.current.theme.choice).toBe('light');
+        });
+
+        act(() => {
+            result.current.preferences.chooseTelemetry(false);
+        });
+
+        // The switch is back on what the deployment holds and the refusal is still said, which is the read that
+        // followed the refused write having been applied.
+        await waitFor(() => {
+            expect(result.current.preferences.notStated).toBe(true);
+            expect(result.current.preferences.telemetryEnabled).toBe(true);
+        });
+
+        act(() => {
+            result.current.preferences.chooseTheme('dark');
+        });
+
+        await waitFor(() => {
+            expect(result.current.preferences.notStated).toBe(false);
+        });
+
+        expect(JSON.parse(requests.at(-1)?.body ?? '')).toMatchObject({ telemetryEnabled: true, theme: 'dark' });
+        expect(window.localStorage.getItem(telemetryKey(anna))).toBe('true');
+    });
+
     // Which preference somebody changed and what they set it to is not written down: a preference document is what a
     // person chose about their own client, and a collector is the deployment's operator rather than them. What an
     // operator needs is that the write happened and whether it stuck, a setting that silently does not stick being

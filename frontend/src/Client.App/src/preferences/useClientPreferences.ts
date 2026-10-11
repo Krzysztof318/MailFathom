@@ -213,7 +213,7 @@ export function useClientPreferences(
             return;
         }
 
-        void writeClientPreferences(session, transport, preferences).then((answer) => {
+        void writeClientPreferences(session, transport, preferences).then(async (answer) => {
             setHeld((current) =>
                 current.session === session ? { ...current, notStated: answer.outcome !== 'read' } : current,
             );
@@ -226,6 +226,29 @@ export function useClientPreferences(
             telemetry.happened('preferences_stated', {
                 'mailfathom.client.stated': answer.outcome === 'read' ? 'held' : 'refused',
             });
+
+            if (answer.outcome === 'read') {
+                return;
+            }
+
+            // A refused document is not one to compose the next write out of. A deployment may refuse a single value
+            // in it — a settings policy holding the telemetry switch does — and every later change would restate that
+            // value beside its own and be refused with it, whichever control it came from. So what the deployment
+            // holds is read back and stands in for the refused choice, still marked as not stated. A newer choice or
+            // a newer read wins over this one, which is what comparing against the refused document itself decides;
+            // and a deployment that cannot be reached answers nothing here either, which leaves the choice standing.
+            const holding = await readClientPreferences(session, transport);
+
+            if (holding.outcome !== 'read' || latest.current !== chosen) {
+                return;
+            }
+
+            const reread = { session, preferences: holding.value, notStated: true };
+
+            latest.current = reread;
+            rememberTelemetry(person, holding.value.telemetryEnabled);
+            setHeld(reread);
+            setThemeChoice(holding.value.theme);
         });
     }
 

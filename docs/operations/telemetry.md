@@ -1446,7 +1446,9 @@ the moment it reads that and throws away what it had held, and the settings scre
 would decide nothing, that this deployment takes no telemetry from this client. It is one sentence for all three and
 names none of them: which one applies is not on the session answer, and who holds a forced switch is on
 [the preferences read](client-endpoint.md#a-settings-policy-may-hold-the-telemetry-switch), which the client does not
-draw yet. Until a deployment has said either way the client records, because a deployment nobody has reached yet is
+draw yet. A switch held **on** is still drawn as the person's own for the same reason: moving it is refused, the
+account menu says the change was not saved, and the client reads the preferences again, so the switch returns to the
+answer in force and the next change somebody makes is not refused with it. Until a deployment has said either way the client records, because a deployment nobody has reached yet is
 every cold start and every failed sign-in — which is what the buffer below exists to keep. The screen says that too,
 in place of either of the other two: a deployment that has not answered has not refused, so drawing the sentence above
 over that state would tell somebody nothing is being sent at the one moment something is.
