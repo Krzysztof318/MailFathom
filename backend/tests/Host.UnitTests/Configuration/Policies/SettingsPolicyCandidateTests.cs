@@ -371,7 +371,7 @@ public sealed class SettingsPolicyCandidateTests
     /// </summary>
     [Theory]
     [InlineData("""{"TrustedSenders":[{"jane@example.test":true}]}""", "MailAccounts:Forced names something inside TrustedSenders that is not a setting an entry of that list carries.")]
-    [InlineData("""{"TrustedSenders":[{"Domian":"a.example","jane@example.test":true}]}""", "MailAccounts:Forced names something inside TrustedSenders that is not a setting an entry of that list carries.")]
+    [InlineData("""{"TrustedSenders":[{"Realm":"a.example","jane@example.test":true}]}""", "MailAccounts:Forced names something inside TrustedSenders that is not a setting an entry of that list carries.")]
     [InlineData("""{"Folders":[{"Alias":"inbox","Remote Path":"INBOX"}]}""", "MailAccounts:Forced names something inside Folders that is not a setting an entry of that list carries.")]
     public void Judge_AListEntryKeyThatIsNotShapedLikeASettingsName_IsRefusedWithoutRepeatingIt(string forced, string expected)
     {
