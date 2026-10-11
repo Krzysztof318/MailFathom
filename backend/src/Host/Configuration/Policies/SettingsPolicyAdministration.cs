@@ -41,8 +41,8 @@ namespace MailFathom.Host.Configuration.Policies;
 /// </para>
 /// <para>
 /// A policy is never logged, and a refusal repeats of it only what <see cref="SettingsPolicyCandidate" /> states: a
-/// language, a zone, or a recording level somebody misspelled, the alias a folder was given, and a key shaped like a
-/// setting's name. By the rules it is judged under it carries no name, no address, and no credential of anybody it
+/// language, a zone, or a recording level somebody misspelled, the alias a folder was given and the special-use role
+/// it names, and a key shaped like a setting's name. By the rules it is judged under it carries no name, no address, and no credential of anybody it
 /// governs, but a forced list of trusted senders is still a list of somebody's correspondents, so it is handled as
 /// the records it governs are.
 /// </para>
@@ -61,6 +61,7 @@ internal sealed class SettingsPolicyAdministration(
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The policy, stating nothing where the scope stores none; or <see langword="null" /> when this deployment holds no such organization or the caller's scope does not cover it.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminRead" />, or holds it below the deployment where the deployment's own policy is asked for.</exception>
+    /// <exception cref="SettingsPolicyUnreadableException">Thrown when the scope stores a policy past what this build reads one from, which no route maps: the request fails and the failure is the operator's to find in the log.</exception>
     internal async Task<SettingsPolicyDocument?> ReadAsync(Guid? organizationId, CancellationToken cancellationToken) =>
         await this.CoversAsync(MailFathomPermission.AdminRead, organizationId, cancellationToken)
             ? await store.ReadAsync(organizationId, cancellationToken)
@@ -74,6 +75,7 @@ internal sealed class SettingsPolicyAdministration(
     /// <returns>What the write did, or <see langword="null" /> when this deployment holds no such organization or the caller's scope does not cover it.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="documentJson" /> is <see langword="null" />.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminConfigurationWrite" />, or holds it below the deployment where the deployment's own policy is written.</exception>
+    /// <exception cref="SettingsPolicyUnreadableException">Thrown when the policy in force is past what this build reads one from, as <see cref="ReadAsync" /> throws it.</exception>
     /// <remarks>
     /// The version is checked before the candidate is judged as well as in the statement, so a policy composed over
     /// one somebody else has replaced is told so rather than told about faults in a document it is about to compose

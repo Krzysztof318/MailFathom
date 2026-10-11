@@ -2177,8 +2177,10 @@ settings decide where a credential goes is deliberately not a list. Such an admi
 organization's mail accounts; a grant at the deployment writes every part of every policy.
 
 **A stored policy past the size above is refused rather than read.** No save produces one, so it is a row written
-beside MailFathom. Reading it — `mfctl policy show`, `mfctl policy edit`, and either `GET` — fails under `12015`
-naming the scope and both figures, and the row is corrected where it was written.
+beside MailFathom. Every route that reads it — both `GET`s, and both `POST`s, which read the policy in force before
+judging a save — answers `500` and says nothing more, so `mfctl policy show` and `mfctl policy edit` report only that
+status. What refused it is in the deployment's log: a `SettingsPolicyUnreadableException`, whose error code is
+`12015`, naming the scope and both figures. The row is corrected where it was written.
 
 **Two administrators saving at once: the second is refused.** The version is checked in the statement that writes the
 policy, so whichever replica each save reached, the one that commits second matches nothing and is answered with the

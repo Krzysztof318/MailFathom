@@ -41,7 +41,7 @@ namespace MailFathom.Host.Configuration.Policies;
 /// Every fault is reported rather than the first, for the reason a record's binder reports them all: whoever is
 /// correcting a policy one sentence at a time learns about the next only by saving it again. A value is repeated
 /// only where the record's own rule quotes it — a language, a zone, a recording level somebody misspelled, the alias
-/// a folder was given — and never otherwise, because a forced list of trusted senders is somebody's addresses; a key somebody wrote is
+/// a folder was given and the special-use role it names — and never otherwise, because a forced list of trusted senders is somebody's addresses; a key somebody wrote is
 /// repeated only where it is shaped like a setting's name, so a refusal is MailFathom's own words rather than the
 /// document's.
 /// </para>
@@ -364,8 +364,10 @@ internal sealed class SettingsPolicyCandidate
         {
             this.refusals.Add(StrictBindingFailure.Read(refusal) switch
             {
-                { UnknownProperties: { } names } =>
+                { UnknownProperties: { } names } when NamesOnlySettings(names) =>
                     $"{where} names {names} inside a list, which is not a setting an entry of that list carries. Remove it, or correct the spelling of the setting it was meant to be.",
+                { UnknownProperties: not null } =>
+                    $"{where} names something inside {property.Path} that is not a setting an entry of that list carries. Remove it, or correct the spelling of the setting it was meant to be.",
                 { UnconvertiblePath: { } path } =>
                     $"The value {where} gives {path} is not of the type that setting takes. Correct it to the type the setting is declared as.",
                 _ => DoesNotBind(where, property),
@@ -432,6 +434,20 @@ internal sealed class SettingsPolicyCandidate
             }
         }
     }
+
+    /// <summary>Reports whether every key the binder did not know is shaped like a setting's name, and so may be repeated back.</summary>
+    /// <remarks>
+    /// A key inside a list entry is text whoever wrote the policy chose, and in a list of trusted senders the likeliest
+    /// thing to be written where a setting's name belongs is an address. The binder writes the names quoted and
+    /// separated by a comma, so a name carrying either reads here as one that is not a setting's.
+    /// </remarks>
+    private static bool NamesOnlySettings(string quotedNames) =>
+        quotedNames
+            .Split(", ")
+            .All(quoted => quoted.Length > 2
+                && quoted[0] == '\''
+                && quoted[^1] == '\''
+                && StrictBindingFailure.IsSettingPath(quoted[1..^1]));
 
     private static string DoesNotBind(string where, GovernableProperty property) =>
         $"{where} gives {property.Path} a value that does not bind as that setting. Check it against what the setting takes in a record.";

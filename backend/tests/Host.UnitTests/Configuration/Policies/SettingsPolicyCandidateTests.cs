@@ -365,6 +365,29 @@ public sealed class SettingsPolicyCandidateTests
         Assert.NotNull(candidate.Json);
     }
 
+    /// <summary>
+    /// A key inside a list entry is repeated back only where it is shaped like a setting's name. Where a setting's name
+    /// belongs in a list of trusted senders, what somebody is likeliest to have written instead is an address.
+    /// </summary>
+    [Theory]
+    [InlineData("""{"TrustedSenders":[{"jane@example.test":true}]}""", "MailAccounts:Forced names something inside TrustedSenders that is not a setting an entry of that list carries.")]
+    [InlineData("""{"TrustedSenders":[{"Domian":"a.example","jane@example.test":true}]}""", "MailAccounts:Forced names something inside TrustedSenders that is not a setting an entry of that list carries.")]
+    [InlineData("""{"Folders":[{"Alias":"inbox","Remote Path":"INBOX"}]}""", "MailAccounts:Forced names something inside Folders that is not a setting an entry of that list carries.")]
+    public void Judge_AListEntryKeyThatIsNotShapedLikeASettingsName_IsRefusedWithoutRepeatingIt(string forced, string expected)
+    {
+        // Arrange
+        var saved = $$$"""{"MailAccounts":{"Forced":{{{forced}}}}}""";
+
+        // Act
+        var candidate = SettingsPolicyCandidate.Judge(saved);
+
+        // Assert
+        Assert.Null(candidate.Json);
+        Assert.StartsWith(expected, Assert.Single(candidate.Refusals), StringComparison.Ordinal);
+        Assert.DoesNotContain("jane", candidate.Refusals[0], StringComparison.Ordinal);
+        Assert.DoesNotContain("Remote Path", candidate.Refusals[0], StringComparison.Ordinal);
+    }
+
     /// <summary>A name an entry was given is text whoever wrote the policy chose, so one carrying a line break is not repeated back.</summary>
     [Fact]
     public void Judge_AListEntryNamedWithAControlCharacter_IsRefusedWithoutRepeatingTheName()
