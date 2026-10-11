@@ -95,7 +95,7 @@ internal static class ShowUserRecordCommand
 
         if (record.Unresolved is { } unresolved)
         {
-            context.Console.WriteLine($"  {unresolved}");
+            context.Console.WriteLine($"  {ConsoleSafeText.Sanitize(unresolved)}");
 
             return CliExitCode.Success;
         }
@@ -109,16 +109,26 @@ internal static class ShowUserRecordCommand
     }
 
     /// <summary>Writes one resolved setting as a line: what it is, where it came from, and who holds it.</summary>
+    /// <remarks>
+    /// Every part the deployment answered with is reduced before it is written. A value is what somebody stated — the
+    /// name is one a person sets for themselves — so it could otherwise carry the characters a terminal acts on into
+    /// an administrator's listing.
+    /// </remarks>
     private static string Describe(UserRecordProperty property)
     {
         var value = property.Value is { ValueKind: not (JsonValueKind.Null or JsonValueKind.Undefined) } stated
-            ? stated.ValueKind == JsonValueKind.String ? stated.GetString() : stated.GetRawText()
+            ? ConsoleSafeText.Sanitize(stated.ValueKind == JsonValueKind.String ? stated.GetString() : stated.GetRawText())
             : "(nothing stated)";
         var heldBy = property.HeldBy is { } holder
-            ? $", held by the {holder.ToLowerInvariant()}"
+            ? $", held by the {ConsoleSafeText.Sanitize(holder.ToLowerInvariant())}"
             : string.Empty;
-        var changeable = property.Changeable ? string.Empty : ", not changeable while the policy forces it";
+        var changeable = property switch
+        {
+            { Changeable: true } => string.Empty,
+            { Source: { } source } when source.EndsWith("Forced", StringComparison.Ordinal) => ", not changeable while the policy forces it",
+            _ => ", not changeable under your grant",
+        };
 
-        return $"  {property.Path}: {value}  [{property.Source}{heldBy}{changeable}]";
+        return $"  {ConsoleSafeText.Sanitize(property.Path)}: {value}  [{ConsoleSafeText.Sanitize(property.Source)}{heldBy}{changeable}]";
     }
 }

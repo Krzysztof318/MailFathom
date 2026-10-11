@@ -27,6 +27,14 @@ internal sealed record UserRecordReading(
     /// <remarks>Empty where <see cref="Unresolved" /> says why the record could not be resolved.</remarks>
     public IReadOnlyList<ResolvedProperty> Properties { get; init; } = [];
 
+    /// <summary>Gets the paths of the properties whoever read the record may change.</summary>
+    /// <remarks>
+    /// Both halves of that are folded in: that no settings policy holds the property against this reader, and that
+    /// the reader's grant reaches a write of it. A read needs less than a write does, so a reader told a property was
+    /// theirs to change on the policy alone would be offered a control whose change is then refused.
+    /// </remarks>
+    public IReadOnlyList<string> Changeable { get; init; } = [];
+
     /// <summary>Gets the sentence saying which settings policy this build does not read, or <see langword="null" /> where the record was resolved.</summary>
     public string? Unresolved { get; init; }
 }

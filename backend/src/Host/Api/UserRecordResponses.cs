@@ -116,10 +116,9 @@ internal sealed record UserRecordResponse(
 
     /// <summary>Builds the response for one record.</summary>
     /// <param name="record">The record as it was read.</param>
-    /// <param name="readByThePerson">Whether the reader is the person the record is about, which decides what "changeable" means for them.</param>
     /// <returns>The response.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="record" /> is <see langword="null" />.</exception>
-    internal static UserRecordResponse For(UserRecordReading record, bool readByThePerson)
+    internal static UserRecordResponse For(UserRecordReading record)
     {
         ArgumentNullException.ThrowIfNull(record);
 
@@ -129,7 +128,12 @@ internal sealed record UserRecordResponse(
             record.Version,
             record.Json)
         {
-            Properties = [.. record.Properties.Select(property => UserRecordPropertyResponse.For(property, readByThePerson))],
+            Properties =
+            [
+                .. record.Properties.Select(property => UserRecordPropertyResponse.For(
+                    property,
+                    record.Changeable.Contains(property.Property.Path))),
+            ],
             Unresolved = record.Unresolved,
         };
     }
@@ -140,7 +144,7 @@ internal sealed record UserRecordResponse(
 /// <param name="Value">The value the user is served with, or <see langword="null" /> where nothing states one and the build takes none either.</param>
 /// <param name="Source">Which step of the resolution order supplied the value: <c>DeploymentForced</c>, <c>OrganizationForced</c>, <c>Record</c>, <c>OrganizationDefault</c>, <c>DeploymentDefault</c>, or <c>BuiltIn</c>.</param>
 /// <param name="HeldBy">Whose policy holds the property against the person the record is about — <c>Deployment</c> or <c>Organization</c> — or <see langword="null" /> where no policy does.</param>
-/// <param name="Changeable">Whether whoever read the record may change the property: the person where it is theirs to change, an administrator where no policy forces it.</param>
+/// <param name="Changeable">Whether a change to the property from whoever read the record would be accepted: no settings policy holds it against them, and their grant reaches a write of it.</param>
 internal sealed record UserRecordPropertyResponse(
     string Path,
     JsonNode? Value,
@@ -150,10 +154,10 @@ internal sealed record UserRecordPropertyResponse(
 {
     /// <summary>Builds the response for one resolved property.</summary>
     /// <param name="property">The property as it resolved.</param>
-    /// <param name="readByThePerson">Whether the reader is the person the record is about.</param>
+    /// <param name="changeable">Whether whoever read the record may change the property.</param>
     /// <returns>The response.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="property" /> is <see langword="null" />.</exception>
-    internal static UserRecordPropertyResponse For(ResolvedProperty property, bool readByThePerson)
+    internal static UserRecordPropertyResponse For(ResolvedProperty property, bool changeable)
     {
         ArgumentNullException.ThrowIfNull(property);
 
@@ -161,9 +165,9 @@ internal sealed record UserRecordPropertyResponse(
             property.Property.Path,
             // A secret-bearing value is redacted in the document beside this, and must not come back through here.
             SecretPropertyNaming.NamesASecret(property.Property.Path.Split(':')[^1]) ? null : property.EffectiveValue,
-            property.Source.ToString(),
-            property.HeldBy?.ToString(),
-            readByThePerson ? property.IsThePersonsToChange : property.IsAnAdministratorsToChange);
+            property.Source.Name,
+            property.HeldBy?.Name,
+            changeable);
     }
 }
 

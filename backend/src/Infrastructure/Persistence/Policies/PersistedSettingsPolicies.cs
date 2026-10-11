@@ -206,6 +206,7 @@ internal sealed class PersistedSettingsPolicies(
                 UserId.Create(user.Id),
                 user.DisplayName,
                 user.Document,
+                new UserEndpointAccess(user.McpEndpointEnabled, user.ClientEndpointEnabled),
                 GoverningOf(user, standing, others),
                 GoverningOf(user, candidate, others))),
         ]);

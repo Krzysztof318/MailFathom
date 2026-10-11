@@ -131,7 +131,7 @@ internal static class ClientUserRecordEndpoint
 
         return record is null
             ? NoRecord()
-            : TypedResults.Ok(UserRecordResponse.For(record, readByThePerson: true));
+            : TypedResults.Ok(UserRecordResponse.For(record));
     }
 
     /// <summary>Takes back the record the acting user saved.</summary>

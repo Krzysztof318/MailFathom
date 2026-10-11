@@ -84,13 +84,13 @@ public sealed class UserRecordPolicyJudgeTests
     }
 
     /// <summary>
-    /// A policy or a record this build does not read is one it cannot resolve, so the row keeps the switches it has
-    /// rather than being moved on no reading at all.
+    /// A policy or a record this build does not read is one it cannot resolve, so where nothing readable forces a
+    /// switch the row keeps the ones it has rather than being moved on no reading at all.
     /// </summary>
     [Theory]
     [InlineData("""{"Language":"English"}""", NotAPolicy)]
-    [InlineData(null, ForcingOffMcp)]
-    public void Judge_ARecordOrAPolicyThisBuildDoesNotRead_LeavesTheRowAsItStandsAndRefusesNothing(
+    [InlineData(null, "{}")]
+    public void Judge_ARecordOrAPolicyThisBuildDoesNotReadWithNothingForced_LeavesTheRowAsItStandsAndRefusesNothing(
         string? record,
         string candidatePolicy)
     {
@@ -102,6 +102,57 @@ public sealed class UserRecordPolicyJudgeTests
         Assert.Empty(judgement.Refusals);
     }
 
+    /// <summary>
+    /// A force outranks the record, so its value is known without reading one: a record that cannot be read, or
+    /// that does not bind, still has the forced switch written and keeps the other as its row holds it.
+    /// </summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("""{"Language":"Silesian"}""")]
+    public void Judge_ARecordThatCannotBeResolvedUnderAPolicyForcingASwitch_WritesTheForcedSwitchAndKeepsTheOther(string? record)
+    {
+        // Act
+        var judgement = Judge(
+            record,
+            StatedPolicies.Governing(),
+            StatedPolicies.Governing(deployment: ForcingOffMcp),
+            held: new UserEndpointAccess(McpEndpoint: true, ClientEndpoint: false));
+
+        // Assert
+        Assert.Equal(new UserEndpointAccess(McpEndpoint: false, ClientEndpoint: false), judgement.EndpointAccess);
+    }
+
+    /// <summary>An organization's policy this build does not read does not lift what the deployment forces over it.</summary>
+    [Fact]
+    public void Judge_AnOrganizationPolicyThisBuildDoesNotReadUnderADeploymentForce_StillWritesTheForcedSwitch()
+    {
+        // Act
+        var judgement = Judge(
+            """{"Language":"English"}""",
+            StatedPolicies.Governing(organization: "{}"),
+            StatedPolicies.Governing(deployment: ForcingOffMcp, organization: NotAPolicy));
+
+        // Assert
+        Assert.Equal(new UserEndpointAccess(McpEndpoint: false, ClientEndpoint: true), judgement.EndpointAccess);
+    }
+
+    /// <summary>
+    /// What an organization forces is outranked by what the deployment forces, so beside a deployment policy this
+    /// build does not read nothing is known and the row is left as it stands.
+    /// </summary>
+    [Fact]
+    public void Judge_AnOrganizationForceUnderADeploymentPolicyThisBuildDoesNotRead_LeavesTheRowAsItStands()
+    {
+        // Act
+        var judgement = Judge(
+            """{"Language":"English"}""",
+            StatedPolicies.Governing(organization: "{}"),
+            StatedPolicies.Governing(deployment: NotAPolicy, organization: ForcingOffMcp));
+
+        // Assert
+        Assert.Null(judgement.EndpointAccess);
+    }
+
     [Fact]
     public void Judge_SeveralRecords_AnswersOneJudgementEachInTheOrderGiven()
     {
@@ -109,8 +160,8 @@ public sealed class UserRecordPolicyJudgeTests
         var candidate = StatedPolicies.Governing(deployment: ForcingOffMcp);
         GovernedUserRecord[] records =
         [
-            new(SyntheticUser.Deployment, "alex", """{"Language":"English"}""", StatedPolicies.Governing(), candidate),
-            new(SyntheticUser.Deployment, "sam", null, StatedPolicies.Governing(), candidate),
+            new(SyntheticUser.Deployment, "alex", """{"Language":"English"}""", UserEndpointAccess.Everywhere, StatedPolicies.Governing(), candidate),
+            new(SyntheticUser.Deployment, "sam", null, new UserEndpointAccess(McpEndpoint: true, ClientEndpoint: false), StatedPolicies.Governing(), candidate),
         ];
 
         // Act
@@ -118,15 +169,19 @@ public sealed class UserRecordPolicyJudgeTests
 
         // Assert
         Assert.Equal(
-            [new UserEndpointAccess(McpEndpoint: false, ClientEndpoint: true), null],
+            [new UserEndpointAccess(McpEndpoint: false, ClientEndpoint: true), new UserEndpointAccess(McpEndpoint: false, ClientEndpoint: false)],
             judgements.Select(judgement => judgement.EndpointAccess));
     }
 
     private static UserRecordPolicyJudgement Judge(
         string? record,
         GoverningSettingsPolicies standing,
-        GoverningSettingsPolicies candidate) =>
-        Assert.Single(NewJudge().Judge([new GovernedUserRecord(SyntheticUser.Deployment, "alex", record, standing, candidate)]));
+        GoverningSettingsPolicies candidate,
+        UserEndpointAccess? held = null) =>
+        Assert.Single(NewJudge().Judge(
+        [
+            new GovernedUserRecord(SyntheticUser.Deployment, "alex", record, held ?? UserEndpointAccess.Everywhere, standing, candidate),
+        ]));
 
     private static UserRecordPolicyJudge NewJudge() => new(new UserAccountDocumentBinder(
         new PersistedSecretMaterial(DeclaredSecretScheme.Registered),

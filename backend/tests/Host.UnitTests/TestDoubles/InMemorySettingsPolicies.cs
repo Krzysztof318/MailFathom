@@ -152,6 +152,7 @@ internal sealed class InMemorySettingsPolicies(IUserRecordPolicyJudge? judge = n
                 user.User,
                 user.DisplayName,
                 user.Json,
+                user.EndpointAccess,
                 Governing(user, written: false),
                 Governing(user, written: true)))]);
 

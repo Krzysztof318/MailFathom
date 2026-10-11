@@ -196,7 +196,7 @@ internal sealed class SettingsPolicyAdministration(
     /// <summary>Names the records a policy would have left unservable, and what each would have been left without.</summary>
     private static IReadOnlyList<string> DescribeRecordsInTheWay(SettingsPolicyCommit commit)
     {
-        var named = commit.RecordsInTheWay ?? [];
+        var named = commit.RecordsInTheWay;
 
         return
         [

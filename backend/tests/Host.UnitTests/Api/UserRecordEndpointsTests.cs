@@ -413,7 +413,8 @@ public sealed class UserRecordEndpointsTests
     public async Task ReadRecordAsync_ARecordUnderAPolicy_ReportsTheValueSourceAndHolderOfEachPropertyAndWhetherAnAdministratorMayChangeIt()
     {
         // Arrange
-        var deployment = new UserRecordDeployment([MailFathomPermission.AdminRead]);
+        var deployment = new UserRecordDeployment(
+            [MailFathomPermission.AdminRead, MailFathomPermission.AdminConfigurationWrite]);
         deployment.Holding(SyntheticUser.Deployment, """{"TimeZone":"Europe/Paris"}""", version: 3);
         deployment.GovernedBy(SyntheticUser.Deployment, StatedPolicies.Governing(organization: """{"Users":{"Forced":{"TimeZone":"Europe/Warsaw"}}}"""));
 
@@ -432,6 +433,30 @@ public sealed class UserRecordEndpointsTests
         Assert.Equal("Europe/Warsaw", zone.Value!.GetValue<string>());
         Assert.Equal(("OrganizationForced", "Organization", false), (zone.Source, zone.HeldBy, zone.Changeable));
         Assert.Equal(("BuiltIn", (string?)null, true), (mcp.Source, mcp.HeldBy, mcp.Changeable));
+    }
+
+    /// <summary>
+    /// Reading a record needs less than writing one, so an administrator granted the read alone is told nothing is
+    /// theirs to change rather than being offered a save that would be refused.
+    /// </summary>
+    [Fact]
+    public async Task ReadRecordAsync_AnAdministratorWhoseGrantOmitsTheWrite_ReportsNothingAsChangeable()
+    {
+        // Arrange
+        var deployment = new UserRecordDeployment([MailFathomPermission.AdminRead]);
+        deployment.Holding(SyntheticUser.Deployment, """{"TimeZone":"Europe/Paris"}""", version: 3);
+
+        // Act
+        var result = await UserRecordEndpoints.ReadRecordAsync(
+            SyntheticUser.Deployment.Value,
+            deployment.Records,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var record = Assert.IsType<Ok<UserRecordResponse>>(result.Result).Value!;
+
+        Assert.NotEmpty(record.Properties);
+        Assert.DoesNotContain(record.Properties, property => property.Changeable);
     }
 
     /// <summary>The same answer a user this deployment genuinely does not hold receives, which is what keeps a caller from learning which identifiers exist by asking about them.</summary>

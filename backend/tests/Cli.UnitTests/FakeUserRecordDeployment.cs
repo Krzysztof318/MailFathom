@@ -213,6 +213,7 @@ internal static class FakeUserRecordDeployment
           {"user":"{{(users.Length > 0 ? users[0] : Guid.Empty):D}}","displayName":"user-{{(users.Length > 0 ? users[0] : Guid.Empty):D}}",
           "version":{{RecordVersion}},"document":{{JsonSerializer.Serialize(document)}},
           "properties":[
+            {"path":"DisplayName","value":"alex\u001b[2J\u202e","source":"Record","heldBy":null,"changeable":false},
             {"path":"Language","value":"Polish","source":"OrganizationForced","heldBy":"Organization","changeable":false},
             {"path":"TimeZone","value":null,"source":"BuiltIn","heldBy":null,"changeable":true}]}
           """);

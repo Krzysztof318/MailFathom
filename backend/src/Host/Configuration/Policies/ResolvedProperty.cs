@@ -23,12 +23,7 @@ internal sealed record ResolvedProperty(
     SettingsPolicyScope? WithheldBy)
 {
     /// <summary>Gets the scope whose policy forces the property, or <see langword="null" /> where none does.</summary>
-    internal SettingsPolicyScope? ForcedBy => this.Source switch
-    {
-        SettingsValueSource.DeploymentForced => SettingsPolicyScope.Deployment,
-        SettingsValueSource.OrganizationForced => SettingsPolicyScope.Organization,
-        _ => null,
-    };
+    internal SettingsPolicyScope? ForcedBy => this.Source.ForcedBy;
 
     /// <summary>Gets the scope that holds the property against the person the record is about, or <see langword="null" /> where no policy does.</summary>
     /// <remarks>A force is named before a restriction, because lifting the restriction would still leave the force.</remarks>

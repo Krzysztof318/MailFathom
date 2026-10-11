@@ -78,6 +78,13 @@ internal sealed class UserRecordAdministration(
     /// <summary>How many times a one-property edit is composed again over a record another write moved underneath it.</summary>
     private const int MaximumRelinkAttempts = 3;
 
+    /// <summary>The properties a person changes through a route of their own, which the grant that read the record already reaches.</summary>
+    private static readonly string[] WrittenUnderTheReadGrant =
+    [
+        nameof(UserAccountOptions.TimeZone),
+        nameof(UserAccountOptions.Portrait),
+    ];
+
     /// <summary>What a save refused over a redaction marker it cannot place is sent to.</summary>
     private const string NarrowerChange =
         "state the setting afresh rather than leaving the redaction marker in its place.";
@@ -96,9 +103,17 @@ internal sealed class UserRecordAdministration(
         RequireNamed(user);
         authorization.RequirePermissionAtAnyScope(MailFathomPermission.AdminRead);
 
-        return !await authorization.PermitsOverAsync(MailFathomPermission.AdminRead, user, cancellationToken)
-            ? null
-            : await this.ReadAsync(user, cancellationToken);
+        if (!await authorization.PermitsOverAsync(MailFathomPermission.AdminRead, user, cancellationToken))
+        {
+            return null;
+        }
+
+        var writes = await authorization.PermitsOverAsync(
+            MailFathomPermission.AdminConfigurationWrite,
+            user,
+            cancellationToken);
+
+        return await this.ReadAsync(user, property => writes && property.IsAnAdministratorsToChange, cancellationToken);
     }
 
     /// <summary>Reads the signed-in user's own record.</summary>
@@ -110,7 +125,13 @@ internal sealed class UserRecordAdministration(
     {
         authorization.RequirePermission(MailFathomPermission.MailRead);
 
-        return this.ReadAsync(authorization.RequireUser(), cancellationToken);
+        var writesTheRecord = authorization.Permits(MailFathomPermission.MailAccountsWrite);
+
+        return this.ReadAsync(
+            authorization.RequireUser(),
+            property => property.IsThePersonsToChange
+                && (writesTheRecord || WrittenUnderTheReadGrant.Contains(property.Property.Path)),
+            cancellationToken);
     }
 
     /// <summary>Applies a whole edited record to one user.</summary>
@@ -449,7 +470,10 @@ internal sealed class UserRecordAdministration(
     /// The document answered stays the record's own, because that is what a save is composed over and what a lifted
     /// force brings back. What the user is served with is answered beside it, per property.
     /// </remarks>
-    private async Task<UserRecordReading?> ReadAsync(UserId user, CancellationToken cancellationToken)
+    private async Task<UserRecordReading?> ReadAsync(
+        UserId user,
+        Func<ResolvedProperty, bool> isTheReadersToChange,
+        CancellationToken cancellationToken)
     {
         if (await documents.ReadAsync(user, cancellationToken) is not { } record)
         {
@@ -457,6 +481,17 @@ internal sealed class UserRecordAdministration(
         }
 
         var layers = SettingsPolicyLayers.Read(record.Policies, SettingsPolicySection.Users, out var unreadable);
+        ResolvedProperty[] properties = layers is null
+            ? []
+            :
+            [
+                .. GovernedRecordResolution.Resolve(SettingsPolicySection.Users, layers, record.Json).Properties
+                    // The name is a column beside the document, so the resolution holds no value for it and
+                    // the envelope read with the record does.
+                    .Select(property => property.Property.Path == SettingsPolicySection.UserDisplayNameColumn
+                        ? property with { EffectiveValue = JsonValue.Create(record.DisplayName) }
+                        : property),
+            ];
 
         return new UserRecordReading(
             user,
@@ -464,17 +499,8 @@ internal sealed class UserRecordAdministration(
             SettingRedaction.ApplyToDocument(record.Json),
             record.Version)
         {
-            Properties = layers is null
-                ? []
-                :
-                [
-                    .. GovernedRecordResolution.Resolve(SettingsPolicySection.Users, layers, record.Json).Properties
-                        // The name is a column beside the document, so the resolution holds no value for it and
-                        // the envelope read with the record does.
-                        .Select(property => property.Property.Path == SettingsPolicySection.UserDisplayNameColumn
-                            ? property with { EffectiveValue = JsonValue.Create(record.DisplayName) }
-                            : property),
-                ],
+            Properties = properties,
+            Changeable = [.. properties.Where(isTheReadersToChange).Select(property => property.Property.Path)],
             Unresolved = layers is null ? SettingsPolicyLayers.DescribeUnreadable(unreadable) : null,
         };
     }

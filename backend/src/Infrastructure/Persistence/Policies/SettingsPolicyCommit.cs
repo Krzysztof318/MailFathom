@@ -17,6 +17,9 @@ public sealed record SettingsPolicyCommit(
     IReadOnlyList<SettingsPolicyRecordInTheWay>? RecordsInTheWay = null,
     int RecordsLeftInvalid = 0)
 {
+    /// <summary>Gets the first records the policy would have left unservable, which is empty for every ending but <see cref="SettingsPolicyCommitResult.RecordsLeftInvalid" />.</summary>
+    public IReadOnlyList<SettingsPolicyRecordInTheWay> RecordsInTheWay { get; init; } = RecordsInTheWay ?? [];
+
     /// <summary>The most records one refusal names, so that an answer about a policy governing thousands stays one a person reads.</summary>
     public const int MaximumRecordsNamed = 10;
 }

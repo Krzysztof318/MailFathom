@@ -24,27 +24,27 @@ public sealed class GovernedRecordResolutionTests
         """{"Users":{"Forced":{"Language":"Polish"},"Defaults":{"Language":"English"}}}""",
         """{"Users":{"Forced":{"Language":"English"}}}""",
         """{"Language":"English"}""",
-        nameof(SettingsValueSource.DeploymentForced))]
+        "DeploymentForced")]
     [InlineData(
         """{"Users":{"Defaults":{"Language":"English"}}}""",
         """{"Users":{"Forced":{"Language":"Polish"}}}""",
         """{"Language":"English"}""",
-        nameof(SettingsValueSource.OrganizationForced))]
+        "OrganizationForced")]
     [InlineData(
         """{"Users":{"Defaults":{"Language":"English"}}}""",
         """{"Users":{"Defaults":{"Language":"English"}}}""",
         """{"Language":"Polish"}""",
-        nameof(SettingsValueSource.Record))]
+        "Record")]
     [InlineData(
         """{"Users":{"Defaults":{"Language":"English"}}}""",
         """{"Users":{"Defaults":{"Language":"Polish"}}}""",
         Nothing,
-        nameof(SettingsValueSource.OrganizationDefault))]
+        "OrganizationDefault")]
     [InlineData(
         """{"Users":{"Defaults":{"Language":"Polish"}}}""",
         Nothing,
         Nothing,
-        nameof(SettingsValueSource.DeploymentDefault))]
+        "DeploymentDefault")]
     public void Resolve_EachStepOfTheOrder_SuppliesTheValueWhereNoEarlierStepStatesOne(
         string deployment,
         string organization,
@@ -57,7 +57,7 @@ public sealed class GovernedRecordResolutionTests
         // Assert
         var language = resolved.Find("Language");
 
-        Assert.Equal(Enum.Parse<SettingsValueSource>(expected), language.Source);
+        Assert.Equal(expected, language.Source.Name);
         Assert.Equal("Polish", language.EffectiveValue?.GetValue<string>());
         Assert.Equal("Polish", Bind(resolved.EffectiveJson).Language);
     }
@@ -152,19 +152,19 @@ public sealed class GovernedRecordResolutionTests
     [InlineData(
         """{"Users":{"Editing":{"Mode":"AllExcept","Properties":["Language"]}}}""",
         """{"Users":{"Editing":{"Mode":"AllExcept","Properties":["Language"]}}}""",
-        nameof(SettingsPolicyScope.Deployment))]
+        "Deployment")]
     [InlineData(
         Nothing,
         """{"Users":{"Editing":{"Mode":"AllExcept","Properties":["Language"]}}}""",
-        nameof(SettingsPolicyScope.Organization))]
+        "Organization")]
     [InlineData(
         """{"Users":{"Editing":{"Mode":"NoneExcept","Properties":["TimeZone"]}}}""",
         """{"Users":{"Editing":{"Mode":"NoneExcept","Properties":["Language"]}}}""",
-        nameof(SettingsPolicyScope.Deployment))]
+        "Deployment")]
     [InlineData(
         """{"Users":{"Editing":{"Mode":"NoneExcept","Properties":["Language"]}}}""",
         """{"Users":{"Editing":{"Mode":"NoneExcept","Properties":["TimeZone"]}}}""",
-        nameof(SettingsPolicyScope.Organization))]
+        "Organization")]
     public void Resolve_TwoEditingRestrictions_TheMoreRestrictiveAnswerWins(
         string deployment,
         string organization,
@@ -176,7 +176,7 @@ public sealed class GovernedRecordResolutionTests
             .Find("Language");
 
         // Assert
-        Assert.Equal(Enum.Parse<SettingsPolicyScope>(expected), language.WithheldBy);
+        Assert.Equal(expected, language.WithheldBy?.Name);
         Assert.False(language.IsThePersonsToChange);
         Assert.True(language.IsAnAdministratorsToChange);
     }

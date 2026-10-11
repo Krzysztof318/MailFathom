@@ -336,6 +336,7 @@ internal sealed class PersistedOrganizations(
                 user,
                 held.DisplayName,
                 held.Document,
+                new UserEndpointAccess(held.McpEndpointEnabled, held.ClientEndpointEnabled),
                 await PersistedSettingsPolicies.ReadGoverningAsync(dbContext, held.OrganizationId, cancellationToken),
                 await PersistedSettingsPolicies.ReadGoverningAsync(dbContext, organizationId, cancellationToken)),
         ])[0];

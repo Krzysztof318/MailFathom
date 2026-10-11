@@ -676,6 +676,31 @@ public sealed class ServedUsersTests
     }
 
     /// <summary>
+    /// A held composition is keyed by the organization's policy version as well as by the deployment's, so an
+    /// organization replacing its policy recomposes its members where neither the record nor the deployment moved.
+    /// </summary>
+    [Fact]
+    public async Task ConvergeAsync_OnlyTheOrganizationPolicyReplacedOnAnotherReplica_RecomposesTheMemberUnderIt()
+    {
+        // Arrange
+        this.records.Put(Record(Alex, EmptyRecord, 2) with { Policies = StatedPolicies.Governing(organization: DefaultingPolish) });
+        var servedUsers = this.Cache();
+        await servedUsers.ReadAsync(Alex, TestContext.Current.CancellationToken);
+        this.records.Put(Record(Alex, EmptyRecord, 2) with
+        {
+            Policies = StatedPolicies.Governing(organization: ForcingEnglish, organizationVersion: 2),
+        });
+
+        // Act
+        var beforeAdopting = servedUsers.Peek(Alex);
+        await servedUsers.ConvergeAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(UserLanguage.Polish, beforeAdopting!.Language);
+        Assert.Equal(UserLanguage.English, servedUsers.Peek(Alex)!.Language);
+    }
+
+    /// <summary>
     /// A policy this build does not read holds the records it governs back: the user stays served from the last
     /// composition held, and is never served their record unresolved.
     /// </summary>

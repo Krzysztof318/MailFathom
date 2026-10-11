@@ -4,6 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Domain.Access;
+using MailFathom.Host.Configuration.Administration;
 using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Infrastructure.Persistence.Policies;
 
@@ -21,6 +22,13 @@ namespace MailFathom.Host.Configuration.Policies;
 /// What refuses a write is a record it breaks, never a record that was broken already. A record is therefore bound
 /// twice where the candidate policies leave it unservable — once under those and once under the standing ones — and
 /// answers a refusal only where the standing ones served it.
+/// </para>
+/// <para>
+/// A record that cannot be resolved still has every switch written that a readable policy forces. A force outranks
+/// the record, so its value is known without reading one, and leaving the row alone would keep somebody on an
+/// endpoint the policy just closed for exactly as long as their record stays unreadable. The deployment's force is
+/// read whenever its policy is; an organization's only beside a deployment policy that reads, since the
+/// deployment's force is the one that would outrank it.
 /// </para>
 /// </remarks>
 [SuppressMessage(
@@ -51,26 +59,44 @@ internal sealed class UserRecordPolicyJudge(UserAccountDocumentBinder binder) : 
 
         return
         [
-            .. records.Select(record => this.JudgeUnder(
-                record,
-                SettingsPolicyLayers.Read(record.Standing, ReadOnce, out _),
-                SettingsPolicyLayers.Read(record.Candidate, ReadOnce, out _))),
+            .. records.Select(record =>
+            {
+                var candidate = SettingsPolicyLayers.Read(record.Candidate, ReadOnce, out var unreadable);
+
+                // Where only the organization's policy is unreadable, the deployment's still says what it forces.
+                var forcing = candidate
+                    ?? (unreadable == SettingsPolicyScope.Organization
+                        && ReadOnce(record.Candidate.Deployment.Json) is { } deployment
+                        ? new SettingsPolicyLayers(deployment, Organization: null)
+                        : null);
+
+                return this.JudgeUnder(
+                    record,
+                    SettingsPolicyLayers.Read(record.Standing, ReadOnce, out _),
+                    candidate,
+                    forcing);
+            }),
         ];
     }
 
     private UserRecordPolicyJudgement JudgeUnder(
         GovernedUserRecord record,
         SettingsPolicyLayers? standing,
-        SettingsPolicyLayers? candidate)
+        SettingsPolicyLayers? candidate,
+        SettingsPolicyLayers? forcing)
     {
         // A record or a policy this build does not read is one it cannot resolve, so the row keeps the switches it
-        // has: writing a guess over them would move somebody on or off an endpoint on no reading at all.
+        // has wherever nothing readable forces one: writing a guess over them would move somebody on or off an
+        // endpoint on no reading at all.
         if (record.Json is not { } own || candidate is null)
         {
-            return new UserRecordPolicyJudgement(EndpointAccess: null, []);
+            return new UserRecordPolicyJudgement(WriteForcedOver(record.Held, forcing), []);
         }
 
         var (access, problems) = this.Bind(own, candidate);
+
+        // A record that does not bind resolves to no switches of its own, and is held to the forces all the same.
+        access ??= WriteForcedOver(record.Held, candidate);
 
         if (problems.Count == 0 || standing is null || this.Bind(own, standing).Problems.Count > 0)
         {
@@ -78,6 +104,31 @@ internal sealed class UserRecordPolicyJudge(UserAccountDocumentBinder binder) : 
         }
 
         return new UserRecordPolicyJudgement(access, problems);
+    }
+
+    /// <summary>Writes every switch the policies force over the ones a row holds.</summary>
+    /// <returns>The switches the row is to carry, or <see langword="null" /> where no policy read forces either, so the row is left as it stands.</returns>
+    private static UserEndpointAccess? WriteForcedOver(UserEndpointAccess held, SettingsPolicyLayers? forcing)
+    {
+        if (forcing is null)
+        {
+            return null;
+        }
+
+        // Resolved over a record stating nothing: a forced value is the same whatever the record says.
+        var resolved = GovernedRecordResolution.Resolve(SettingsPolicySection.Users, forcing, "{}");
+        var forced = UserEndpointAccessOptions.ReadFrom(RedactedDocumentSave.Flatten(resolved.EffectiveJson));
+
+        bool IsForced(string switchPath) => resolved.Find(switchPath).ForcedBy is not null;
+
+        var mcpForced = IsForced(UserEndpointAccessOptions.McpEndpointKey);
+        var clientForced = IsForced(UserEndpointAccessOptions.ClientEndpointKey);
+
+        return mcpForced || clientForced
+            ? new UserEndpointAccess(
+                mcpForced ? forced.McpEndpoint : held.McpEndpoint,
+                clientForced ? forced.ClientEndpoint : held.ClientEndpoint)
+            : null;
     }
 
     private (UserEndpointAccess? Access, IReadOnlyList<string> Problems) Bind(string own, SettingsPolicyLayers layers)

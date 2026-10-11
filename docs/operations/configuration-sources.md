@@ -443,6 +443,12 @@ rewritten by every commit that can move that answer: a write of the record, a wr
 a move of the user into or out of an organization. So a session or a token stops or resumes on its holder's next
 request on every replica, with no convergence to wait for.
 
+**A forced switch reaches the row of a record that cannot itself be resolved.** A record that does not bind states no
+switch a policy write or a move could project, so the switches nothing forces stay on its row as they stand — but a
+switch a policy forces is written regardless, because a force does not depend on what the record says. The same holds
+where the organization's policy is one this build does not read: what the deployment's policy forces is still
+written, and what that organization's would have said is left as the row has it.
+
 **Every writer of that row has to know policies for it to hold.** While a rolling upgrade still runs a replica of a
 build older than settings policies, a record write or a move that reaches that replica writes the record's own
 switches onto the row, over whatever a policy forced or supplied — and the row keeps them until the next write of

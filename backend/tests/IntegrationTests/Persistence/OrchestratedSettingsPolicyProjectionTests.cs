@@ -65,11 +65,13 @@ public sealed class OrchestratedSettingsPolicyProjectionTests(MailFathomOrchestr
             // Act
             var forced = await CommitPolicyAsync(services, organization, ForcingOffMcp, expectedVersion: 0, cancellationToken);
             var whileForced = await ReadSwitchesAsync(services, member, cancellationToken);
+            var strangerWhileForced = await ReadSwitchesAsync(services, stranger, cancellationToken);
             var lifted = await CommitPolicyAsync(services, organization, "{}", expectedVersion: 1, cancellationToken);
 
             // Assert
             Assert.Equal(SettingsPolicyCommitResult.Committed, forced.Result);
             Assert.Equal(new UserEndpointAccess(McpEndpoint: false, ClientEndpoint: true), whileForced);
+            Assert.Equal(UserEndpointAccess.Everywhere, strangerWhileForced);
             Assert.Equal(SettingsPolicyCommitResult.Committed, lifted.Result);
             Assert.Equal(UserEndpointAccess.Everywhere, await ReadSwitchesAsync(services, member, cancellationToken));
             Assert.Equal(UserEndpointAccess.Everywhere, await ReadSwitchesAsync(services, stranger, cancellationToken));
@@ -105,7 +107,7 @@ public sealed class OrchestratedSettingsPolicyProjectionTests(MailFathomOrchestr
 
             // Assert
             Assert.Equal(SettingsPolicyCommitResult.RecordsLeftInvalid, refused.Result);
-            Assert.Equal(member, Assert.Single(refused.RecordsInTheWay!).Identity);
+            Assert.Equal(member, Assert.Single(refused.RecordsInTheWay).Identity);
             var standing = await services.InScopeAsync(
                 (scope, token) => scope.GetRequiredService<ISettingsPolicyStore>().ReadAsync(organization, token),
                 cancellationToken);
@@ -166,6 +168,52 @@ public sealed class OrchestratedSettingsPolicyProjectionTests(MailFathomOrchestr
         finally
         {
             await RemoveAsync(services, organization, member);
+        }
+    }
+
+    /// <summary>
+    /// A candidate the next read would refuse is refused inside the commit that composed it and stores nothing: a
+    /// document whose root is no object, and one past what a record binds from. Either left on the row would lock the
+    /// user out, and the writer is the one place every composition passes through.
+    /// </summary>
+    [Theory]
+    [InlineData("[]")]
+    [InlineData(null)]
+    public async Task CommitAsync_ACandidateTheNextReadWouldRefuse_IsRefusedAndLeavesTheRowAsItStood(string? composed)
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var user = Guid.CreateVersion7();
+        var candidate = composed
+            ?? $$"""{"Language":"English","Filler":"{{new string('f', UserSettingsDocument.MaximumOctets + 1024)}}"}""";
+
+        try
+        {
+            await ProvisionStatingEnglishAsync(services, user, cancellationToken);
+
+            // Act
+            var refusal = await Record.ExceptionAsync(() => services.InScopeAsync(
+                (scope, token) => scope.GetRequiredService<IUserSettingsDocumentWriter>().CommitAsync(
+                    UserId.Create(user),
+                    expectedVersion: 2,
+                    _ => new UserRecordCandidate(candidate, new UserEndpointAccess(McpEndpoint: false, ClientEndpoint: false)),
+                    token),
+                cancellationToken));
+
+            // Assert
+            Assert.IsType<ArgumentException>(refusal);
+            Assert.Equal(2, await ReadVersionAsync(services, user, cancellationToken));
+            Assert.Equal(UserEndpointAccess.Everywhere, await ReadSwitchesAsync(services, user, cancellationToken));
+            var standing = await services.InScopeAsync(
+                (scope, token) => scope.GetRequiredService<IUserSettingsDocumentReader>().ReadAsync(UserId.Create(user), token),
+                cancellationToken);
+            Assert.Contains("\"English\"", standing?.Json, StringComparison.Ordinal);
+            Assert.DoesNotContain("Filler", standing?.Json, StringComparison.Ordinal);
+        }
+        finally
+        {
+            await OrchestratedForeignUser.EraseAsync(services, user);
         }
     }
 

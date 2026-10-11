@@ -50,7 +50,7 @@ public sealed class GovernedUserJudgementsTests
         Assert.Equal(3, refusal.GovernedRecords);
         Assert.Equal(1, refusal.RecordsLeftInvalid);
 
-        var named = Assert.Single(refusal.RecordsInTheWay!);
+        var named = Assert.Single(refusal.RecordsInTheWay);
 
         Assert.Equal(users[1].Id, named.Identity);
         Assert.Equal("user 2", named.DisplayName);
@@ -77,7 +77,7 @@ public sealed class GovernedUserJudgementsTests
         Assert.Equal(refusing, refusal.RecordsLeftInvalid);
         Assert.Equal(
             users.Take(SettingsPolicyCommit.MaximumRecordsNamed).Select(user => user.Id),
-            refusal.RecordsInTheWay!.Select(named => named.Identity));
+            refusal.RecordsInTheWay.Select(named => named.Identity));
     }
 
     /// <summary>What a request authenticates against is the row, so the rows a policy moves are exactly the ones whose switches differ from what their record now resolves to.</summary>

@@ -83,7 +83,9 @@ public sealed class ClientUserRecordEndpointTests
     public async Task ReadAsync_ARecordUnderAPolicy_ReportsWhichPropertiesAreThePersonsToChange()
     {
         // Arrange
-        var deployment = SignedInAs(SyntheticUser.Deployment, MailFathomPermission.MailRead);
+        var deployment = new UserRecordDeployment(
+            [MailFathomPermission.MailRead, MailFathomPermission.MailAccountsWrite],
+            SyntheticUser.Deployment);
         deployment.Holding(SyntheticUser.Deployment, EmptyRecord, version: 2);
         deployment.GovernedBy(SyntheticUser.Deployment, StatedPolicies.Governing(deployment: """{"Users":{"Forced":{"TimeZone":"Europe/Warsaw"}}}"""));
 
@@ -102,6 +104,31 @@ public sealed class ClientUserRecordEndpointTests
                 .Select(property => (property.Path, property.Changeable))
                 .Order());
         Assert.Equal("Deployment", record.Properties.Single(property => property.Path == "TimeZone").HeldBy);
+    }
+
+    /// <summary>
+    /// The read needs less than the record's own write does, so a caller granted the read alone is told a property is
+    /// theirs to change only where a route of their own writes it: the zone and the portrait, and nothing the save
+    /// they would be refused carries.
+    /// </summary>
+    [Fact]
+    public async Task ReadAsync_ACallerWhoseGrantOmitsTheRecordWrite_ReportsOnlyWhatARouteOfTheirOwnWritesAsChangeable()
+    {
+        // Arrange
+        var deployment = SignedInAs(SyntheticUser.Deployment, MailFathomPermission.MailRead);
+        deployment.Holding(SyntheticUser.Deployment, EmptyRecord, version: 2);
+
+        // Act
+        var result = await ClientUserRecordEndpoint.ReadAsync(
+            deployment.Records,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var record = Assert.IsType<Ok<UserRecordResponse>>(result.Result).Value!;
+
+        Assert.Equal(
+            ["Portrait", "TimeZone"],
+            record.Properties.Where(property => property.Changeable).Select(property => property.Path).Order());
     }
 
     /// <summary>Reached where the row behind an authenticated caller has gone, which is a user erased under a credential that has not yet been withdrawn.</summary>

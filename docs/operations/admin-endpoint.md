@@ -1980,7 +1980,7 @@ answers the record's own `document` — what somebody stated on it, which is wha
 | `value` | The value the user is served with, or `null` where nothing states one and the build takes none |
 | `source` | Which step supplied it: `DeploymentForced`, `OrganizationForced`, `Record`, `OrganizationDefault`, `DeploymentDefault`, or `BuiltIn` |
 | `heldBy` | `Deployment` or `Organization` where that scope's policy forces the setting or withholds it from the person, otherwise `null` |
-| `changeable` | Whether an administrator may change it, which is `false` only where a policy forces it |
+| `changeable` | Whether a change from whoever read the record would be accepted: `false` where a policy forces the setting, and for every setting where the caller's grant does not carry `mailfathom.admin.configuration.write` over the user |
 
 Where a policy governing the user is one this build does not read, `properties` is empty and `unresolved` carries the
 sentence naming which. `mfctl user show --effective` prints the list in place of the document, one setting a line:

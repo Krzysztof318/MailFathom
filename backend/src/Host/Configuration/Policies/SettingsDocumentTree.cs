@@ -49,6 +49,11 @@ internal static class SettingsDocumentTree
     /// <param name="value">What the document states afterwards, or <see langword="null" /> to state nothing.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="document" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="path" /> is <see langword="null" />, empty, or white space.</exception>
+    /// <remarks>
+    /// Stating nothing takes the blocks it leaves empty with it, so a document that had a value written into a block
+    /// of its own and taken out again is the document it was before, rather than one carrying an empty block that
+    /// reads as a change.
+    /// </remarks>
     internal static void Replace(JsonObject document, string path, JsonNode? value)
     {
         ArgumentNullException.ThrowIfNull(document);
@@ -56,6 +61,7 @@ internal static class SettingsDocumentTree
 
         var segments = path.Split(':');
         var enclosing = document;
+        var entered = new List<(JsonObject Parent, string Name)>(segments.Length - 1);
 
         foreach (var segment in segments[..^1])
         {
@@ -72,18 +78,24 @@ internal static class SettingsDocumentTree
                 enclosing[name] = block;
             }
 
+            entered.Add((enclosing, name));
             enclosing = block;
         }
 
         var written = NameIn(enclosing, segments[^1]) ?? segments[^1];
 
-        if (value is null)
-        {
-            enclosing.Remove(written);
-        }
-        else
+        if (value is not null)
         {
             enclosing[written] = value.DeepClone();
+
+            return;
+        }
+
+        enclosing.Remove(written);
+
+        for (var depth = entered.Count - 1; depth >= 0 && entered[depth].Parent[entered[depth].Name] is JsonObject { Count: 0 }; depth--)
+        {
+            entered[depth].Parent.Remove(entered[depth].Name);
         }
     }
 

@@ -138,6 +138,27 @@ public sealed class GovernedRecordChangeTests
         Assert.Null(SettingsDocumentTree.Find(GovernedRecordResolution.ReadDocument(judged.Json)!, "EndpointAccess:McpEndpoint"));
     }
 
+    /// <summary>
+    /// A block the record never stated, sent back as a read showed it, leaves the document it was: an empty block
+    /// left behind would read as a change and commit a version for a save that changed nothing.
+    /// </summary>
+    [Fact]
+    public void Judge_ABlockTheRecordNeverStatedCarriedThrough_LeavesTheDocumentAsItStoodWithNoEmptyBlock()
+    {
+        // Act
+        var judged = GovernedRecordChange.Judge(
+            SettingsPolicySection.Users,
+            SettingsPolicyLayers.Nothing,
+            StandingEnglish,
+            """{"Language":"English","TimeZone":"Europe/Paris","EndpointAccess":{"McpEndpoint":true,"ClientEndpoint":"true"}}""",
+            byThePerson: true);
+
+        // Assert
+        Assert.True(SettingsDocumentTree.StateTheSame(
+            GovernedRecordResolution.ReadDocument(StandingEnglish),
+            GovernedRecordResolution.ReadDocument(judged.Json)));
+    }
+
     [Fact]
     public void Judge_ACandidateThatIsNoDocument_IsLeftForTheBinderToRefuse()
     {

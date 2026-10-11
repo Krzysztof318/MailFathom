@@ -339,7 +339,7 @@ internal static class UserRecordEndpoints
 
         return record is null
             ? NoSuchUser()
-            : TypedResults.Ok(UserRecordResponse.For(record, readByThePerson: false));
+            : TypedResults.Ok(UserRecordResponse.For(record));
     }
 
     /// <summary>Takes back one user's record as an editing session saved it.</summary>
