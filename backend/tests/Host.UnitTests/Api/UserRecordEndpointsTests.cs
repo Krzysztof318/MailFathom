@@ -410,7 +410,7 @@ public sealed class UserRecordEndpointsTests
     /// is an administrator's answer: a forced value binds them, and the settings only they write are theirs.
     /// </summary>
     [Fact]
-    public async Task ReadRecordAsync_ARecordUnderAPolicy_ReportsEachPropertysValueSourceHolderAndWhetherAnAdministratorMayChangeIt()
+    public async Task ReadRecordAsync_ARecordUnderAPolicy_ReportsTheValueSourceAndHolderOfEachPropertyAndWhetherAnAdministratorMayChangeIt()
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminRead]);

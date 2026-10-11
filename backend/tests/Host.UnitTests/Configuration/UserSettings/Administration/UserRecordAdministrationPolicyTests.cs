@@ -288,7 +288,7 @@ public sealed class UserRecordAdministrationPolicyTests
     /// record never stated, is written on rather than read as already on.
     /// </summary>
     [Fact]
-    public async Task SetEndpointAccessAsync_ASwitchAPolicysDefaultTurnsOffAskedOn_IsWrittenIntoTheRecord()
+    public async Task SetEndpointAccessAsync_ASwitchADefaultInAPolicyTurnsOffAskedOn_IsWrittenIntoTheRecord()
     {
         // Arrange
         var deployment = Administered("""{"Language":"English"}""", StatedPolicies.Governing(organization: DefaultingOffMcp));
