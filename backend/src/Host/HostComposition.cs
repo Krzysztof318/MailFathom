@@ -66,6 +66,7 @@ using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.Mail.Readers;
 using MailFathom.Host.Configuration.Mail.Writers;
 using MailFathom.Host.Configuration.Persistence;
+using MailFathom.Host.Configuration.Policies;
 using MailFathom.Host.Configuration.Providers;
 using MailFathom.Host.Configuration.Records;
 using MailFathom.Host.Configuration.RootSettings;
@@ -319,6 +320,7 @@ internal static class HostComposition
         // its operations are published under, and that service is scoped to whatever admitted the caller.
         builder.Services.AddScoped<UserRosterAdministration>();
         builder.Services.AddScoped<UserRecordAdministration>();
+        builder.Services.AddScoped<SettingsPolicyAdministration>();
         builder.Services.AddScoped<MailAccountAdministration>();
         // The portrait link is a key of the user record, so the use case that stores the picture reaches the record
         // through its administration rather than through the row.

@@ -163,6 +163,7 @@ using MailFathom.Infrastructure.Persistence.Grants;
 using MailFathom.Infrastructure.Persistence.Jobs;
 using MailFathom.Infrastructure.Persistence.Mutations;
 using MailFathom.Infrastructure.Persistence.Notifications;
+using MailFathom.Infrastructure.Persistence.Policies;
 using MailFathom.Infrastructure.Persistence.Preferences;
 using MailFathom.Infrastructure.Persistence.ReplyDrafts;
 using MailFathom.Infrastructure.Persistence.Rules;
@@ -628,6 +629,9 @@ public static class ServiceCollectionExtensions
         // The organizations users are grouped into and the membership that scopes a password's login. Scoped for the
         // reason the credential store is: it writes through the request's own context.
         services.AddScoped<IOrganizationStore, PersistedOrganizations>();
+        // The settings policy the deployment and each organization hold. Scoped for the reason the organization store
+        // is: it reads and writes through the request's own context.
+        services.AddScoped<ISettingsPolicyStore, PersistedSettingsPolicies>();
         // The roles, groups, and assignments a user's grant is computed from. Scoped for the same reason.
         services.AddScoped<IGrantStore, PersistedGrants>();
         // What a user holds, computed from those records. The resolver is scoped because the store it reads through is;

@@ -1,6 +1,6 @@
 # Administering a deployment
 
-<!-- describes: backend/src/Host/Configuration/Endpoints/AdminEndpointOptions.cs, backend/src/Host/Security/Transport/UserCredentialAdmission.cs, backend/src/Host/Hosting/Startup/DefaultAdministratorStartupGate.cs, backend/src/Application/Access/DefaultAdministrator/**, backend/src/Domain/Access/UserCredentialSurface.cs, backend/src/Application/Access/Credentials/UserCredentialReach.cs, backend/src/Host/Configuration/UserSettings/Administration/StoredSecretAdministration.cs, backend/src/Host/Configuration/UserSettings/Administration/MailAccount*.cs, backend/src/Host/Api/Admin*.cs, backend/src/Host/Api/Configuration*.cs, backend/src/Host/Api/Contact*.cs, backend/src/Host/Api/Content*.cs, backend/src/Host/Api/Embedding*.cs, backend/src/Host/Api/Grant*.cs, backend/src/Host/Api/Job*.cs, backend/src/Host/Api/Mail*.cs, backend/src/Host/Api/Outbox*.cs, backend/src/Host/Api/User*.cs, backend/src/Host/Api/Organization*.cs, backend/src/Application/Access/Organizations/**, backend/src/Host/Api/Spam*.cs, backend/src/Host/Hosting/Workers/MailAccountWork*.cs, backend/src/Host/Hosting/Startup/SurfaceIsolation.cs, backend/src/Host/Hosting/Warnings/AdminTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/TransportGrantStartupReport.cs, backend/src/Domain/Access/MailFathomPermission.cs, backend/src/Host/Security/Endpoints/AdminTransportSecurityExtensions.cs, backend/src/Host/Security/Endpoints/RouteAuthorization.cs, backend/src/Host/Security/Endpoints/RoutePermission.cs, backend/src/Host/Security/Endpoints/TransportListenerBinder.cs, backend/src/Host/Security/Transport/TransportRateLimiting.cs, backend/src/Cli/**, scripts/install-mfctl.sh -->
+<!-- describes: backend/src/Host/Configuration/Endpoints/AdminEndpointOptions.cs, backend/src/Host/Security/Transport/UserCredentialAdmission.cs, backend/src/Host/Hosting/Startup/DefaultAdministratorStartupGate.cs, backend/src/Application/Access/DefaultAdministrator/**, backend/src/Domain/Access/UserCredentialSurface.cs, backend/src/Application/Access/Credentials/UserCredentialReach.cs, backend/src/Host/Configuration/UserSettings/Administration/StoredSecretAdministration.cs, backend/src/Host/Configuration/UserSettings/Administration/MailAccount*.cs, backend/src/Host/Api/Admin*.cs, backend/src/Host/Api/Configuration*.cs, backend/src/Host/Api/Contact*.cs, backend/src/Host/Api/Content*.cs, backend/src/Host/Api/Embedding*.cs, backend/src/Host/Api/Grant*.cs, backend/src/Host/Api/Job*.cs, backend/src/Host/Api/Mail*.cs, backend/src/Host/Api/Outbox*.cs, backend/src/Host/Api/User*.cs, backend/src/Host/Api/Organization*.cs, backend/src/Host/Api/SettingsPolicy*.cs, backend/src/Host/Configuration/Policies/**, backend/src/Infrastructure/Policies/**, backend/src/Infrastructure/Persistence/Policies/**, backend/src/Cli/Commands/Policies/**, backend/src/Application/Access/Organizations/**, backend/src/Host/Api/Spam*.cs, backend/src/Host/Hosting/Workers/MailAccountWork*.cs, backend/src/Host/Hosting/Startup/SurfaceIsolation.cs, backend/src/Host/Hosting/Warnings/AdminTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/TransportGrantStartupReport.cs, backend/src/Domain/Access/MailFathomPermission.cs, backend/src/Host/Security/Endpoints/AdminTransportSecurityExtensions.cs, backend/src/Host/Security/Endpoints/RouteAuthorization.cs, backend/src/Host/Security/Endpoints/RoutePermission.cs, backend/src/Host/Security/Endpoints/TransportListenerBinder.cs, backend/src/Host/Security/Transport/TransportRateLimiting.cs, backend/src/Cli/**, scripts/install-mfctl.sh -->
 
 How the `mfctl` command reaches a running deployment, and what that deployment has to have enabled before it will
 answer.
@@ -463,6 +463,7 @@ These routes accept a grant held at any of the three, and check it against the t
 | `POST /api/admin/mail-accounts/{id}/organization` | The mail account where it sits now, and the organization the body moves it into; a move out of every organization is the deployment's alone |
 | `GET /api/admin/organizations` | — lists the organizations the caller's scopes for `mailfathom.admin.read` cover; a user scope covers none |
 | `PUT /api/admin/organizations/{organizationId}/display-name` | The organization |
+| `GET` and `POST /api/admin/organizations/{organizationId}/policy` | The organization |
 
 **A target outside the caller's scope is answered exactly as one that does not exist**, because a refusal naming the
 missing scope would tell an organization's administrator that the account, the person, or the organization exists
@@ -672,6 +673,10 @@ and a request with none is refused as any other.
 | `PUT /api/admin/organizations/{organizationId}/display-name` | `mailfathom.admin.configuration.write` | Replaces the name an operator reads the organization by. It answers `204`, `404` for an organization this deployment does not hold, and `400` for a name it does not accept. |
 | `PUT /api/admin/organizations/{organizationId}/short-name` | `mailfathom.admin.credentials.write` | Replaces the short name its members sign in under, which moves every member's login with it. It answers `204`, `404`, `409` for a short name another organization holds, and `400`. |
 | `DELETE /api/admin/organizations/{organizationId}` | `mailfathom.admin.configuration.write` | Removes an organization with neither members nor mail accounts. It answers `204`, `404`, and `409` naming how many members and how many mail accounts it still has. |
+| `GET /api/admin/policy` | `mailfathom.admin.read` | Hands over [the settings policy](#settings-policies) the deployment holds, as the JSON an editing session opens, with the version it was read at. A deployment that has stored none answers `{}` at version `0`. |
+| `POST /api/admin/policy` | `mailfathom.admin.configuration.write` | Takes that policy back edited and commits it as one change against the version it was opened over. It is what `mfctl policy edit` sends when the editor exits; a policy that does not validate, and one another writer moved past, are refused in the answer rather than merged or written in part. |
+| `GET /api/admin/organizations/{organizationId}/policy` | `mailfathom.admin.read` | Hands over the settings policy one organization holds, the same way. It answers `404` for an organization this deployment does not hold. |
+| `POST /api/admin/organizations/{organizationId}/policy` | `mailfathom.admin.configuration.write` | Takes that organization's policy back edited and commits it as one change, the same way. It answers `404` for an organization this deployment does not hold. |
 | `GET /api/admin/roles` | `mailfathom.admin.read` | Reads one page of the [roles](#roles-groups-and-assignments) this deployment holds, each with its list as it was written under `permissions`, what each pattern on that list reaches in this build under `patterns`, and any stored entry granting nothing in this build under `unpublished`. |
 | `POST /api/admin/roles` | `mailfathom.admin.roles.write` at the deployment | Records a role from the name and the list of permissions the body carries — published names, and [patterns](permissions.md#a-pattern-in-a-roles-list) — and answers with the identifier it was minted under. A name another role carries is answered `409`, and a name it does not accept, a missing list, a permission this build does not publish, or a pattern reaching nothing it publishes `400`. |
 | `PUT /api/admin/roles/{roleId}/name` | `mailfathom.admin.roles.write` at the deployment | Replaces the name an operator reads the role by. It answers `204`, `404`, `409` for a name already taken, and `400` for a name it does not accept. |
@@ -2025,7 +2030,8 @@ The mail account belongs to organization '0197c0de-0000-7000-8000-0000000000a1' 
 
 An account created for a user is created in that user's organization, so creating one never straddles two. What an
 organization narrows is who an account may be assigned to and nothing else: an assigned user reads and acts on the
-account exactly as anybody assigned it does, and an organization declares no setting its members or accounts inherit.
+account exactly as anybody assigned it does. What an organization states for its members and accounts is its
+[settings policy](#settings-policies), which is stored and governs no record yet.
 
 **A mail account in no organization is one person's.** Sharing a mailbox is something an organization does: an account
 in an organization is assigned to any number of that organization's members, and an account in none to at most one
@@ -2067,6 +2073,126 @@ users in none — already holds one of that user's usernames for somebody else, 
 **An organization with members or mail accounts is not removed.** The refusal says how many of each it still has, so an
 operator moves each of them out first rather than leaving users whose logins name a short name nobody holds, or accounts
 assignable only within an organization that is gone.
+
+### Settings policies
+
+A settings policy is what one scope states once for the records beneath it: the defaults a user's record and a mail
+account start from, the values they are held to, and which of the rest the person may change. The deployment holds
+one, and each [organization](#organizations) holds one of its own. **A stored policy governs nothing until a record is
+read through it, and no record is read through one**: these commands and routes change what a scope states and nothing
+about what any user or mail account is served, so saving a policy alters no record, no synchronization, and no
+sign-in.
+
+| Command | What it does |
+| --- | --- |
+| `mfctl policy show [--organization <id>] [--format json\|yaml]` | Reads the deployment's settings policy, or with `--organization` that organization's, and the version it stands at, as JSON or as YAML |
+| `mfctl policy edit [--organization <id>] [--format json\|yaml]` | Opens that policy in your `$VISUAL` or `$EDITOR`, as JSON or as YAML, and commits what you saved as one change |
+
+`--organization` takes the identifier `mfctl organization list` reports, and left out the command addresses the
+deployment's own policy. Nothing in a policy is redacted, because a policy states nothing about a secret, so what
+`show` prints is what is stored.
+
+**A policy is one document with two sections, and each section takes three statements.** `Users` speaks for a user's
+record and `MailAccounts` for a mail account; every part is optional, and a policy that states nothing is `{}`.
+
+```json
+{
+  "Users": {
+    "Defaults": { "Language": "Polish", "TimeZone": "Europe/Warsaw" },
+    "Forced": { "EndpointAccess": { "McpEndpoint": false } },
+    "Editing": { "Mode": "NoneExcept", "Properties": ["TimeZone", "DisplayName"] }
+  },
+  "MailAccounts": {
+    "Forced": { "TransportSecurity": { "ConnectionSecurity": "TlsOnConnect" } },
+    "Editing": { "Mode": "AllExcept", "Properties": ["Delivery", "Secrets:Password"] }
+  }
+}
+```
+
+| Statement | What it holds |
+| --- | --- |
+| `Defaults` | An object in the shape of the record, stating only the properties the scope gives a starting value |
+| `Forced` | An object in the same shape, stating only the properties the scope holds every record to |
+| `Editing` | `Mode`, which is `AllExcept` or `NoneExcept`, and `Properties`, the list of property paths the mode excepts: the ones locked under `AllExcept`, and the only ones left open under `NoneExcept`. A list without a mode is refused |
+
+A property is named by the record's own key names, exactly as `mfctl user edit` and `mfctl account edit` show them,
+compared without regard to case. Inside `Defaults` and `Forced` the name is the nesting of the object; in
+`Editing:Properties` it is written out with colons, as `EndpointAccess:McpEndpoint` or `Delivery:Host`. A key joined
+that way inside `Defaults` or `Forced` is refused, so one property has one spelling in a stored policy. A path naming
+a block covers everything beneath it. **A list is one value**: `Folders` is stated whole, and no path reaches an entry
+of one.
+
+**A scope that has stored no policy reads as one stating nothing, at version `0`.** Its first save is composed over
+version `0`, and every later one over the version it read. Emptying a policy is saving `{}`, which commits as a new
+version like any other change. A saved policy is at most 1048576 octets as the database stores it.
+
+**A policy is validated whole before anything is written, and committed whole or not at all.** A save answers `200`
+with `committed`, the `version` now in force, and — where it was refused — a `code` and one sentence in `messages`
+per fault, every one of them in the same answer, so a policy is corrected in one pass rather than a save at a time.
+Saving what is already in force writes nothing and says so. A refused policy leaves the stored one untouched:
+
+```console
+$ mfctl policy edit --organization 0197c0de-0000-7000-8000-0000000000a1
+Users:Defaults names Dialect, which is not a property of a user's record. Remove it, or correct the spelling of the property it was meant to be.
+Users:Forced states DisplayName, which says who or which rather than how, so it takes no default and no forced value: one statement for many records could only be wrong. Remove it; Users:Editing may still say whether the person changes it.
+```
+
+What a save is refused for, each under `12007` unless the row says otherwise:
+
+| Refused | Why |
+| --- | --- |
+| A path that names no property of the record | A mistyped path would otherwise be a rule that silently governs nothing. A name that is not a section, a statement, or part of an editing restriction is refused the same way, and so is a name stated twice in different casing |
+| A value its property would refuse in a record | Each stated value is bound on its own by the binder a record is bound by, as the property it is stated for, and held to what that property declares: a value of the wrong type, an unknown setting inside a list entry, a name or number that is no member of the setting's enumeration, a value outside a range the setting declares, and a language, time zone, or telemetry level MailFathom does not know are each refused naming the path. A list is stated whole, so each entry of one is held to that entry's own rules as well — a folder mapping with no alias, or one naming neither a remote path nor a special-use role, and a trusted sender or a contact-collection exclusion that does not name exactly one usable thing, which is refused by its position in the list and never by the address or the domain it holds. A property named with no value, a single value where a list or a block belongs, and an object where a single value belongs are refused too |
+| A default or a forced value for an identity property | It says who or which rather than how, so one statement for many records could only be wrong. In `Users` these are `DisplayName` and `Portrait`; in `MailAccounts`, `EmailAddress`, `DisplayName`, `UserName`, `Delivery:UserName`, `Delivery:FromAddress`, and `Delivery:FromDisplayName`. Each may still be listed under `Editing` |
+| A default or a forced value for a secret block | A secret reference is admissible for one user, and a policy speaks for every record in its scope. These are `Secrets:Password`, `OAuth:ClientSecret`, `OAuth:RefreshToken`, `TransportSecurity:TrustedCertificateAuthority`, and `Delivery:Secrets:Password` in `MailAccounts`. Each may still be listed under `Editing`, and the settings beside one in its block are ordinary |
+| An administrator-only property listed as the person's to change | `EndpointAccess` and `ClientTelemetryLevel` in `Users` are written by an administrator alone. They take a default and a forced value and may be listed as locked, and a `NoneExcept` list naming one — or a block holding one — is refused, because no editing mode makes it the person's |
+| A client preference other than the telemetry switch | A client preference is the person's own. `ClientPreferences:TelemetryEnabled` takes a forced value under `Users:Forced` and nothing else: a default for it, any statement about another preference, and an editing path reaching `ClientPreferences` are each refused by name |
+| `MailAccounts` in the `Users` section, and `AccountId` in `MailAccounts` | A policy governs the properties of a record, and never which mail accounts a user has or the identifier this deployment generates for one |
+| A policy composed over a version no longer in force, under `12008` | Another writer committed first. The refusal names both versions, `mfctl policy edit` reports which settings differ between them, and nothing of the session is merged on top of what is in force |
+| A default or a forced value in `MailAccounts` changed under a grant held at the organization | Such a value can decide where a mailbox's credential is presented, so it is the deployment's to state, as the paragraph on a grant held at the organization says below |
+| A document that is not one JSON object, or is past the size above | A request carrying no document at all is answered `400` rather than taken as a decision to empty the policy |
+
+**What a record's validator asks of the record as a whole is not asked of a policy.** A statement is a sparse record
+rather than a record, so a rule that reads several of a record's properties together — delivery enabled with no
+submission host, say — has nothing to be asked of: forcing `Delivery:Enabled` leaves the host each account states to
+that account. The same holds for a bound that validator checks on one property in the course of reading the record,
+rather than the property declaring it: a submission port, an audit trail's retention window, and the thresholds of
+contact collection are held to their bounds when a record is written, and not when a policy states them.
+
+**Reading is `mailfathom.admin.read` and saving is `mailfathom.admin.configuration.write`.** The deployment's policy
+takes the permission held at the deployment, and a caller holding it only below that is
+[refused](#what-a-refusal-says) rather than answered as nothing found. An organization's accepts it at the deployment
+or at that organization, which is what lets an organization's own administrator write its policy and no other; a
+grant at one user covers no organization. An organization outside the caller's scope is answered `404`, exactly as
+one this deployment does not hold.
+
+**A grant held at the organization states no default and no forced value for a mail account.** Forcing a host, a
+port, a token endpoint, or a transport security posture decides where a mailbox's credential is presented, and an
+organization's administrator is trusted with that organization's mailboxes and not with a credential the deployment
+holds for somebody else. Telling the two apart takes a reading of the accounts a policy governs, and a save reads
+none, so a save under such a grant whose `MailAccounts:Defaults` or `MailAccounts:Forced` differ from the policy in
+force is refused under `12007`, whichever setting moved and whether it was added, changed, or removed. Which
+settings decide where a credential goes is deliberately not a list. Such an administrator still saves the whole of
+`Users` and `MailAccounts:Editing`, and saves back unchanged whatever the deployment's administrator stated for the
+organization's mail accounts; a grant at the deployment writes every part of every policy. The comparison is made
+as the replica answering judges a policy, so a policy in force that it cannot judge whole — one a newer build
+stored while two builds were serving during an upgrade — is refused to a grant held at the organization whatever
+the save states, and is the deployment's administrator's to replace.
+
+**A stored policy past the size above is refused rather than read.** No save produces one, so it is a row written
+beside MailFathom. Every route that reads it — both `GET`s, and both `POST`s, which read the policy in force before
+judging a save — answers `500` and says nothing more, so `mfctl policy show` and `mfctl policy edit` report only that
+status. What refused it is in the deployment's log: a `SettingsPolicyUnreadableException`, whose error code is
+`12015`, naming the scope and both figures. The row is corrected where it was written.
+
+**Two administrators saving at once: the second is refused.** The version is checked in the statement that writes the
+policy, so whichever replica each save reached, the one that commits second matches nothing and is answered with the
+version the first produced. A committed policy is announced to every replica the way [a committed
+change](configuration-sources.md#changing-a-persisted-setting) to a user's record is, over the signal backplane
+where one is declared.
+
+**An organization that is removed takes its policy with it.** The row is the organization's, so nothing is left
+stating defaults for a scope nobody holds.
 
 ### Roles, groups, and assignments
 

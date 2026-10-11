@@ -165,6 +165,26 @@ public sealed class AdminEndpointRoutesTests
     }
 
     /// <summary>
+    /// The two paths a settings policy is read and saved at, pinned for the reason every other path here is. The
+    /// deployment's own names no organization and an organization's sits beneath it, so which scope a command addresses
+    /// is the path itself rather than a field a body could get wrong.
+    /// </summary>
+    [Fact]
+    public void SettingsPolicyPath_IsTheRouteEachScopesPolicyIsServedAt()
+    {
+        // Arrange
+        var organization = new Guid("11111111-2222-3333-4444-555555555555");
+
+        // Act
+        var deploymentsOwn = AdminEndpointRoutes.SettingsPolicyPath(organizationId: null);
+        var organizations = AdminEndpointRoutes.SettingsPolicyPath(organization);
+
+        // Assert
+        Assert.Equal("/api/admin/policy", deploymentsOwn);
+        Assert.Equal("/api/admin/organizations/11111111-2222-3333-4444-555555555555/policy", organizations);
+    }
+
+    /// <summary>
     /// The role, group, and assignment paths and the one explaining a user's grant, pinned for the reason every other
     /// path here is: a rename on either side would compile cleanly and leave the command reaching a 404 that reads
     /// exactly like an administrative endpoint nobody enabled.

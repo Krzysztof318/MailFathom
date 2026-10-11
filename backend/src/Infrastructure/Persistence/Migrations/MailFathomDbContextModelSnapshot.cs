@@ -3357,6 +3357,39 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.SettingsPolicyEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Document")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid?>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganizationId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_settings_policies_scope");
+
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("OrganizationId"), false);
+
+                    b.ToTable("settings_policies", (string)null);
+                });
+
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.SpamClassificationRunEntity", b =>
                 {
                     b.Property<string>("MailboxAccountId")
@@ -4821,6 +4854,15 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasForeignKey("RoleId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.SettingsPolicyEntity", b =>
+                {
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.OrganizationEntity", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .HasConstraintName("fk_settings_policies_organization");
                 });
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.StoredEmailEntity", b =>

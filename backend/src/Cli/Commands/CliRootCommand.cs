@@ -13,6 +13,7 @@ using MailFathom.Cli.Commands.Groups;
 using MailFathom.Cli.Commands.Jobs;
 using MailFathom.Cli.Commands.Organizations;
 using MailFathom.Cli.Commands.Outbox;
+using MailFathom.Cli.Commands.Policies;
 using MailFathom.Cli.Commands.RoleAssignments;
 using MailFathom.Cli.Commands.Roles;
 using MailFathom.Cli.Commands.Rules;
@@ -282,6 +283,16 @@ internal static class CliRootCommand
             RemoveOrganizationCommand.Create(context),
         };
 
+        // What the deployment and each organization state once for the users and the mail accounts beneath them. A
+        // group of its own rather than two verbs under "config" or "organization", because a policy is neither a
+        // section of the deployment's configuration nor a field of an organization: one pair of commands reads and
+        // writes it at both scopes, and "--organization" is the whole of what tells the two apart.
+        Command policyCommand = new("policy", "Read and change the settings policy the deployment or one organization holds.")
+        {
+            ShowPolicyCommand.Create(context),
+            EditPolicyCommand.Create(context),
+        };
+
         // The one group whose credentials belong to a person rather than to this deployment, which is why every command
         // in it reads a password from a prompt or a pipe and none of them takes one as an argument. One group for four
         // methods, because what an administrator does with them is identical whatever is presented. "disable" and
@@ -320,6 +331,7 @@ internal static class CliRootCommand
             configCommand,
             userCommand,
             organizationCommand,
+            policyCommand,
             roleCommand,
             groupCommand,
             assignmentCommand,

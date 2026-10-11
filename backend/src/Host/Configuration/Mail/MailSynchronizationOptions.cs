@@ -26,6 +26,7 @@ using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Infrastructure.Certificates;
 using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Mail.OAuth;
+using MailFathom.Infrastructure.Policies;
 using MailFathom.Infrastructure.Secrets.References;
 
 namespace MailFathom.Host.Configuration.Mail;
@@ -817,6 +818,7 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
 
     /// <summary>Gets or sets the local account identifier.</summary>
     [Required]
+    [OutsideSettingsPolicy("the identifier this deployment generates for a mail account, which nobody states")]
     public string AccountId { get; set; } = string.Empty;
 
     /// <summary>Gets or sets the name this account is published under.</summary>
@@ -835,6 +837,7 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
     /// </para>
     /// </remarks>
     [Required]
+    [SettingsPolicyClass(SettingsPolicyPropertyClass.Identity)]
     public string DisplayName { get; set; } = string.Empty;
 
     /// <summary>Gets or sets the language this deployment writes about this mailbox's mail in, named as it is spelled in English.</summary>
@@ -884,6 +887,7 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
     public MailAccountTransportSecurityOptions TransportSecurity { get; set; } = new();
 
     /// <summary>Gets or sets the IMAP user name, which is an identifier rather than a credential and stays a plain configuration value.</summary>
+    [SettingsPolicyClass(SettingsPolicyPropertyClass.Identity)]
     public string UserName { get; set; } = string.Empty;
 
     /// <summary>Gets or sets the account's secret-bearing settings, which carry references rather than credentials.</summary>

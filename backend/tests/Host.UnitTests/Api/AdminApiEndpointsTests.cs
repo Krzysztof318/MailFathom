@@ -158,6 +158,8 @@ public sealed class AdminApiEndpointsTests
         // path, which is the listing and the creation, three times at one account's path for the reading, the saving,
         // and the erasure, and once at each of the assignment paths, because assigning an account and ending an
         // assignment are published under different grants.
+        // The settings policy appears twice at the deployment's path and twice at an organization's, which is the
+        // reading and the saving of each.
         // The roles and the groups each appear twice at their collection path, which is the listing and the recording; a
         // group's member appears twice at its path, for joining and leaving, and the role assignments twice at theirs, for
         // the listing and the assigning.
@@ -225,12 +227,16 @@ public sealed class AdminApiEndpointsTests
                 $"{AdminEndpointOptions.RoutePrefix}{OrganizationEndpoints.OrganizationsRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{OrganizationEndpoints.OrganizationRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{OrganizationEndpoints.OrganizationDisplayNameRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{SettingsPolicyEndpoints.OrganizationPolicyRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{SettingsPolicyEndpoints.OrganizationPolicyRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{OrganizationEndpoints.OrganizationShortNameRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{OutboxEndpoints.OutboxRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{OutboxEndpoints.CancellationRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{OutboxEndpoints.RequeueRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{OutboxEndpoints.SummaryRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{OutboxEndpoints.SendRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{SettingsPolicyEndpoints.DeploymentPolicyRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{SettingsPolicyEndpoints.DeploymentPolicyRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{HeldBackRecordEndpoints.HeldBackRecordsRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{GrantEndpoints.RoleAssignmentsRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{GrantEndpoints.RoleAssignmentsRoute}",
@@ -395,6 +401,10 @@ public sealed class AdminApiEndpointsTests
                 $"DELETE {prefix}{OrganizationEndpoints.OrganizationRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name}",
                 $"PUT {prefix}{OrganizationEndpoints.UserOrganizationRoute} -> {MailFathomPermission.AdminCredentialsWrite.Name} over its target",
                 $"POST {prefix}{OrganizationEndpoints.MailAccountOrganizationRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name} over its target",
+                $"GET {prefix}{SettingsPolicyEndpoints.DeploymentPolicyRoute} -> {MailFathomPermission.AdminRead.Name}",
+                $"POST {prefix}{SettingsPolicyEndpoints.DeploymentPolicyRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name}",
+                $"GET {prefix}{SettingsPolicyEndpoints.OrganizationPolicyRoute} -> {MailFathomPermission.AdminRead.Name} over its target",
+                $"POST {prefix}{SettingsPolicyEndpoints.OrganizationPolicyRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name} over its target",
                 $"GET {prefix}{GrantEndpoints.RolesRoute} -> {MailFathomPermission.AdminRead.Name} over its target",
                 $"POST {prefix}{GrantEndpoints.RolesRoute} -> {MailFathomPermission.AdminRolesWrite.Name}",
                 $"PUT {prefix}{GrantEndpoints.RoleNameRoute} -> {MailFathomPermission.AdminRolesWrite.Name}",
@@ -574,6 +584,31 @@ public sealed class AdminApiEndpointsTests
 
         Assert.Equal(
             UserRecordEndpoints.MaxStoredSecretWriteRequestBytes,
+            write.Metadata.GetMetadata<Microsoft.AspNetCore.Http.Metadata.IRequestSizeLimitMetadata>()!.MaxRequestBodySize);
+    }
+
+    /// <summary>A saved settings policy is a body an authenticated client states the whole of, so each route taking one bounds it by the policy's own ceiling.</summary>
+    /// <param name="route">The route the policy is saved on.</param>
+    [Theory]
+    [InlineData(SettingsPolicyEndpoints.DeploymentPolicyRoute)]
+    [InlineData(SettingsPolicyEndpoints.OrganizationPolicyRoute)]
+    public void MapAdminApi_ARouteSavingASettingsPolicy_CarriesTheRequestBodyBound(string route)
+    {
+        // Arrange
+        var endpoints = BuildRouteBuilder();
+
+        // Act
+        endpoints.MapAdminApi();
+
+        // Assert
+        var write = endpoints.Materialize()
+            .OfType<RouteEndpoint>()
+            .Single(endpoint =>
+                $"/{endpoint.RoutePattern.RawText?.TrimStart('/')}" == $"{AdminEndpointOptions.RoutePrefix}{route}"
+                && endpoint.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods.Contains("POST"));
+
+        Assert.Equal(
+            SettingsPolicyEndpoints.MaxWriteRequestBytes,
             write.Metadata.GetMetadata<Microsoft.AspNetCore.Http.Metadata.IRequestSizeLimitMetadata>()!.MaxRequestBodySize);
     }
 

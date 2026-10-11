@@ -9,7 +9,7 @@ informed:
 
 # Hold a settings policy at the deployment and at each organization, read a user's record and a mail account through it in one fixed order, keep a forced value off the record it overrides, and store both policies as rows rather than as configuration
 
-<!-- describes: backend/src/Host/Configuration/UserSettings/**, backend/src/Host/Configuration/Mail/MailSynchronizationOptions.cs, backend/src/Application/Preferences/ClientPreferences.cs, backend/src/Infrastructure/Persistence/Entities/OrganizationEntity.cs -->
+<!-- describes: backend/src/Host/Configuration/UserSettings/**, backend/src/Host/Configuration/Mail/MailSynchronizationOptions.cs, backend/src/Application/Preferences/ClientPreferences.cs, backend/src/Infrastructure/Persistence/Entities/OrganizationEntity.cs, backend/src/Infrastructure/Persistence/Entities/SettingsPolicyEntity.cs, backend/src/Infrastructure/Persistence/Policies/**, backend/src/Infrastructure/Policies/**, backend/src/Host/Configuration/Policies/**, backend/src/Host/Api/SettingsPolicy*.cs -->
 
 ## Context and Problem Statement
 

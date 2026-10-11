@@ -354,6 +354,20 @@ internal static class AdminEndpointRoutes
     internal static string OrganizationShortNamePath(Guid organizationId) =>
         $"{OrganizationPath(organizationId)}/short-name";
 
+    /// <summary>Where one scope's settings policy is read whole, and where an edited one is saved back.</summary>
+    /// <param name="organizationId">The organization whose policy the path names, or <see langword="null" /> for the deployment's own.</param>
+    /// <returns>The path.</returns>
+    /// <remarks>
+    /// One path per scope, read with <c>GET</c> and written with <c>POST</c>, for the reason the user-record path is:
+    /// the version a buffer is opened over and the version a save is judged against are one reading. An organization's
+    /// sits beneath the organization rather than behind a parameter on the deployment's, because the two are published
+    /// under grants held at different scopes: the deployment's takes one held at the deployment, and an organization's
+    /// accepts one held at that organization.
+    /// </remarks>
+    internal static string SettingsPolicyPath(Guid? organizationId) => organizationId is { } organization
+        ? $"{OrganizationPath(organization)}/policy"
+        : $"{Prefix}/policy";
+
     /// <summary>Where the roles a deployment defines are listed, and where one is defined.</summary>
     internal const string RolesPath = $"{Prefix}/roles";
 

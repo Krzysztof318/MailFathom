@@ -9,11 +9,11 @@ namespace MailFathom.Cli.Editing;
 /// <summary>Puts a document the deployment handed over in front of the operator, and reports what they left to commit.</summary>
 /// <remarks>
 /// <para>
-/// Three commands fetch a JSON document with the version it was read at, let the operator change it whole, and commit
-/// it against that version: the deployment's own persisted configuration, one user's record, and one mail account's
-/// declaration. Everything between the fetch and the commit is the same act, so it is written once — which is also what
-/// keeps the guidance an operator reads when their editor does not cooperate, and the YAML view an operator may ask
-/// for instead of JSON, from existing in several versions that drift apart.
+/// Four commands fetch a JSON document with the version it was read at, let the operator change it whole, and commit
+/// it against that version: the deployment's own persisted configuration, one user's record, one mail account's
+/// declaration, and one scope's settings policy. Everything between the fetch and the commit is the same act, so it
+/// is written once — which is also what keeps the guidance an operator reads when their editor does not cooperate,
+/// and the YAML view an operator may ask for instead of JSON, from existing in several versions that drift apart.
 /// </para>
 /// <para>
 /// What each command keeps is the part that is genuinely its own: which document it fetched, what the version guard is
