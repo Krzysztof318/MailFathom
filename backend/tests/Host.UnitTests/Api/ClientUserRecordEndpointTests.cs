@@ -131,6 +131,61 @@ public sealed class ClientUserRecordEndpointTests
             record.Properties.Where(property => property.Changeable).Select(property => property.Path).Order());
     }
 
+    /// <summary>
+    /// A person reads their accounts as the policies governing them resolve each: what an account is served, where
+    /// it came from, who holds it, and whether it is theirs to change — the list of folders on an account they hold,
+    /// and every property no policy holds on one they have yet to declare. No secret-bearing value travels with it.
+    /// </summary>
+    [Fact]
+    public async Task ReadMailAccountsAsync_AnAccountUnderAPolicy_ReportsEachPropertyAsItIsServedAndWhatIsThePersonsToChange()
+    {
+        // Arrange
+        var work = Mailbox(SyntheticUser.Deployment, "work");
+        var deployment = new UserRecordDeployment(
+            [MailFathomPermission.MailRead, MailFathomPermission.MailAccountsWrite],
+            SyntheticUser.Deployment);
+        deployment.Holding(SyntheticUser.Deployment, EmptyRecord, version: 2, work);
+        deployment.GovernedBy(
+            SyntheticUser.Deployment,
+            StatedPolicies.Governing(deployment: """{"MailAccounts":{"Forced":{"Host":"imap.corp.example.test"}}}"""));
+
+        // Act
+        var result = await ClientUserRecordEndpoint.ReadMailAccountsAsync(
+            deployment.MailAccounts,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var accounts = Assert.IsType<Ok<UserMailAccountsResponse>>(result.Result).Value!;
+        var held = Assert.Single(accounts.Accounts);
+        var host = held.Properties.Single(property => property.Path == "Host");
+
+        Assert.Equal(work.Id.ToString("D"), held.Id);
+        Assert.Null(held.Unresolved);
+        Assert.Equal("imap.corp.example.test", host.Value!.GetValue<string>());
+        Assert.Equal(("DeploymentForced", "Deployment", false), (host.Source, host.HeldBy, host.Changeable));
+        Assert.Equal(["Folders"], held.Properties.Where(property => property.Changeable).Select(property => property.Path));
+        Assert.Null(held.Properties.Single(property => property.Path == "Secrets:Password").Value);
+
+        Assert.Null(accounts.NewAccount.Id);
+        Assert.False(accounts.NewAccount.Properties.Single(property => property.Path == "Host").Changeable);
+        Assert.True(accounts.NewAccount.Properties.Single(property => property.Path == "Language").Changeable);
+    }
+
+    [Fact]
+    public async Task ReadMailAccountsAsync_ACallerWhoseRowHasGone_AnswersThatThereIsNoRecord()
+    {
+        // Arrange
+        var deployment = SignedInAs(SyntheticUser.Deployment, MailFathomPermission.MailRead);
+
+        // Act
+        var result = await ClientUserRecordEndpoint.ReadMailAccountsAsync(
+            deployment.MailAccounts,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.IsType<NotFound<ProblemDetails>>(result.Result);
+    }
+
     /// <summary>Reached where the row behind an authenticated caller has gone, which is a user erased under a credential that has not yet been withdrawn.</summary>
     [Fact]
     public async Task ReadAsync_ACallerWhoseRowHasGone_AnswersThatThereIsNoRecord()

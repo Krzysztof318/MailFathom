@@ -11,6 +11,7 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Synchronization;
 using MailFathom.Infrastructure.Persistence.Connections;
+using MailFathom.Infrastructure.Persistence.Policies;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -68,7 +69,8 @@ internal sealed class PersistedServedMailAccounts(
 
     private const string SelectServedRecords =
         $"""
-         SELECT account."Id", account."EmailAddress", account."DisplayName", account."Document"::text, account."Version"
+         SELECT account."Id", account."EmailAddress", account."DisplayName", account."Document"::text, account."Version",
+                account."OrganizationId"
          FROM settings_mail_accounts AS account
          WHERE {Served}
            AND octet_length(account."Document"::text) <= @maximumOctets
@@ -182,23 +184,48 @@ internal sealed class PersistedServedMailAccounts(
     public async Task<IReadOnlyList<MailAccountRecord>> ReadServedRecordsAsync(CancellationToken cancellationToken)
     {
         await using var connection = await dataSource().OpenConnectionAsync(cancellationToken);
-        await using var command = new NpgsqlCommand(SelectServedRecords, connection) { CommandTimeout = this.CommandTimeoutSeconds };
-        command.Parameters.AddWithValue("maximumOctets", UserSettingsDocument.MaximumOctets);
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var records = new List<(MailAccountRecord Account, Guid? OrganizationId)>();
 
-        var records = new List<MailAccountRecord>();
-
-        while (await reader.ReadAsync(cancellationToken))
+        await using (var command = new NpgsqlCommand(SelectServedRecords, connection) { CommandTimeout = this.CommandTimeoutSeconds })
         {
-            records.Add(new MailAccountRecord(
-                reader.GetGuid(0),
-                reader.IsDBNull(1) ? null : reader.GetString(1),
-                reader.GetString(2),
-                reader.GetString(3),
-                reader.GetInt64(4)));
+            command.Parameters.AddWithValue("maximumOctets", UserSettingsDocument.MaximumOctets);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                records.Add((
+                    new MailAccountRecord(
+                        reader.GetGuid(0),
+                        reader.IsDBNull(1) ? null : reader.GetString(1),
+                        reader.GetString(2),
+                        reader.GetString(3),
+                        reader.GetInt64(4)),
+                    reader.IsDBNull(5) ? null : reader.GetGuid(5)));
+            }
         }
 
-        return [.. records.OrderBy(account => account.Id.ToString("D"), StringComparer.Ordinal)];
+        // What an account declares is its settings as the policies governing it resolve them, so each record is
+        // handed on with the policies of its own organization.
+        // ponytail: one statement per organization holding a served account. Read every stored policy in one
+        // statement if a deployment of many organizations measures this read slow.
+        var policies = new Dictionary<Guid, GoverningSettingsPolicies>();
+
+        foreach (var organization in records.Select(static record => record.OrganizationId).Distinct())
+        {
+            policies[organization ?? Guid.Empty] = await GoverningSettingsPolicyStatements.ReadAsync(
+                connection,
+                transaction: null,
+                organization,
+                this.CommandTimeoutSeconds,
+                cancellationToken);
+        }
+
+        return
+        [
+            .. records
+                .Select(record => record.Account with { Policies = policies[record.OrganizationId ?? Guid.Empty] })
+                .OrderBy(account => account.Id.ToString("D"), StringComparer.Ordinal),
+        ];
     }
 
     /// <inheritdoc />

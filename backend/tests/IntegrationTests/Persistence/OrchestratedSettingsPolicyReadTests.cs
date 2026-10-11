@@ -55,7 +55,7 @@ public sealed class OrchestratedSettingsPolicyReadTests(MailFathomOrchestrationF
 
             await services.InScopeAsync(
                 (scope, token) => scope.GetRequiredService<ISettingsPolicyStore>()
-                    .CommitAsync(organization, ForcingPolling, expectedVersion: 0, maximumUserRecordsJudged: null, token),
+                    .CommitAsync(organization, ForcingPolling, expectedVersion: 0, new GovernedRecordsToJudge(Users: false, MailAccounts: false, Maximum: 1), token),
                 cancellationToken);
 
             var withinTheBound = await ReadAsync(services, organization, cancellationToken);

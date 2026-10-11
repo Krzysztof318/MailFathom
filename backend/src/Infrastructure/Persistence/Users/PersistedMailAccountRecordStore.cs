@@ -9,6 +9,7 @@ using MailFathom.Application.SensitiveContent;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Access;
 using MailFathom.Infrastructure.Persistence.Entities;
+using MailFathom.Infrastructure.Persistence.Policies;
 using MailFathom.Infrastructure.Persistence.Sessions;
 using MailFathom.Infrastructure.Persistence.Users.AccountSettings;
 using Microsoft.EntityFrameworkCore;
@@ -27,6 +28,12 @@ namespace MailFathom.Infrastructure.Persistence.Users;
 /// <para>
 /// A statement that turns out not to apply after an earlier one in the same transaction did is undone by the statement
 /// after it rather than by abandoning the transaction, because the retry policy commits whatever the work staged.
+/// </para>
+/// <para>
+/// A write of an account's settings is a write of a governed record. It holds the lock a policy write excludes those
+/// with, reads the policies of the organization the account stands in inside its own transaction, and hands them to
+/// the caller to compose the account and its queryable settings under, so neither is ever derived from a policy that
+/// has since been replaced.
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this store.")]
@@ -107,41 +114,58 @@ internal sealed class PersistedMailAccountRecordStore(
             .Select(assignment => assignment.UserId)
             .ToListAsync(cancellationToken);
 
-        return new MailAccountHolding(ToRecord(account), [.. users.Select(UserId.Create)], account.OrganizationId);
+        var policies = await PersistedSettingsPolicies.ReadGoverningAsync(dbContext, account.OrganizationId, cancellationToken);
+
+        return new MailAccountHolding(
+            ToRecord(account) with { Policies = policies },
+            [.. users.Select(UserId.Create)],
+            account.OrganizationId);
     }
 
     /// <inheritdoc />
     public Task<MailAccountWrite> CreateAsync(
         UserId user,
         long expectedUserVersion,
-        MailAccountRecord account,
-        MailAccountQueryableSettings settings,
+        Func<GoverningSettingsPolicies, MailAccountCandidate?> compose,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(account);
-        ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(compose);
 
         var userId = RequireNamed(user);
         var now = timeProvider.GetUtcNow();
-        var normalized = MailAccountRecord.NormalizedFormOf(account.EmailAddress);
 
         return commitPolicy.CommitAsync(
             async (session, token) =>
             {
                 var context = await EfCorePersistenceSessionAccessor.JoinAsync(session, token);
 
-                await LockUserAsync(context, userId, token);
+                await HoldBesideRecordWritesAsync(context, token);
 
                 // The account is created in the organization of the user it is created for, read under that user's
                 // lock, so a move of theirs either lands before this and is read here or waits and counts this account.
+                // A user who is gone is answered as a record that moved on, which is what their version would say.
+                if (await LockUserAsync(context, userId, token) is not [var organization])
+                {
+                    return new MailAccountWrite(MailAccountWriteResult.VersionSuperseded, 0);
+                }
+
+                var policies = await PersistedSettingsPolicies.ReadGoverningAsync(context, organization, token);
+
+                if (compose(policies) is not { } candidate)
+                {
+                    return new MailAccountWrite(MailAccountWriteResult.NothingComposed, 0);
+                }
+
+                var account = candidate.Account;
+                var normalized = MailAccountRecord.NormalizedFormOf(account.EmailAddress);
+
                 // The conflict clause names no target, so it covers the address index as well as the key: an address
                 // another account holds inserts nothing rather than raising.
                 var created = await context.Database.ExecuteSqlAsync(
                     $"""
                      INSERT INTO settings_mail_accounts
                          ("Id", "EmailAddress", "NormalizedEmailAddress", "DisplayName", "OrganizationId", "Document", "Version", "CreatedAt", "UpdatedAt")
-                     VALUES ({account.Id}, {account.EmailAddress}, {normalized}, {account.DisplayName},
-                             (SELECT "OrganizationId" FROM settings_accounts WHERE "Id" = {userId}),
+                     VALUES ({account.Id}, {account.EmailAddress}, {normalized}, {account.DisplayName}, {organization},
                              CAST({account.Document} AS jsonb), 1, {now}, {now})
                      ON CONFLICT DO NOTHING
                      """,
@@ -168,7 +192,7 @@ internal sealed class PersistedMailAccountRecordStore(
                      """,
                     token);
 
-                await WriteQueryableSettingsAsync(context, account.Id, 1, settings, token);
+                await WriteQueryableSettingsAsync(context, account.Id, 1, candidate.Settings, token);
 
                 return new MailAccountWrite(MailAccountWriteResult.Committed, 1);
             },
@@ -177,15 +201,14 @@ internal sealed class PersistedMailAccountRecordStore(
 
     /// <inheritdoc />
     public async Task<MailAccountWrite> SaveAsync(
-        MailAccountRecord account,
-        MailAccountQueryableSettings settings,
+        Guid accountId,
+        long expectedVersion,
+        Func<GoverningSettingsPolicies, MailAccountCandidate?> compose,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(account);
-        ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(compose);
 
         var now = timeProvider.GetUtcNow();
-        var normalized = MailAccountRecord.NormalizedFormOf(account.EmailAddress);
 
         try
         {
@@ -193,6 +216,25 @@ internal sealed class PersistedMailAccountRecordStore(
                 async (session, token) =>
                 {
                     var context = await EfCorePersistenceSessionAccessor.JoinAsync(session, token);
+
+                    await HoldBesideRecordWritesAsync(context, token);
+
+                    // Held against a move of the account, so the organization read here is the one whose policy
+                    // governs the account when its row is replaced.
+                    if (await LockAccountAsync(context, accountId, token) is not [var organization])
+                    {
+                        return new MailAccountWrite(MailAccountWriteResult.NotFound, 0);
+                    }
+
+                    var policies = await PersistedSettingsPolicies.ReadGoverningAsync(context, organization, token);
+
+                    if (compose(policies) is not { } candidate)
+                    {
+                        return new MailAccountWrite(MailAccountWriteResult.NothingComposed, expectedVersion);
+                    }
+
+                    var account = candidate.Account with { Id = accountId, Version = expectedVersion };
+                    var normalized = MailAccountRecord.NormalizedFormOf(account.EmailAddress);
 
                     var saved = await context.Database
                         .SqlQuery<long>(
@@ -219,7 +261,7 @@ internal sealed class PersistedMailAccountRecordStore(
                     }
 
                     await StepAssignedUsersAsync(context, account.Id, now, token);
-                    await WriteQueryableSettingsAsync(context, account.Id, saved[0], settings, token);
+                    await WriteQueryableSettingsAsync(context, account.Id, saved[0], candidate.Settings, token);
 
                     return new MailAccountWrite(MailAccountWriteResult.Committed, saved[0]);
                 },
@@ -229,7 +271,7 @@ internal sealed class PersistedMailAccountRecordStore(
         {
             // The race the condition above cannot see: another writer took the address in a transaction that had not
             // committed when this one read. The index is what refused it.
-            return new MailAccountWrite(MailAccountWriteResult.AddressHeld, account.Version);
+            return new MailAccountWrite(MailAccountWriteResult.AddressHeld, expectedVersion);
         }
     }
 
@@ -410,20 +452,35 @@ internal sealed class PersistedMailAccountRecordStore(
     public Task<bool> RecordSettingsAsync(
         Guid accountId,
         long readFrom,
-        MailAccountQueryableSettings settings,
+        Func<GoverningSettingsPolicies, MailAccountQueryableSettings?> derive,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(derive);
 
         return commitPolicy.CommitAsync(
             async (session, token) =>
             {
                 var context = await EfCorePersistenceSessionAccessor.JoinAsync(session, token);
 
-                return await WriteQueryableSettingsAsync(context, accountId, readFrom, settings, token);
+                await HoldBesideRecordWritesAsync(context, token);
+
+                if (await LockAccountAsync(context, accountId, token) is not [var organization])
+                {
+                    return false;
+                }
+
+                var policies = await PersistedSettingsPolicies.ReadGoverningAsync(context, organization, token);
+
+                return derive(policies) is { } settings
+                    && await WriteQueryableSettingsAsync(context, accountId, readFrom, settings, token);
             },
             cancellationToken);
     }
+
+    /// <summary>Holds the lock a policy write excludes writes of governed records with, for the rest of the transaction.</summary>
+    /// <remarks>Taken before any row is locked, so a write waiting behind a policy write holds nothing that write needs.</remarks>
+    private static Task<int> HoldBesideRecordWritesAsync(MailFathomDbContext context, CancellationToken cancellationToken) =>
+        context.Database.ExecuteSqlRawAsync(GoverningSettingsPolicyStatements.HoldBesideRecordWrites, cancellationToken);
 
     /// <summary>Tells why an assignment inserted nothing: the user already holds it, the account is assigned to as many users as it may be where it belongs, or a row is gone.</summary>
     private static async Task<MailAccountWriteResult> WhyNotAssignedAsync(
@@ -502,11 +559,11 @@ internal sealed class PersistedMailAccountRecordStore(
     /// <summary>Writes the settings a question about every account filters on, replacing whatever the account held before.</summary>
     /// <returns>Whether the account still stood at <paramref name="readFrom" />; nothing is written where it had moved on.</returns>
     /// <remarks>
-    /// Written inside the transaction that wrote the document, so a reader meets either both as they stood or both as
-    /// they stand now, and stamped with the version of the document they were read out of. The folders are replaced whole rather than
+    /// Written inside the transaction that wrote the document or the policy that moved them, so a reader meets either
+    /// both as they stood or both as they stand now, and stamped with the version of the document they were read out of. The folders are replaced whole rather than
     /// reconciled, because they are a reading of the document and the document was just replaced whole.
     /// </remarks>
-    private static async Task<bool> WriteQueryableSettingsAsync(
+    internal static async Task<bool> WriteQueryableSettingsAsync(
         MailFathomDbContext context,
         Guid accountId,
         long readFrom,

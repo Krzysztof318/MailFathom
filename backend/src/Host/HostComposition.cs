@@ -95,6 +95,7 @@ using MailFathom.Infrastructure.ObjectStorage;
 using MailFathom.Infrastructure.Observability;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Persistence.Policies;
+using MailFathom.Infrastructure.Persistence.Policies.MailAccounts;
 using MailFathom.Infrastructure.Persistence.Users;
 using MailFathom.Infrastructure.Persistence.Users.AccountSettings;
 using MailFathom.Infrastructure.Rules;
@@ -306,6 +307,7 @@ internal static class HostComposition
         // their own transactions. Implemented here rather than beside those stores because resolving a record and
         // binding it is the composition root's, and a singleton because it holds nothing and reads nothing.
         builder.Services.AddSingleton<IUserRecordPolicyJudge, UserRecordPolicyJudge>();
+        builder.Services.AddSingleton<IMailAccountPolicyJudge, MailAccountPolicyJudge>();
         // What that reading refused, which is a report rather than a decision: nothing resolves anything on it,
         // and the administrative surface is what an operator meets a broken row on instead of a log line.
         builder.Services.AddSingleton<HeldBackRecords>();

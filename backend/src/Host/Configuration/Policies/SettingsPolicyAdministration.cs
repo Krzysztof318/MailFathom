@@ -22,28 +22,27 @@ namespace MailFathom.Host.Configuration.Policies;
 /// committed as one statement or not at all.
 /// </para>
 /// <para>
-/// A stored policy governs the users of its scope: every user's record is read through the policies above it, so a
-/// write here changes what those users are served. It is therefore judged twice. First as a document, and then —
-/// where it changes a default or a forced value of the section about users — against every user record it governs,
+/// A stored policy governs the users and the mail accounts of its scope: each is read through the policies above
+/// it, so a write here changes what they are served. It is therefore judged twice. First as a document, and then —
+/// for each section whose defaults or forced values it changes — against every record of that kind it governs,
 /// inside the commit: a write that would leave one of them a record this deployment could not serve is refused
 /// naming the records in the way, and one that governs more records than
-/// <see cref="DeploymentOptions.MaximumRecordsJudgedPerPolicyWrite" /> is refused before any is read. The same commit
-/// rewrites the endpoint switches on the row of every user whose effective switches it moves, which is what makes a
-/// session or a token stop or resume on its holder's next request on every replica. A write that changes nothing but
-/// an editing restriction judges no record, because a restriction cannot make a record invalid.
+/// <see cref="DeploymentOptions.MaximumRecordsJudgedPerPolicyWrite" />, users and mail accounts together, is refused
+/// before any is read. The same commit rewrites the endpoint switches on the row of every user whose effective
+/// switches it moves, and the queryable settings of every mail account whose effective settings it moves, which is
+/// what makes a session stop on its holder's next request and a query over every account choose by the effective
+/// settings on every replica. A write that changes nothing but an editing restriction judges no record, because a
+/// restriction cannot make a record invalid.
 /// </para>
 /// <para>
-/// A mail account is not read through a policy yet, which is why a grant held below the deployment states no default
-/// and no forced value for one. Forcing a host, a port, or a token endpoint decides where a mailbox's credential is
-/// presented, and such a grant is trusted with its organization's mailboxes and not with a credential the deployment
-/// holds for somebody else — which only a reading of the accounts a policy governs can tell apart. Nothing reads them
-/// here, and a stored policy outlives the build that stored it, so the statement is refused rather than committed
-/// unjudged. Which settings
-/// decide where a credential goes is not enumerated, because a list is what a setting added later would be missing
-/// from. An editing restriction moves no value and is the organization's administrator's to write, as the whole of
-/// the section about users is. The values are compared as this build judges them, so a policy in force that this
-/// build cannot judge whole — one a newer build stored while both were serving — is refused to such a grant as
-/// well: a statement neither side of the comparison holds would otherwise be one the save could remove unseen.
+/// A grant held below the deployment is bound in that pass as it is in a write of one account. Forcing a host, a
+/// port, or a token endpoint decides where a mailbox's credential is presented, and such a grant is trusted with its
+/// organization's mailboxes and not with a credential the deployment holds for somebody else. So a write under one
+/// is refused, naming the accounts in the way, where it moves the effective settings of an account naming a secret
+/// that was not provisioned for a user the account is assigned to. Which settings decide where a credential goes is
+/// not enumerated, because a list is what a setting added later would be missing from. A policy in force that this
+/// build cannot judge whole — one a newer build stored while both were serving — is judged as one stating nothing
+/// an account could have been served with, so such a grant is not given the benefit of what nobody here can read.
 /// </para>
 /// <para>
 /// The deployment's policy is the deployment's to write, so it takes the grant over the whole deployment. An
@@ -124,15 +123,6 @@ internal sealed class SettingsPolicyAdministration(
                 candidate.Refusals);
         }
 
-        if (!authorization.Permits(MailFathomPermission.AdminConfigurationWrite)
-            && FindNarrowerGrantRefusal(candidate, inForce) is { } beyondTheGrant)
-        {
-            return SettingsPolicyWriteOutcome.Refused(
-                MailFathomErrorCode.ConfigurationCandidateInvalid,
-                inForce.Version,
-                [beyondTheGrant]);
-        }
-
         if (JsonNode.DeepEquals(JsonNode.Parse(inForce.Json), JsonNode.Parse(judged)))
         {
             return SettingsPolicyWriteOutcome.NothingToChange(
@@ -146,7 +136,11 @@ internal sealed class SettingsPolicyAdministration(
             organizationId,
             judged,
             expectedVersion,
-            MovesWhatAUserIsServed(inForce.Json, judged) ? maximum : null,
+            new GovernedRecordsToJudge(
+                MovesWhatARecordIsServed(SettingsPolicySection.Users, inForce.Json, judged),
+                MovesWhatARecordIsServed(SettingsPolicySection.MailAccounts, inForce.Json, judged),
+                maximum,
+                UnderANarrowerGrant: !authorization.Permits(MailFathomPermission.AdminConfigurationWrite)),
             cancellationToken);
 
         switch (commit.Result)
@@ -163,7 +157,7 @@ internal sealed class SettingsPolicyAdministration(
                     MailFathomErrorCode.ConfigurationCandidateInvalid,
                     inForce.Version,
                     [
-                        $"The saved policy changes a default or a forced value for {commit.GovernedRecords} user records, and one policy write judges at most {maximum}, so none was read and nothing was written. {DeploymentOptions.SectionName}:{nameof(DeploymentOptions.MaximumRecordsJudgedPerPolicyWrite)} raises that bound; the judgement runs inside the write, and saves of the records it judges wait for it.",
+                        $"The saved policy changes a default or a forced value for {commit.GovernedRecords} records, counting the users and the mail accounts it changes one for, and one policy write judges at most {maximum}, so none was read and nothing was written. {DeploymentOptions.SectionName}:{nameof(DeploymentOptions.MaximumRecordsJudgedPerPolicyWrite)} raises that bound; the judgement runs inside the write, and saves of the records it judges wait for it.",
                     ]);
 
             case SettingsPolicyCommitResult.RecordsLeftInvalid:
@@ -182,18 +176,19 @@ internal sealed class SettingsPolicyAdministration(
         }
     }
 
-    /// <summary>Reports whether a save changes a default or a forced value of the section about users, which is all of a policy that can break a user's record or move their endpoint switches.</summary>
+    /// <summary>Reports whether a save changes a default or a forced value of one section, which is all of a policy that can break a record of that kind or move what it is served with.</summary>
     /// <remarks>
     /// A policy in force that this build does not judge whole is answered as one the save moves: what it states is
     /// unknown here, so whether the save leaves it standing is as well.
     /// </remarks>
-    private static bool MovesWhatAUserIsServed(string inForceJson, string judgedJson) =>
-        SettingsPolicyStatements.Read(inForceJson, SettingsPolicySection.Users) is not { } standing
-        || SettingsPolicyStatements.Read(judgedJson, SettingsPolicySection.Users) is not { } saved
+    private static bool MovesWhatARecordIsServed(SettingsPolicySection section, string inForceJson, string judgedJson) =>
+        SettingsPolicyStatements.Read(inForceJson, section) is not { } standing
+        || SettingsPolicyStatements.Read(judgedJson, section) is not { } saved
         || !JsonNode.DeepEquals(standing.Defaults, saved.Defaults)
         || !JsonNode.DeepEquals(standing.Forced, saved.Forced);
 
-    /// <summary>Names the records a policy would have left unservable, and what each would have been left without.</summary>
+    /// <summary>Names the records a policy write was refused over, and what each was refused for.</summary>
+    /// <remarks>An account is named by the label this deployment tells it apart by and never by its address, which is somebody's.</remarks>
     private static IReadOnlyList<string> DescribeRecordsInTheWay(SettingsPolicyCommit commit)
     {
         var named = commit.RecordsInTheWay;
@@ -202,9 +197,9 @@ internal sealed class SettingsPolicyAdministration(
         [
             string.Create(
                 CultureInfo.InvariantCulture,
-                $"The saved policy would leave {commit.RecordsLeftInvalid} of the {commit.GovernedRecords} user records it governs a record this deployment could not serve, so nothing was written. Correct those records first, or keep what they rely on in the policy. {(named.Count < commit.RecordsLeftInvalid ? $"The first {named.Count} are named below." : "Each is named below.")}"),
+                $"The saved policy is refused over {commit.RecordsLeftInvalid} of the {commit.GovernedRecords} records it governs — a user record or a mail account it would leave one this deployment could not serve, or a mail account whose effective settings the grant it was written under may not move — so nothing was written. Correct those records first, or keep what they rely on in the policy. {(named.Count < commit.RecordsLeftInvalid ? $"The first {named.Count} are named below." : "Each is named below.")}"),
             .. named.Select(record =>
-                $"User '{record.DisplayName}' ({record.Identity:D}): {string.Join(" ", record.Corrections)}"),
+                $"{(record.Kind == SettingsPolicyRecordKind.MailAccount ? "Mail account" : "User")} '{record.DisplayName}' ({record.Identity:D}): {string.Join(" ", record.Corrections)}"),
         ];
     }
 
@@ -231,27 +226,6 @@ internal sealed class SettingsPolicyAdministration(
             permission,
             AssignmentScope.Organization(organization),
             cancellationToken);
-    }
-
-    /// <summary>Says why a save under a grant held below the deployment may not stand, or nothing where it may.</summary>
-    /// <remarks>
-    /// The policy in force is judged as the candidate was, and the two are compared by the values each states. One
-    /// this build refuses in any part is not compared at all: what it could not judge is in neither set, so the two
-    /// would read as equal over a statement the save had removed.
-    /// </remarks>
-    private static string? FindNarrowerGrantRefusal(SettingsPolicyCandidate candidate, SettingsPolicyDocument inForce)
-    {
-        var standing = SettingsPolicyCandidate.Judge(inForce.Json);
-        var grant = $"'{MailFathomPermission.AdminConfigurationWrite.Name}' held over an organization rather than over the whole deployment";
-
-        if (standing.Refusals.Count > 0)
-        {
-            return $"Version {inForce.Version} of this policy states something this build does not judge as a settings policy, so a save under {grant} cannot be shown to leave the default and forced values of the {SettingsPolicySection.MailAccounts.Name} section as they stand. Have the policy written under a grant at the deployment.";
-        }
-
-        return candidate.MailAccountValues.SetEquals(standing.MailAccountValues)
-            ? null
-            : $"The saved policy changes a default or a forced value of the {SettingsPolicySection.MailAccounts.Name} section, and {grant} does not state one: such a value can decide where a mailbox's credential is presented. Leave those two statements as version {inForce.Version} has them, or have them written under a grant at the deployment.";
     }
 
     private static SettingsPolicyWriteOutcome Superseded(long composedOver, long inForce) =>

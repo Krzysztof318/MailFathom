@@ -7,6 +7,11 @@ using MailFathom.Domain.Access;
 namespace MailFathom.Host.Configuration.UserSettings.Administration;
 
 /// <summary>One mail account as an administrator reads it.</summary>
+/// <remarks>
+/// The declaration is the account's own: what somebody stated on it, which is what a save is composed over. What
+/// the account is served with is answered per property beside it, because a settings policy may force a value over
+/// the account's or supply one it leaves out, and neither is ever written into the declaration.
+/// </remarks>
 /// <param name="Id">The identifier the deployment generated for the account.</param>
 /// <param name="Declaration">The declaration, with every secret-bearing value replaced by the redaction marker.</param>
 /// <param name="Version">The version a save states.</param>
@@ -17,4 +22,8 @@ internal sealed record MailAccountReading(
     string Declaration,
     long Version,
     IReadOnlyList<UserId> Users,
-    Guid? OrganizationId);
+    Guid? OrganizationId)
+{
+    /// <summary>Gets the account as the settings policies governing it resolve it, and which of its properties the reader may change.</summary>
+    public required MailAccountPolicyReading Policy { get; init; }
+}

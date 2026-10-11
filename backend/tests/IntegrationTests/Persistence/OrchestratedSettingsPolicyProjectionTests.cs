@@ -313,7 +313,7 @@ public sealed class OrchestratedSettingsPolicyProjectionTests(MailFathomOrchestr
         long expectedVersion,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<ISettingsPolicyStore>()
-                .CommitAsync(organization, json, expectedVersion, MaximumJudged, token),
+                .CommitAsync(organization, json, expectedVersion, new GovernedRecordsToJudge(Users: true, MailAccounts: true, MaximumJudged), token),
             cancellationToken);
 
     private static Task<UserEndpointAccess> ReadSwitchesAsync(

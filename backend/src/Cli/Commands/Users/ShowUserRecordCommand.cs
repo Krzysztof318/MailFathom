@@ -4,9 +4,7 @@
 
 using System.CommandLine;
 using System.Globalization;
-using System.Text.Json;
 using MailFathom.Cli.Administration;
-using MailFathom.Cli.Administration.Users;
 using MailFathom.Cli.Editing;
 
 namespace MailFathom.Cli.Commands.Users;
@@ -93,42 +91,8 @@ internal static class ShowUserRecordCommand
             return CliExitCode.Success;
         }
 
-        if (record.Unresolved is { } unresolved)
-        {
-            context.Console.WriteLine($"  {ConsoleSafeText.SanitizeExplanation(unresolved)}");
-
-            return CliExitCode.Success;
-        }
-
-        foreach (var property in record.Properties ?? [])
-        {
-            context.Console.WriteLine(Describe(property));
-        }
+        EffectiveSettingsOutput.Write(context.Console, record.Unresolved, record.Properties);
 
         return CliExitCode.Success;
-    }
-
-    /// <summary>Writes one resolved setting as a line: what it is, where it came from, and who holds it.</summary>
-    /// <remarks>
-    /// Every part the deployment answered with is reduced before it is written. A value is what somebody stated — the
-    /// name is one a person sets for themselves — so it could otherwise carry the characters a terminal acts on into
-    /// an administrator's listing.
-    /// </remarks>
-    private static string Describe(UserRecordProperty property)
-    {
-        var value = property.Value is { ValueKind: not (JsonValueKind.Null or JsonValueKind.Undefined) } stated
-            ? ConsoleSafeText.Sanitize(stated.ValueKind == JsonValueKind.String ? stated.GetString() : stated.GetRawText())
-            : "(nothing stated)";
-        var heldBy = property.HeldBy is { } holder
-            ? $", held by the {ConsoleSafeText.Sanitize(holder.ToLowerInvariant())}"
-            : string.Empty;
-        var changeable = property switch
-        {
-            { Changeable: true } => string.Empty,
-            { Source: { } source } when source.EndsWith("Forced", StringComparison.Ordinal) => ", not changeable while the policy forces it",
-            _ => ", not changeable under your grant",
-        };
-
-        return $"  {ConsoleSafeText.Sanitize(property.Path)}: {value}  [{ConsoleSafeText.Sanitize(property.Source)}{heldBy}{changeable}]";
     }
 }

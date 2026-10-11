@@ -16,6 +16,6 @@ public enum SettingsPolicyCommitResult
     /// <summary>The policy governs more records than one write judges, so none was read and nothing was written.</summary>
     TooManyRecords = 2,
 
-    /// <summary>The policy would have left a record it governs one the deployment could not serve, so nothing was written.</summary>
+    /// <summary>A record the policy governs refuses it — the policy would leave it one the deployment could not serve, or would move a mail account's settings past what the writer's grant reaches — so nothing was written.</summary>
     RecordsLeftInvalid = 3,
 }

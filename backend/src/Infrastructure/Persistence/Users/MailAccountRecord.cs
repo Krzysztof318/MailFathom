@@ -2,6 +2,8 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Infrastructure.Persistence.Policies;
+
 namespace MailFathom.Infrastructure.Persistence.Users;
 
 /// <summary>One mail account as its record holds it.</summary>
@@ -17,6 +19,15 @@ public sealed record MailAccountRecord(
     string Document,
     long Version)
 {
+    /// <summary>Gets the settings policies that govern the account, as they stood when it was read.</summary>
+    /// <remarks>
+    /// Read beside the record for the reason a user's are: what an account is served is its settings resolved through
+    /// them, and a caller that read one would immediately ask for the other. They are the policies of the account's own
+    /// organization and of the deployment, so the policy that governs a mailbox follows the mailbox rather than
+    /// whoever reads it. A write never trusts these: it is handed the policies in force inside its own transaction.
+    /// </remarks>
+    public GoverningSettingsPolicies Policies { get; init; } = GoverningSettingsPolicies.Unwritten;
+
     /// <summary>The greatest number of accounts one user is read with, which bounds the record composed for them.</summary>
     public const int MaximumAssignedPerUser = 64;
 

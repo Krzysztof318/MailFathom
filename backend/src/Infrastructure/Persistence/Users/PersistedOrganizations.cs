@@ -8,6 +8,7 @@ using MailFathom.Application.Paging;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Access;
 using MailFathom.Infrastructure.Persistence.Policies;
+using MailFathom.Infrastructure.Persistence.Policies.MailAccounts;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -34,6 +35,7 @@ internal sealed class PersistedOrganizations(
     MailFathomDbContext dbContext,
     IGrantChangeAnnouncer grantChanges,
     IUserRecordPolicyJudge judge,
+    IMailAccountPolicyJudge accountJudge,
     TimeProvider timeProvider)
     : IOrganizationStore
 {
@@ -421,13 +423,26 @@ internal sealed class PersistedOrganizations(
     /// other's side as it stood, and while the two agree before either move, a move of one side alone always leaves them
     /// differing. The organization's restricting foreign key waits on a deletion that locked it first, and is answered as
     /// the organization being gone.
+    /// <para>
+    /// A move changes which settings policy governs the account, so it is a write of a governed record, as a move of
+    /// a user is: it holds the lock a policy write excludes those with, reads the policies of where the account is
+    /// and of where it is going inside its own transaction, and has the account judged under both. The queryable
+    /// settings the account resolves to under the target's policy are written with the organization, and the record
+    /// version of every user it is assigned to moves, which is what has every replica compose them again.
+    /// </para>
     /// </remarks>
     public async Task<OrganizationWriteResult> SetMailAccountOrganizationAsync(
         Guid mailAccountId,
         Guid? organizationId,
+        bool underANarrowerGrant,
         CancellationToken cancellationToken)
     {
         await using var move = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+        // Before the row, so a move waiting behind a policy write holds nothing that write needs.
+        await dbContext.Database.ExecuteSqlRawAsync(
+            GoverningSettingsPolicyStatements.HoldBesideRecordWrites,
+            cancellationToken);
 
         await dbContext.Database.ExecuteSqlAsync(
             $"""SELECT 1 FROM settings_mail_accounts WHERE "Id" = {mailAccountId} FOR UPDATE""",
@@ -468,12 +483,55 @@ internal sealed class PersistedOrganizations(
                 StandingAssignments: straddling);
         }
 
+        var held = await GovernedMailAccountRows.Of(dbContext).SingleAsync(row => row.Id == mailAccountId, cancellationToken);
+
+        // An account whose settings were not sent is one this build binds nothing from, so there is nothing to judge
+        // and its columns are left as they stand.
+        var judgement = held.Document is null
+            ? null
+            : accountJudge.Judge(
+                [
+                    GovernedMailAccountJudgements.GovernedOf(
+                        held,
+                        await PersistedSettingsPolicies.ReadGoverningAsync(dbContext, held.OrganizationId, cancellationToken),
+                        await PersistedSettingsPolicies.ReadGoverningAsync(dbContext, organizationId, cancellationToken)),
+                ],
+                underANarrowerGrant)[0];
+
+        if (judgement is { Refusals.Count: > 0 })
+        {
+            return new OrganizationWriteResult(OrganizationWriteOutcome.RecordLeftInvalid) { Corrections = judgement.Refusals };
+        }
+
         try
         {
             await dbContext.MailAccountRecords
                 .Where(account => account.Id == mailAccountId)
                 .ExecuteUpdateAsync(
                     setters => setters.SetProperty(account => account.OrganizationId, organizationId),
+                    cancellationToken);
+
+            if (judgement?.Settings is { } settings)
+            {
+                await PersistedMailAccountRecordStore.WriteQueryableSettingsAsync(
+                    dbContext,
+                    mailAccountId,
+                    held.Version,
+                    settings,
+                    cancellationToken);
+            }
+
+            // Which policy governs a mailbox is part of what its users are served, and a replica learns that it has
+            // to compose a user again by their record's version moving.
+            var now = timeProvider.GetUtcNow();
+
+            await dbContext.UserAccounts
+                .Where(user => dbContext.MailAccountAssignments.Any(assignment => assignment.MailAccountId == mailAccountId
+                    && assignment.UserId == user.Id))
+                .ExecuteUpdateAsync(
+                    setters => setters
+                        .SetProperty(user => user.Version, user => user.Version + 1)
+                        .SetProperty(user => user.UpdatedAt, now),
                     cancellationToken);
 
             await move.CommitAsync(cancellationToken);

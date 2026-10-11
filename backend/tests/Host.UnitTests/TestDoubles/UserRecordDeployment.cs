@@ -238,19 +238,38 @@ internal sealed class UserRecordDeployment
         this.MailAccountRecords.HoldUser(user, json, version, accounts);
         this.Documents.ReadAsync(user, Arg.Any<CancellationToken>())
             .Returns(_ => this.MailAccountRecords.DocumentOf(user) is { } document
-                ? document with { Policies = this.policiesRead.GetValueOrDefault(user, GoverningSettingsPolicies.Unwritten) }
+                ? this.ReadUnderItsPolicies(user, document)
                 : null);
     }
 
     /// <summary>States the settings policies governing one user, as their record is read under them and as a commit of it is composed under them.</summary>
+    /// <remarks>An account is governed by the policies of the organization its users stand in, so the accounts are read and committed under the same ones.</remarks>
     internal void GovernedBy(UserId user, GoverningSettingsPolicies policies)
     {
         this.policiesRead[user] = policies;
         this.Writer.GovernedBy(user, policies);
+        this.MailAccountRecords.Policies = policies;
+        this.MailAccountRecords.PoliciesAtCommit = null;
     }
 
     /// <summary>States the policies one user's record is read under and leaves the ones a commit is composed under as they are, which is a policy that moved between the two.</summary>
-    internal void ReadingUnder(UserId user, GoverningSettingsPolicies policies) => this.policiesRead[user] = policies;
+    internal void ReadingUnder(UserId user, GoverningSettingsPolicies policies)
+    {
+        this.policiesRead[user] = policies;
+        this.MailAccountRecords.PoliciesAtCommit ??= this.MailAccountRecords.Policies;
+        this.MailAccountRecords.Policies = policies;
+    }
+
+    private UserSettingsDocument ReadUnderItsPolicies(UserId user, UserSettingsDocument document)
+    {
+        var policies = this.policiesRead.GetValueOrDefault(user, GoverningSettingsPolicies.Unwritten);
+
+        return document with
+        {
+            Policies = policies,
+            MailAccounts = [.. document.MailAccounts.Select(account => account with { Policies = policies })],
+        };
+    }
 
     private UserSettingsDocumentVersion WithPolicyVersions(UserSettingsDocumentVersion row) =>
         this.policiesRead.TryGetValue(row.User, out var policies)

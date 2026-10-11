@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Paging;
 using MailFathom.Domain.Access;
+using MailFathom.Infrastructure.Persistence.Policies;
 using MailFathom.Infrastructure.Persistence.Users.AccountSettings;
 
 namespace MailFathom.Infrastructure.Persistence.Users;
@@ -41,25 +42,40 @@ public interface IMailAccountRecordStore
     /// <summary>Creates an account in the organization of the user it is created for, and assigns it to them.</summary>
     /// <param name="user">The user the account is created for.</param>
     /// <param name="expectedUserVersion">The version of that user's record the account was judged against.</param>
-    /// <param name="account">The account to create, whose version is ignored.</param>
-    /// <param name="settings">The settings its document holds that a question about every account filters on, written in the same transaction.</param>
+    /// <param name="compose">
+    /// Composes the account to create under the policies that will govern it, or answers <see langword="null" /> to
+    /// create nothing. It is called inside the write's transaction, once per attempt, and performs no I/O of its own.
+    /// </param>
     /// <param name="cancellationToken">Cancels the write.</param>
-    /// <returns>What the write did; an address another account holds leaves nothing written.</returns>
+    /// <returns>What the write did; an address another account holds leaves nothing written, and so does a composition that answered nothing.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="compose" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// The policies are handed to the caller rather than read by it beforehand, for the reason a user's record is
+    /// written the same way: what the account is judged by and what its columns hold have to be the policies in force
+    /// when the write commits. They are read inside the transaction, under the lock a policy write excludes record
+    /// writes with, and they are the policies of the organization the user stands in at that moment.
+    /// </remarks>
     Task<MailAccountWrite> CreateAsync(
         UserId user,
         long expectedUserVersion,
-        MailAccountRecord account,
-        MailAccountQueryableSettings settings,
+        Func<GoverningSettingsPolicies, MailAccountCandidate?> compose,
         CancellationToken cancellationToken);
 
     /// <summary>Replaces an account's address, name, and settings where it still stands at the version they were composed over.</summary>
-    /// <param name="account">The account as it is to stand, carrying the version it was composed over.</param>
-    /// <param name="settings">The settings its document holds that a question about every account filters on, written in the same transaction.</param>
+    /// <param name="accountId">The account.</param>
+    /// <param name="expectedVersion">The version of the account the change was composed over.</param>
+    /// <param name="compose">
+    /// Composes the account as it is to stand under the policies that govern it, or answers <see langword="null" /> to
+    /// write nothing. It is called inside the write's transaction, once per attempt, and performs no I/O of its own.
+    /// </param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>What the write did.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="compose" /> is <see langword="null" />.</exception>
+    /// <remarks>The policies are read as <see cref="CreateAsync" /> reads them, for the account's own organization.</remarks>
     Task<MailAccountWrite> SaveAsync(
-        MailAccountRecord account,
-        MailAccountQueryableSettings settings,
+        Guid accountId,
+        long expectedVersion,
+        Func<GoverningSettingsPolicies, MailAccountCandidate?> compose,
         CancellationToken cancellationToken);
 
     /// <summary>Assigns an account to one more user, where the two belong to the same organization or both to none and the account is assigned to fewer users than <see cref="MailAccountRecord.MaximumUsersAssignedIn" /> admits where it belongs.</summary>
@@ -117,19 +133,33 @@ public interface IMailAccountRecordStore
     /// </remarks>
     Task<IReadOnlyList<Guid>> ReadSolelyAssignedAsync(UserId user, CancellationToken cancellationToken);
 
-    /// <summary>Records the settings read out of an account's document, where the account still stands at the version they were read from.</summary>
+    /// <summary>Records the settings an account is served on, where the account still stands at the version they were read from.</summary>
     /// <param name="accountId">The account.</param>
     /// <param name="readFrom">The version of the document the settings came from.</param>
-    /// <param name="settings">The settings read out of that document.</param>
+    /// <param name="derive">
+    /// Derives the settings under the policies that govern the account, or answers <see langword="null" /> to record
+    /// nothing. It is called inside the write's transaction and performs no I/O of its own.
+    /// </param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>Whether they were recorded; an account that moved on, or is gone, records nothing.</returns>
-    /// <remarks>Every write of this build records them with the document; this is for a row a build older than the settings columns wrote alone.</remarks>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="derive" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// Every write of this build records them with the document; this is for a row a build older than the settings
+    /// columns wrote alone. The settings are derived under the lock a policy write excludes record writes with, so a
+    /// policy that lands while a row is being read again is either the one the row is derived from or the one that
+    /// rewrites it afterwards.
+    /// </remarks>
     Task<bool> RecordSettingsAsync(
         Guid accountId,
         long readFrom,
-        MailAccountQueryableSettings settings,
+        Func<GoverningSettingsPolicies, MailAccountQueryableSettings?> derive,
         CancellationToken cancellationToken);
 }
+
+/// <summary>The account one write commits, and the settings a question about every account filters on.</summary>
+/// <param name="Account">The account as its record is to hold it: only what somebody stated on it, never a value a policy forces.</param>
+/// <param name="Settings">The queryable settings the account resolves to through the policies governing it, which the same transaction writes onto its columns.</param>
+public sealed record MailAccountCandidate(MailAccountRecord Account, MailAccountQueryableSettings Settings);
 
 /// <summary>One account and the users it is assigned to.</summary>
 /// <param name="Account">The account.</param>
@@ -192,6 +222,9 @@ public enum MailAccountWriteResult
 
     /// <summary>The account belongs to no organization and is already assigned to somebody else, and a mailbox is shared only inside an organization, so the assignment was refused.</summary>
     SharedOnlyInOrganization = 7,
+
+    /// <summary>The caller composed nothing under the policies in force, so nothing was written.</summary>
+    NothingComposed = 8,
 }
 
 /// <summary>What ending one assignment did.</summary>

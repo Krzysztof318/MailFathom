@@ -8,4 +8,8 @@ namespace MailFathom.Infrastructure.Persistence.Policies;
 /// <param name="Identity">The record's identifier.</param>
 /// <param name="DisplayName">The label an administrator tells it apart by.</param>
 /// <param name="Corrections">One sentence per reason, each naming the property.</param>
-public sealed record SettingsPolicyRecordInTheWay(Guid Identity, string DisplayName, IReadOnlyList<string> Corrections);
+public sealed record SettingsPolicyRecordInTheWay(Guid Identity, string DisplayName, IReadOnlyList<string> Corrections)
+{
+    /// <summary>Gets which kind of record it is, which is a user's unless the judgement of mail accounts named it.</summary>
+    public SettingsPolicyRecordKind Kind { get; init; } = SettingsPolicyRecordKind.User;
+}

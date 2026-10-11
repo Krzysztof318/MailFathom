@@ -227,7 +227,9 @@ public sealed class OrganizationAdministration
     /// Both sides have to be covered, as for <see cref="SetUserOrganizationAsync" />: the account where it sits now, and
     /// the organization it is moved into. An account in no organization is covered by the deployment alone, so leaving
     /// every organization is the deployment's to write, and it is refused by name before the account is read because it
-    /// names no organization whose existence a refusal could disclose.
+    /// names no organization whose existence a refusal could disclose. A move changes which settings policy governs
+    /// the account, so the store is told whether the mover holds the permission below the deployment: such a grant
+    /// may not move the effective settings of an account naming a secret that was not provisioned for one of its users.
     /// </remarks>
     public async Task<OrganizationWriteResult> SetMailAccountOrganizationAsync(
         Guid mailAccountId,
@@ -240,7 +242,11 @@ public sealed class OrganizationAdministration
         {
             this.authorization.RequirePermissionOverTheDeployment(permission);
 
-            return await this.organizations.SetMailAccountOrganizationAsync(mailAccountId, organizationId, cancellationToken);
+            return await this.organizations.SetMailAccountOrganizationAsync(
+                mailAccountId,
+                organizationId,
+                underANarrowerGrant: false,
+                cancellationToken);
         }
 
         this.authorization.RequirePermissionAtAnyScope(permission);
@@ -255,7 +261,11 @@ public sealed class OrganizationAdministration
             return OrganizationWriteResult.Of(OrganizationWriteOutcome.UnknownOrganization);
         }
 
-        return await this.organizations.SetMailAccountOrganizationAsync(mailAccountId, organizationId, cancellationToken);
+        return await this.organizations.SetMailAccountOrganizationAsync(
+            mailAccountId,
+            organizationId,
+            underANarrowerGrant: !this.authorization.Permits(permission),
+            cancellationToken);
     }
 
     /// <summary>Reports why a written display name cannot be an organization's, or that it can.</summary>

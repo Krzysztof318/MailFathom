@@ -293,7 +293,7 @@ internal static class OrganizationEndpoints
     /// <param name="request">The organization to move it into, or none.</param>
     /// <param name="organizations">The organization administration.</param>
     /// <param name="cancellationToken">Cancels the write when the client disconnects.</param>
-    /// <returns><c>204</c> once the move stands, <c>404</c> when no such mail account exists, <c>409</c> naming how many of its users it would leave outside or how many it would leave sharing an account in no organization, or <c>400</c> naming what was wrong with the request.</returns>
+    /// <returns><c>204</c> once the move stands, <c>404</c> when no such mail account exists, <c>409</c> naming how many of its users it would leave outside, how many it would leave sharing an account in no organization, or what the settings policy it would move under refuses it over, or <c>400</c> naming what was wrong with the request.</returns>
     /// <remarks>A move of an account decides who it may be assigned to and nothing about how anybody signs in, so it takes the grant an assignment takes rather than the one a move of a user takes.</remarks>
     internal static async Task<Results<NoContent, NotFound<ProblemDetails>, ProblemHttpResult>> SetMailAccountOrganizationAsync(
         Guid accountId,
@@ -335,6 +335,11 @@ internal static class OrganizationEndpoints
                 + "is assigned to one person, because a mailbox is shared only inside an organization. Nothing was "
                 + "changed and nobody was unassigned. Unassign all but one of them first, or leave the account in an "
                 + "organization.",
+                statusCode: StatusCodes.Status409Conflict),
+            OrganizationWriteOutcome.RecordLeftInvalid => TypedResults.Problem(
+                "The move would change which settings policy governs this mail account, and the one it would move "
+                + $"under refuses it, so it was not moved: {string.Join(' ', result.Corrections)} Correct the account "
+                + "first, or have the policy it would move under supply what it is missing.",
                 statusCode: StatusCodes.Status409Conflict),
             _ => UnknownTarget(target),
         };

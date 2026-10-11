@@ -4,13 +4,16 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using MailFathom.Application.Access;
 using MailFathom.Application.Paging;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Failures;
 using MailFathom.Host.Configuration.Administration;
 using MailFathom.Host.Configuration.Mail;
+using MailFathom.Host.Configuration.Policies;
 using MailFathom.Host.Signals;
+using MailFathom.Infrastructure.Persistence.Policies;
 using MailFathom.Infrastructure.Persistence.Users;
 using MailFathom.Infrastructure.Secrets.Discovery;
 
@@ -41,6 +44,22 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// commits.
 /// </para>
 /// <para>
+/// An account is governed by the settings policy of the deployment and of the organization it stands in. So a change
+/// to one is judged against those before anything else: a property a policy forces is refused to everybody, a
+/// property the editing restriction withholds is refused to a person changing a mailbox assigned to them and to
+/// nobody administering it, and a held property stated as a read showed it is carried through and leaves the account
+/// stating what it stated. What is then bound, and what every rule here is asked of, is the account as those policies
+/// resolve it — so a declaration may leave out what a default supplies, and a combination a declaration would be
+/// refused for is refused however its halves were supplied. The account's own document keeps only what was stated
+/// on it.
+/// </para>
+/// <para>
+/// A write is judged twice where a policy moved in between: once under the policies the account was read with,
+/// because the reads of the users it reaches and of the secret stores may not be made inside a commit, and once more
+/// inside the commit, under the policies in force at that moment, which is the judgement that decides and the one the
+/// account's queryable settings are derived under.
+/// </para>
+/// <para>
 /// A committed write is served by comparing the users this replica holds against the rows, which recomposes every user
 /// whose record version the write moved, and then announced so every other replica compares too.
 /// </para>
@@ -69,6 +88,12 @@ internal sealed class MailAccountAdministration(
     /// <remarks>Bounded rather than persistent, because losing three times in a row is contention nothing here resolves by trying a fourth: the act is reported as superseded and the person asks again.</remarks>
     private const int DeclarationWriteAttempts = 3;
 
+    /// <summary>The one property of an account the folder routes write, which a person changes after the account is declared.</summary>
+    private const string FoldersProperty = nameof(MailSynchronizationAccountOptions.Folders);
+
+    /// <summary>The document of an account that states nothing, which a creation is judged against.</summary>
+    private const string StatingNothing = "{}";
+
     /// <summary>Lists one page of the accounts this deployment holds.</summary>
     /// <param name="query">The page asked for.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
@@ -92,14 +117,66 @@ internal sealed class MailAccountAdministration(
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The account, redacted, or <see langword="null" /> when this deployment holds none under that identifier or the caller's scope does not cover it.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminRead" /> at every scope.</exception>
+    /// <remarks>
+    /// The declaration answered stays the account's own, because that is what a save is composed over and what a
+    /// lifted force brings back. What the account is served with is answered beside it, per property.
+    /// </remarks>
     internal async Task<MailAccountReading?> ReadAsync(Guid accountId, CancellationToken cancellationToken)
     {
         authorization.RequirePermissionAtAnyScope(MailFathomPermission.AdminRead);
 
-        return await accounts.ReadAsync(accountId, cancellationToken) is { } holding
-            && authorization.PermitsOver(MailFathomPermission.AdminRead, TargetOf(holding))
-                ? ReadingOf(holding)
-                : null;
+        if (await accounts.ReadAsync(accountId, cancellationToken) is not { } holding
+            || !authorization.PermitsOver(MailFathomPermission.AdminRead, TargetOf(holding)))
+        {
+            return null;
+        }
+
+        var writes = authorization.PermitsOver(MailFathomPermission.AdminConfigurationWrite, TargetOf(holding));
+
+        return new MailAccountReading(
+            holding.Account.Id,
+            SettingRedaction.ApplyToDocument(MailAccountDeclaration.Of(holding.Account)),
+            holding.Account.Version,
+            holding.Users,
+            holding.OrganizationId)
+        {
+            Policy = PolicyReadingOf(holding.Account, property => writes && property.IsAnAdministratorsToChange),
+        };
+    }
+
+    /// <summary>Reads how the settings policies governing the signed-in user's mail accounts resolve each of them.</summary>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>Every account assigned to the user as it is served, and what an account they declared now would start from; or <see langword="null" /> when this deployment holds no record for the acting user.</returns>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
+    /// <remarks>
+    /// A property of an account already declared is the reader's to change only where a route of theirs writes it,
+    /// which is the list of folders and nothing else; every property is stated when an account is declared, so there
+    /// it is every property no policy holds against them. Both need <see cref="MailFathomPermission.MailAccountsWrite" />,
+    /// so a reader without it is told nothing is theirs to change rather than offered a control whose change is refused.
+    /// </remarks>
+    internal async Task<OwnMailAccountsPolicyReading?> ReadOwnAccountPoliciesAsync(CancellationToken cancellationToken)
+    {
+        authorization.RequirePermission(MailFathomPermission.MailRead);
+
+        if (await documents.ReadAsync(authorization.RequireUser(), cancellationToken) is not { } record)
+        {
+            return null;
+        }
+
+        var writes = authorization.Permits(MailFathomPermission.MailAccountsWrite);
+
+        return new OwnMailAccountsPolicyReading(
+            record.MailAccounts.ToDictionary(
+                account => account.Id,
+                account => PolicyReadingOf(
+                    account,
+                    property => writes && property.IsThePersonsToChange && property.Property.Path == FoldersProperty)),
+            PolicyReadingOf(
+                new MailAccountRecord(Guid.Empty, EmailAddress: null, string.Empty, StatingNothing, Version: 0)
+                {
+                    Policies = record.Policies,
+                },
+                property => writes && property.IsThePersonsToChange));
     }
 
     /// <summary>Creates an account in the organization of the user it is created for, and assigns it to them.</summary>
@@ -199,24 +276,29 @@ internal sealed class MailAccountAdministration(
             return NotADeclaration(standing.Version, refused);
         }
 
-        var judgement = await this.JudgeAsync(candidate, standing.Document, holding.Users, actingUser: null, cancellationToken);
+        var opened = await this.JudgeAsync(
+            standing,
+            candidate,
+            holding.Users,
+            actingUser: null,
+            standing.Version,
+            standing.Policies,
+            cancellationToken);
 
-        if (judgement.Refusals.Count > 0)
+        if (opened.Write is not { } pending)
         {
-            return UserRecordWriteOutcome.Refused(MailFathomErrorCode.ConfigurationCandidateInvalid, standing.Version, judgement.Refusals);
+            return opened.Refusal;
         }
 
-        var write = await accounts.SaveAsync(
-            candidate,
-            MailAccountQueryableSettingsReading.Of(candidate),
-            cancellationToken);
+        var write = await accounts.SaveAsync(accountId, expectedVersion, pending.Compose, cancellationToken);
 
         return write.Result switch
         {
             MailAccountWriteResult.NotFound => null,
             MailAccountWriteResult.Committed => await this.ServedAsync(
-                UserRecordWriteOutcome.Committed(write.Version, judgement.StandingProblems),
+                UserRecordWriteOutcome.Committed(write.Version, pending.StandingProblems),
                 cancellationToken),
+            MailAccountWriteResult.NothingComposed => pending.CommittedAs.Refusal ?? NothingHeldMoves(standing.Version),
             MailAccountWriteResult.AddressHeld => AddressHeldForAdministrator(write.Version, candidate.EmailAddress),
             _ => Superseded(standing.Version, write.Version, "mail account"),
         };
@@ -274,11 +356,20 @@ internal sealed class MailAccountAdministration(
                 : AssignedToMostUsers(account.Version);
         }
 
-        var judgement = await this.JudgeAsync(account, account.Document, [user], actingUser: null, cancellationToken);
+        // Judged as the account stands, so nothing of it is held against anybody: what is asked is whether this user's
+        // set still binds with the account in it.
+        var opened = await this.JudgeAsync(
+            account,
+            account,
+            [user],
+            actingUser: null,
+            account.Version,
+            account.Policies,
+            cancellationToken);
 
-        if (judgement.Refusals.Count > 0)
+        if (opened.Write is not { } judgement)
         {
-            return UserRecordWriteOutcome.Refused(MailFathomErrorCode.ConfigurationCandidateInvalid, account.Version, judgement.Refusals);
+            return opened.Refusal;
         }
 
         var write = await accounts.AssignAsync(accountId, user, record.Version, cancellationToken);
@@ -532,10 +623,16 @@ internal sealed class MailAccountAdministration(
     /// <summary>Reads the aliases one of the signed-in user's accounts declares in the user's own record.</summary>
     /// <param name="accountId">The account's identifier.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The aliases as the record writes them, empty where the record declares none or names no such account.</returns>
+    /// <returns>The aliases as the record writes them, empty where the account declares none, where a settings policy holds its folders against the user, or where the record names no such account.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="accountId" /> is <see langword="null" />, empty, or white space.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
-    /// <remarks>The record's own layer rather than the composed view, because what the folder-management surface may act on is what this user declared and never what an operator's file fixed.</remarks>
+    /// <remarks>
+    /// What the folder-management surface may act on is what this user may state afresh. That is the list the account
+    /// states, or the one a policy's default supplies where it states none — a list is one value, so a change to one
+    /// folder of a default states the whole list on the account. Folders a policy forces, and folders the editing
+    /// restriction withholds, are nobody's to act on here, and neither are those of an account a policy this build
+    /// does not read governs.
+    /// </remarks>
     internal async Task<IReadOnlyList<string>> AliasesOwnAccountDeclaresAsync(
         string accountId,
         CancellationToken cancellationToken)
@@ -549,9 +646,14 @@ internal sealed class MailAccountAdministration(
             return [];
         }
 
+        if (MailAccountPolicyResolution.ResolveUnderItsPolicies(account)?.Find(FoldersProperty) is not { IsThePersonsToChange: true })
+        {
+            return [];
+        }
+
         try
         {
-            return MailAccountFolderComposition.AliasesIn(account.Document);
+            return MailAccountFolderComposition.AliasesIn(WithTheFoldersItIsServed(account));
         }
         catch (Exception unreadable) when (unreadable is FormatException or JsonException)
         {
@@ -612,13 +714,94 @@ internal sealed class MailAccountAdministration(
         return outcome;
     }
 
-    private static MailAccountReading ReadingOf(MailAccountHolding holding) =>
-        new(
-            holding.Account.Id,
-            SettingRedaction.ApplyToDocument(MailAccountDeclaration.Of(holding.Account)),
-            holding.Account.Version,
-            holding.Users,
-            holding.OrganizationId);
+    /// <summary>Resolves one account through the policies it was read with, and says which of its properties are the reader's to change.</summary>
+    private static MailAccountPolicyReading PolicyReadingOf(
+        MailAccountRecord account,
+        Func<ResolvedProperty, bool> isTheReadersToChange)
+    {
+        if (MailAccountPolicyResolution.LayersOf(account, out var unreadable) is not { } layers)
+        {
+            return new MailAccountPolicyReading([], [], SettingsPolicyLayers.DescribeUnreadable(unreadable));
+        }
+
+        var properties = MailAccountPolicyResolution.Resolve(account, layers).Properties;
+
+        return new MailAccountPolicyReading(
+            properties,
+            [.. properties.Where(isTheReadersToChange).Select(property => property.Property.Path)],
+            Unresolved: null);
+    }
+
+    /// <summary>Composes the settings a folder change is made over: the account's own, with the folders it is served standing where it states none.</summary>
+    /// <remarks>
+    /// A list is one value across the layers of a policy, so an account that states no folders and is served a
+    /// default's has a whole list to change one folder of. Composing the change over the account's own document would
+    /// state a list holding that one folder and drop every other the person was looking at.
+    /// </remarks>
+    private static string WithTheFoldersItIsServed(MailAccountRecord account)
+    {
+        if (MailAccountPolicyResolution.ResolveUnderItsPolicies(account)?.Find(FoldersProperty)
+                is not { EffectiveValue: { } served } folders
+            || folders.Source == SettingsValueSource.Record
+            || GovernedRecordResolution.ReadDocument(account.Document) is not { } document)
+        {
+            return account.Document;
+        }
+
+        SettingsDocumentTree.Replace(document, FoldersProperty, served);
+
+        return document.ToJsonString();
+    }
+
+    /// <summary>States an account as a judged declaration leaves it: the name its row holds, and the settings beside it.</summary>
+    private static MailAccountRecord WithDeclaration(MailAccountRecord account, string declarationJson)
+    {
+        if (GovernedRecordResolution.ReadDocument(declarationJson) is not { } declaration)
+        {
+            return account;
+        }
+
+        var displayName = SettingsDocumentTree.Find(declaration, MailAccountRecordComposition.DisplayNameProperty) is JsonValue stated
+            && stated.TryGetValue<string>(out var name)
+                ? name
+                : account.DisplayName;
+
+        MailAccountRecordComposition.RemoveEverySpelling(declaration, MailAccountRecordComposition.DisplayNameProperty);
+
+        return account with { DisplayName = displayName, Document = declaration.ToJsonString() };
+    }
+
+    /// <summary>Reports whether an account as it would stand states exactly what it states now.</summary>
+    private static bool StatesWhatStands(MailAccountRecord standing, MailAccountRecord candidate) =>
+        string.Equals(standing.EmailAddress, candidate.EmailAddress, StringComparison.Ordinal)
+        && string.Equals(standing.DisplayName, candidate.DisplayName, StringComparison.Ordinal)
+        && SettingsDocumentTree.StateTheSame(
+            GovernedRecordResolution.ReadDocument(standing.Document),
+            GovernedRecordResolution.ReadDocument(candidate.Document));
+
+    /// <summary>Says why a change to an account's address is refused, where it is.</summary>
+    /// <remarks>
+    /// The address is a column no declaration document states, so the judgement of a document cannot reach it. A
+    /// policy takes no value for it and says only who may change it, which binds a person stating the address of a
+    /// mailbox they declare and nobody administering one.
+    /// </remarks>
+    private static IEnumerable<string> FindAddressRefusal(
+        SettingsPolicyLayers layers,
+        MailAccountRecord? standing,
+        MailAccountRecord stated,
+        bool byThePerson) =>
+        string.Equals(standing?.EmailAddress, stated.EmailAddress, StringComparison.OrdinalIgnoreCase)
+        || GovernedRecordResolution.Resolve(SettingsPolicySection.MailAccounts, layers, StatingNothing)
+            .Find(MailAccountRecordComposition.EmailAddressProperty)
+            .FindRefusal(byThePerson) is not { } refusal
+            ? []
+            : [refusal];
+
+    /// <summary>Answers a change every part of which is held where it stands.</summary>
+    private static UserRecordWriteOutcome NothingHeldMoves(long version) =>
+        UserRecordWriteOutcome.NothingToChange(
+            version,
+            $"Every setting the change names is held where it stands, so nothing was written and version {version} stays in force.");
 
     private static MailAccountRecord? AssignedAccount(UserSettingsDocument record, string accountId) =>
         Guid.TryParse(accountId, out var id) ? record.MailAccounts.FirstOrDefault(account => account.Id == id) : null;
@@ -824,24 +1007,21 @@ internal sealed class MailAccountAdministration(
             document,
             Version: 0);
 
-        var judgement = await this.JudgeAsync(
+        var opened = await this.JudgeAsync(
+            standing: null,
             candidate,
-            standingDocument: "{}",
             [record.User],
             authority == UserRecordAuthority.User ? record.User : null,
+            record.Version,
+            record.Policies,
             cancellationToken);
 
-        if (judgement.Refusals.Count > 0)
+        if (opened.Write is not { } pending)
         {
-            return (null, UserRecordWriteOutcome.Refused(MailFathomErrorCode.ConfigurationCandidateInvalid, record.Version, judgement.Refusals));
+            return (null, opened.Refusal!);
         }
 
-        var write = await accounts.CreateAsync(
-            record.User,
-            record.Version,
-            candidate,
-            MailAccountQueryableSettingsReading.Of(candidate),
-            cancellationToken);
+        var write = await accounts.CreateAsync(record.User, record.Version, pending.Compose, cancellationToken);
 
         if (write.Result != MailAccountWriteResult.Committed)
         {
@@ -851,6 +1031,7 @@ internal sealed class MailAccountAdministration(
             {
                 MailAccountWriteResult.AddressHeld when authority == UserRecordAuthority.User => AddressRefusedForUser(current),
                 MailAccountWriteResult.AddressHeld => AddressHeldForAdministrator(current, candidate.EmailAddress),
+                MailAccountWriteResult.NothingComposed when pending.CommittedAs.Refusal is { } refusedAtCommit => refusedAtCommit,
                 _ => Superseded(record.Version, current, "user record"),
             });
         }
@@ -859,7 +1040,7 @@ internal sealed class MailAccountAdministration(
             ? await this.VersionOfAsync(record, cancellationToken)
             : write.Version;
 
-        return (candidate.Id, await this.ServedAsync(UserRecordWriteOutcome.Committed(version, judgement.StandingProblems), cancellationToken));
+        return (candidate.Id, await this.ServedAsync(UserRecordWriteOutcome.Committed(version, pending.StandingProblems), cancellationToken));
     }
 
     /// <summary>Composes one folder change over one of the signed-in user's accounts, and saves the account it produced.</summary>
@@ -892,7 +1073,7 @@ internal sealed class MailAccountAdministration(
 
         try
         {
-            change = compose(account.Document);
+            change = compose(WithTheFoldersItIsServed(account));
         }
         catch (Exception refused) when (refused is FormatException or JsonException)
         {
@@ -914,25 +1095,30 @@ internal sealed class MailAccountAdministration(
 
         var candidate = account with { Document = candidateDocument };
         var users = (await accounts.ReadAsync(account.Id, cancellationToken))?.Users ?? [record.User];
-        var judgement = await this.JudgeAsync(candidate, account.Document, users, record.User, cancellationToken);
+        var judged = await this.JudgeAsync(
+            account,
+            candidate,
+            users,
+            record.User,
+            record.Version,
+            account.Policies,
+            cancellationToken);
 
-        if (judgement.Refusals.Count > 0)
+        if (judged.Write is not { } pending)
         {
-            return UserRecordWriteOutcome.Refused(MailFathomErrorCode.ConfigurationCandidateInvalid, record.Version, judgement.Refusals);
+            return judged.Refusal;
         }
 
-        var write = await accounts.SaveAsync(
-            candidate,
-            MailAccountQueryableSettingsReading.Of(candidate),
-            cancellationToken);
+        var write = await accounts.SaveAsync(account.Id, account.Version, pending.Compose, cancellationToken);
         var version = await this.VersionOfAsync(record, cancellationToken);
 
         return write.Result switch
         {
             MailAccountWriteResult.Committed => await this.ServedAsync(
-                UserRecordWriteOutcome.Committed(version, judgement.StandingProblems),
+                UserRecordWriteOutcome.Committed(version, pending.StandingProblems),
                 cancellationToken),
             MailAccountWriteResult.NotFound => null,
+            MailAccountWriteResult.NothingComposed => pending.CommittedAs.Refusal ?? NothingHeldMoves(version),
             _ => Superseded(record.Version, version, "user record"),
         };
     }
@@ -950,26 +1136,152 @@ internal sealed class MailAccountAdministration(
             : new OpenedRecord(record, Superseded(expectedVersion, record.Version, "user record"));
     }
 
-    /// <summary>Judges an account as it would stand against every user it is assigned to.</summary>
-    /// <param name="candidate">The account as it would stand.</param>
-    /// <param name="standingDocument">The settings the account holds now, which a credential already carried is compared against.</param>
+    /// <summary>Judges an account write before its commit, and prepares the judgement the commit makes again.</summary>
+    /// <param name="standing">The account as it stands, or <see langword="null" /> for one being created.</param>
+    /// <param name="stated">The account as the change states it.</param>
     /// <param name="users">The users the account would be assigned to.</param>
     /// <param name="actingUser">The user making the change on their own behalf, or <see langword="null" /> for an administrator.</param>
+    /// <param name="versionInForce">The version a refusal answers, which is the one the caller composed over.</param>
+    /// <param name="readUnder">The policies the account was read with.</param>
     /// <param name="cancellationToken">Cancels the reads.</param>
+    /// <returns>The write to commit, or the outcome that stops it.</returns>
     /// <remarks>
-    /// Which secrets the account may carry afterwards is asked first and follows who is making the change. A user may
+    /// Everything that reads is done here, before the commit: the record of each user the account reaches, and whether
+    /// the secrets it names can be retrieved. That last is resolved here rather than left to the next start, which
+    /// refuses the whole deployment over it. A change that leaves every credential exactly as the account held it
+    /// cannot have introduced one, so it is reported rather than refused: refusing it would block every unrelated edit
+    /// without making the next start any worse.
+    /// </remarks>
+    private async Task<OpenedWrite> JudgeAsync(
+        MailAccountRecord? standing,
+        MailAccountRecord stated,
+        IReadOnlyList<UserId> users,
+        UserId? actingUser,
+        long versionInForce,
+        GoverningSettingsPolicies readUnder,
+        CancellationToken cancellationToken)
+    {
+        List<UserSettingsDocument> assignees = [];
+
+        foreach (var assignee in users)
+        {
+            // Absent when the user was erased while this change was judged, which the store's own write settles.
+            if (await documents.ReadAsync(assignee, cancellationToken) is { } record)
+            {
+                assignees.Add(record);
+            }
+        }
+
+        JudgedAccount JudgeUnder(GoverningSettingsPolicies policies) =>
+            this.JudgeUnder(standing, stated, users, assignees, actingUser, versionInForce, policies);
+
+        var judged = JudgeUnder(readUnder);
+
+        if (judged.Refusal is { } refusal)
+        {
+            return new OpenedWrite(refusal, Write: null);
+        }
+
+        if (judged.Candidate is not { } candidate)
+        {
+            return new OpenedWrite(NothingHeldMoves(versionInForce), Write: null);
+        }
+
+        var unusable = judged.Declared.Count == 0
+            ? []
+            : await secrets.FindUserMailAccountErrorsAsync(DeclarationPath, judged.Declared, cancellationToken);
+
+        if (unusable.Count > 0 && !LeavesEverySecretAsItWas(standing?.Document ?? StatingNothing, candidate.Document))
+        {
+            return new OpenedWrite(
+                UserRecordWriteOutcome.Refused(MailFathomErrorCode.ConfigurationCandidateInvalid, versionInForce, unusable),
+                Write: null);
+        }
+
+        return new OpenedWrite(
+            Refusal: null,
+            new PendingAccountWrite(judged, readUnder, JudgeUnder)
+            {
+                StandingProblems = [.. unusable.Select(UserRecordAdministration.DescribeAsAlreadyHeld)],
+            });
+    }
+
+    /// <summary>Judges an account as it would stand, under one reading of the policies governing it, against every user it reaches.</summary>
+    /// <remarks>
+    /// <para>
+    /// Reads nothing and awaits nothing, which is what lets a commit ask it again inside its own transaction.
+    /// </para>
+    /// <para>
+    /// The policies are asked first. A property a policy forces is refused to everybody, one the editing restriction
+    /// withholds to a user acting for themselves, and a held property stated as a read showed it is carried through
+    /// and leaves the account stating what it stated. Held rather than refused as a candidate somebody could correct:
+    /// nothing about what was sent is wrong.
+    /// </para>
+    /// <para>
+    /// Which secrets the account may carry afterwards is asked next and follows who is making the change. A user may
     /// newly name their own material. An administrator holding <see cref="MailFathomPermission.AdminConfigurationWrite" />
     /// below the deployment may change the settings only while every secret they name is the material of a user the
     /// account is assigned to, so a reference left in place cannot be presented somewhere new. One holding it over the
     /// whole deployment names anything.
+    /// </para>
+    /// <para>
+    /// What is bound last is the account as the policies resolve it, composed into the record of each user it reaches
+    /// as those same policies resolve that record, beside their other accounts.
+    /// </para>
     /// </remarks>
-    private async Task<Judgement> JudgeAsync(
-        MailAccountRecord candidate,
-        string standingDocument,
+    private JudgedAccount JudgeUnder(
+        MailAccountRecord? standing,
+        MailAccountRecord stated,
         IReadOnlyList<UserId> users,
+        List<UserSettingsDocument> assignees,
         UserId? actingUser,
-        CancellationToken cancellationToken)
+        long versionInForce,
+        GoverningSettingsPolicies policies)
     {
+        JudgedAccount Refused(IReadOnlyList<string> messages) =>
+            new(
+                UserRecordWriteOutcome.Refused(MailFathomErrorCode.ConfigurationCandidateInvalid, versionInForce, messages),
+                Candidate: null,
+                []);
+
+        JudgedAccount Held(IReadOnlyList<string> messages) =>
+            new(UserRecordWriteOutcome.Held(versionInForce, messages), Candidate: null, []);
+
+        if (SettingsPolicyLayers.Read(policies, SettingsPolicySection.MailAccounts, out var unreadable) is not { } layers)
+        {
+            return Held([$"{SettingsPolicyLayers.DescribeUnreadable(unreadable)} Nothing was written."]);
+        }
+
+        var byThePerson = actingUser is not null;
+        var statedDeclaration = MailAccountPolicyResolution.GovernedDeclarationOf(stated);
+
+        var change = GovernedRecordChange.Judge(
+            SettingsPolicySection.MailAccounts,
+            layers,
+            standing is null ? StatingNothing : MailAccountPolicyResolution.GovernedDeclarationOf(standing),
+            statedDeclaration,
+            byThePerson);
+
+        string[] held = [.. change.Refusals, .. FindAddressRefusal(layers, standing, stated, byThePerson)];
+
+        if (held.Length > 0)
+        {
+            return Held(held);
+        }
+
+        var carriedThrough = !ReferenceEquals(change.Json, statedDeclaration);
+        var candidate = (carriedThrough ? WithDeclaration(stated, change.Json) : stated) with { Policies = policies };
+
+        // Everything the change would have moved was a held property carried through, so the account is the one
+        // already in force and committing it would move its version, and recompose every user it reaches on every
+        // replica, for a change that changed nothing.
+        if (carriedThrough && standing is not null && StatesWhatStands(standing, candidate))
+        {
+            return new JudgedAccount(Refusal: null, Candidate: null, []);
+        }
+
+        var standingDocument = standing?.Document ?? StatingNothing;
+
         var introduced = actingUser is { } user
             ? UserRecordAdministration.FindSecretsTheUserMayNotName(user, standingDocument, candidate.Document)
             : authorization.Permits(MailFathomPermission.AdminConfigurationWrite)
@@ -978,20 +1290,17 @@ internal sealed class MailAccountAdministration(
 
         if (introduced.Count > 0)
         {
-            return new Judgement(introduced, []);
+            return Refused(introduced);
         }
 
+        // An account is assigned only to users of its own organization, so the policies governing it are the ones
+        // governing each of them and every other account they are assigned.
+        var userLayers = SettingsPolicyLayers.Read(policies, SettingsPolicySection.Users, out _);
         List<string> refusals = [];
         UserAccountOptions? bound = null;
 
-        foreach (var assignee in users)
+        foreach (var record in assignees)
         {
-            // Absent when the user was erased while this change was judged, which the store's own write settles.
-            if (await documents.ReadAsync(assignee, cancellationToken) is not { } record)
-            {
-                continue;
-            }
-
             if (record.MailAccounts.Count >= MailAccountRecord.MaximumAssignedPerUser
                 && record.MailAccounts.All(account => account.Id != candidate.Id))
             {
@@ -1001,34 +1310,31 @@ internal sealed class MailAccountAdministration(
             }
 
             var binding = binder.Bind(
-                MailAccountRecordComposition.Compose(record.Json, WithCandidate(record.MailAccounts, candidate)),
+                MailAccountRecordComposition.Compose(
+                    userLayers is null
+                        ? record.Json
+                        : GovernedRecordResolution.Resolve(SettingsPolicySection.Users, userLayers, record.Json).EffectiveJson,
+                    WithCandidate([.. record.MailAccounts.Select(account => account with { Policies = policies })], candidate)),
                 UserRecordArrival.BeingWritten);
 
             refusals.AddRange(binding.Refusals);
             bound ??= binding.User;
         }
 
-        if (refusals.Count > 0 || bound is null)
+        if (refusals.Count > 0)
         {
-            return new Judgement([.. refusals.Distinct(StringComparer.Ordinal)], []);
+            return Refused([.. refusals.Distinct(StringComparer.Ordinal)]);
         }
 
         var identifier = candidate.Id.ToString("D");
-        IReadOnlyList<MailSynchronizationAccountOptions> declared =
-        [
-            .. bound.MailAccounts.Where(account => MailSynchronizationOptions.TryReadAccountId(account.AccountId) == identifier),
-        ];
 
-        // Resolved here rather than left to the next start, which refuses the whole deployment over it. A change that
-        // leaves every credential exactly as the account held it cannot have introduced one, so it is reported rather
-        // than refused: refusing it would block every unrelated edit without making the next start any worse.
-        var unusable = await secrets.FindUserMailAccountErrorsAsync(DeclarationPath, declared, cancellationToken);
-
-        return unusable.Count == 0
-            ? new Judgement([], [])
-            : LeavesEverySecretAsItWas(standingDocument, candidate.Document)
-                ? new Judgement([], [.. unusable.Select(UserRecordAdministration.DescribeAsAlreadyHeld)])
-                : new Judgement(unusable, []);
+        return new JudgedAccount(
+            Refusal: null,
+            candidate,
+            [
+                .. (bound?.MailAccounts ?? [])
+                    .Where(account => MailSynchronizationOptions.TryReadAccountId(account.AccountId) == identifier),
+            ]);
     }
 
     /// <summary>Reads the version a user's record stands at now, which every account write moves.</summary>
@@ -1063,6 +1369,47 @@ internal sealed class MailAccountAdministration(
 
     private sealed record OpenedRecord(UserSettingsDocument Record, UserRecordWriteOutcome? Refusal);
 
-    /// <summary>What judging an account found: refusals that stop the write, or problems the account already carried.</summary>
-    private readonly record struct Judgement(IReadOnlyList<string> Refusals, IReadOnlyList<string> StandingProblems);
+    /// <summary>What judging an account under one reading of its policies found.</summary>
+    /// <param name="Refusal">The outcome that stops the write, or <see langword="null" /> where it may stand.</param>
+    /// <param name="Candidate">The account to commit, with every held property the change carried through left as the account states it; <see langword="null" /> where a refusal stops the write, and where everything the change named is held where it stands.</param>
+    /// <param name="Declared">The account as a user it reaches would be served it, which its credentials are resolved from.</param>
+    private sealed record JudgedAccount(
+        UserRecordWriteOutcome? Refusal,
+        MailAccountRecord? Candidate,
+        IReadOnlyList<MailSynchronizationAccountOptions> Declared);
+
+    /// <summary>An account write as it was judged before its commit: the write to commit, or the outcome that stops it.</summary>
+    private readonly record struct OpenedWrite(UserRecordWriteOutcome? Refusal, PendingAccountWrite? Write);
+
+    /// <summary>One account write that passed the judgement made before its commit, and what the commit decided on.</summary>
+    /// <param name="judged">The judgement made under the policies the account was read with.</param>
+    /// <param name="readUnder">Those policies.</param>
+    /// <param name="judgeAgain">Judges the same change under another reading of the policies, reading nothing.</param>
+    private sealed class PendingAccountWrite(
+        JudgedAccount judged,
+        GoverningSettingsPolicies readUnder,
+        Func<GoverningSettingsPolicies, JudgedAccount> judgeAgain)
+    {
+        private readonly JudgedAccount judgedBeforeTheCommit = judged;
+
+        /// <summary>Gets the judgement the commit decided on, which is the one made before it until the commit asks.</summary>
+        public JudgedAccount CommittedAs { get; private set; } = judged;
+
+        /// <summary>Gets the problems the account already carried, which a committed write reports rather than refuses.</summary>
+        public IReadOnlyList<string> StandingProblems { get; init; } = [];
+
+        /// <summary>Composes what the commit writes, under the policies in force inside it.</summary>
+        /// <param name="policies">The policies the commit read inside its own transaction.</param>
+        /// <returns>The account and the queryable settings it resolves to, or <see langword="null" /> where those policies refuse the change or leave nothing to write.</returns>
+        /// <remarks>Where the commit read the policies the account was read with, the judgement made before it is the one that decides; a policy that moved in between is judged against here.</remarks>
+        public MailAccountCandidate? Compose(GoverningSettingsPolicies policies)
+        {
+            this.CommittedAs = policies == readUnder ? this.judgedBeforeTheCommit : judgeAgain(policies);
+
+            return this.CommittedAs is { Refusal: null, Candidate: { } candidate }
+                && MailAccountQueryableSettingsReading.Of(candidate) is { } settings
+                    ? new MailAccountCandidate(candidate, settings)
+                    : null;
+        }
+    }
 }

@@ -173,7 +173,7 @@ public sealed class OrchestratedSoleAssignmentOutsideOrganizationTests(MailFatho
         Guid account,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IOrganizationStore>()
-                .SetMailAccountOrganizationAsync(account, organizationId: null, token),
+                .SetMailAccountOrganizationAsync(account, organizationId: null, underANarrowerGrant: false, token),
             cancellationToken);
 
     private static Task<Guid[]> ReadAssignedUsersAsync(

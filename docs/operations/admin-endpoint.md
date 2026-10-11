@@ -664,11 +664,11 @@ and a request with none is refused as any other.
 | `POST /api/admin/users/{userId}/record` | `mailfathom.admin.configuration.write` | Takes that record back edited and commits it as one change against the version it was opened over. It is what `mfctl user edit` sends when the editor exits, and a record another writer moved past is refused as superseded rather than merged. |
 | `GET /api/admin/mail-accounts` | `mailfathom.admin.read` | Reads [one page](#reading-the-users-mail-accounts-and-organizations-a-page-at-a-time) of [the mail accounts this deployment holds](#mail-accounts-and-who-they-are-assigned-to), each with its identifier, its version, the users it is assigned to, its address, its display name, and the `organizationId` it belongs to or `null` for none, and `nextCursor` naming where the following page continues. The declaration itself is read one account at a time. |
 | `POST /api/admin/mail-accounts` | `mailfathom.admin.configuration.write` | Creates a mail account from the declaration the body carries, in the [organization](#organizations) of the user `userId` names, and assigns it to that user, answering with the identifier it was generated under. An address another account already holds is refused. |
-| `GET /api/admin/mail-accounts/{accountId}` | `mailfathom.admin.read` | Hands over one account's declaration as the redacted JSON an editing session opens, with the version it was read at and the `organizationId` it belongs to, or `400` naming the row to correct when the stored declaration is not one of settings. |
-| `POST /api/admin/mail-accounts/{accountId}` | `mailfathom.admin.configuration.write` | Takes that declaration back edited and commits it against the version it was opened over, judged against every user the account is assigned to. |
+| `GET /api/admin/mail-accounts/{accountId}` | `mailfathom.admin.read` | Hands over one account's declaration as the redacted JSON an editing session opens, with the version it was read at, the `organizationId` it belongs to, and each of its settings as [the settings policies governing it](configuration-mail.md#how-a-settings-policy-resolves-a-mail-account) resolve it, or `400` naming the row to correct when the stored declaration is not one of settings. |
+| `POST /api/admin/mail-accounts/{accountId}` | `mailfathom.admin.configuration.write` | Takes that declaration back edited and commits it against the version it was opened over, judged against every user the account is assigned to and against the settings policies governing it: a declaration moving a setting a policy forces is refused naming the setting and who holds it. |
 | `DELETE /api/admin/mail-accounts/{accountId}` | `mailfathom.admin.erase` | Erases the account, every assignment to it, and every message this deployment holds for it. **This cannot be undone.** |
 | `POST /api/admin/mail-accounts/{accountId}/assignments` | `mailfathom.admin.configuration.write` | Assigns the account to the user named by `userId`: beside the other members already assigned it where it belongs to an [organization](#organizations), and to nobody else where it belongs to none. Assigning it to somebody who already holds it writes nothing. An account and a user of different organizations — counting none as one of them — are refused, naming both; so is a second user of an account in no organization, which is one person's; and so is an account already assigned to 256 users. |
-| `POST /api/admin/mail-accounts/{accountId}/organization` | `mailfathom.admin.configuration.write` | Moves the account into the organization the body's `organizationId` names, or out of every organization where the body says `"none": true`. A body stating neither, or both, is refused with `400` rather than read as a move out. This is what `mfctl account set-organization` sends. It answers `204`, `404` for an account this deployment does not hold, `400` for an organization it does not hold, and `409` naming how many of the users it is assigned to the target would not admit — or, for a move out of every organization, how many users it is assigned to when that is more than one. |
+| `POST /api/admin/mail-accounts/{accountId}/organization` | `mailfathom.admin.configuration.write` | Moves the account into the organization the body's `organizationId` names, or out of every organization where the body says `"none": true`. A body stating neither, or both, is refused with `400` rather than read as a move out. This is what `mfctl account set-organization` sends. It answers `204`, `404` for an account this deployment does not hold, `400` for an organization it does not hold, and `409` naming how many of the users it is assigned to the target would not admit — or, for a move out of every organization, how many users it is assigned to when that is more than one — or naming what the settings policy the account would move under refuses about it. |
 | `POST /api/admin/mail-accounts/{accountId}/assignments/removal` | `mailfathom.admin.erase` | Ends one user's assignment and erases what that user authored under the account, their drafts and their standing instructions; the mail itself stays whole while anybody else is assigned. **Ending the last one erases the account and every message this deployment holds for it.** |
 | `POST /api/admin/users/{userId}/secrets` | `mailfathom.admin.configuration.write` | Seals the material carried in the body under the active data-encryption key and answers only with its `database:<uuid>` reference. Sending the same declared name for that user rotates the existing row and returns the same reference. It refuses when the user does not exist or the deployment configures no data-encryption key ring. |
 | `GET /api/admin/organizations` | `mailfathom.admin.read` | Reads [one page](#reading-the-users-mail-accounts-and-organizations-a-page-at-a-time) of [the organizations](#organizations) this deployment holds, each with its display name, its short name, how many users belong to it, how many mail accounts belong to it as `mailAccounts`, and when it was recorded, and `nextCursor` naming where the following page continues. A row on the page whose stored short name is not one this build reads is reported beside them under `unreadable`, by identifier, display name, and a `correction` naming what a short name may contain, rather than refusing the listing. The stored short name itself is never echoed. This is what `mfctl organization list` asks. |
@@ -2142,8 +2142,10 @@ one, and each [organization](#organizations) holds one of its own. **What a poli
 user's record in its scope from the commit that stores it**: [how a settings policy resolves a user's
 record](configuration-sources.md#how-a-settings-policy-resolves-a-users-record) holds the order the two policies and
 the record are read in, and saving one never rewrites a record's own document. **What a policy states for mail
-accounts is stored and governs no account**: no mail account is read through a policy, so that section changes no
-synchronization and no delivery.
+accounts governs every mail account in its scope the same way** — the deployment's every account, an organization's
+the accounts that belong to it — and
+[how a settings policy resolves a mail account](configuration-mail.md#how-a-settings-policy-resolves-a-mail-account)
+holds what that means for a list, for the identity properties, and for a setting a declaration leaves out.
 
 | Command | What it does |
 | --- | --- |
@@ -2211,7 +2213,7 @@ What a save is refused for, each under `12007` unless the row says otherwise:
 | A client preference other than the telemetry switch | A client preference is the person's own. `ClientPreferences:TelemetryEnabled` takes a forced value under `Users:Forced` and nothing else: a default for it, any statement about another preference, and an editing path reaching `ClientPreferences` are each refused by name |
 | `MailAccounts` in the `Users` section, and `AccountId` in `MailAccounts` | A policy governs the properties of a record, and never which mail accounts a user has or the identifier this deployment generates for one |
 | A policy composed over a version no longer in force, under `12008` | Another writer committed first. The refusal names both versions, `mfctl policy edit` reports which settings differ between them, and nothing of the session is merged on top of what is in force |
-| A default or a forced value in `MailAccounts` changed under a grant held at the organization | Such a value can decide where a mailbox's credential is presented, so it is the deployment's to state, as the paragraph on a grant held at the organization says below |
+| A default or a forced value in `MailAccounts` that would move, under a grant held at the organization, an account naming a secret not provisioned for its own users | Such a value can decide where that credential is presented, as the paragraph on a grant held at the organization says below |
 | A document that is not one JSON object, or is past the size above | A request carrying no document at all is answered `400` rather than taken as a decision to empty the policy |
 
 **What a record's validator asks of the record as a whole is not asked of a policy.** A statement is a sparse record
@@ -2219,29 +2221,43 @@ rather than a record, so a rule that reads several of a record's properties toge
 submission host, say — has nothing to be asked of: forcing `Delivery:Enabled` leaves the host each account states to
 that account. The same holds for a bound that validator checks on one property in the course of reading the record,
 rather than the property declaring it: a submission port, an audit trail's retention window, and the thresholds of
-contact collection are held to their bounds when a record is written, and not when a policy states them.
+contact collection are held to their bounds when a record is written, and not when a policy states them. Both are
+asked instead of each record the policy governs, as that record would stand under it, which is the judgement the next
+paragraph describes.
 
-**A policy may not leave a user's record it governs unservable.** A save that changes a default or a forced value for
-users is judged against every user record the policy governs — every user for the deployment's, the members for an
-organization's — inside the transaction that stores it: each record is resolved under the policy as saved and held to
-what a record is held to. A record the policy in force kept servable and the saved one would not refuses the save
-under `12007`, naming how many records stand in the way and the first ten of them by label and identifier, each with
-what it would be left without. A record that was already unservable refuses nothing, because the save did not break
-it:
+**A policy may not leave a record it governs unservable.** A save that changes a default or a forced value for users
+is judged against every user record the policy governs, and one that changes a default or a forced value for mail
+accounts against every mail account it governs — every one for the deployment's, the members and the accounts of an
+organization for that organization's — inside the transaction that stores it: each is resolved under the policy as
+saved and held to what a record of its kind is held to when it is written. A record the policy in force kept servable
+and the saved one would not refuses the save under `12007`, naming how many records stand in the way and the first
+ten of them, each with what it would be left without. A user is named by label and identifier and a mail account by
+its display name and identifier, never by its address. A record that was already unservable refuses nothing, because
+the save did not break it, and a mail account the save leaves served exactly what it was is not judged at all — so
+stating a default refuses nothing over the accounts that state that setting themselves:
 
 ```console
 $ mfctl policy edit --organization 0197c0de-0000-7000-8000-0000000000a1
-The saved policy would leave 1 of the 14 user records it governs a record this deployment could not serve, so nothing was written. Correct those records first, or keep what they rely on in the policy. Each is named below.
+The saved policy is refused over 2 of the 31 records it governs — a user record or a mail account it would leave one this deployment could not serve, or a mail account whose effective settings the grant it was written under may not move — so nothing was written. Correct those records first, or keep what they rely on in the policy. Each is named below.
 User 'alex' (0197a3c0-0000-7000-8000-000000000001): Language is not stated, and every user record names the language MailFathom writes for that person in — the card beside a contact of theirs, a message that answers no correspondence. State 'English' or 'Polish'.
+Mail account 'Work' (0199a0c0-0000-7000-8000-00000000000a): Account 'Work': Language is not stated, and every mail account names the language MailFathom writes about its mail in — the reading on a message row, the statement about a conversation. State 'English' or 'Polish'.
 ```
 
-A save that changes only an editing restriction, or only what the policy states for mail accounts, judges no record:
-neither can make a user's record unservable.
+A save judges only the kind of record it moves a value for: one that changes nothing but `Users` reads no mail
+account, one that changes nothing but `MailAccounts` reads no user, and one that changes only an editing restriction
+judges no record at all, because a restriction can make no record unservable.
 
 **One save judges at most [`Deployment:MaximumRecordsJudgedPerPolicyWrite`](configuration-runtime.md#deployment)
-records, 10000 unless set.** The judgement runs inside the write, and a save of any record it judges waits for it, so
-the bound is what keeps one policy write from holding every record write of a large deployment behind it. A save
-governing more is refused under `12007` before any record is read, naming the setting that raises the bound.
+records, 10000 unless set, counting the users and the mail accounts together.** The judgement runs inside the write,
+and a save of any record it judges waits for it, so the bound is what keeps one policy write from holding every record
+write of a large deployment behind it. A save governing more is refused under `12007` before any record is read,
+naming the setting that raises the bound.
+
+**The same commit rewrites what the deployment reads across the mail accounts it moves.** The columns and folder rows
+beside an account's declaration — its mode, whether it classifies and scans, each folder's mapping — hold what the
+account is served, so a policy that forces `Folders`, supplies a default mode, or lifts either rewrites them for the
+accounts it governs as it commits; the declaration itself is never rewritten. The account's next run is composed
+under the policy, and a run already in flight finishes on the settings it took.
 
 **The same commit rewrites the endpoint switches of every user whose switches it moves.** A request authenticates
 against [the switches on a user's row](configuration-sources.md#which-endpoints-one-user-is-served-on) and never
@@ -2258,18 +2274,22 @@ or at that organization, which is what lets an organization's own administrator 
 grant at one user covers no organization. An organization outside the caller's scope is answered `404`, exactly as
 one this deployment does not hold.
 
-**A grant held at the organization states no default and no forced value for a mail account.** Forcing a host, a
-port, a token endpoint, or a transport security posture decides where a mailbox's credential is presented, and an
-organization's administrator is trusted with that organization's mailboxes and not with a credential the deployment
-holds for somebody else. Telling the two apart takes a reading of the accounts a policy governs, and a save reads
-none, so a save under such a grant whose `MailAccounts:Defaults` or `MailAccounts:Forced` differ from the policy in
-force is refused under `12007`, whichever setting moved and whether it was added, changed, or removed. Which
-settings decide where a credential goes is deliberately not a list. Such an administrator still saves the whole of
-`Users` and `MailAccounts:Editing`, and saves back unchanged whatever the deployment's administrator stated for the
-organization's mail accounts; a grant at the deployment writes every part of every policy. The comparison is made
-as the replica answering judges a policy, so a policy in force that it cannot judge whole — one a newer build
-stored while two builds were serving during an upgrade — is refused to a grant held at the organization whatever
-the save states, and is the deployment's administrator's to replace.
+**A grant held at the organization may not move an account naming a secret that is not its own users'.** Forcing a
+host, a port, a token endpoint, or a transport security posture decides where a mailbox's credential is presented,
+and an organization's administrator is trusted with that organization's mailboxes and not with a credential the
+deployment holds for somebody else. So a save under such a grant is held, account by account, to the bound
+[an account's own write](#mail-accounts-and-who-they-are-assigned-to) is held to under the same grant: where the
+saved policy would change what an account is served — whichever setting moved, and whether a default or a forced
+value was added, changed, or removed — every secret that account names has to be material this deployment
+provisioned for a user the account is assigned to, its own name beginning with `user-`, that user's identifier, and
+`-`. An account naming anything else refuses the save under `12007` and is named in the answer like any other record
+in the way. Which settings decide where a credential goes is deliberately not a list. An account the save leaves
+served exactly what it was is not asked, so such an administrator states a default the accounts in question state
+themselves, and saves the whole of `Users` and `MailAccounts:Editing`; a grant at the deployment writes every part of
+every policy and is not asked this at all. What an account was served under a policy in force that the answering
+replica cannot judge whole — one a newer build stored while two builds were serving during an upgrade — is unknown
+to it, so replacing such a policy under a grant held at the organization counts as moving every account the policy
+governs, and is refused over each that names a secret that is not its users'.
 
 **A stored policy past the size above is refused rather than read.** No save produces one, so it is a row written
 beside MailFathom. Every route that reads it — both `GET`s, and both `POST`s, which read the policy in force before
@@ -2429,7 +2449,7 @@ over exactly that set.
 | Command | What it does |
 | --- | --- |
 | `mfctl account list` | Reads every account this deployment holds, following the listing's cursor to its last page, with each one's identifier, address, display name, version, who it is assigned to, and the organization it belongs to |
-| `mfctl account show --account <id> [--format json\|yaml]` | Reads one account's declaration, secrets redacted, as JSON or as YAML, beneath the organization it belongs to |
+| `mfctl account show --account <id> [--format json\|yaml] [--effective]` | Reads one account's declaration, secrets redacted, as JSON or as YAML, beneath the organization it belongs to — or with `--effective`, each setting as the account is served it, with what supplied it and who holds it |
 | `mfctl account add [--user <id>] --from-file <path>` | Creates an account from the declaration in the file — JSON, or YAML where the file is named `.yaml` or `.yml` — assigns it to that user, and reports the identifier it was generated under |
 | `mfctl account edit --account <id> [--format json\|yaml]` | Opens that declaration in your `$VISUAL` or `$EDITOR`, as JSON or as YAML, and commits what you saved as one change |
 | `mfctl account assign --account <id> --user <id>` | Assigns an account to that user: beside the other members assigned it where it belongs to an [organization](#organizations), and to nobody else where it belongs to none |
@@ -2498,6 +2518,50 @@ account's mail reaches, so nobody it is assigned to is ever left out of one.
 the account as it would stand and binds each of them, so a change that would break any one user's record is refused
 whole. Every committed write moves the version of each of those users' records, which is what a client composing
 against its own record's version sees move.
+
+**An account write is judged under the settings policies governing the account, and an administrator is bound by a
+forced value alone.** What is bound into each user's record is the account as
+[the policies resolve it](configuration-mail.md#how-a-settings-policy-resolves-a-mail-account), so a declaration may
+leave out a setting a policy supplies, and the account's record keeps only what the declaration stated. A declaration
+stating another value for a setting a policy forces is refused under `12007`, naming the setting and whether the
+organization or the deployment holds it; an editing restriction binds the people the account is assigned to and
+not whoever administers it. A forced setting saved back as the read showed it — the declaration's own value, or the
+value in force — passes and leaves the declaration's own value as it was, and a save that names nothing else commits
+nothing. The policies are read again inside the commit, so a policy that came to force a setting while the
+declaration was being edited refuses the save rather than being passed by it.
+
+```
+Host is held by the organization, whose settings policy forces its value, so nothing written on the record changes it. Leave it as the record states it, or change the policy.
+```
+
+**An account is read with each setting as it is served beside its declaration.** `GET
+/api/admin/mail-accounts/{accountId}` answers the account's own `declaration` — what a save is composed over — and a
+`properties` list in the shape [a user's record read](#users-and-their-records) answers: `path`, `value`, `source`,
+`heldBy`, and `changeable`, which is `false` where a policy forces the setting and for every setting where the
+caller's grant does not carry `mailfathom.admin.configuration.write` over the account. `EmailAddress` and
+`DisplayName` are answered from the account's row, and a secret block is listed with no value: its reference is
+redacted in the declaration and does not come back through this list. Where a policy governing the account is one
+this build does not read, `properties` is empty and `unresolved` carries the sentence naming which. `mfctl account
+show --effective` prints the list in place of the declaration, one setting a line:
+
+```console
+$ mfctl account show --account 5b0c... --effective
+5b0c...  Work <alex@example.test>
+    version 4; assigned to: 7c02...
+    organization: 0197c0de-0000-7000-8000-0000000000a1
+  DisplayName: Work  [Record]
+  Host: imap.corp.example.test  [OrganizationForced, held by the organization, not changeable while the policy forces it]
+  Mode: Polling  [BuiltIn]
+  Port: 993  [DeploymentDefault]
+```
+
+**Moving an account changes which policy governs it, and the move is judged like a policy write.** `mfctl account
+set-organization` resolves the account under the policy of the organization it would move into — or under the
+deployment's alone, for a move out of every one — inside the transaction that moves it. An account that policy would
+leave one no start would serve is not moved and is answered `409` with what it would be left without; so is an
+account naming a secret not provisioned for one of its users, where the move is made under a grant held below the
+deployment and would change what the account is served. Nothing is rewritten on the account to make a move pass,
+and a move that commits rewrites the columns the deployment reads across accounts in the same transaction.
 
 **Ending an assignment erases mail, and ending the last one erases the account.** `mfctl account unassign` erases the
 mail this deployment stored for that user under the account. An account nobody is assigned to serves nobody, so ending

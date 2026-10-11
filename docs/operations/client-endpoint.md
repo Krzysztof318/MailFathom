@@ -91,6 +91,7 @@ AppHost provisions its synthetic credential after the service reports ready;
 | `POST /api/client/mutations/deletes/releases` | `mailfathom.mail.delete` |
 | `GET /api/client/record` | `mailfathom.mail.read` |
 | `POST /api/client/record` | `mailfathom.mail.accounts.write` |
+| `GET /api/client/record/mail-accounts` | `mailfathom.mail.read` |
 | `POST /api/client/record/mail-accounts` | `mailfathom.mail.accounts.write` |
 | `POST /api/client/record/mail-accounts/removal` | `mailfathom.mail.accounts.write` |
 | `POST /api/client/record/mail-accounts/folders` | `mailfathom.mail.accounts.write` |
@@ -711,6 +712,16 @@ allows nothing. `ServerRefused` and `ServerUnavailable` say the mail server refu
 nothing was changed on either side. `NotRecorded` is the one refusal that leaves the two sides disagreeing: the server
 carried the act out and MailFathom could not write it down, so the folders are read again before anything else is
 asked.
+
+**A settings policy that holds `Folders` against the person closes these routes for that account.** What they may
+act on is what the person may state afresh, so where a policy forces the account's list of folders or its editing
+restriction withholds it — [how a settings policy resolves a mail
+account](configuration-mail.md#how-a-settings-policy-resolves-a-mail-account) — no folder of the account is
+answered as one it declares, and renaming, moving, or deleting one answers `NotDeclaredByTheAccount` before any mail
+server is reached. Creating a folder is the exception this surface does not yet close: on a mirrored account the
+server is asked first and the declaration is refused afterwards, so the act answers `NotRecorded` and leaves a folder
+on the server that the account does not declare. A folder of a default's list is one the account is served rather
+than one it states, and is acted on like any other; the first act writes the resulting list onto the account.
 
 The read takes `mailfathom.mail.read` and the writes take
 [`mailfathom.mail.folders.write`](permissions.md#the-published-set) as well as `mailfathom.mail.read`, because an act
@@ -2029,7 +2040,7 @@ subject, no correspondent, no body, and no keyword reaches a log line or a telem
 
 ### The record routes
 
-These seven are how a person maintains what this deployment reads for them: which mailboxes it synchronizes, which
+These eight are how a person maintains what this deployment reads for them: which mailboxes it synchronizes, which
 folders of each it reads, what each one is reached with, and the settings that are theirs rather than the
 deployment's. Reading is `mailfathom.mail.read` like the rest of this surface; the six writes are
 `mailfathom.mail.accounts.write`, separately granted for the reason every write here is separately granted — reading
@@ -2039,6 +2050,7 @@ somebody's mail is not deciding which mailboxes are read for them.
 | --- | --- |
 | `GET /api/client/record` | Hands over the signed-in user's record as redacted JSON, with the version it was read at and each of its settings as [the settings policies governing them](configuration-sources.md#how-a-settings-policy-resolves-a-users-record) resolve it |
 | `POST /api/client/record` | Commits that record back edited, as one change against the version it was opened over |
+| `GET /api/client/record/mail-accounts` | Hands over each mailbox assigned to the signed-in user as [the settings policies governing it](configuration-mail.md#how-a-settings-policy-resolves-a-mail-account) resolve it, and what a mailbox they declared now would start from |
 | `POST /api/client/record/mail-accounts` | Creates one more mailbox, assigned to the signed-in user alone |
 | `POST /api/client/record/mail-accounts/removal` | Ends the signed-in user's assignment to one mailbox, named by its identifier, and erases the mail stored for it |
 | `POST /api/client/record/mail-accounts/folders` | Declares one more folder in one of those mailboxes |
@@ -2100,6 +2112,70 @@ nothing but held settings carried through commits nothing and answers the versio
 
 **`Language` is required of a saved record only where no policy supplies it.** A record whose organization or
 deployment states a default or a forced language may leave it out, and is refused for leaving it out everywhere else.
+
+**A person's mailboxes are read the same way, on a route of their own.** A settings policy governs a mail account as
+it governs a record — [how a settings policy resolves a mail
+account](configuration-mail.md#how-a-settings-policy-resolves-a-mail-account) holds the order, what a list is, and
+which properties take no value from a policy — and `GET /api/client/record/mail-accounts` answers what that leaves
+each of the caller's mailboxes served:
+
+```json
+{
+  "accounts": [
+    {
+      "id": "5b0c8a3e-…",
+      "properties": [
+        { "path": "DisplayName", "value": "Work", "source": "Record", "heldBy": null, "changeable": false },
+        { "path": "Folders", "value": [ { "Alias": "INBOX", "RemotePath": "INBOX" } ], "source": "OrganizationDefault", "heldBy": null, "changeable": true },
+        { "path": "Host", "value": "imap.corp.example.test", "source": "OrganizationForced", "heldBy": "Organization", "changeable": false },
+        { "path": "Secrets:Password", "value": null, "source": "Record", "heldBy": null, "changeable": false }
+      ],
+      "unresolved": null
+    }
+  ],
+  "newAccount": { "id": null, "properties": [ … ], "unresolved": null }
+}
+```
+
+`accounts` carries one entry per mailbox assigned to the caller, in identifier order, each `properties` list in the
+shape the record read answers and listing every setting of the mailbox — the example shows four. Three things are
+particular to it:
+
+- **`changeable` on a mailbox already declared is `true` for `Folders` at most.** The folder routes are the only
+  routes of the person's that write a declared mailbox, so the list of folders is the one setting of it that can be
+  theirs, and it is where no policy forces it or withholds it and the caller's grant carries
+  `mailfathom.mail.accounts.write`.
+- **`newAccount` is what a mailbox declared now would start from.** Its `id` is `null`, each `value` is what a
+  declaration stating nothing would be served, and `changeable` says whether the setting is the caller's to state in
+  `POST /api/client/record/mail-accounts` — so a dialog shows a forced server as fixed and leaves out a setting a
+  default already supplies. It is `false` for every setting where the grant does not carry
+  `mailfathom.mail.accounts.write`.
+- **No secret travels on this route.** A secret block is listed with a `null` value whatever the mailbox states for
+  it, and the route answers nothing of a mailbox beyond the settings a declaration states: no synchronization state,
+  and no mail.
+
+Where a policy governing a mailbox is one this replica's build does not read, that entry's `properties` is empty and
+its `unresolved` carries the sentence naming which scope's policy it is. A caller whose row has gone is answered
+`404`, as on the record read. [The accounts route](#the-accounts-route) stays what a client renders its mailbox list
+from: it answers each mailbox's two names and how fresh its copy is, and nothing a policy decides.
+
+**The four routes that write a mailbox refuse a setting held against the person.** A declaration sent to
+`POST /api/client/record/mail-accounts` is judged as the record save is: a setting a policy forces may be left out or
+stated as `newAccount` answered it, and stating it otherwise — or stating a setting the policy's editing restriction
+withholds — is refused in a sentence naming the setting and who holds it. The restriction reaches the address and the
+name as well, so under a policy that leaves a person only their folders, declaring a mailbox is an administrator's.
+The three folder routes change the list of folders and nothing else, so each is refused the same way where `Folders`
+is forced or withheld. What these routes fix for every folder — that it is synchronized, and that one naming a
+`RemotePath` is created where it is missing — is unchanged by any policy.
+
+```
+Folders is held by the organization, whose settings policy does not leave it to you to change. Leave it as it stands, or ask whoever administers the organization.
+```
+
+**A folder change is composed over the folders the mailbox is served.** A list is one value across a policy's
+layers, so a mailbox that states no folders and is served a default's has that whole list to change one folder of:
+the first folder added, restated, or withdrawn writes the resulting list onto the mailbox, which from then on states
+its own and no longer follows the default.
 
 **The three folder routes are the whole of what a client may do to a folder, and none of them touches a mail
 server.** Each is a change to the mapping the record declares: a declaration adds one and lets the account's next run

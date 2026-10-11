@@ -61,6 +61,7 @@ using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Policies;
+using MailFathom.Infrastructure.Persistence.Policies.MailAccounts;
 using MailFathom.Infrastructure.Resilience;
 using MailFathom.Infrastructure.Secrets.Discovery;
 using MailFathom.Infrastructure.Secrets.References;
@@ -500,11 +501,14 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         // Registered by the composition root as well, because judging a user's record under a settings policy is
         // resolving and binding it, which is the host's. The deployment's own judge rather than a stand-in, so a
         // policy write and a move here are refused and projected by exactly what a deployment asks.
+        builder.Services.AddSingleton(provider => new UserAccountDocumentBinder(
+            new PersistedSecretMaterial(provider.GetServices<ISecretSchemeResolver>()),
+            provider.GetRequiredService<TimeProvider>(),
+            Options.Create(new SensitiveContentOptions())));
         builder.Services.AddSingleton<IUserRecordPolicyJudge>(provider => new UserRecordPolicyJudge(
-            new UserAccountDocumentBinder(
-                new PersistedSecretMaterial(provider.GetServices<ISecretSchemeResolver>()),
-                provider.GetRequiredService<TimeProvider>(),
-                Options.Create(new SensitiveContentOptions()))));
+            provider.GetRequiredService<UserAccountDocumentBinder>()));
+        builder.Services.AddSingleton<IMailAccountPolicyJudge>(provider => new MailAccountPolicyJudge(
+            provider.GetRequiredService<UserAccountDocumentBinder>()));
         // Registered by the composition root beside the database health checks rather than by AddInfrastructure, so
         // the resolver that reads a secret straight off the pool — a bare command rather than a unit of work — would
         // find nothing to bound itself by here. The shipped default, because nothing this suite asserts is about a

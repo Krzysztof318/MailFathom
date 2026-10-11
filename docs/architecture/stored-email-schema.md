@@ -308,6 +308,15 @@ reads a hundred such rows again from their documents on each
 where the account still stands at the version it read and stepping over one whose reading fails. So the columns trail
 such a write by one interval while no more than a hundred rows trail, and a larger backlog drains at that rate.
 
+**What the columns and the folder rows hold is the account as it is served, not as its document states it.** A
+[settings policy](../operations/configuration-mail.md#how-a-settings-policy-resolves-a-mail-account) of the
+deployment or of the account's organization may force a mode or a list of folders over the document's, or supply one
+the document leaves out, and the document is never rewritten to say so. Each reading above is therefore of the
+document resolved through the two policies the writing transaction reads, and three commits rewrite the columns: a
+write of the account, a write of a policy that moves what the account is served, and a move of the account into or
+out of an organization. Where a policy governing the account is one the writing build does not read, the columns are
+left as they stand rather than written from the document alone.
+
 | Column of `mail_account_folder_settings` | What it records |
 |---|---|
 | `MailAccountId` | The account, a foreign key onto `settings_mail_accounts` (`fk_mail_account_folder_settings_settings_mail_accounts`) with `ON DELETE CASCADE` |

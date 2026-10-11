@@ -139,6 +139,67 @@ public sealed class MailAccountCommandTests : IDisposable
         Assert.DoesNotContain(FakeMailAccountDeployment.Declaration, this.harness.Console.Lines);
     }
 
+    /// <summary>
+    /// The effective view prints each setting as the account is served it, with the step that supplied it and who
+    /// holds it, in place of the account's own declaration, and reduces what a terminal would act on.
+    /// </summary>
+    [Fact]
+    public async Task Show_TheEffectiveView_PrintsEachSettingWithWhereItCameFromAndWhoHoldsIt()
+    {
+        // Arrange
+        using var deployment = FakeMailAccountDeployment.Holding();
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "account",
+            "show",
+            "--account",
+            $"{Account:D}",
+            "--effective",
+            "--endpoint",
+            Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Contains(
+            "  Host: imap.corp.example.test  [OrganizationForced, held by the organization, not changeable while the policy forces it]",
+            this.harness.Console.Lines);
+        Assert.Contains("  Port: (nothing stated)  [BuiltIn]", this.harness.Console.Lines);
+        Assert.Contains(this.harness.Console.Lines, line => line.StartsWith("  DisplayName: Work", StringComparison.Ordinal));
+        Assert.DoesNotContain(FakeMailAccountDeployment.Declaration, this.harness.Console.Lines);
+        Assert.DoesNotContain(this.harness.Console.Lines, line => line.Contains('\u001b', StringComparison.Ordinal));
+        Assert.DoesNotContain(this.harness.Console.Lines, line => line.Contains('\u202e', StringComparison.Ordinal));
+    }
+
+    /// <summary>An account no policy resolves answers a sentence in place of its settings, printed reduced and whole, and the command still succeeds.</summary>
+    [Fact]
+    public async Task Show_TheEffectiveViewOfAnAccountLeftUnresolved_PrintsTheReducedSentenceAndNoSetting()
+    {
+        // Arrange
+        using var deployment = FakeMailAccountDeployment.HoldingAnAccountLeftUnresolved();
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "account",
+            "show",
+            "--account",
+            $"{Account:D}",
+            "--effective",
+            "--endpoint",
+            Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Contains(
+            this.harness.Console.Lines,
+            line => line.StartsWith("  The settings policy of the deployment", StringComparison.Ordinal)
+                && line.EndsWith("or bring this replica to the build that wrote it.", StringComparison.Ordinal));
+        Assert.DoesNotContain(this.harness.Console.Lines, line => line.Contains('\u001b', StringComparison.Ordinal));
+        Assert.DoesNotContain(this.harness.Console.Lines, line => line.Contains("  [", StringComparison.Ordinal));
+    }
+
     /// <summary>The identifier is the deployment's to generate, and a deployment holding one user needs nobody named.</summary>
     [Fact]
     public async Task Add_ADeclarationInAFile_CreatesItForTheResolvedUserAndReportsTheIdentifier()
