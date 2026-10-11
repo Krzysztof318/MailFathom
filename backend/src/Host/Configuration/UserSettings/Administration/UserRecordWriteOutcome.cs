@@ -96,9 +96,9 @@ internal sealed record UserRecordWriteOutcome
         return new UserRecordWriteOutcome(version, refusal: default, [message]);
     }
 
-    /// <summary>Reports that the write would have moved a setting held against whoever was writing, so the record is unchanged.</summary>
+    /// <summary>Reports that the write would have moved a setting held against whoever was writing, or that the record is held whole because a settings policy governing the user is one this build does not read, so the record is unchanged.</summary>
     /// <param name="versionInForce">The version the user's record still stands at.</param>
-    /// <param name="messages">One sentence per held setting, each naming it and who holds it.</param>
+    /// <param name="messages">One sentence per held setting, each naming it and who holds it; or, for a record held whole, the one sentence naming the policy this build does not read.</param>
     /// <returns>The refused result.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="messages" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="messages" /> is empty.</exception>

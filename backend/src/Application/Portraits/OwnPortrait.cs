@@ -79,10 +79,10 @@ public sealed class OwnPortrait
     /// <summary>Replaces the picture the signed-in person is drawn by.</summary>
     /// <param name="portrait">The portrait, whose octets are stored as they were supplied.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
-    /// <returns>Whether this deployment holds a record for the caller, and the sentence naming who holds the portrait where it is not theirs to change.</returns>
+    /// <returns>Whether this deployment holds a record for the caller, and the sentence saying why where the change was refused: who holds the portrait where it is not theirs to change, or which settings policy holds their whole record where this build does not read it.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="portrait" /> is <see langword="null" />.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
-    /// <remarks>A portrait that is not theirs to change leaves the file written for it removed again, so a refusal stores nothing.</remarks>
+    /// <remarks>A refused portrait leaves the file written for it removed again, so a refusal stores nothing.</remarks>
     public async Task<PortraitChange> ReplaceAsync(UserPortrait portrait, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(portrait);
@@ -120,7 +120,7 @@ public sealed class OwnPortrait
 
     /// <summary>Removes the picture the signed-in person is drawn by.</summary>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
-    /// <returns>Whether this deployment holds a record for the caller, and the sentence naming who holds the portrait where it is not theirs to change.</returns>
+    /// <returns>Whether this deployment holds a record for the caller, and the sentence saying why where the change was refused: who holds the portrait where it is not theirs to change, or which settings policy holds their whole record where this build does not read it.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
     /// <remarks>
     /// Nothing else about the person is touched, and the removal is silent about whether there was one to remove. The

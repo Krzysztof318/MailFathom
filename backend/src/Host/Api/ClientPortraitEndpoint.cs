@@ -129,7 +129,7 @@ internal static class ClientPortraitEndpoint
     /// <param name="portraits">The acting person's own portrait.</param>
     /// <param name="context">The request being answered, whose body carries the picture.</param>
     /// <param name="cancellationToken">Cancels the read and the commit.</param>
-    /// <returns><c>204</c> when it was stored, <c>404</c> when this deployment holds no record for the caller, <c>413</c> for an upload over the bound, <c>415</c> for octets that are neither kind, or <c>400</c> for a request carrying no picture at all and for a portrait a settings policy does not leave to the caller, naming who holds it.</returns>
+    /// <returns><c>204</c> when it was stored, <c>404</c> when this deployment holds no record for the caller, <c>413</c> for an upload over the bound, <c>415</c> for octets that are neither kind, or <c>400</c> for a request carrying no picture at all and for a portrait a settings policy does not leave to the caller, naming who holds it, or one governed by a settings policy this build does not read, naming that policy.</returns>
     internal static async Task<Results<NoContent, NotFound<ProblemDetails>, ProblemHttpResult>> ReplaceAsync(
         [FromServices] OwnPortrait portraits,
         HttpContext context,
@@ -187,7 +187,7 @@ internal static class ClientPortraitEndpoint
     /// <summary>Removes the picture the acting person is drawn by.</summary>
     /// <param name="portraits">The acting person's own portrait.</param>
     /// <param name="cancellationToken">Cancels the commit.</param>
-    /// <returns><c>204</c>, whether or not there was a portrait to remove, or <c>400</c> naming who holds the portrait where a settings policy does not leave it to the caller.</returns>
+    /// <returns><c>204</c>, whether or not there was a portrait to remove, or <c>400</c> naming who holds the portrait where a settings policy does not leave it to the caller, or naming the policy where one governing the caller is one this build does not read.</returns>
     /// <remarks>Everything else about the person is left as it was, and the answer does not separate having removed one from having had none: both leave the caller with no portrait, which is the whole of what they asked for.</remarks>
     internal static async Task<Results<NoContent, ProblemHttpResult>> RemoveAsync(
         [FromServices] OwnPortrait portraits,

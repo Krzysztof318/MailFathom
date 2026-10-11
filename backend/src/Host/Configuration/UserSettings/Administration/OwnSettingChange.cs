@@ -35,8 +35,8 @@ internal readonly record struct OwnSettingChange(bool UserHeld, string? RefusalM
         return new OwnSettingChange(UserHeld: true, RefusalMessage: null) { Served = served };
     }
 
-    /// <summary>Reports that the record is held and the setting was not theirs to change.</summary>
-    /// <param name="refusalMessage">The sentence naming the setting and who holds it.</param>
+    /// <summary>Reports that the record is held and the setting was not theirs to change, or that the record is held whole by a settings policy this build does not read.</summary>
+    /// <param name="refusalMessage">The sentence naming the setting and who holds it, or naming the policy this build does not read.</param>
     /// <returns>The refused outcome.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="refusalMessage" /> is <see langword="null" />, empty, or white space.</exception>
     internal static OwnSettingChange Refused(string refusalMessage)
