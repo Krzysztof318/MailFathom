@@ -17,9 +17,9 @@ namespace MailFathom.Host.Api;
 /// <para>
 /// A route of its own rather than a query on the body route, because what it costs is different in kind. The body route
 /// reads a local copy and is published under reading mail; this one sends an outline to a chat provider and is charged to
-/// the period allowance a question is charged to, so it is published under asking instead — a reading grant must not be a
-/// way to spend a deployment's provider budget. A caller holds both, the read behind this requiring the reading grant as
-/// every read does.
+/// the period allowance a question is charged to, so it is published under the assistant grant instead — a reading
+/// grant must not be a way to spend a deployment's provider budget. A caller holds both, the use case behind this
+/// asking for the reading grant as every read of mail does.
 /// </para>
 /// <para>
 /// <b>It answers a document and never an empty pane.</b> Where the cleaning did not happen the ordinary reduced document
@@ -50,7 +50,7 @@ internal static class ClientMailCleanedBodyEndpoint
         ArgumentNullException.ThrowIfNull(api);
 
         api.MapGet(CleanedMailBodyRoute, ReadCleanedBodyAsync)
-            .RequirePermission(MailFathomPermission.MailAsk);
+            .RequirePermission(MailFathomPermission.AssistantUse);
     }
 
     /// <summary>Serves one of the acting user's messages as the cleaned rendering, or reports that there is no such message.</summary>
@@ -58,7 +58,7 @@ internal static class ClientMailCleanedBodyEndpoint
     /// <param name="remoteImages">Whether the reader has asked this message's remote pictures for, so the cleaned document matches the body already on their screen.</param>
     /// <param name="cleaning">Cleans the body, for a caller the read's own grant admits.</param>
     /// <param name="cancellationToken">Cancels the pass when the client disconnects.</param>
-    /// <returns><c>200</c> with the rendering, <c>404</c> where this user has no such message, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.ask</c>.</returns>
+    /// <returns><c>200</c> with the rendering, <c>404</c> where this user has no such message, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.assistant.use</c>.</returns>
     /// <remarks>
     /// A spent allowance is <c>200</c> rather than <c>429</c>, which is the difference from drafting a reply: there the
     /// person pressed a button and has nothing unless the call is made, while here the message is on the screen either way

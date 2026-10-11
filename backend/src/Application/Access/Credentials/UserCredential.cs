@@ -70,7 +70,7 @@ public sealed record UserCredential(
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="userGrant" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// The same intersection a request is answered with, before a token's scopes narrow it further: the user's grant
-    /// kept to the half each surface reads and then to the credential's names. The mail half counts where the credential
+    /// kept to the half each surface reads and then to the credential's names. The user-facing half counts where the credential
     /// is presented on the MCP or the client endpoint and the administrative half where it is presented on the
     /// administrative one, so a credential that administers is reported holding what it administers with. A listed name
     /// the user does not hold yields nothing, which is why an operator is shown both this and <see cref="Permissions" />

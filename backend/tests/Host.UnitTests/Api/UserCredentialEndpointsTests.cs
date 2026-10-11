@@ -75,7 +75,7 @@ public sealed class UserCredentialEndpointsTests
         var harness = new EndpointHarness(MailFathomPermission.AdminRead);
         harness.Credentials.ReadForUserAsync(SyntheticUser.Deployment, Arg.Any<CancellationToken>())
             .Returns([AHeldCredential(UserCredentialMethod.ApiKey, "digest") with { Permissions = null }]);
-        harness.UserHolds(MailFathomPermission.MailRead, MailFathomPermission.MailAsk, MailFathomPermission.AdminRead);
+        harness.UserHolds(MailFathomPermission.MailRead, MailFathomPermission.AssistantUse, MailFathomPermission.AdminRead);
 
         // Act
         var result = await UserCredentialEndpoints.ListAsync(
@@ -88,7 +88,7 @@ public sealed class UserCredentialEndpointsTests
 
         Assert.Null(credential.Permissions);
         Assert.Equal(
-            [MailFathomPermission.MailRead.Name, MailFathomPermission.MailAsk.Name],
+            [MailFathomPermission.MailRead.Name, MailFathomPermission.AssistantUse.Name],
             credential.EffectivePermissions);
     }
 

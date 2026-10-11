@@ -364,7 +364,10 @@ public sealed class ClientPortraitEndpointTests
     }
 
     private static OwnPortrait SignedIn(HeldPortrait held) => new(
-        AccessAuthorizations.ForUserGranted(SyntheticUser.Deployment, MailFathomPermission.MailRead),
+        AccessAuthorizations.ForUserGranted(
+            SyntheticUser.Deployment,
+            MailFathomPermission.ProfileRead,
+            MailFathomPermission.ProfileWrite),
         held,
         held);
 

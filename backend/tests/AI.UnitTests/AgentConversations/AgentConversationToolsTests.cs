@@ -77,17 +77,85 @@ public sealed class AgentConversationToolsTests : IAsyncDisposable
             });
     }
 
-    /// <summary>A grant that only reads proposes nothing that leaves the deployment, and proposes onto the person's own calendar and list, which those use cases admit under the same grant.</summary>
+    /// <summary>A grant that only reads mail is offered the tools that read mail and nothing over the calendar or the task list, which are records of their own.</summary>
     [Fact]
-    public void Create_AGrantThatOnlyReads_OffersNoMailProposal()
+    public void Create_AGrantThatOnlyReadsMail_OffersTheMailReadingToolsAlone()
     {
         // Act
         var names = this.Tools(MailFathomPermission.MailRead).Create().Select(static tool => tool.Name);
 
         // Assert
-        Assert.Equal(
-            ["suggest_follow_ups", "search_mail", "read_thread", "show_thread_state", "read_calendar", "read_tasks", "propose_event", "propose_task"],
-            names);
+        Assert.Equal(["suggest_follow_ups", "search_mail", "read_thread", "show_thread_state"], names);
+    }
+
+    /// <summary>The calendar and the task list are each read under a grant of their own, so holding both reading grants offers both reading tools and no way to propose onto either.</summary>
+    [Fact]
+    public void Create_AGrantThatReadsTheCalendarAndTheTaskList_OffersTheirReadingToolsAlone()
+    {
+        // Act
+        var names = this.Tools(MailFathomPermission.CalendarRead, MailFathomPermission.TasksRead)
+            .Create()
+            .Select(static tool => tool.Name);
+
+        // Assert
+        Assert.Equal(["suggest_follow_ups", "read_calendar", "read_tasks"], names);
+    }
+
+    /// <summary>A proposal is offered only where accepting it could be carried out, which for an event and a task is the grant that changes each record.</summary>
+    [Fact]
+    public void Create_AGrantThatChangesTheCalendarAndTheTaskList_OffersTheirProposals()
+    {
+        // Act
+        var names = this.Tools(MailFathomPermission.CalendarWrite, MailFathomPermission.TasksWrite)
+            .Create()
+            .Select(static tool => tool.Name);
+
+        // Assert
+        Assert.Equal(["suggest_follow_ups", "propose_event", "propose_task"], names);
+    }
+
+    /// <summary>Asking is not reading, so a caller holding the asking grant alone converses with a model that can read nothing of theirs.</summary>
+    [Fact]
+    public void Create_AGrantThatOnlyAsks_OffersNothingThatReadsOrProposes()
+    {
+        // Act
+        var names = this.Tools(MailFathomPermission.AssistantUse).Create().Select(static tool => tool.Name);
+
+        // Assert
+        Assert.Equal(["suggest_follow_ups"], names);
+    }
+
+    /// <summary>Which mailboxes somebody has is mail's to read, so a model answering a caller who reads none is not told their names.</summary>
+    [Fact]
+    public void NamedAccounts_AGrantThatReadsNoMailAndProposesNone_NamesNoAccount()
+    {
+        // Act
+        var named = this.Tools(MailFathomPermission.AssistantUse, MailFathomPermission.CalendarRead, MailFathomPermission.TasksWrite).NamedAccounts;
+
+        // Assert
+        Assert.Empty(named);
+    }
+
+    /// <summary>A reader of mail is offered tools that take an account, so the model is told which the person has.</summary>
+    [Fact]
+    public void NamedAccounts_AGrantThatReadsMail_NamesThePersonsAccounts()
+    {
+        // Act
+        var named = this.Tools(MailFathomPermission.MailRead).NamedAccounts;
+
+        // Assert
+        Assert.Equal([Primary], named);
+    }
+
+    /// <summary>A message is proposed from an account, so a grant that may only draft and send is still told which there are.</summary>
+    [Fact]
+    public void NamedAccounts_AGrantThatSendsButDoesNotRead_NamesThePersonsAccounts()
+    {
+        // Act
+        var named = this.Tools(MailFathomPermission.MailDraftsWrite, MailFathomPermission.MailSend).NamedAccounts;
+
+        // Assert
+        Assert.Equal([Primary], named);
     }
 
     /// <summary>A grant that drafts and sends but reads nothing may propose a new message and cannot answer one it could not read.</summary>
@@ -112,12 +180,17 @@ public sealed class AgentConversationToolsTests : IAsyncDisposable
         Assert.DoesNotContain(names, static name => name is "propose_message" or "propose_reply");
     }
 
-    /// <summary>A grant that reads, drafts, and sends is offered every proposing tool, answering a message it read among them.</summary>
+    /// <summary>A grant that reads mail, drafts, sends, and changes the calendar and the task list is offered every proposing tool, answering a message it read among them.</summary>
     [Fact]
     public void Create_AGrantThatReadsAndSends_OffersEveryProposingTool()
     {
         // Act
-        var names = this.Tools(MailFathomPermission.MailRead, MailFathomPermission.MailDraftsWrite, MailFathomPermission.MailSend)
+        var names = this.Tools(
+                MailFathomPermission.MailRead,
+                MailFathomPermission.MailDraftsWrite,
+                MailFathomPermission.MailSend,
+                MailFathomPermission.CalendarWrite,
+                MailFathomPermission.TasksWrite)
             .Create()
             .Select(static tool => tool.Name)
             .Where(static name => name.StartsWith("propose_", StringComparison.Ordinal));
@@ -250,7 +323,7 @@ public sealed class AgentConversationToolsTests : IAsyncDisposable
     public async Task ProposeEvent_AValidEvent_WritesTheProposalCarryingExactlyThatAct()
     {
         // Arrange
-        var tool = this.ToolNamed("propose_event", MailFathomPermission.MailRead);
+        var tool = this.ToolNamed("propose_event", MailFathomPermission.CalendarWrite);
 
         // Act
         await tool.InvokeAsync(
@@ -278,7 +351,7 @@ public sealed class AgentConversationToolsTests : IAsyncDisposable
     public async Task ProposeEvent_AnEndBeforeTheStart_IsRefusedAndProposesNothing()
     {
         // Arrange
-        var tool = this.ToolNamed("propose_event", MailFathomPermission.MailRead);
+        var tool = this.ToolNamed("propose_event", MailFathomPermission.CalendarWrite);
 
         // Act
         var answer = await tool.InvokeAsync(
@@ -302,7 +375,7 @@ public sealed class AgentConversationToolsTests : IAsyncDisposable
     public async Task ProposeEvent_AMessageTheRunNeverRead_ProposesWithoutCitingIt()
     {
         // Arrange
-        var tool = this.ToolNamed("propose_event", MailFathomPermission.MailRead);
+        var tool = this.ToolNamed("propose_event", MailFathomPermission.CalendarWrite);
 
         // Act
         var answer = await tool.InvokeAsync(
@@ -330,7 +403,7 @@ public sealed class AgentConversationToolsTests : IAsyncDisposable
         // Arrange
         var found = Guid.CreateVersion7();
         this.knowledgeSearch.Returning("notice period", KnowledgePassages.Create("Please send the list by Thursday.", found, subject: "Notice period"));
-        var search = this.ToolNamed("search_mail", MailFathomPermission.MailRead);
+        var search = this.ToolNamed("search_mail", MailFathomPermission.MailRead, MailFathomPermission.TasksWrite);
         await search.InvokeAsync(
             new AIFunctionArguments(new Dictionary<string, object?> { [ScopedMailKnowledgeRetrieval.QueryArgumentName] = "notice period" }),
             TestContext.Current.CancellationToken);
@@ -360,7 +433,7 @@ public sealed class AgentConversationToolsTests : IAsyncDisposable
     public async Task ProposeTask_AValidTask_WritesTheProposalCarryingExactlyThatAct()
     {
         // Arrange
-        var tool = this.ToolNamed("propose_task", MailFathomPermission.MailRead);
+        var tool = this.ToolNamed("propose_task", MailFathomPermission.TasksWrite);
 
         // Act
         await tool.InvokeAsync(
@@ -386,7 +459,7 @@ public sealed class AgentConversationToolsTests : IAsyncDisposable
     public async Task ProposeTask_NoDueDay_ProposesATaskOwedByNoDay()
     {
         // Arrange
-        var tool = this.ToolNamed("propose_task", MailFathomPermission.MailRead);
+        var tool = this.ToolNamed("propose_task", MailFathomPermission.TasksWrite);
 
         // Act
         await tool.InvokeAsync(
@@ -408,7 +481,7 @@ public sealed class AgentConversationToolsTests : IAsyncDisposable
     public async Task ProposeTask_ADueDayThatIsNotADay_IsRefusedAndProposesNothing()
     {
         // Arrange
-        var tool = this.ToolNamed("propose_task", MailFathomPermission.MailRead);
+        var tool = this.ToolNamed("propose_task", MailFathomPermission.TasksWrite);
 
         // Act
         var answer = await tool.InvokeAsync(
@@ -432,7 +505,7 @@ public sealed class AgentConversationToolsTests : IAsyncDisposable
     public async Task ReadCalendar_AnInstantWithoutAnOffset_IsRefusedWithoutReadingTheCalendar(string from, string until)
     {
         // Arrange
-        var tool = this.ToolNamed("read_calendar", MailFathomPermission.MailRead);
+        var tool = this.ToolNamed("read_calendar", MailFathomPermission.CalendarRead);
 
         // Act
         var answer = await tool.InvokeAsync(

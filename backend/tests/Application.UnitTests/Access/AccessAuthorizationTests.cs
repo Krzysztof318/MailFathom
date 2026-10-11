@@ -47,30 +47,30 @@ public sealed class AccessAuthorizationTests
 
         // Act
         var refusal = Assert.Throws<PrincipalNotAuthorizedException>(() =>
-            authorization.RequirePermission(MailFathomPermission.MailAsk));
+            authorization.RequirePermission(MailFathomPermission.AssistantUse));
 
         // Assert
-        Assert.Equal(MailFathomPermission.MailAsk, refusal.RequiredPermission);
+        Assert.Equal(MailFathomPermission.AssistantUse, refusal.RequiredPermission);
         Assert.Equal(MailFathomErrorCode.PrincipalNotAuthorized, refusal.ErrorCode);
     }
 
     /// <summary>An act two surfaces perform is reached from either half, which is what the alternative exists for.</summary>
     [Theory]
     [InlineData(nameof(MailFathomPermission.AdminOperate))]
-    [InlineData(nameof(MailFathomPermission.MailContactsWrite))]
+    [InlineData(nameof(MailFathomPermission.ContactsWrite))]
     public void RequireAnyPermission_CallerGrantedEitherAlternative_Permits(string granted)
     {
         // Arrange
         var held = granted == nameof(MailFathomPermission.AdminOperate)
             ? MailFathomPermission.AdminOperate
-            : MailFathomPermission.MailContactsWrite;
+            : MailFathomPermission.ContactsWrite;
 
         var authorization = AuthorizationOver(AuthorizedPrincipal.CallerActingFor(SyntheticUser.Deployment, ConfiguredCredentialName, [held]));
 
         // Act
         var refusal = Record.Exception(() => authorization.RequireAnyPermission(
             MailFathomPermission.AdminOperate,
-            MailFathomPermission.MailContactsWrite));
+            MailFathomPermission.ContactsWrite));
 
         // Assert
         Assert.Null(refusal);
@@ -82,12 +82,12 @@ public sealed class AccessAuthorizationTests
     {
         // Arrange
         var authorization = AuthorizationOver(
-            AuthorizedPrincipal.Caller(ConfiguredCredentialName, [MailFathomPermission.MailContactsRead]));
+            AuthorizedPrincipal.Caller(ConfiguredCredentialName, [MailFathomPermission.ContactsRead]));
 
         // Act
         var refusal = Assert.Throws<PrincipalNotAuthorizedException>(() => authorization.RequireAnyPermission(
             MailFathomPermission.AdminOperate,
-            MailFathomPermission.MailContactsWrite));
+            MailFathomPermission.ContactsWrite));
 
         // Assert
         Assert.Equal(MailFathomErrorCode.PrincipalNotAuthorized, refusal.ErrorCode);
@@ -99,15 +99,15 @@ public sealed class AccessAuthorizationTests
     {
         // Arrange
         var authorization = AuthorizationOver(
-            AuthorizedPrincipal.CallerActingFor(SyntheticUser.Deployment, ConfiguredCredentialName, [MailFathomPermission.MailContactsRead]));
+            AuthorizedPrincipal.CallerActingFor(SyntheticUser.Deployment, ConfiguredCredentialName, [MailFathomPermission.ContactsRead]));
 
         // Act
         var refusal = Assert.Throws<PrincipalNotAuthorizedException>(() => authorization.RequireAnyPermission(
             MailFathomPermission.AdminOperate,
-            MailFathomPermission.MailContactsWrite));
+            MailFathomPermission.ContactsWrite));
 
         // Assert
-        Assert.Equal(MailFathomPermission.MailContactsWrite, refusal.RequiredPermission);
+        Assert.Equal(MailFathomPermission.ContactsWrite, refusal.RequiredPermission);
     }
 
     /// <summary>A caller acting for no user has no mail for a mail name to reach, so holding one admits it to no mail use case.</summary>
@@ -132,12 +132,12 @@ public sealed class AccessAuthorizationTests
     {
         // Arrange
         var authorization = AuthorizationOver(
-            AuthorizedPrincipal.Caller(ConfiguredCredentialName, [MailFathomPermission.MailContactsRead]));
+            AuthorizedPrincipal.Caller(ConfiguredCredentialName, [MailFathomPermission.ContactsRead]));
 
         // Act
         var refusal = Assert.Throws<PrincipalNotAuthorizedException>(() => authorization.RequireAnyPermission(
             MailFathomPermission.AdminOperate,
-            MailFathomPermission.MailContactsWrite));
+            MailFathomPermission.ContactsWrite));
 
         // Assert
         Assert.Equal(MailFathomPermission.AdminOperate, refusal.RequiredPermission);
@@ -153,7 +153,7 @@ public sealed class AccessAuthorizationTests
         // Act
         var refusal = Assert.Throws<PrincipalNotAuthorizedException>(() => authorization.RequireAnyPermission(
             MailFathomPermission.AdminOperate,
-            MailFathomPermission.MailContactsWrite));
+            MailFathomPermission.ContactsWrite));
 
         // Assert
         Assert.Equal(MailFathomPermission.AdminOperate, refusal.RequiredPermission);
@@ -169,7 +169,7 @@ public sealed class AccessAuthorizationTests
         // Act, Assert
         Assert.Throws<PrincipalNotAuthorizedException>(() => authorization.RequireAnyPermission(
             MailFathomPermission.AdminOperate,
-            MailFathomPermission.MailContactsWrite));
+            MailFathomPermission.ContactsWrite));
     }
 
     /// <summary>The unspecified default names no act, so listing it as an alternative is a defect in the use case rather than a refusal.</summary>

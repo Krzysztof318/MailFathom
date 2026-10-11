@@ -106,7 +106,7 @@ public sealed class CalendarFileImport
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>What the file would create, what it would skip and why, or why the whole file was refused.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="file" /> is <see langword="null" />.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no person, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no person, or its grant omits <see cref="MailFathomPermission.CalendarWrite" />.</exception>
     public async Task<CalendarImportSummary> SummariseAsync(Stream file, CancellationToken cancellationToken)
     {
         var (outcome, offered, skipped) = this.Offered(file);
@@ -130,7 +130,7 @@ public sealed class CalendarFileImport
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>What the file created, what it skipped and why, or why the whole file was refused.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="file" /> is <see langword="null" />.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no person, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no person, or its grant omits <see cref="MailFathomPermission.CalendarWrite" />.</exception>
     /// <remarks>
     /// What is written is asserted, because choosing a file and confirming what it holds is a person putting those
     /// events on their calendar. Nothing an import produces is a proposal: a proposal is a date something read out of
@@ -192,7 +192,7 @@ public sealed class CalendarFileImport
     {
         ArgumentNullException.ThrowIfNull(file);
 
-        this.authorization.RequirePermission(MailFathomPermission.MailRead);
+        this.authorization.RequirePermission(MailFathomPermission.CalendarWrite);
 
         var reading = this.reader.Read(file, this.zones.ZoneOf(this.authorization.RequireUser()).Zone);
 

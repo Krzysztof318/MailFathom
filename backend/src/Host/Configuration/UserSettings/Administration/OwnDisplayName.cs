@@ -16,9 +16,9 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// <para>
 /// The name is the envelope rather than the document — the column an operator tells one user from another by, unique
 /// across the deployment and keyed by nothing — which is why this stands beside
-/// <see cref="UserRecordAdministration" /> instead of inside it. What it shares with that service is the grant: the
-/// envelope is written under the record's own, because both are what this deployment holds about a person rather than
-/// what that person set about their client.
+/// <see cref="UserRecordAdministration" /> instead of inside it. It does not share that service's grant either: what a
+/// person is called belongs to their profile, beside the time zone and the portrait, and is written under the
+/// profile's own grant.
 /// </para>
 /// <para>
 /// <b>Neither act names a user.</b> The person is the one the credential authenticated, resolved from the principal
@@ -27,11 +27,11 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// user-facing surface from composing a deployment-wide catalog of people.
 /// </para>
 /// <para>
-/// Reading is <see cref="MailFathomPermission.MailRead" />, the grant a signed-in person already holds, because a
-/// person who may not change their name must still be shown it. Writing is
-/// <see cref="MailFathomPermission.MailAccountsWrite" />, which is the record's write and is granted separately — and
-/// the read says whether a write would be accepted, so a client draws the name as text rather than discovering the
-/// refusal by submitting one.
+/// Reading is <see cref="MailFathomPermission.ProfileRead" /> and writing is
+/// <see cref="MailFathomPermission.ProfileWrite" />, granted apart because a person who may not change their name must
+/// still be shown it — and the read says whether a write would be accepted, so a client draws the name as text rather
+/// than discovering the refusal by submitting one. Neither is the record's own write: a name says nothing about which
+/// mailboxes this deployment connects to.
 /// </para>
 /// <para>
 /// A settings policy may withhold the name from the person as it may any property of their record, although the name
@@ -54,17 +54,17 @@ internal sealed class OwnDisplayName(
     /// <summary>Reads the name this deployment records the signed-in person under.</summary>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The name and whether this caller could change it, or <see langword="null" /> when this deployment holds no record for them.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.ProfileRead" />.</exception>
     internal async Task<OwnDisplayNameReading?> ReadAsync(CancellationToken cancellationToken)
     {
-        authorization.RequirePermission(MailFathomPermission.MailRead);
+        authorization.RequirePermission(MailFathomPermission.ProfileRead);
 
         var user = authorization.RequireUser();
 
         return await directory.ReadUserAsync(user, cancellationToken) is { } held
             ? new OwnDisplayNameReading(
                 held.DisplayName,
-                authorization.Permits(MailFathomPermission.MailAccountsWrite)
+                authorization.Permits(MailFathomPermission.ProfileWrite)
                 && await this.FindPolicyRefusalAsync(user, cancellationToken) is null)
             : null;
     }
@@ -73,7 +73,7 @@ internal sealed class OwnDisplayName(
     /// <param name="displayName">The name they would be recorded under.</param>
     /// <param name="cancellationToken">Cancels the read and the write.</param>
     /// <returns>What the change did: whether this deployment holds them at all, the name the row now carries, and the sentence naming what to correct where it holds them and refused.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailAccountsWrite" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.ProfileWrite" />.</exception>
     /// <remarks>
     /// The version the record's writes state has no counterpart here, for the reason <c>RelabelAsync</c> gives: the
     /// version guards the document a change is composed over and the name is not part of that document. The
@@ -82,7 +82,7 @@ internal sealed class OwnDisplayName(
     /// </remarks>
     internal async Task<OwnDisplayNameChange> ChangeAsync(string? displayName, CancellationToken cancellationToken)
     {
-        authorization.RequirePermission(MailFathomPermission.MailAccountsWrite);
+        authorization.RequirePermission(MailFathomPermission.ProfileWrite);
 
         var user = authorization.RequireUser();
 

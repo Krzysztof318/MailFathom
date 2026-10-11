@@ -50,7 +50,8 @@ export function TaskSelectionBar({
     /** Marks everything picked out as done, which is the one act here that is not destructive and is not confirmed. */
     readonly onComplete: () => void;
 
-    readonly onSchedule: () => void;
+    /** Puts everything picked out in the calendar, or `undefined` where this credential may not change one. */
+    readonly onSchedule: (() => void) | undefined;
 
     /** Raises the question the erasure stands behind, over everything picked out. */
     readonly onAskErasure: () => void;
@@ -82,12 +83,14 @@ export function TaskSelectionBar({
 
             <Control label={translate('tasks.markDone')} icon="check_circle" shape={shape} onPress={onComplete} />
 
-            <Control
-                label={translate('tasks.scheduleInCalendar')}
-                icon="calendar_month"
-                shape={shape}
-                onPress={onSchedule}
-            />
+            {onSchedule === undefined ? null : (
+                <Control
+                    label={translate('tasks.scheduleInCalendar')}
+                    icon="calendar_month"
+                    shape={shape}
+                    onPress={onSchedule}
+                />
+            )}
 
             <Control label={translate('tasks.deleteTasks')} icon="delete" shape={shape} onPress={onAskErasure} />
         </div>

@@ -52,7 +52,7 @@ function Asking({
     readonly remindersAsked: boolean;
     readonly onAmend: (amendment: CalendarEventAmendment) => void;
     readonly onAskDeletion: () => void;
-    readonly onOpenSource: (messageId: string) => void;
+    readonly onOpenSource: ((messageId: string) => void) | undefined;
     readonly onLeft: () => void;
 }) {
     const asked = useRef<HTMLDialogElement>(null);
@@ -126,6 +126,27 @@ describe('EventDialog', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Open the message' }));
 
         expect(onOpenSource).toHaveBeenCalledWith('message-4');
+    });
+
+    // Mail is read under a grant of its own, so a link to a message nobody may open is a control that leads nowhere.
+    it('says where an event came from and offers no message where this credential reads no mail', () => {
+        render(
+            <LocalizationProvider>
+                <Asking
+                    event={fromMail}
+                    remindersAsked={false}
+                    onAmend={vi.fn()}
+                    onAskDeletion={vi.fn()}
+                    onOpenSource={undefined}
+                    onLeft={vi.fn()}
+                />
+            </LocalizationProvider>,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: asks }));
+
+        expect(screen.getByText('From mail')).toBeDefined();
+        expect(screen.queryByRole('button', { name: 'Open the message' })).toBeNull();
     });
 
     it('opens the fields already holding the event, so amending one is changing what is there', () => {

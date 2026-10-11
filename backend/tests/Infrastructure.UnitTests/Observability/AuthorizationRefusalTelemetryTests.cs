@@ -95,7 +95,7 @@ public sealed class AuthorizationRefusalTelemetryTests : IDisposable
         this.telemetry.RecordRefusal(
             ProtectedSurface.Mail,
             Operation,
-            MailFathomPermission.MailContactsWrite,
+            MailFathomPermission.ContactsWrite,
             CallerIdentity);
 
         // Assert
@@ -103,7 +103,7 @@ public sealed class AuthorizationRefusalTelemetryTests : IDisposable
         Assert.Equal(LogLevel.Warning, record.Level);
         Assert.Equal(CallerIdentity, record.Properties["RefusedIdentity"]);
         Assert.Equal(Operation, record.Properties["Operation"]);
-        Assert.Equal(MailFathomPermission.MailContactsWrite.Name, record.Properties["RequiredPermission"]);
+        Assert.Equal(MailFathomPermission.ContactsWrite.Name, record.Properties["RequiredPermission"]);
     }
 
     /// <summary>A log line telling an operator to grant a permission that would not have helped is worse than none.</summary>
@@ -149,7 +149,7 @@ public sealed class AuthorizationRefusalTelemetryTests : IDisposable
         using var measurements = new RecordedMailFathomMeasurements(RefusalsInstrumentName);
 
         // Act
-        this.telemetry.RecordRefusal(ProtectedSurface.Mail, Operation, MailFathomPermission.MailAsk, CallerIdentity);
+        this.telemetry.RecordRefusal(ProtectedSurface.Mail, Operation, MailFathomPermission.AssistantUse, CallerIdentity);
 
         // Assert
         Assert.DoesNotContain(

@@ -49,7 +49,7 @@ namespace MailFathom.Host.Security.Transport;
 /// <para>
 /// <b>On the two mail-serving surfaces a caller holds what its user holds</b>, computed by
 /// <see cref="UserGrantResolver" /> from the roles assigned to the user directly and through their groups, narrowed to
-/// the mail half and then to whatever the credential admitting it named — its own list, and under
+/// the user-facing half and then to whatever the credential admitting it named — its own list, and under
 /// <c>PermissionsFromTokenScopes</c> a token's scopes as well, which the scheme already applied to that list. Reading
 /// the user's grant is a database read where nothing is remembered, and this type answers synchronously, so
 /// <see cref="ResolveGrantAsync" /> reads it once per request ahead of every route and attaches it to the request. A
@@ -179,7 +179,7 @@ internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalS
         }
     }
 
-    /// <summary>Reports what a caller on a mail-serving surface holds: its user's grant, narrowed to the mail half and to what admitted it.</summary>
+    /// <summary>Reports what a caller on a mail-serving surface holds: its user's grant, narrowed to the user-facing half and to what admitted it.</summary>
     /// <param name="userGrant">What the user holds, or <see langword="null" /> where it was never read for this request.</param>
     /// <param name="narrowing">The names the credential admitting the caller keeps, already narrowed by a token's scopes where the entry says so.</param>
     /// <returns>The grant the caller holds.</returns>

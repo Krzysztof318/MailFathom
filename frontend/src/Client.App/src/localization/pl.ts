@@ -588,6 +588,10 @@ export const pl: Catalogue = {
     'settings.name': 'Imię i nazwisko',
     'settings.nameNotYours':
         'Twoje imię i nazwisko prowadzi ten, kto zarządza tym wdrożeniem, więc jest tu pokazane, a nie oddane do zmiany.',
+    'settings.profileNotYours':
+        'To logowanie może odczytać to, co wdrożenie przechowuje o Tobie, ale nie może tego zmienić, więc imię i nazwisko, zdjęcie i strefa czasowa są tu pokazane, a nie oddane do zmiany.',
+    'settings.preferencesNotYours':
+        'To logowanie nie może zmieniać ustawień, które idą za Tobą między maszynami, więc są tu pokazane w obecnym stanie. Język i to, co robi ta maszyna, nadal ustawiasz samodzielnie.',
     'settings.nameNotAcceptable':
         'To imię i nazwisko nie zostało przyjęte. Nie może być puste ani dłuższe niż 128 znaków i nie może być takie, jakim posługuje się już ktoś inny na tym wdrożeniu.',
     'settings.nameNotStored':
@@ -1218,6 +1222,22 @@ export const pl: Catalogue = {
         'To poświadczenie nie może czytać książki adresowej w tym wdrożeniu, więc nie oferujemy przestrzeni Osoby. Osoba prowadząca wdrożenie może nadać takie uprawnienie.',
     'grant.writeContacts':
         'To poświadczenie nie może zmieniać książki adresowej w tym wdrożeniu, więc nie oferujemy dodawania kontaktu, przejmowania zebranego ani usuwania. Osoba prowadząca wdrożenie może nadać takie uprawnienie.',
+    'grant.readTasks':
+        'To poświadczenie nie może czytać Twoich zadań w tym wdrożeniu, więc nie oferujemy przestrzeni Zadania. Osoba prowadząca wdrożenie może nadać takie uprawnienie.',
+    'grant.writeTasks':
+        'To poświadczenie nie może zmieniać Twoich zadań w tym wdrożeniu, więc nie oferujemy przestrzeni Zadania. Osoba prowadząca wdrożenie może nadać takie uprawnienie.',
+    'grant.readCalendar':
+        'To poświadczenie nie może czytać Twojego kalendarza w tym wdrożeniu, więc nie oferujemy przestrzeni Kalendarz. Osoba prowadząca wdrożenie może nadać takie uprawnienie.',
+    'grant.writeCalendar':
+        'To poświadczenie nie może zmieniać Twojego kalendarza w tym wdrożeniu, więc nie oferujemy przestrzeni Kalendarz. Osoba prowadząca wdrożenie może nadać takie uprawnienie.',
+    'grant.readNotifications':
+        'To poświadczenie nie może czytać Twoich powiadomień w tym wdrożeniu, więc nie oferujemy dzwonka, a klient dowiaduje się o zmianach w swoim własnym odstępie, a nie na bieżąco. Osoba prowadząca wdrożenie może nadać takie uprawnienie.',
+    'grant.writeNotifications':
+        'To poświadczenie nie może oznaczać ani usuwać Twoich powiadomień w tym wdrożeniu, więc nie oferujemy dzwonka. Osoba prowadząca wdrożenie może nadać takie uprawnienie.',
+    'grant.readProfile':
+        'To poświadczenie nie może czytać Twojego profilu w tym wdrożeniu, więc nie pokazujemy Twojej nazwy, zdjęcia, strefy czasowej ani preferencji, a klient używa własnych ustawień domyślnych. Osoba prowadząca wdrożenie może nadać takie uprawnienie.',
+    'grant.writeProfile':
+        'To poświadczenie nie może zmieniać Twojego profilu w tym wdrożeniu, więc zmiana nazwy, zdjęcia, strefy czasowej lub preferencji zostanie odrzucona. Osoba prowadząca wdrożenie może nadać takie uprawnienie.',
     'failure.unauthenticated': 'brak uwierzytelnienia',
     'failure.unauthorized': 'brak uprawnień',
     'failure.unavailable': 'usługa niedostępna',

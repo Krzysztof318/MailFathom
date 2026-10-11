@@ -7,9 +7,9 @@ namespace MailFathom.Domain.Access;
 /// <summary>One of the two halves the published permission vocabulary is divided into.</summary>
 /// <remarks>
 /// <para>
-/// A permission belongs to exactly one surface and says so in its own name, which is what lets a grant written on the
-/// wrong surface be refused at startup instead of sitting there granting nothing. The two halves are disjoint: no
-/// permission covers an operation on both.
+/// A permission belongs to exactly one surface, and its name says which: the domain after <c>mailfathom.</c> is
+/// <c>admin</c> for <see cref="Administration" /> and anything else for <see cref="Mail" />. The two halves are
+/// disjoint: no permission covers an operation on both.
 /// </para>
 /// <para>
 /// It is a plain enum because a member is nothing but a name the process reads. What a caller may do is carried by
@@ -19,7 +19,8 @@ namespace MailFathom.Domain.Access;
 /// </remarks>
 public enum ProtectedSurface
 {
-    /// <summary>The surface serving the mailbox: the MCP tools that read the local copy and the one that answers from it.</summary>
+    /// <summary>The surface serving one person: their mailbox, and the records this deployment keeps beside it for them — contacts, tasks, the calendar, notifications, and their own profile.</summary>
+    /// <remarks>It keeps the name of what it was first built to serve; the MCP endpoint and the client endpoint both draw on it.</remarks>
     Mail = 0,
 
     /// <summary>The surface serving the deployment's own administration.</summary>

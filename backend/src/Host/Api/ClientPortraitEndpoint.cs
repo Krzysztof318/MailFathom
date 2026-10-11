@@ -25,10 +25,11 @@ namespace MailFathom.Host.Api;
 /// is no argument to put another user's identifier in and no listing to discover one from.
 /// </para>
 /// <para>
-/// All three are <see cref="MailFathomPermission.MailRead" />, and none adds a name to the published permission set.
-/// The two writes are deliberately not <see cref="MailFathomPermission.MailAccountsWrite" />, for the reason the
-/// preferences write is not: that grant decides what this deployment reads out of somebody's mailboxes, and what a
-/// person is drawn by must not be decided by a grant over their mail configuration.
+/// The read is <see cref="MailFathomPermission.ProfileRead" /> and the two writes are
+/// <see cref="MailFathomPermission.ProfileWrite" />. The writes are deliberately not
+/// <see cref="MailFathomPermission.MailAccountsWrite" />, for the reason the preferences write is not: that grant
+/// decides what this deployment reads out of somebody's mailboxes, and what a person is drawn by must not be decided
+/// by a grant over their mail configuration.
 /// </para>
 /// <para>
 /// <b>An upload is bounded and then judged by its octets.</b> The bound is applied by the routing pipeline before a
@@ -76,7 +77,7 @@ internal static class ClientPortraitEndpoint
         ArgumentNullException.ThrowIfNull(api);
 
         api.MapGet(PortraitRoute, ReadAsync)
-            .RequirePermission(MailFathomPermission.MailRead)
+            .RequirePermission(MailFathomPermission.ProfileRead)
             .Produces<Stream>(StatusCodes.Status200OK, PortraitImageType.Jpeg.MediaType, PortraitImageType.Png.MediaType);
 
         // The attribute is reached for its metadata rather than as an MVC filter, exactly as every other write on this
@@ -85,10 +86,10 @@ internal static class ClientPortraitEndpoint
         api.MapPost(PortraitRoute, ReplaceAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxPortraitBytes))
             .Accepts<Stream>(PortraitImageType.Jpeg.MediaType, PortraitImageType.Png.MediaType)
-            .RequirePermission(MailFathomPermission.MailRead);
+            .RequirePermission(MailFathomPermission.ProfileWrite);
 
         api.MapDelete(PortraitRoute, RemoveAsync)
-            .RequirePermission(MailFathomPermission.MailRead);
+            .RequirePermission(MailFathomPermission.ProfileWrite);
     }
 
     /// <summary>Hands the acting person the picture they are drawn by.</summary>

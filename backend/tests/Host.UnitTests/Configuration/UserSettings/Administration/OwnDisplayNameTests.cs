@@ -29,7 +29,7 @@ public sealed class OwnDisplayNameTests
     public async Task ReadAsync_APersonThisDeploymentHolds_HandsThemTheNameItRecordsThemUnder()
     {
         // Arrange
-        var harness = new NameHarness(MailFathomPermission.MailRead);
+        var harness = new NameHarness(MailFathomPermission.ProfileRead);
         harness.Recording("Ada Lovelace");
 
         // Act
@@ -41,10 +41,10 @@ public sealed class OwnDisplayNameTests
 
     /// <summary>The whole reason the flag travels with the name: a client draws the name as text rather than offering a field the deployment would refuse.</summary>
     [Fact]
-    public async Task ReadAsync_ACallerGrantedTheRecordsWrite_ReportsTheNameAsChangeable()
+    public async Task ReadAsync_ACallerGrantedTheProfileWrite_ReportsTheNameAsChangeable()
     {
         // Arrange
-        var harness = new NameHarness(MailFathomPermission.MailRead, MailFathomPermission.MailAccountsWrite);
+        var harness = new NameHarness(MailFathomPermission.ProfileRead, MailFathomPermission.ProfileWrite);
         harness.Recording("Ada Lovelace");
 
         // Act
@@ -55,10 +55,10 @@ public sealed class OwnDisplayNameTests
     }
 
     [Fact]
-    public async Task ReadAsync_ACallerWithoutTheRecordsWrite_ReportsTheNameAsUnchangeable()
+    public async Task ReadAsync_ACallerWithoutTheProfileWrite_ReportsTheNameAsUnchangeable()
     {
         // Arrange
-        var harness = new NameHarness(MailFathomPermission.MailRead);
+        var harness = new NameHarness(MailFathomPermission.ProfileRead);
         harness.Recording("Ada Lovelace");
 
         // Act
@@ -73,7 +73,7 @@ public sealed class OwnDisplayNameTests
     public async Task ReadAsync_APersonThisDeploymentDoesNotHold_AnswersNothing()
     {
         // Arrange
-        var harness = new NameHarness(MailFathomPermission.MailRead);
+        var harness = new NameHarness(MailFathomPermission.ProfileRead);
 
         // Act
         var read = await harness.Names.ReadAsync(TestContext.Current.CancellationToken);
@@ -87,7 +87,7 @@ public sealed class OwnDisplayNameTests
     public async Task ReadAsync_Always_AsksAboutTheUserTheCredentialActsForAndNoOneElse()
     {
         // Arrange
-        var harness = new NameHarness(MailFathomPermission.MailRead);
+        var harness = new NameHarness(MailFathomPermission.ProfileRead);
         harness.Recording("Ada Lovelace");
 
         // Act
@@ -103,7 +103,7 @@ public sealed class OwnDisplayNameTests
     public async Task ReadAsync_ACallerWithoutTheReadGrant_IsRefused()
     {
         // Arrange
-        var harness = new NameHarness(MailFathomPermission.MailAccountsWrite);
+        var harness = new NameHarness(MailFathomPermission.ProfileWrite);
 
         // Act & Assert
         await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
@@ -114,7 +114,7 @@ public sealed class OwnDisplayNameTests
     public async Task ChangeAsync_APersonCorrectingTheirName_RecordsItAndAnswersWhatIsNowStored()
     {
         // Arrange
-        var harness = new NameHarness(MailFathomPermission.MailAccountsWrite);
+        var harness = new NameHarness(MailFathomPermission.ProfileWrite);
         harness.Recording("Ada Lovelace");
 
         // Act
@@ -131,7 +131,7 @@ public sealed class OwnDisplayNameTests
     public async Task ChangeAsync_ANameCarryingSurroundingSpace_RecordsAndAnswersTheTrimmedName()
     {
         // Arrange
-        var harness = new NameHarness(MailFathomPermission.MailAccountsWrite);
+        var harness = new NameHarness(MailFathomPermission.ProfileWrite);
         harness.Recording("Ada Lovelace");
 
         // Act
@@ -147,7 +147,7 @@ public sealed class OwnDisplayNameTests
     public async Task ChangeAsync_ABodyStatingNoName_IsRefusedWithoutWriting()
     {
         // Arrange
-        var harness = new NameHarness(MailFathomPermission.MailAccountsWrite);
+        var harness = new NameHarness(MailFathomPermission.ProfileWrite);
         harness.Recording("Ada Lovelace");
 
         // Act
@@ -165,7 +165,7 @@ public sealed class OwnDisplayNameTests
     public async Task ChangeAsync_ANamePastWhatTheColumnStores_IsRefusedNamingTheBound()
     {
         // Arrange
-        var harness = new NameHarness(MailFathomPermission.MailAccountsWrite);
+        var harness = new NameHarness(MailFathomPermission.ProfileWrite);
         harness.Recording("Ada Lovelace");
 
         // Act
@@ -187,7 +187,7 @@ public sealed class OwnDisplayNameTests
     public async Task ChangeAsync_ANameSomebodyElseCarries_IsRefusedWithoutNamingWho()
     {
         // Arrange
-        var harness = new NameHarness(MailFathomPermission.MailAccountsWrite);
+        var harness = new NameHarness(MailFathomPermission.ProfileWrite);
         harness.Recording("Ada Lovelace");
         harness.Provisioning
             .RelabelAsync(Arg.Any<UserId>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
@@ -206,7 +206,7 @@ public sealed class OwnDisplayNameTests
     public async Task ChangeAsync_APersonThisDeploymentDoesNotHold_AnswersThatThereIsNoRecord()
     {
         // Arrange
-        var harness = new NameHarness(MailFathomPermission.MailAccountsWrite);
+        var harness = new NameHarness(MailFathomPermission.ProfileWrite);
 
         // Act
         var change = await harness.Names.ChangeAsync("Ada King", TestContext.Current.CancellationToken);
@@ -218,12 +218,45 @@ public sealed class OwnDisplayNameTests
             .RelabelAsync(Arg.Any<UserId>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
-    /// <summary>The record's own grant rather than the read every signed-in person holds, because this writes the row an administrator maintains.</summary>
+    /// <summary>What somebody is called is not mail, so the grant that reads mail is not shown it.</summary>
+    [Fact]
+    public async Task ReadAsync_ACallerGrantedOnlyReadingMail_IsRefusedNamingTheProfileGrant()
+    {
+        // Arrange
+        var harness = new NameHarness(MailFathomPermission.MailRead);
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
+            () => harness.Names.ReadAsync(TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.ProfileRead, refusal.RequiredPermission);
+    }
+
+    /// <summary>
+    /// The grant that decides which mailboxes this deployment reads says nothing about what a person is called, so
+    /// holding it corrects no name — and somebody whose mailboxes an administrator maintains corrects theirs without it.
+    /// </summary>
+    [Fact]
+    public async Task ChangeAsync_ACallerHoldingOnlyTheMailAccountsGrant_IsRefusedNamingTheProfileGrant()
+    {
+        // Arrange
+        var harness = new NameHarness(MailFathomPermission.MailRead, MailFathomPermission.MailAccountsWrite);
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
+            () => harness.Names.ChangeAsync("Ada King", TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.ProfileWrite, refusal.RequiredPermission);
+    }
+
+    /// <summary>Seeing the name is not correcting it, so a caller granted only the reading half of their profile writes nothing.</summary>
     [Fact]
     public async Task ChangeAsync_ACallerHoldingOnlyTheReadGrant_IsRefused()
     {
         // Arrange
-        var harness = new NameHarness(MailFathomPermission.MailRead);
+        var harness = new NameHarness(MailFathomPermission.ProfileRead);
 
         // Act & Assert
         await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
@@ -235,12 +268,12 @@ public sealed class OwnDisplayNameTests
     [InlineData(WithholdingTheName, false)]
     [InlineData("{}", true)]
     [InlineData(NotAPolicy, false)]
-    public async Task ReadAsync_ACallerGrantedTheRecordsWriteUnderAPolicy_ReportsTheNameAsChangeableOnlyWhereThePolicyLeavesItToThem(
+    public async Task ReadAsync_ACallerGrantedTheProfileWriteUnderAPolicy_ReportsTheNameAsChangeableOnlyWhereThePolicyLeavesItToThem(
         string organizationPolicy,
         bool changeable)
     {
         // Arrange
-        var harness = new NameHarness(MailFathomPermission.MailRead, MailFathomPermission.MailAccountsWrite);
+        var harness = new NameHarness(MailFathomPermission.ProfileRead, MailFathomPermission.ProfileWrite);
         harness.Recording("Ada Lovelace");
         harness.GovernedBy(StatedPolicies.Governing(organization: organizationPolicy));
 
@@ -255,7 +288,7 @@ public sealed class OwnDisplayNameTests
     public async Task ChangeAsync_ANameAPolicyWithholdsFromThePerson_IsRefusedNamingWhoHoldsItWithoutWriting()
     {
         // Arrange
-        var harness = new NameHarness(MailFathomPermission.MailRead, MailFathomPermission.MailAccountsWrite);
+        var harness = new NameHarness(MailFathomPermission.ProfileRead, MailFathomPermission.ProfileWrite);
         harness.Recording("Ada Lovelace");
         harness.GovernedBy(StatedPolicies.Governing(organization: WithholdingTheName));
 
@@ -274,7 +307,7 @@ public sealed class OwnDisplayNameTests
     public async Task ChangeAsync_AWithheldNameCarriedThroughAsItStands_PassesWithoutWriting()
     {
         // Arrange
-        var harness = new NameHarness(MailFathomPermission.MailRead, MailFathomPermission.MailAccountsWrite);
+        var harness = new NameHarness(MailFathomPermission.ProfileRead, MailFathomPermission.ProfileWrite);
         harness.Recording("Ada Lovelace");
         harness.GovernedBy(StatedPolicies.Governing(organization: WithholdingTheName));
 

@@ -53,8 +53,11 @@ export function EventDialog({
     /** Raises the question the deletion stands behind, over this one event. */
     readonly onAskDeletion: () => void;
 
-    /** Opens the message the event was read out of, which is the Mail space's to draw. */
-    readonly onOpenSource: (messageId: string) => void;
+    /**
+     * Opens the message the event was read out of, which is the Mail space's to draw — or `undefined` where this
+     * credential reads no mail, and a link to one would lead nowhere.
+     */
+    readonly onOpenSource: ((messageId: string) => void) | undefined;
 
     /** Says the dialog has been left, which is what lets the screen stop holding the event it was drawing. */
     readonly onLeft: () => void;
@@ -141,7 +144,7 @@ export function EventDialog({
                             {wordReminderCount(draft.reminders.length, locale, translate)}
                         </button>
 
-                        {event.sourceMessage === null ? null : (
+                        {event.sourceMessage === null || onOpenSource === undefined ? null : (
                             <button
                                 type="button"
                                 className="flex items-center gap-1.75 self-start rounded-lg bg-accent-soft px-2.75 py-1.5 text-sm text-accent-deep hover:underline"

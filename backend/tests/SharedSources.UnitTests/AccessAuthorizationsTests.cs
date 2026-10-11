@@ -34,7 +34,7 @@ public sealed class AccessAuthorizationsTests
         var authorization = AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead);
 
         // Assert
-        Assert.False(authorization.Permits(MailFathomPermission.MailAsk));
+        Assert.False(authorization.Permits(MailFathomPermission.AssistantUse));
     }
 
     [Fact]

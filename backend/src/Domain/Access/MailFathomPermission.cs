@@ -24,10 +24,12 @@ namespace MailFathom.Domain.Access;
 /// ahead of it.
 /// </para>
 /// <para>
-/// A name is <c>mailfathom.&lt;surface&gt;[.&lt;subject&gt;].&lt;verb&gt;</c>, lowercase and dot-separated, and is
-/// always a valid OAuth scope token so the same string can travel in a <c>scope</c> claim. The prefix after
-/// <c>mailfathom.</c> names the <see cref="Surface" /> the permission belongs to, and the two halves are disjoint: no
-/// permission implies another, and holding one says nothing about holding the next.
+/// A name is <c>mailfathom.&lt;domain&gt;[.&lt;subject&gt;].&lt;verb&gt;</c>, lowercase and dot-separated, and is
+/// always a valid OAuth scope token so the same string can travel in a <c>scope</c> claim. The domain after
+/// <c>mailfathom.</c> names what the permission governs — mail, the contact book, the task list, the calendar,
+/// the notification centre, a person's own profile, the assistant, or the deployment's administration — and it is
+/// <c>admin</c> exactly when the permission belongs to <see cref="ProtectedSurface.Administration" />. The two halves
+/// are disjoint: no permission implies another, and holding one says nothing about holding the next.
 /// </para>
 /// <para>
 /// Being a struct, <see langword="default" /> is reachable and is not a permission. It reports itself through
@@ -49,33 +51,14 @@ public readonly record struct MailFathomPermission
 
     #region Mail
 
-    /// <summary>Gets the permission covering the tools that read the local mailbox copy.</summary>
+    /// <summary>Gets the permission covering reading the local mailbox copy, and nothing that writes.</summary>
     /// <remarks>
     /// It is not an egress-free grant. Where semantic retrieval is configured, searching places the caller's own query
     /// text with the embedding provider, which is why the pages describing the grant say so where an operator writes
-    /// it. What it does not permit is sending mail content to a chat provider, which is <see cref="MailAsk" />.
+    /// it. What it does not permit is sending mail content to a chat provider, which is <see cref="AssistantUse" />,
+    /// nor reading or changing any record this deployment keeps beside the mailbox, each of which has a name of its own.
     /// </remarks>
     public static MailFathomPermission MailRead { get; } = new("mailfathom.mail.read", ProtectedSurface.Mail);
-
-    /// <summary>Gets the permission covering the tool that answers from mail content by sending it to a model provider.</summary>
-    /// <remarks>It does not imply <see cref="MailRead" /> and is not the weaker of the two: a cited answer returns mail content, so granting it is granting access to mail.</remarks>
-    public static MailFathomPermission MailAsk { get; } = new("mailfathom.mail.ask", ProtectedSurface.Mail);
-
-    /// <summary>Gets the permission covering the tools that read the contact book.</summary>
-    /// <remarks>
-    /// The book is an assembled record about identified third parties rather than mail that arrived, which is why it is
-    /// granted apart from <see cref="MailRead" /> instead of travelling with it: a deployment may want an agent able to
-    /// name the people it reads about without that following from the grant that lets it read the mailbox.
-    /// </remarks>
-    public static MailFathomPermission MailContactsRead { get; } = new("mailfathom.mail.contacts.read", ProtectedSurface.Mail);
-
-    /// <summary>Gets the permission covering the tools that record, amend, and erase a contact.</summary>
-    /// <remarks>
-    /// It does not imply <see cref="MailContactsRead" />, as no permission implies another. It is the grant that lets a
-    /// caller change what this deployment holds about a person, erasure included, so a deployment that wants the book
-    /// looked up and not edited writes the reading half alone.
-    /// </remarks>
-    public static MailFathomPermission MailContactsWrite { get; } = new("mailfathom.mail.contacts.write", ProtectedSurface.Mail);
 
     /// <summary>Gets the permission covering the tool that writes <c>\Seen</c>, <c>\Flagged</c>, and keywords onto mail this deployment holds.</summary>
     /// <remarks>
@@ -172,8 +155,8 @@ public readonly record struct MailFathomPermission
     /// <remarks>
     /// <para>
     /// The one grant on this surface that changes what the deployment reads for a person: the settings their own
-    /// record states, the name they are recorded under, and which folders of a mailbox assigned to them are mirrored.
-    /// It declares no mailbox and ends no assignment to one — which mailboxes a person has is decided under
+    /// record states, and which folders of a mailbox assigned to them are mirrored. The name they are recorded under
+    /// is not among them, which is <see cref="ProfileWrite" />. It declares no mailbox and ends no assignment to one — which mailboxes a person has is decided under
     /// <see cref="AdminConfigurationWrite" /> and <see cref="AdminErase" />. It follows from nothing —
     /// <see cref="MailRead" /> is a person reading their own mail, and nothing about reading implies deciding what is
     /// read out of a mailbox.
@@ -210,6 +193,115 @@ public readonly record struct MailFathomPermission
     /// </remarks>
     public static MailFathomPermission MailFoldersWrite { get; } =
         new("mailfathom.mail.folders.write", ProtectedSurface.Mail);
+
+    #endregion
+
+    #region Contacts
+
+    /// <summary>Gets the permission covering the tools that read the contact book.</summary>
+    /// <remarks>
+    /// The book is an assembled record about identified third parties rather than mail that arrived, which is why it is
+    /// granted apart from <see cref="MailRead" /> instead of travelling with it: a deployment may want an agent able to
+    /// name the people it reads about without that following from the grant that lets it read the mailbox.
+    /// </remarks>
+    public static MailFathomPermission ContactsRead { get; } = new("mailfathom.contacts.read", ProtectedSurface.Mail);
+
+    /// <summary>Gets the permission covering the tools that record, amend, and erase a contact.</summary>
+    /// <remarks>
+    /// It does not imply <see cref="ContactsRead" />, as no permission implies another. It is the grant that lets a
+    /// caller change what this deployment holds about a person, erasure included, so a deployment that wants the book
+    /// looked up and not edited writes the reading half alone.
+    /// </remarks>
+    public static MailFathomPermission ContactsWrite { get; } = new("mailfathom.contacts.write", ProtectedSurface.Mail);
+
+    #endregion
+
+    #region Tasks
+
+    /// <summary>Gets the permission covering reading a person's own task list and what their mail proposed as a task.</summary>
+    /// <remarks>
+    /// A task is this deployment's own record of what one person owes rather than mail, which is why it is granted apart
+    /// from <see cref="MailRead" />: a deployment may give somebody their list without their mailbox, and a credential
+    /// that reads mail does not thereby read what its user has committed to.
+    /// </remarks>
+    public static MailFathomPermission TasksRead { get; } = new("mailfathom.tasks.read", ProtectedSurface.Mail);
+
+    /// <summary>Gets the permission covering recording, editing, completing, accepting, and erasing a task on a person's own list.</summary>
+    /// <remarks>
+    /// It does not imply <see cref="TasksRead" />, as no permission implies another. Nothing it admits reaches a mail
+    /// server: the message a task cites is a value the task carries, so erasing one is not <see cref="MailDelete" />.
+    /// </remarks>
+    public static MailFathomPermission TasksWrite { get; } = new("mailfathom.tasks.write", ProtectedSurface.Mail);
+
+    #endregion
+
+    #region Calendar
+
+    /// <summary>Gets the permission covering reading a person's own calendar: a window of it, or one event.</summary>
+    /// <remarks>
+    /// An event is this deployment's own record of when one person is committed, so it is granted apart from
+    /// <see cref="MailRead" /> for the reason <see cref="TasksRead" /> is.
+    /// </remarks>
+    public static MailFathomPermission CalendarRead { get; } = new("mailfathom.calendar.read", ProtectedSurface.Mail);
+
+    /// <summary>Gets the permission covering putting an event on a person's own calendar, amending one, accepting a date their mail proposed, removing one, and importing a calendar file.</summary>
+    /// <remarks>
+    /// It does not imply <see cref="CalendarRead" />. Importing is here rather than apart, because confirming a file
+    /// creates the events it named, which is the same act as putting one there by hand; the summary that precedes it
+    /// writes nothing and is admitted under the same name, since it exists only to be confirmed.
+    /// </remarks>
+    public static MailFathomPermission CalendarWrite { get; } = new("mailfathom.calendar.write", ProtectedSurface.Mail);
+
+    #endregion
+
+    #region Notifications
+
+    /// <summary>Gets the permission covering reading a person's own notification centre and how much of it is unread.</summary>
+    /// <remarks>
+    /// A notification is what this deployment drew for one person about their mail, their calendar, their tasks, or
+    /// itself, so it belongs to none of those grants and is read under its own.
+    /// </remarks>
+    public static MailFathomPermission NotificationsRead { get; } = new("mailfathom.notifications.read", ProtectedSurface.Mail);
+
+    /// <summary>Gets the permission covering marking a person's own notifications read and taking them out of the centre.</summary>
+    /// <remarks>
+    /// It does not imply <see cref="NotificationsRead" />. What a notification points at stays exactly where it is, so
+    /// removing one is not <see cref="MailDelete" />.
+    /// </remarks>
+    public static MailFathomPermission NotificationsWrite { get; } = new("mailfathom.notifications.write", ProtectedSurface.Mail);
+
+    #endregion
+
+    #region Profile
+
+    /// <summary>Gets the permission covering reading what a person set about themselves: their display name, their client preferences, their time zone, and their portrait.</summary>
+    /// <remarks>
+    /// None of it says what this deployment reads out of a person's mailboxes, which is <see cref="MailAccountsWrite" />'s
+    /// question, and none of it is mail, which is why it is not <see cref="MailRead" />.
+    /// </remarks>
+    public static MailFathomPermission ProfileRead { get; } = new("mailfathom.profile.read", ProtectedSurface.Mail);
+
+    /// <summary>Gets the permission covering changing what a person set about themselves: their display name, their client preferences, their time zone, and their portrait.</summary>
+    /// <remarks>
+    /// It does not imply <see cref="ProfileRead" />. It is apart from <see cref="MailAccountsWrite" /> so that somebody
+    /// whose mailboxes an administrator maintains still keeps their own profile. Which of these values a person may
+    /// actually change is the settings policy's to say, and this grant widens none of what that policy holds.
+    /// </remarks>
+    public static MailFathomPermission ProfileWrite { get; } = new("mailfathom.profile.write", ProtectedSurface.Mail);
+
+    #endregion
+
+    #region Assistant
+
+    /// <summary>Gets the permission covering placing something with a chat provider on the caller's behalf, and spending the allowance that is charged to.</summary>
+    /// <remarks>
+    /// It carries no read of its own. Every act it admits also asks for the reading grant of whatever that act sends —
+    /// <see cref="MailRead" /> beneath an answer drawn from mail, <see cref="TasksRead" /> and
+    /// <see cref="CalendarRead" /> beneath an arrangement of the day — so a caller holding this name alone reaches only
+    /// the acts that send nothing but what the caller typed. What withholding it stops is content leaving for a chat
+    /// provider, which no reading grant decides.
+    /// </remarks>
+    public static MailFathomPermission AssistantUse { get; } = new("mailfathom.assistant.use", ProtectedSurface.Mail);
 
     #endregion
 
@@ -317,9 +409,6 @@ public readonly record struct MailFathomPermission
     public static IReadOnlyList<MailFathomPermission> All { get; } =
     [
         MailRead,
-        MailAsk,
-        MailContactsRead,
-        MailContactsWrite,
         MailFlagsWrite,
         MailMove,
         MailDelete,
@@ -327,6 +416,17 @@ public readonly record struct MailFathomPermission
         MailSend,
         MailAccountsWrite,
         MailFoldersWrite,
+        ContactsRead,
+        ContactsWrite,
+        TasksRead,
+        TasksWrite,
+        CalendarRead,
+        CalendarWrite,
+        NotificationsRead,
+        NotificationsWrite,
+        ProfileRead,
+        ProfileWrite,
+        AssistantUse,
         AdminRead,
         AdminAuditRead,
         AdminOperate,

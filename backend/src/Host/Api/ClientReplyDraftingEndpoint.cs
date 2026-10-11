@@ -39,9 +39,10 @@ namespace MailFathom.Host.Api;
 /// of a request that reaches an access log by default, on this deployment and on every proxy in front of it.
 /// </para>
 /// <para>
-/// It is published under the grant that governs asking a question rather than the one that governs reading mail,
-/// because that is what it does: a conversation and a sample of the account's own sent mail leave this deployment for
-/// a chat provider, and the call is charged to the same allowance a question is.
+/// It is published under the assistant grant rather than the one that governs reading mail, because that is what it
+/// adds: a conversation and a sample of the account's own sent mail leave this deployment for a chat provider, and the
+/// call is charged to the same allowance a question is. What leaves is mail, so the use case beneath asks for the
+/// reading grant as well, and a caller holding one of the two is refused naming the other.
 /// </para>
 /// </remarks>
 internal static class ClientReplyDraftingEndpoint
@@ -65,19 +66,19 @@ internal static class ClientReplyDraftingEndpoint
         ArgumentNullException.ThrowIfNull(api);
 
         api.MapGet(ReplyDraftingRoute, DraftsReplies)
-            .RequirePermission(MailFathomPermission.MailAsk);
+            .RequirePermission(MailFathomPermission.AssistantUse);
 
         // The MVC attribute is what a minimal API states this with, whatever its namespace suggests: it implements
         // IRequestSizeLimitMetadata, which the routing pipeline applies to the request body feature, so a body over
         // the bound is refused before anything reads it.
         api.MapPost(ReplyDraftingRoute, DraftReplyAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxDraftingRequestBytes))
-            .RequirePermission(MailFathomPermission.MailAsk);
+            .RequirePermission(MailFathomPermission.AssistantUse);
     }
 
     /// <summary>Says whether this deployment drafts a reply at all.</summary>
     /// <param name="drafting">Drafts a reply, or <see langword="null" /> where this deployment declared no chat endpoint or declined this.</param>
-    /// <returns><c>200</c> saying whether replies are drafted, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.ask</c>.</returns>
+    /// <returns><c>200</c> saying whether replies are drafted, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.assistant.use</c>.</returns>
     /// <remarks>
     /// A capability rather than a probe: it resolves a registration and calls nothing, so a composer asking it once
     /// costs no provider call and no mail read. The two reasons a deployment does not draft — no endpoint, and an
@@ -92,7 +93,7 @@ internal static class ClientReplyDraftingEndpoint
     /// <param name="request">The message being answered, and what its author asked the reply to say.</param>
     /// <param name="drafting">Drafts the reply, or <see langword="null" /> where this deployment does not.</param>
     /// <param name="cancellationToken">Cancels the drafting when the client disconnects.</param>
-    /// <returns><c>200</c> with the draft, <c>400</c> naming what was wrong with the request, <c>404</c> where this user has no such message, <c>429</c> where the deployment has spent what it allows a provider, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.ask</c>.</returns>
+    /// <returns><c>200</c> with the draft, <c>400</c> naming what was wrong with the request, <c>404</c> where this user has no such message, <c>429</c> where the deployment has spent what it allows a provider, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.assistant.use</c>.</returns>
     /// <remarks>
     /// <para>
     /// A deployment that drafts nothing answers <c>200</c> saying so rather than <c>404</c>, because a person writing

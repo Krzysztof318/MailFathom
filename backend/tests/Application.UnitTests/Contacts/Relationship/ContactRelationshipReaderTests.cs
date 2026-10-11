@@ -130,7 +130,7 @@ public sealed class ContactRelationshipReaderTests
 
     /// <summary>The grant is the one that puts mail in front of a provider, asked here rather than at the transport, so an entrypoint added later meets the same refusal.</summary>
     [Fact]
-    public async Task ReadAsync_ACallerWithoutTheMailAskGrant_IsRefusedWithTheTransportAbsent()
+    public async Task ReadAsync_ACallerWithoutTheAssistantGrant_IsRefusedWithTheTransportAbsent()
     {
         // Arrange
         var reader = ReaderOver(
@@ -143,7 +143,7 @@ public sealed class ContactRelationshipReaderTests
             reader.ReadAsync(ContactOf("anna@example.com"), TestContext.Current.CancellationToken));
 
         // Assert
-        Assert.Equal(MailFathomPermission.MailAsk, refusal.RequiredPermission);
+        Assert.Equal(MailFathomPermission.AssistantUse, refusal.RequiredPermission);
     }
 
     private static ContactRelationshipReader ReaderOver(
@@ -155,7 +155,7 @@ public sealed class ContactRelationshipReaderTests
     {
         var guard = egressGuard ?? SensitiveContentEgressGuards.Inactive();
         var granted = authorization ?? AccessAuthorizations.ForCallerGranted(
-            MailFathomPermission.MailAsk,
+            MailFathomPermission.AssistantUse,
             MailFathomPermission.MailRead);
         var scopeResolver = new MailboxScopeResolver(
             CatalogServing(TheAccount),

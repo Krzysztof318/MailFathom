@@ -595,7 +595,7 @@ public sealed class MailThreadBrowserTests
         // Arrange
         var browser = BrowserOver(
             ConversationOf(2),
-            authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailAsk));
+            authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.AssistantUse));
 
         // Act
         var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>

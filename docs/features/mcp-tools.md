@@ -125,7 +125,7 @@ to vary by the authorization presented on the request — so the listing is wher
 field is invented to say it instead. Nothing caches a listing, so one caller's answer never serves another.
 
 This composes with the availability rule rather than replacing it: a tool may be unavailable, unauthorized, or both, and
-no grant makes a capability the deployment does not have appear. A caller granted `mailfathom.mail.ask` is not offered
+no grant makes a capability the deployment does not have appear. A caller granted `mailfathom.assistant.use` is not offered
 `ask_mail` on a deployment that answers no questions.
 
 The check runs twice. The endpoint refuses before a use case is reached, and the use case behind each tool asks for the
@@ -1936,7 +1936,7 @@ contact failure names is the rule that refused it, and the identity, which is Ma
 
 ### Two permissions divide the book
 
-`mailfathom.mail.contacts.read` and `mailfathom.mail.contacts.write` are held the way every other permission is, and
+`mailfathom.contacts.read` and `mailfathom.contacts.write` are held the way every other permission is, and
 [§ What a caller is offered](#what-a-caller-is-offered) is what a caller not holding one meets — the tool absent from
 `tools/list`, and a call to it answered as a call naming a tool that does not exist. What is worth reading twice is how
 this book divides: a read-only credential sees `list_contacts` and `get_contact` and no write tool, and one granted
@@ -2140,13 +2140,13 @@ collected record was answering for; `alreadyAsserted` means the identifier named
 down, so there was nothing to take on.
 
 The new record's identity is not answered here, for the reason the record is not: a caller holding
-`mailfathom.mail.contacts.write` alone reads nothing from this surface. A caller that also holds the reading grant finds
+`mailfathom.contacts.write` alone reads nothing from this surface. A caller that also holds the reading grant finds
 the copy with `get_contact` by one of the person's addresses.
 
 **No record comes back, deliberately.** The caller supplied an identifier rather than a person, so answering with the
 promoted contact would hand the whole of what `get_contact` serves — the name, every address, the note — to a caller
-holding `mailfathom.mail.contacts.write` and nothing else, and no permission here implies another. A caller that also
-holds `mailfathom.mail.contacts.read` reads the person through the tool published for reading them. The administrative
+holding `mailfathom.contacts.write` and nothing else, and no permission here implies another. A caller that also
+holds `mailfathom.contacts.read` reads the person through the tool published for reading them. The administrative
 route behind the same use case answers the same way and for the same reason.
 
 ## Pending

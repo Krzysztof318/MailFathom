@@ -27,6 +27,9 @@ public sealed class RoleSeedingMigrationTests
 
     private const string OrganizationAdministratorRoleId = "01a11deb-3808-7000-8000-000000000002";
 
+    /// <summary>What every seeded role's identifier begins with.</summary>
+    private const string SeededRoleIdentifierPrefix = "01a11deb-3808-7000-8000-";
+
     /// <summary>The migrations allowed to write roles after the seeding one, each named rather than admitted by a looser rule.</summary>
     /// <remarks>
     /// <see cref="HoldMailGrantsOnUsers" /> carries what each credential granted onto its user, so it creates roles of
@@ -35,9 +38,13 @@ public sealed class RoleSeedingMigrationTests
     /// <see cref="RewriteAdministratorRoleAsAPattern" /> is the one deliberate edit of a seeded list: ADR 0012 decides
     /// that <c>Administrator</c> lists the pattern <c>*</c>, which reaches on the day it is written exactly the names
     /// it replaces, and the test below holds it to that role alone.
+    /// <see cref="SplitUserFacingPermissionsByDomain" /> rewrites names rather than grants: the release that splits
+    /// the user-facing permissions by domain carries every role's list — seeded or written by an operator, alike — to
+    /// the names its holders already acted under, so a list gains entries and nobody gains an act. The test below
+    /// holds it to treating every role alike.
     /// </remarks>
     private static readonly Type[] RoleWritersAfterTheSeedingOne =
-        [typeof(HoldMailGrantsOnUsers), typeof(RewriteAdministratorRoleAsAPattern)];
+        [typeof(HoldMailGrantsOnUsers), typeof(RewriteAdministratorRoleAsAPattern), typeof(SplitUserFacingPermissionsByDomain)];
 
     [Fact]
     public void Migrations_AfterTheSeedingOne_WriteNoRoleAndNoRolesPermissions()
@@ -104,6 +111,29 @@ public sealed class RoleSeedingMigrationTests
             Assert.DoesNotContain(MailUserRoleId, statement.Sql, StringComparison.Ordinal);
             Assert.DoesNotContain(OrganizationAdministratorRoleId, statement.Sql, StringComparison.Ordinal);
         });
+    }
+
+    /// <summary>
+    /// The split is admitted because it carries what a list already reached, which is a rule about names and so holds
+    /// for every role: it singles out no seeded role, whose list an operator may have rewritten since.
+    /// </summary>
+    [Fact]
+    public void Migrations_ThePermissionSplit_SinglesOutNoSeededRole()
+    {
+        // Arrange
+        using var context = CreateContext();
+        var migrations = context.GetService<IMigrationsAssembly>();
+
+        // Act
+        var split = migrations.CreateMigration(
+            typeof(SplitUserFacingPermissionsByDomain).GetTypeInfo(),
+            context.Database.ProviderName!);
+        var statements = split.UpOperations.Concat(split.DownOperations).OfType<SqlOperation>().ToArray();
+
+        // Assert
+        Assert.Contains(statements, statement => statement.Sql.Contains(RolePermissionEntity.TableName, StringComparison.Ordinal));
+        Assert.All(statements, statement =>
+            Assert.DoesNotContain(SeededRoleIdentifierPrefix, statement.Sql, StringComparison.Ordinal));
     }
 
     private static bool WritesARole(MigrationOperation operation) => operation switch

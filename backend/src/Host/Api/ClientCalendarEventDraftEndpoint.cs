@@ -33,10 +33,11 @@ namespace MailFathom.Host.Api;
 /// and on every proxy in front of it.
 /// </para>
 /// <para>
-/// It is published under the grant that governs asking a question rather than the one that governs reading mail,
-/// because that is what it does: a sentence leaves this deployment for a chat provider and is charged to the same
-/// allowance a question is. A caller holding only the reading grant is refused here and composes the event itself,
-/// which is what a deployment with no provider leaves every caller doing.
+/// It is published under the assistant grant rather than one over the calendar, because that is what it does: a
+/// sentence leaves this deployment for a chat provider and is charged to the same allowance a question is. Nothing
+/// but that sentence leaves and nothing is written, so it asks for no calendar grant beneath. A caller without the
+/// assistant grant is refused here and composes the event itself, which is what a deployment with no provider leaves
+/// every caller doing.
 /// </para>
 /// </remarks>
 internal static class ClientCalendarEventDraftEndpoint
@@ -56,19 +57,19 @@ internal static class ClientCalendarEventDraftEndpoint
         ArgumentNullException.ThrowIfNull(api);
 
         api.MapGet(CalendarEventDraftRoute, ReadsDescriptions)
-            .RequirePermission(MailFathomPermission.MailAsk);
+            .RequirePermission(MailFathomPermission.AssistantUse);
 
         // The MVC attribute is what a minimal API states this with, whatever its namespace suggests: it implements
         // IRequestSizeLimitMetadata, which the routing pipeline applies to the request body feature, so a body over
         // the bound is refused before anything reads it.
         api.MapPost(CalendarEventDraftRoute, DraftEventAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxDescriptionRequestBytes))
-            .RequirePermission(MailFathomPermission.MailAsk);
+            .RequirePermission(MailFathomPermission.AssistantUse);
     }
 
     /// <summary>Says whether this deployment turns a description into an event.</summary>
     /// <param name="extractor">Reads text into events, in whichever state this deployment left it.</param>
-    /// <returns><c>200</c> saying whether a description is read, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.ask</c>.</returns>
+    /// <returns><c>200</c> saying whether a description is read, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.assistant.use</c>.</returns>
     /// <remarks>
     /// A capability rather than a probe: it reads a registration and calls nothing, so a screen asking it once costs no
     /// provider call. The two reasons a deployment does not read a description — no endpoint, and an operator who
@@ -88,7 +89,7 @@ internal static class ClientCalendarEventDraftEndpoint
     /// <param name="extractor">Reads the sentence, in whichever state this deployment left it.</param>
     /// <param name="userClock">Reads the instant whoever typed it is standing on, which every relative day and hour is resolved against.</param>
     /// <param name="cancellationToken">Cancels the reading when the client disconnects.</param>
-    /// <returns><c>200</c> with the draft or with the statement that none was read, <c>400</c> naming what was wrong with the request, <c>429</c> where the deployment has spent what it allows a provider, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.ask</c>.</returns>
+    /// <returns><c>200</c> with the draft or with the statement that none was read, <c>400</c> naming what was wrong with the request, <c>429</c> where the deployment has spent what it allows a provider, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.assistant.use</c>.</returns>
     /// <remarks>
     /// <para>
     /// A deployment that reads no description answers <c>200</c> saying so rather than <c>404</c>, because a person

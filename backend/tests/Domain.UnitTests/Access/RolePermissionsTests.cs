@@ -151,13 +151,13 @@ public sealed class RolePermissionsTests
     public void Read_AStoredNameThisBuildDoesNotPublish_IsReportedRatherThanGranted()
     {
         // Arrange
-        string[] stored = ["mailfathom.mail.ask", "mailfathom.admin.retired"];
+        string[] stored = ["mailfathom.assistant.use", "mailfathom.admin.retired"];
 
         // Act
         var permissions = RolePermissions.Read(stored);
 
         // Assert
-        Assert.Equal([MailFathomPermission.MailAsk], permissions.Granted);
+        Assert.Equal([MailFathomPermission.AssistantUse], permissions.Granted);
         Assert.Equal(["mailfathom.admin.retired"], permissions.Unpublished);
     }
 
@@ -169,21 +169,21 @@ public sealed class RolePermissionsTests
     public void Read_AStoredPatternReachingNothing_IsReportedGrantsNothingAndStillWidens()
     {
         // Arrange
-        string[] stored = ["mailfathom.mail.ask", "mailfathom.retired.*"];
+        string[] stored = ["mailfathom.assistant.use", "mailfathom.retired.*"];
 
         // Act
         var permissions = RolePermissions.Read(stored);
 
         // Assert
-        Assert.Equal([MailFathomPermission.MailAsk], permissions.Granted);
+        Assert.Equal([MailFathomPermission.AssistantUse], permissions.Granted);
         Assert.Equal(["mailfathom.retired.*"], permissions.Unpublished);
-        Assert.Equal(["mailfathom.mail.ask"], permissions.Written);
+        Assert.Equal(["mailfathom.assistant.use"], permissions.Written);
         Assert.True(permissions.WidensOnUpgrade);
     }
 
     [Theory]
-    [InlineData("mailfathom.mail.ask", new[] { "mailfathom.mail.ask" })]
-    [InlineData("mailfathom.mail.contacts.*", new[] { "mailfathom.mail.contacts.read", "mailfathom.mail.contacts.write" })]
+    [InlineData("mailfathom.assistant.use", new[] { "mailfathom.assistant.use" })]
+    [InlineData("mailfathom.contacts.*", new[] { "mailfathom.contacts.read", "mailfathom.contacts.write" })]
     [InlineData("mailfathom.retired.*", new string[0])]
     [InlineData("mailfathom.admin.retired", new string[0])]
     [InlineData("mailfathom.mail.c*", new string[0])]

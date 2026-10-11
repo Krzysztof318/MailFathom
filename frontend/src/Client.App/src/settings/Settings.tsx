@@ -59,6 +59,7 @@ export function Settings({
     profile,
     preferences,
     telemetryForwarding,
+    writesProfile,
     deploymentVersion,
     onClose,
 }: {
@@ -70,6 +71,13 @@ export function Settings({
 
     /** What this deployment has said about forwarding this client's telemetry, including that it has said nothing. */
     readonly telemetryForwarding: TelemetryForwarding;
+
+    /**
+     * Whether this credential may change what the deployment holds about the person — the picture, the zone, and the
+     * settings that follow them. Reading all of it is a grant of its own, so a person may be shown what they may not
+     * change, and what is theirs to set on this machine stays theirs either way.
+     */
+    readonly writesProfile: boolean;
 
     /** What the deployment answered it is running, or `null` while nothing has answered, for the line at the foot. */
     readonly deploymentVersion: string | null;
@@ -145,9 +153,13 @@ export function Settings({
                 className="flex min-h-0 flex-1 flex-col gap-2.75 overflow-y-auto px-4 pt-3.5 pb-7 workspace:gap-2.25 workspace:pb-5"
             >
                 {open === 'profile' ? (
-                    <Profile profile={profile} />
+                    <Profile profile={profile} writable={writesProfile} />
                 ) : (
-                    <Application preferences={preferences} telemetryForwarding={telemetryForwarding} />
+                    <Application
+                        preferences={preferences}
+                        telemetryForwarding={telemetryForwarding}
+                        writable={writesProfile}
+                    />
                 )}
             </div>
 
@@ -270,12 +282,19 @@ function SectionName({ children }: { readonly children: string }) {
 // operating system is spoken to and the design draws the client rather than the machine under it, and the other is how
 // long a notification stands rather than what one looks like. Both take the shape of the rows around them rather than
 // one of their own, which is what keeps that from being a second house style.
+//
+// Two of the rows are this machine's and the rest follow the person, which is what the two groups below are: the
+// deployment keeps what follows somebody and takes a change to it under a grant of its own, so a credential without
+// that grant is shown those rows as they stand, with the sentence saying why, and keeps the language and the system
+// notification, which no deployment is asked about.
 function Application({
     preferences,
     telemetryForwarding,
+    writable,
 }: {
     readonly preferences: ClientPreferencesInForce;
     readonly telemetryForwarding: TelemetryForwarding;
+    readonly writable: boolean;
 }) {
     const { translate } = useLocalization();
 
@@ -286,29 +305,42 @@ function Application({
 
             <Divider />
 
-            <SectionName>{translate('settings.messageView')}</SectionName>
-            <MessageView preferences={preferences} />
-            <ThreadExpansion preferences={preferences} />
-            <MessageViewWarning preferences={preferences} />
+            {writable ? null : <p className="text-2xs text-muted">{translate('settings.preferencesNotYours')}</p>}
 
-            <Divider />
+            <fieldset disabled={!writable} className={followingThePerson}>
+                <SectionName>{translate('settings.messageView')}</SectionName>
+                <MessageView preferences={preferences} />
+                <ThreadExpansion preferences={preferences} />
+                <MessageViewWarning preferences={preferences} />
 
-            <SectionName>{translate('settings.mailbox')}</SectionName>
-            <AiFiltersSection preferences={preferences} />
+                <Divider />
+
+                <SectionName>{translate('settings.mailbox')}</SectionName>
+                <AiFiltersSection preferences={preferences} />
+            </fieldset>
 
             {/* One section, because both rows are about the same notifications: whether this machine raises one of its
                 own, and how long one stands wherever it is drawn. The section name is the first component's, which is
                 why the second is a sibling under it rather than a section of its own repeating the word. */}
             <SystemNotifications />
-            <NotificationDuration preferences={preferences} />
 
-            <Divider />
+            <fieldset disabled={!writable} className={followingThePerson}>
+                <NotificationDuration preferences={preferences} />
 
-            <SectionName>{translate('settings.privacy')}</SectionName>
-            <Telemetry preferences={preferences} forwarding={telemetryForwarding} />
+                <Divider />
+
+                <SectionName>{translate('settings.privacy')}</SectionName>
+                <Telemetry preferences={preferences} forwarding={telemetryForwarding} />
+            </fieldset>
         </>
     );
 }
+
+// A group of rows the deployment keeps. A fieldset because disabling one is the platform's own way of withdrawing
+// every control in it, and one that generates no box of its own, so that grouping the rows moves none of them: they
+// stay the panel's own children for layout, which is what the panel's spacing and its scrolling are written against.
+// The dimming is on the rows for the same reason — an element without a box has nothing to dim.
+const followingThePerson = 'contents [&:disabled>*]:opacity-60';
 
 // Whether this machine raises a notification of its own while nobody is looking at the window.
 //
@@ -518,7 +550,7 @@ function AiFiltersSection({ preferences }: { readonly preferences: ClientPrefere
 // What the deployment records the person as, and the picture they are drawn by. The name is corrected in place rather
 // than through a form with a button: there is one field, and a person who has typed their name and moved on has said
 // what they mean as plainly as one who pressed Save.
-function Profile({ profile }: { readonly profile: OwnProfileInForce }) {
+function Profile({ profile, writable }: { readonly profile: OwnProfileInForce; readonly writable: boolean }) {
     const { translate } = useLocalization();
 
     // What a file the person picked was refused for, which belongs to the control they picked it with rather than to
@@ -573,58 +605,65 @@ function Profile({ profile }: { readonly profile: OwnProfileInForce }) {
                     />
 
                     {/* Drawn whatever the field beside them is doing. `changeable` says whether *the name* would be
-                        taken, which is a grant over somebody's mail configuration; the portrait routes ask only for
-                        the grant to read mail, deliberately and for the reason the endpoint states — what a person is
-                        drawn by is not decided by who maintains their mailboxes. Gating these on it would refuse a
-                        change the deployment would have accepted. */}
-                    <div className="flex flex-wrap items-center gap-1.25">
-                        <label className="flex cursor-pointer items-center gap-1.25 rounded-md border border-line-strong px-2.25 py-1 text-xs text-text-soft transition hover:bg-hover has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent">
-                            <Icon name="add_a_photo" className="size-3.5" />
-                            {translate('settings.choosePicture')}
+                        taken, which a settings policy may hold apart from everything else here; the portrait routes
+                        ask only for the grant to change a profile, so that grant alone decides whether these are
+                        offered. */}
+                    {!writable ? null : (
+                        <div className="flex flex-wrap items-center gap-1.25">
+                            <label className="flex cursor-pointer items-center gap-1.25 rounded-md border border-line-strong px-2.25 py-1 text-xs text-text-soft transition hover:bg-hover has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent">
+                                <Icon name="add_a_photo" className="size-3.5" />
+                                {translate('settings.choosePicture')}
 
-                            {/* The file input carries the label rather than being clicked by a handler: a hidden input
+                                {/* The file input carries the label rather than being clicked by a handler: a hidden input
                                 a control activates imperatively is one a keyboard reaches only by accident, and a
                                 label already names it and opens it. */}
-                            <input
-                                type="file"
-                                accept="image/jpeg,image/png"
-                                className="sr-only"
-                                onChange={(event) => {
-                                    pick(event.target.files?.[0]);
+                                <input
+                                    type="file"
+                                    accept="image/jpeg,image/png"
+                                    className="sr-only"
+                                    onChange={(event) => {
+                                        pick(event.target.files?.[0]);
 
-                                    // Cleared so that picking the same file twice is a second choice rather than
-                                    // nothing at all, which is what a person correcting a refusal does.
-                                    event.target.value = '';
-                                }}
-                            />
-                        </label>
+                                        // Cleared so that picking the same file twice is a second choice rather than
+                                        // nothing at all, which is what a person correcting a refusal does.
+                                        event.target.value = '';
+                                    }}
+                                />
+                            </label>
 
-                        {profile.picture === null ? null : (
-                            <button
-                                type="button"
-                                className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted transition hover:bg-hover hover:text-text"
-                                onClick={() => {
-                                    setRefused(null);
-                                    profile.removePicture();
-                                }}
-                            >
-                                <Icon name="delete" className="size-3.5" />
-                                {translate('settings.removePicture')}
-                            </button>
-                        )}
+                            {profile.picture === null ? null : (
+                                <button
+                                    type="button"
+                                    className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted transition hover:bg-hover hover:text-text"
+                                    onClick={() => {
+                                        setRefused(null);
+                                        profile.removePicture();
+                                    }}
+                                >
+                                    <Icon name="delete" className="size-3.5" />
+                                    {translate('settings.removePicture')}
+                                </button>
+                            )}
 
-                        <span className="text-2xs text-faint">{translate('settings.pictureBounds')}</span>
-                    </div>
+                            <span className="text-2xs text-faint">{translate('settings.pictureBounds')}</span>
+                        </div>
+                    )}
 
                     <PictureNotice profile={profile} refused={refused} />
                 </div>
             </div>
 
-            <TimeZone profile={profile} />
+            <TimeZone profile={profile} writable={writable} />
 
             <p className="text-2xs text-muted">{translate('settings.profileHeld')}</p>
 
-            {profile.changeable ? null : <p className="text-2xs text-muted">{translate('settings.nameNotYours')}</p>}
+            {/* Two reasons a name is shown rather than offered, and each has its own sentence: the credential may
+                change nothing here, or it may and somebody else keeps the name. */}
+            {!writable ? (
+                <p className="text-2xs text-muted">{translate('settings.profileNotYours')}</p>
+            ) : profile.changeable ? null : (
+                <p className="text-2xs text-muted">{translate('settings.nameNotYours')}</p>
+            )}
 
             {profile.nameNotAcceptable ? (
                 <p className="text-2xs text-warning">{translate('settings.nameNotAcceptable')}</p>
@@ -651,7 +690,7 @@ function Profile({ profile }: { readonly profile: OwnProfileInForce }) {
 // runtime's own — `Intl.supportedValuesOf` is every zone this engine can place a date in, which is the same question
 // the deployment answers for itself. The zone in force is put into the list whether or not the runtime carries it, so a
 // deployment holding one this engine has never heard of draws what it holds rather than silently drawing another zone.
-function TimeZone({ profile }: { readonly profile: OwnProfileInForce }) {
+function TimeZone({ profile, writable }: { readonly profile: OwnProfileInForce; readonly writable: boolean }) {
     const { translate } = useLocalization();
     const named = useId();
 
@@ -677,6 +716,7 @@ function TimeZone({ profile }: { readonly profile: OwnProfileInForce }) {
                     key={inForce}
                     id={named}
                     defaultValue={inForce}
+                    disabled={!writable}
                     className="w-44 shrink-0 rounded-lg border border-line-strong bg-sunken px-2.5 py-1.5 text-base text-text outline-none focus:border-accent"
                     onChange={(event) => {
                         profile.chooseTimeZone(event.target.value);

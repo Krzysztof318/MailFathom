@@ -93,7 +93,7 @@ internal static class AnsweringDeployment
             Substitute.For<IMailAnsweringAuditTrail>(),
             new FakeTimeProvider(Now),
             egressGuard ?? SensitiveContentEgressGuards.Inactive(),
-            AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailAsk),
+            AccessAuthorizations.ForCallerGranted(MailFathomPermission.AssistantUse, MailFathomPermission.MailRead),
             UserClocks.Reading(Now));
     }
 

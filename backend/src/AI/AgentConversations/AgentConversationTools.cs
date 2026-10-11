@@ -105,11 +105,24 @@ internal sealed class AgentConversationTools
     /// <remarks>Held rather than written, because they belong to the answer that completes and a model that suggests and then fails has suggested nothing for the one that follows it.</remarks>
     internal IReadOnlyList<PresentationText> FollowUps { get; private set; } = [];
 
+    /// <summary>Gets the accounts the model is told of: the person's where a tool it is offered takes one, and none otherwise.</summary>
+    /// <remarks>
+    /// Which mailboxes somebody has is read under <see cref="MailFathomPermission.MailRead" /> everywhere else, so a
+    /// model answering a caller without it is not handed their names as a side effect of being asked something. The
+    /// one other reason to name them is the proposal of a new message, which is sent from one.
+    /// </remarks>
+    internal IReadOnlyList<MailAccountId> NamedAccounts =>
+        this.readers.Authorization.Permits(MailFathomPermission.MailRead) || this.ProposesMail ? this.accounts : [];
+
+    private bool ProposesMail =>
+        this.readers.Authorization.Permits(MailFathomPermission.MailDraftsWrite)
+        && this.readers.Authorization.Permits(MailFathomPermission.MailSend);
+
     /// <summary>Creates the tools the person's grant allows.</summary>
     /// <returns>
-    /// The reading tools where the grant reads mail, beside the two that propose onto the person's own calendar and task
-    /// list — which those use cases admit under the same grant — and the ones proposing mail where it also drafts and
-    /// sends.
+    /// Each reading tool where the grant reads that record — mail, the calendar, the task list — each of the two that
+    /// propose onto the calendar or the task list where the grant writes it, and the ones proposing mail where it
+    /// drafts and sends.
     /// </returns>
     internal IReadOnlyList<AITool> Create()
     {
@@ -123,13 +136,29 @@ internal sealed class AgentConversationTools
             tools.Add(new ReportingFunction(this.retrieval.CreateSearchTool(), this.journal, AgentActivity.SearchingMail));
             tools.Add(AIFunctionFactory.Create(this.ReadThreadAsync, "read_thread", "Reads the whole email conversation a message belongs to: every message's sender, date, subject, and body. Pass the id of any message in it."));
             tools.Add(AIFunctionFactory.Create(this.ShowThreadStateAsync, "show_thread_state", "Shows the person where the conversation a message belongs to stands — what was agreed, what is still open, what somebody owes — exactly as it was already derived. The reading is placed in the conversation for them; do not restate it."));
+        }
+
+        if (this.readers.Authorization.Permits(MailFathomPermission.CalendarRead))
+        {
             tools.Add(AIFunctionFactory.Create(this.ReadCalendarAsync, "read_calendar", "Reads the person's calendar between two instants, earliest first."));
+        }
+
+        if (this.readers.Authorization.Permits(MailFathomPermission.TasksRead))
+        {
             tools.Add(AIFunctionFactory.Create(this.ReadTasksAsync, "read_tasks", "Reads the person's task list, soonest due first, including what their mail proposed as a task."));
+        }
+
+        if (this.readers.Authorization.Permits(MailFathomPermission.CalendarWrite))
+        {
             tools.Add(AIFunctionFactory.Create(this.ProposeEventAsync, "propose_event", "Proposes a calendar event for the person to review. Nothing is scheduled: the person sees the event, corrects its hour, and decides."));
+        }
+
+        if (this.readers.Authorization.Permits(MailFathomPermission.TasksWrite))
+        {
             tools.Add(AIFunctionFactory.Create(this.ProposeTaskAsync, "propose_task", "Proposes a task for the person's own list. Nothing is created: the person sees the task, corrects its due day, and decides."));
         }
 
-        if (this.readers.Authorization.Permits(MailFathomPermission.MailDraftsWrite) && this.readers.Authorization.Permits(MailFathomPermission.MailSend))
+        if (this.ProposesMail)
         {
             tools.Add(AIFunctionFactory.Create(this.ProposeMessageAsync, "propose_message", "Proposes a new email for the person to review. Nothing is sent: the person sees the draft and decides."));
 

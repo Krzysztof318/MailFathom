@@ -62,15 +62,15 @@ public sealed class MailFathomPermissionTests
     /// could ask this deployment for, and the custody permission when switching one account into holding its own
     /// mailbox became an act that empties a mail server of somebody's mail. The roles permission was allocated when
     /// roles, groups, and role assignments became records an administrator writes over the administrative endpoint.
+    /// The task, calendar, notification, and profile pairs were allocated when those records stopped being read and
+    /// changed under the grant that reads mail, which is also when the contact pair and the asking grant took a
+    /// domain of their own: a name says which record it is a grant over, and none of those records is a mailbox.
     /// </remarks>
     [Fact]
     public void All_CarriesThePublishedNames() =>
         Assert.Equal(
             [
                 "mailfathom.mail.read",
-                "mailfathom.mail.ask",
-                "mailfathom.mail.contacts.read",
-                "mailfathom.mail.contacts.write",
                 "mailfathom.mail.flags.write",
                 "mailfathom.mail.move",
                 "mailfathom.mail.delete",
@@ -78,6 +78,17 @@ public sealed class MailFathomPermissionTests
                 "mailfathom.mail.send",
                 "mailfathom.mail.accounts.write",
                 "mailfathom.mail.folders.write",
+                "mailfathom.contacts.read",
+                "mailfathom.contacts.write",
+                "mailfathom.tasks.read",
+                "mailfathom.tasks.write",
+                "mailfathom.calendar.read",
+                "mailfathom.calendar.write",
+                "mailfathom.notifications.read",
+                "mailfathom.notifications.write",
+                "mailfathom.profile.read",
+                "mailfathom.profile.write",
+                "mailfathom.assistant.use",
                 "mailfathom.admin.read",
                 "mailfathom.admin.audit.read",
                 "mailfathom.admin.operate",
@@ -104,7 +115,7 @@ public sealed class MailFathomPermissionTests
         Assert.Empty(unusableAsScopes);
     }
 
-    /// <summary>The prefix is what a startup refusal reads to tell a grant written on the wrong endpoint from one that belongs there.</summary>
+    /// <summary>The domain says which half a name belongs to: <c>admin</c> is the administrative one, and every other domain reaches what the deployment holds for one person.</summary>
     [Fact]
     public void Surface_FollowsThePrefixOfTheName()
     {
@@ -129,9 +140,6 @@ public sealed class MailFathomPermissionTests
         Assert.Equal(
             [
                 MailFathomPermission.MailRead,
-                MailFathomPermission.MailAsk,
-                MailFathomPermission.MailContactsRead,
-                MailFathomPermission.MailContactsWrite,
                 MailFathomPermission.MailFlagsWrite,
                 MailFathomPermission.MailMove,
                 MailFathomPermission.MailDelete,
@@ -139,6 +147,17 @@ public sealed class MailFathomPermissionTests
                 MailFathomPermission.MailSend,
                 MailFathomPermission.MailAccountsWrite,
                 MailFathomPermission.MailFoldersWrite,
+                MailFathomPermission.ContactsRead,
+                MailFathomPermission.ContactsWrite,
+                MailFathomPermission.TasksRead,
+                MailFathomPermission.TasksWrite,
+                MailFathomPermission.CalendarRead,
+                MailFathomPermission.CalendarWrite,
+                MailFathomPermission.NotificationsRead,
+                MailFathomPermission.NotificationsWrite,
+                MailFathomPermission.ProfileRead,
+                MailFathomPermission.ProfileWrite,
+                MailFathomPermission.AssistantUse,
             ],
             mail);
         Assert.Equal(MailFathomPermission.All.Count, mail.Count + administration.Count);
@@ -200,7 +219,7 @@ public sealed class MailFathomPermissionTests
     /// <summary>A log line and a startup record name the permission an operator wrote, not the structure carrying it.</summary>
     [Fact]
     public void ToString_IsThePublishedName() =>
-        Assert.Equal("mailfathom.mail.ask", MailFathomPermission.MailAsk.ToString());
+        Assert.Equal("mailfathom.assistant.use", MailFathomPermission.AssistantUse.ToString());
 
     [Fact]
     public void JsonRoundTrip_PreservesThePermission()
@@ -251,7 +270,7 @@ public sealed class MailFathomPermissionTests
             [MailFathomPermission.AdminSpend],
             MailFathomPermission.All.Where(permission => permission.IsDeploymentScopeOnly));
 
-    private static ProtectedSurface ExpectedSurfaceOf(string name) => name.StartsWith("mailfathom.mail.", StringComparison.Ordinal)
-        ? ProtectedSurface.Mail
-        : ProtectedSurface.Administration;
+    private static ProtectedSurface ExpectedSurfaceOf(string name) => name.StartsWith("mailfathom.admin.", StringComparison.Ordinal)
+        ? ProtectedSurface.Administration
+        : ProtectedSurface.Mail;
 }

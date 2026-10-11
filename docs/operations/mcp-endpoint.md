@@ -816,7 +816,7 @@ The operational consequences are the ones that always applied to an unauthentica
   disclosure of a mailbox, which is enough on its own, and every writing half with it. `mailfathom.mail.flags.write` lets them mark, star, and relabel the user's mail on the real mail server
   through `set_mail_flags`, and the change converges out over the account's own write connection; nothing there sends,
   deletes, or moves mail, but a message somebody else marked read is a message the user never saw arrive.
-  `mailfathom.mail.contacts.write` lets them record, amend, and irreversibly erase the records about identified third
+  `mailfathom.contacts.write` lets them record, amend, and irreversibly erase the records about identified third
   parties that the credential's user reads — their own book, and the collected book of each mail account assigned to
   them, so an erasure there reaches a record every other user of a shared mailbox was reading. `mailfathom.mail.send` is the third writing half and the one whose effect cannot be
   recalled: through `send_email` it lets anyone who can reach the port send mail from the user's own address to
@@ -842,16 +842,17 @@ $ mfctl credential create --method api-key --user 6f1c… --permission mailfatho
 $ mfctl credential list --user 6f1c…
 ```
 
-This surface's half of the published set is eleven names — `mailfathom.mail.read`, `mailfathom.mail.ask`,
-`mailfathom.mail.contacts.read`, `mailfathom.mail.contacts.write`, `mailfathom.mail.flags.write`,
-`mailfathom.mail.move`, `mailfathom.mail.delete`, `mailfathom.mail.drafts.write`, `mailfathom.mail.send`,
-`mailfathom.mail.accounts.write`, and `mailfathom.mail.folders.write` — and
+This surface's half of the published set is the user-facing one — the eight names over mail, the pairs over the address
+book, the task list, the calendar, the notification centre, and the profile, and `mailfathom.assistant.use` — and
 [what a credential may do](permissions.md) holds the model behind them in full: what each name reaches, which tool each
 one covers, how a caller's grant is computed from the user's roles, what naming no permission and naming
 `--no-permissions` each mean, what `PermissionsFromTokenScopes` narrows it to, and what is refused.
 
-Seven of the eleven publish a tool here. `mailfathom.mail.accounts.write`, `mailfathom.mail.move`,
-`mailfathom.mail.delete`, and `mailfathom.mail.folders.write` publish none: the first reaches [the client endpoint's
+Seven of them publish a tool here: `mailfathom.mail.read`, `mailfathom.mail.flags.write`, `mailfathom.mail.drafts.write`,
+`mailfathom.mail.send`, the two address-book names, and `mailfathom.assistant.use`. The pairs over the task list, the
+calendar, the notification centre, and the profile publish none, because those records are a signed-in person's and are
+reached through [the client endpoint](client-endpoint.md). `mailfathom.mail.accounts.write`, `mailfathom.mail.move`,
+`mailfathom.mail.delete`, and `mailfathom.mail.folders.write` publish none either: the first reaches [the client endpoint's
 record routes](client-endpoint.md#the-record-routes), which is where a person maintains their own record and the
 folders this deployment reads out of their mailboxes, the next two reach [its mutation routes](client-endpoint.md#the-mutation-routes), which is where they
 file mail into another folder and where they delete a message off the server outright, and the last reaches [its
@@ -872,7 +873,7 @@ answer never serves another.
 
 The availability rule that already decides `ask_mail` composes with this rather than being replaced by it. A tool may be
 unavailable, unauthorized, or both, and no grant makes a capability this deployment does not have appear — an endpoint
-whose chat provider is unconfigured withholds `ask_mail` from a caller granted `mailfathom.mail.ask` exactly as it does
+whose chat provider is unconfigured withholds `ask_mail` from a caller granted `mailfathom.assistant.use` exactly as it does
 from one granted nothing.
 
 Startup states what every entry accepts, one line per entry, so the posture is one an operator reads on the first run
@@ -2068,13 +2069,15 @@ tools than the paragraph above describes and nothing in the answer says why. Con
 
 `ask_mail` is the fifth, and it appears only while this deployment can answer a question: a chat endpoint declared and
 not currently refusing, and an embedding profile whose space a query can be placed in. Its absence from the listing of a
-caller granted `mailfathom.mail.ask` is therefore a statement about the deployment rather than a fault — an instance
+caller granted `mailfathom.assistant.use` is therefore a statement about the deployment rather than a fault — an instance
 that declared no chat endpoint never advertises it, and one whose chat provider refused within the last minute withholds
 it and offers it again afterwards, so a rotated credential is picked up without a restart. Read the health record for
 the chat role before treating that absence as a defect. Such a caller calling it anyway is refused with `56001`, whose
 message says whether this deployment answers no questions at all or answers them and currently cannot; a caller whose
-grant does not carry `mailfathom.mail.ask` receives the unknown-tool error instead, which is the grant rather than the
-deployment and is read from the configured entry rather than from the health record.
+grant does not carry `mailfathom.assistant.use` receives the unknown-tool error instead, which is the grant rather than the
+deployment and is read from the configured entry rather than from the health record. A caller holding that grant
+without `mailfathom.mail.read` is offered the tool and refused by the use case behind it, because the question is
+answered out of mail — [which tool each name covers](permissions.md#which-tool-each-name-covers) says why the two are asked apart.
 
 A call answers from the local mailbox copy, so what it returns depends on what synchronization has stored rather than on
 whether a mail server is reachable. A deployment whose folders have never synchronized answers an empty page whose

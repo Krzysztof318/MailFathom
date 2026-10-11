@@ -286,10 +286,10 @@ public sealed class MailOutboxTests
     /// <summary>Reading a mailbox is not writing from it, so the grant that reaches every other mail tool reaches no send.</summary>
     [Theory]
     [InlineData("mailfathom.mail.read")]
-    [InlineData("mailfathom.mail.ask")]
+    [InlineData("mailfathom.assistant.use")]
     [InlineData("mailfathom.mail.flags.write")]
-    [InlineData("mailfathom.mail.contacts.read")]
-    [InlineData("mailfathom.mail.contacts.write")]
+    [InlineData("mailfathom.contacts.read")]
+    [InlineData("mailfathom.contacts.write")]
     public async Task EnqueueAsync_CallerGrantedAnotherMailPermission_Refuses(string grantedPermissionName)
     {
         // Arrange

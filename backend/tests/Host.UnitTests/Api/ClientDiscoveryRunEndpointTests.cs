@@ -127,6 +127,27 @@ public sealed class ClientDiscoveryRunEndpointTests
         Assert.Equal(0, store.HeldCount);
     }
 
+    /// <summary>
+    /// A run answers out of mail, so a caller who may ask and may not read mail is refused before one is opened —
+    /// rather than being told a run began, holding one of their concurrent runs, and reading only that it failed.
+    /// </summary>
+    [Fact]
+    public async Task Start_ACallerGrantedAskingAlone_IsRefusedBeforeARunIsOpened()
+    {
+        // Arrange
+        var store = new InMemoryDiscoveryRunStore();
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() => StartAsync(
+            new ClientDiscoveryRunRequest("which supplier quoted least", null, null, null, null),
+            store,
+            MailFathomPermission.AssistantUse));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.MailRead, refusal.RequiredPermission);
+        Assert.Equal(0, store.HeldCount);
+    }
+
     /// <summary>A run executes as whoever asked for it, so a request the transport admitted nobody for opens none.</summary>
     [Fact]
     public async Task Start_ARequestNoPrincipalWasAdmittedFor_RefusesTheQuestion()
@@ -139,6 +160,7 @@ public sealed class ClientDiscoveryRunEndpointTests
         // Act
         var answered = await ClientDiscoveryRunEndpoints.Start(
             new ClientDiscoveryRunRequest("which supplier quoted least", null, null, null, null),
+            AccessAuthorizations.ForCallerGranted(MailFathomPermission.AssistantUse, MailFathomPermission.MailRead),
             ResolverFor(SyntheticUser.Deployment),
             UserClocks.Reading(Now),
             principals,
@@ -464,9 +486,12 @@ public sealed class ClientDiscoveryRunEndpointTests
 
     private static Task<Results<Accepted<ClientDiscoveryRunResponse>, ProblemHttpResult>> StartAsync(
         ClientDiscoveryRunRequest request,
-        InMemoryDiscoveryRunStore store) =>
+        InMemoryDiscoveryRunStore store,
+        params MailFathomPermission[] granted) =>
         ClientDiscoveryRunEndpoints.Start(
             request,
+            AccessAuthorizations.ForCallerGranted(
+                granted is [] ? [MailFathomPermission.AssistantUse, MailFathomPermission.MailRead] : granted),
             ResolverFor(SyntheticUser.Deployment),
             UserClocks.Reading(Now),
             AdmittedCaller(SyntheticUser.Deployment),
@@ -525,7 +550,10 @@ public sealed class ClientDiscoveryRunEndpointTests
     {
         var principals = Substitute.For<IAuthorizedPrincipalSource>();
         principals.Current.Returns(
-            AuthorizedPrincipal.CallerActingFor(user, "test-caller", [MailFathomPermission.MailAsk]));
+            AuthorizedPrincipal.CallerActingFor(
+                user,
+                "test-caller",
+                [MailFathomPermission.AssistantUse, MailFathomPermission.MailRead]));
 
         return principals;
     }
@@ -533,7 +561,7 @@ public sealed class ClientDiscoveryRunEndpointTests
     private static MailboxScopeResolver ResolverFor(UserId user) =>
         new(
             AssignedMailAccountCatalogs.For(
-                AccessAuthorizations.ForUserGranted(user, MailFathomPermission.MailAsk),
+                AccessAuthorizations.ForUserGranted(user, MailFathomPermission.AssistantUse),
                 SyntheticServedAccount.Of("primary")),
             StubMailFolderParticipation.Nothing,
             StubDeploymentMailFolders.None,

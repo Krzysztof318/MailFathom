@@ -579,6 +579,10 @@ export const en = {
     'settings.name': 'Full name',
     'settings.nameNotYours':
         'Whoever runs this deployment keeps your name, so it is shown here rather than offered for you to change.',
+    'settings.profileNotYours':
+        'This sign-in may read what the deployment holds about you and may not change it, so your name, your picture, and your time zone are shown here rather than offered for you to change.',
+    'settings.preferencesNotYours':
+        'This sign-in may not change the settings that follow you between machines, so they are shown here as they stand. The language and what this machine does are still yours to set.',
     'settings.nameNotAcceptable':
         'That name was not accepted. It cannot be blank or longer than 128 characters, and it cannot be one somebody else on this deployment already goes by.',
     'settings.nameNotStored': 'That name was not saved to the deployment, so it still holds you under the old one.',
@@ -1201,6 +1205,22 @@ export const en = {
         'This credential may not read the address book on this deployment, so the People space is not offered. Whoever runs the deployment can grant that.',
     'grant.writeContacts':
         'This credential may not change the address book on this deployment, so adding a contact, taking a collected one on, and deleting one are not offered. Whoever runs the deployment can grant that.',
+    'grant.readTasks':
+        'This credential may not read your tasks on this deployment, so the Tasks space is not offered. Whoever runs the deployment can grant that.',
+    'grant.writeTasks':
+        'This credential may not change your tasks on this deployment, so the Tasks space is not offered. Whoever runs the deployment can grant that.',
+    'grant.readCalendar':
+        'This credential may not read your calendar on this deployment, so the Calendar space is not offered. Whoever runs the deployment can grant that.',
+    'grant.writeCalendar':
+        'This credential may not change your calendar on this deployment, so the Calendar space is not offered. Whoever runs the deployment can grant that.',
+    'grant.readNotifications':
+        'This credential may not read your notifications on this deployment, so the bell is not offered and this client learns what changed on its own interval rather than as it happens. Whoever runs the deployment can grant that.',
+    'grant.writeNotifications':
+        'This credential may not mark or remove your notifications on this deployment, so the bell is not offered. Whoever runs the deployment can grant that.',
+    'grant.readProfile':
+        'This credential may not read your profile on this deployment, so your name, picture, time zone and preferences are not shown and this client uses its own defaults. Whoever runs the deployment can grant that.',
+    'grant.writeProfile':
+        'This credential may not change your profile on this deployment, so a change to your name, picture, time zone or preferences is refused. Whoever runs the deployment can grant that.',
     'failure.unauthenticated': 'unauthenticated',
     'failure.unauthorized': 'unauthorized',
     'failure.unavailable': 'unavailable',

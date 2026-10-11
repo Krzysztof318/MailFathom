@@ -97,13 +97,17 @@ export function TaskList({
     readonly onToggleCompleted: (task: PersonalTask) => void;
     readonly onAccept: (task: PersonalTask) => void;
 
-    /** Opens the message a task cites, which is the Mail space's to draw and therefore the frame's to perform. */
-    readonly onOpenSource: (messageId: string) => void;
+    /**
+     * Opens the message a task cites, which is the Mail space's to draw and therefore the frame's to perform — or
+     * `undefined` where this credential reads no mail, and a link to one would lead nowhere.
+     */
+    readonly onOpenSource: ((messageId: string) => void) | undefined;
 
     /** Opens what announces one task, which the screen holds the panel for. */
     readonly onReminders: (task: PersonalTask) => void;
 
-    readonly onSchedule: (tasks: readonly PersonalTask[]) => void;
+    /** Puts tasks in the calendar, or `undefined` where this credential may not change one. */
+    readonly onSchedule: ((tasks: readonly PersonalTask[]) => void) | undefined;
 
     /** Raises the question an erasure stands behind, over the tasks it is about. */
     readonly onAskErasure: (tasks: readonly PersonalTask[]) => void;
@@ -149,7 +153,7 @@ export function TaskList({
                       }
                     : undefined,
             onOpenSource:
-                source === null
+                source === null || onOpenSource === undefined
                     ? undefined
                     : () => {
                           onOpenSource(source);
@@ -160,9 +164,12 @@ export function TaskList({
                     : () => {
                           onReminders(task);
                       },
-            onSchedule: () => {
-                onSchedule([task]);
-            },
+            onSchedule:
+                onSchedule === undefined
+                    ? undefined
+                    : () => {
+                          onSchedule([task]);
+                      },
         };
     }
 

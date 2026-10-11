@@ -870,7 +870,7 @@ public sealed class UserCredentialCommandTests : IDisposable
         // Arrange
         using var deployment = FakeUserCredentialDeployment.Holding(
             [User],
-            FakeUserCredentialDeployment.CredentialNamingNothing(CredentialId, "mailfathom.mail.read", "mailfathom.mail.ask"));
+            FakeUserCredentialDeployment.CredentialNamingNothing(CredentialId, "mailfathom.mail.read", "mailfathom.assistant.use"));
 
         // Act
         var exitCode = await this.RunAsync(deployment, "credential", "list", "--endpoint", Endpoint);
@@ -882,7 +882,7 @@ public sealed class UserCredentialCommandTests : IDisposable
         var row = Assert.Single(listing.Rows);
 
         Assert.Equal("everything the user holds", listing.Cell(row, "Narrows to"));
-        Assert.Equal("mailfathom.mail.read, mailfathom.mail.ask", listing.Cell(row, "Holds"));
+        Assert.Equal("mailfathom.mail.read, mailfathom.assistant.use", listing.Cell(row, "Holds"));
     }
 
     /// <summary>A whole half is named as the half it is, so a credential holding every mail name never reads as one that administers.</summary>

@@ -178,7 +178,7 @@ public sealed class MailAccountDirectoryReaderTests
     public async Task ReadAsync_ACallerGrantedOnlyTheAnsweringPermission_IsRefusedWithTheTransportAbsent()
     {
         // Arrange
-        var reader = ReaderAuthorizedBy(AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailAsk));
+        var reader = ReaderAuthorizedBy(AccessAuthorizations.ForCallerGranted(MailFathomPermission.AssistantUse));
 
         // Act
         var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>

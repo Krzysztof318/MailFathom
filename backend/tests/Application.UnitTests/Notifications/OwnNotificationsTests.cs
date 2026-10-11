@@ -335,13 +335,13 @@ public sealed class OwnNotificationsTests
             () => notifications.EraseAsync(named, TestContext.Current.CancellationToken));
     }
 
-    /// <summary>The centre is a person's own working state, so a caller holding no reading grant reaches none of it.</summary>
+    /// <summary>The centre is a record of its own rather than anything in a mailbox, so the grant that reads mail reaches none of it.</summary>
     [Fact]
-    public async Task ReadPageAsync_ACallerWithoutTheReadingGrant_IsRefused()
+    public async Task ReadPageAsync_ACallerGrantedOnlyReadingMail_IsRefused()
     {
         // Arrange
         var notifications = new OwnNotifications(
-            AccessAuthorizations.ForUserGranted(User, MailFathomPermission.MailSend),
+            AccessAuthorizations.ForUserGranted(User, MailFathomPermission.MailRead),
             new InMemoryNotificationStore());
 
         // Act and assert
@@ -349,8 +349,39 @@ public sealed class OwnNotificationsTests
             () => notifications.ReadPageAsync(null, null, TestContext.Current.CancellationToken));
     }
 
+    /// <summary>Reading the centre is not changing it, so a caller granted only the reading half marks nothing read.</summary>
+    [Fact]
+    public async Task MarkAllReadAsync_ACallerGrantedOnlyReadingTheCentre_IsRefused()
+    {
+        // Arrange
+        var notifications = new OwnNotifications(
+            AccessAuthorizations.ForUserGranted(User, MailFathomPermission.NotificationsRead),
+            new InMemoryNotificationStore());
+
+        // Act and assert
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
+            () => notifications.MarkAllReadAsync(TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>The count a change is answered with is the tail of that change, so the reading half alone does not reach it.</summary>
+    [Fact]
+    public async Task CountUnreadLeftAsync_ACallerGrantedOnlyReadingTheCentre_IsRefused()
+    {
+        // Arrange
+        var notifications = new OwnNotifications(
+            AccessAuthorizations.ForUserGranted(User, MailFathomPermission.NotificationsRead),
+            new InMemoryNotificationStore());
+
+        // Act and assert
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
+            () => notifications.CountUnreadLeftAsync(TestContext.Current.CancellationToken));
+    }
+
     private static OwnNotifications SignedIn(INotificationStore store) => new(
-        AccessAuthorizations.ForUserGranted(User, MailFathomPermission.MailRead),
+        AccessAuthorizations.ForUserGranted(
+            User,
+            MailFathomPermission.NotificationsRead,
+            MailFathomPermission.NotificationsWrite),
         store);
 
     private static async Task<Notification> RecordAsync(

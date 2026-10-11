@@ -15,7 +15,7 @@ namespace MailFathom.Application.Contacts;
 /// <para>
 /// The book itself is <see cref="ContactBook" /> and the rows are <see cref="IContactDirectory" />'s; what this use case
 /// adds is the two things a caller-facing read owes and neither of those does — that the caller holds
-/// <see cref="MailFathomPermission.MailContactsRead" />, and that every bound on a page is applied before the store is
+/// <see cref="MailFathomPermission.ContactsRead" />, and that every bound on a page is applied before the store is
 /// reached. The permission is asked for here rather than only at the transport, so an entrypoint added later cannot
 /// reach the book by arriving another way.
 /// </para>
@@ -72,7 +72,7 @@ public sealed class ContactBookReader
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        this.authorization.RequirePermission(MailFathomPermission.MailContactsRead);
+        this.authorization.RequirePermission(MailFathomPermission.ContactsRead);
 
         var scope = await this.ownership.ReadScopeAsync(cancellationToken);
 
@@ -86,7 +86,7 @@ public sealed class ContactBookReader
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold the reading grant.</exception>
     public async Task<Contact?> FindAsync(ContactId contactId, CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.MailContactsRead);
+        this.authorization.RequirePermission(MailFathomPermission.ContactsRead);
 
         var scope = await this.ownership.ReadScopeAsync(cancellationToken);
 
@@ -107,7 +107,7 @@ public sealed class ContactBookReader
     /// </remarks>
     public async Task<Contact?> FindByAddressAsync(EmailAddress address, CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.MailContactsRead);
+        this.authorization.RequirePermission(MailFathomPermission.ContactsRead);
 
         var scope = await this.ownership.ReadScopeAsync(cancellationToken);
 

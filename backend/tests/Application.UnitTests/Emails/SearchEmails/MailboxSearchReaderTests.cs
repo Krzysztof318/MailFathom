@@ -742,7 +742,7 @@ public sealed class MailboxSearchReaderTests
         // Arrange
         var reader = ReaderOver(
             new InMemoryEmailSearchIndex(),
-            authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailAsk));
+            authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.AssistantUse));
 
         // Act
         var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>

@@ -3,7 +3,9 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.AI.AgentConversations;
+using MailFathom.Application.Agent.Conversations;
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using Xunit;
 
 namespace MailFathom.AI.UnitTests.AgentConversations;
@@ -20,6 +22,23 @@ public sealed class AgentConversationInstructionsTests
 
         // Assert
         Assert.All(texts, static pair => Assert.Contains($"Write your own words — your answer, a summary, a paraphrase — in {pair.language}.", pair.Item2, StringComparison.Ordinal));
+    }
+
+    /// <summary>A turn names the accounts it was handed and says nothing of accounts where it was handed none.</summary>
+    [Fact]
+    public void ComposeTurn_NoAccountToName_LeavesTheAccountsOutOfTheTurn()
+    {
+        // Arrange
+        var askedAt = new DateTimeOffset(2026, 3, 2, 9, 0, 0, TimeSpan.Zero);
+
+        // Act
+        var naming = AgentConversationComposition.ComposeTurn(askedAt, [MailAccountId.Create("primary")], AgentMessageScope.Mailbox(), "What is due?");
+        var silent = AgentConversationComposition.ComposeTurn(askedAt, [], AgentMessageScope.Mailbox(), "What is due?");
+
+        // Assert
+        Assert.Contains("The person's accounts: primary.", naming, StringComparison.Ordinal);
+        Assert.DoesNotContain("accounts", silent, StringComparison.OrdinalIgnoreCase);
+        Assert.EndsWith("What is due?", silent, StringComparison.Ordinal);
     }
 
     /// <summary>A day and an hour written the way the mail and the calendar write them are the ones the person recognises.</summary>

@@ -42,18 +42,23 @@ describe('App session', () => {
         renderApp(servedFrom, heldSession, granting('mailfathom.mail.read'));
         await framed();
 
-        expect(screen.getAllByRole('link').map((space) => space.textContent)).toEqual([
-            'Mail',
-            'Cases',
-            'Tasks',
-            'Calendar',
-        ]);
+        expect(screen.getAllByRole('link').map((space) => space.textContent)).toEqual(['Mail', 'Cases']);
     });
 
-    // People is the second space behind a grant of its own, and it is the worked example of a space that became a
-    // screen: a placeholder is reached by anybody, and what reading somebody's address book needs is said here.
-    it('offers the address book to a credential that may read one', async () => {
-        renderApp(servedFrom, heldSession, granting('mailfathom.mail.read', 'mailfathom.mail.contacts.read'));
+    // The task list and the calendar are each a record of their own with a grant pair of their own, so reading mail
+    // offers neither, and holding both halves of each pair is what does.
+    it('offers the task list and the calendar to a credential that may read and change each', async () => {
+        renderApp(
+            servedFrom,
+            heldSession,
+            granting(
+                'mailfathom.mail.read',
+                'mailfathom.tasks.read',
+                'mailfathom.tasks.write',
+                'mailfathom.calendar.read',
+                'mailfathom.calendar.write',
+            ),
+        );
         await framed();
 
         expect(screen.getAllByRole('link').map((space) => space.textContent)).toEqual([
@@ -61,18 +66,39 @@ describe('App session', () => {
             'Cases',
             'Tasks',
             'Calendar',
-            'People',
         ]);
     });
 
-    // The calendar and the task list are both reached under reading mail rather than under a grant of their own, so a
-    // credential narrowed to asking is offered neither — and pressing one would have been refused by every route
-    // behind it.
-    it('withholds the calendar and the tasks from a credential that may not read mail', async () => {
-        renderApp(servedFrom, heldSession, granting('mailfathom.mail.ask'));
-        await screen.findByRole('heading', { name: 'Discover', level: 1 });
+    // Neither screen has a composition for a record somebody may look at and not change, so one half of a pair offers
+    // no space at all rather than a screen whose every control the deployment would refuse.
+    it('withholds the task list and the calendar from a credential holding only the reading half of each', async () => {
+        renderApp(
+            servedFrom,
+            heldSession,
+            granting('mailfathom.mail.read', 'mailfathom.tasks.read', 'mailfathom.calendar.read'),
+        );
+        await framed();
 
-        expect(screen.getAllByRole('link').map((space) => space.textContent)).toEqual(['Discover', 'Cases', 'Agent']);
+        expect(screen.getAllByRole('link').map((space) => space.textContent)).toEqual(['Mail', 'Cases']);
+    });
+
+    // People is the second space behind a grant of its own, and it is the worked example of a space that became a
+    // screen: a placeholder is reached by anybody, and what reading somebody's address book needs is said here.
+    it('offers the address book to a credential that may read one', async () => {
+        renderApp(servedFrom, heldSession, granting('mailfathom.mail.read', 'mailfathom.contacts.read'));
+        await framed();
+
+        expect(screen.getAllByRole('link').map((space) => space.textContent)).toEqual(['Mail', 'Cases', 'People']);
+    });
+
+    // Discover asks a question of mail, so it needs the grant that asks and the one that reads what is asked about;
+    // the Agent needs only the first, because what its answers may draw on is decided record by record. A credential
+    // narrowed to asking is therefore offered the Agent and not Discover, whose first question would be refused.
+    it('withholds Discover from a credential that may ask and may not read mail', async () => {
+        renderApp(servedFrom, heldSession, granting('mailfathom.assistant.use'));
+        await screen.findByRole('link', { name: 'Agent' });
+
+        expect(screen.getAllByRole('link').map((space) => space.textContent)).toEqual(['Cases', 'Agent']);
     });
 
     it('says what the credential may not do, so an absence is not read as a client that is broken', async () => {
@@ -114,8 +140,8 @@ describe('App session', () => {
     });
 
     it('never asks for the mail a credential may not read, rather than letting the read be refused', async () => {
-        renderApp(servedFrom, heldSession, granting('mailfathom.mail.ask'));
-        await screen.findByRole('heading', { name: 'Discover', level: 1 });
+        renderApp(servedFrom, heldSession, granting('mailfathom.assistant.use'));
+        await screen.findByRole('link', { name: 'Agent' });
 
         // The drafting capability is beside it and is not one of them: it is published under the grant this credential
         // does hold, it reads no mail, and what it answers is whether the composer may offer a draft at all. Nor is the
@@ -172,6 +198,10 @@ describe('App session', () => {
         expect(screen.getByText(/This credential may not ask questions of your mail/)).toBeDefined();
         expect(screen.getByText(/This credential may not change a flag on your mail server/)).toBeDefined();
         expect(screen.getByText(/This credential may not file mail in another folder/)).toBeDefined();
+        expect(screen.getByText(/This credential may not read your tasks/)).toBeDefined();
+        expect(screen.getByText(/This credential may not change your calendar/)).toBeDefined();
+        expect(screen.getByText(/This credential may not read your notifications/)).toBeDefined();
+        expect(screen.getByText(/This credential may not change your profile/)).toBeDefined();
         expect(screen.queryByRole('link', { name: 'Mail' })).toBeNull();
     });
 

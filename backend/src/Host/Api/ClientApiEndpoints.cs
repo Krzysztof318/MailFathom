@@ -46,8 +46,9 @@ namespace MailFathom.Host.Api;
 /// <para>
 /// The name routes, which <see cref="ClientDisplayNameEndpoint" /> describes, stand beside the record rather than
 /// inside it: what this deployment records a person as is the envelope its record hangs on, so a client reading the
-/// record alone would still have nothing to draw the person with. They are written under the record's own grant and
-/// refused for the same person, and the read says which, so a screen is drawn from one answer.
+/// record alone would still have nothing to draw the person with. They are written under
+/// <see cref="MailFathomPermission.ProfileWrite" />, the grant over a person's own profile rather than the record's
+/// own, and the read says whether a write would be accepted, so a screen is drawn from one answer.
 /// </para>
 /// <para>
 /// The preferences routes, which <see cref="ClientPreferencesEndpoint" /> describes, are the surface's other write and
@@ -71,22 +72,23 @@ namespace MailFathom.Host.Api;
 /// The notification routes, which <see cref="ClientNotificationEndpoints" /> describes, are the centre a person reads
 /// what happened to them in while nobody was looking. They stand beside the preferences rather than among the mail
 /// routes because what they serve is the deployment's own working state about a person rather than their mailbox, and
-/// both ways of marking one read are admitted under the reading grant for the reason the preferences write is: a
-/// person whose mail accounts an administrator maintains still has to be able to clear their own bell.
+/// they are published under a pair of grants of their own for the reason the preferences are: a person whose mail
+/// accounts an administrator maintains still has to be able to clear their own bell, and a credential granted to read
+/// a mailbox must not thereby change anything.
 /// </para>
 /// <para>
 /// The task routes, which <see cref="ClientTaskEndpoints" /> describes, are the person's own list of what they owe.
 /// They stand beside the notification routes rather than among the mail ones for the same reason those do: what they
-/// serve is a record native to this deployment rather than a mailbox, and every act on one is admitted under the
-/// reading grant because none of them reaches a mail server. The list is read as two — what the person committed to
+/// serve is a record native to this deployment rather than a mailbox, so reading the list and writing it are each a
+/// grant of their own and neither is one over mail. The list is read as two — what the person committed to
 /// and what mail proposed — because those are two things to somebody looking at a screen.
 /// </para>
 /// <para>
 /// The calendar routes, which <see cref="ClientCalendarEndpoints" /> describes, are the person's own days, and they
 /// stand beside the task routes for the reason those stand where they do: what they hold is a record native to this
 /// deployment — what somebody put on their calendar, and the dates their mail proposed to it — and no act among
-/// them reaches a mail server or any calendar server at all, so every one of them is admitted under the reading grant.
-/// Every read is a window, because every view over a calendar is one, and the two halves are asked for separately
+/// them reaches a mail server or any calendar server at all, so reading the calendar and writing it are each a grant
+/// of their own, as the task list's are. Every read is a window, because every view over a calendar is one, and the two halves are asked for separately
 /// because they are drawn in different places.
 /// </para>
 /// <para>
@@ -97,8 +99,8 @@ namespace MailFathom.Host.Api;
 /// </para>
 /// <para>
 /// The contact relationship route, which <see cref="ClientContactRelationshipEndpoint" /> describes, reads that same
-/// correlation into the note the contact is headed by. It is published under the asking grant rather than the reading
-/// one, because a correspondence leaves this deployment for a chat provider to derive it and the call is charged to
+/// correlation into the note the contact is headed by. It is published under the assistant grant rather than the
+/// reading one, because a correspondence leaves this deployment for a chat provider to derive it and the call is charged to
 /// the allowance a question is — which is also why it is a route of its own rather than a field on the correlation: a
 /// client that draws no card never pays for the derivation.
 /// </para>
@@ -149,7 +151,7 @@ internal static class ClientApiEndpoints
 
         // On the group rather than on each route, because what a route supplies is its decision and what this supplies
         // is the enforcement: a route mapped without stating a permission is refused by this rather than served, which
-        // is what makes forgetting to decide fail closed. The surface is the mailbox half, which is where this surface's
+        // is what makes forgetting to decide fail closed. The surface is the user-facing half, which is where this surface's
         // grants are drawn from. Group filters reach every route the group holds, whenever it was added, so nothing here
         // depends on this line staying first.
         api.AddEndpointFilter(RouteAuthorization.RefusingUnpermitted(ProtectedSurface.Mail));

@@ -19,7 +19,8 @@ namespace MailFathom.Host.Signals;
 /// <para>
 /// <b>A connection is authenticated by a ticket and by nothing else.</b> It carries no <c>Authorization</c> header,
 /// because a browser cannot put one on a WebSocket, so <see cref="ClientSignalTickets" /> is what names the user —
-/// minted over an authenticated route that already required <see cref="MailFathomPermission.MailRead" />, spent here
+/// minted over an authenticated route that already required <see cref="MailFathomPermission.MailRead" /> and
+/// <see cref="MailFathomPermission.NotificationsRead" />, the two grants over what this channel announces, spent here
 /// once against the store every replica shares, and never seen again. A connection presenting nothing, something
 /// malformed, something expired, or something already spent is aborted without being told which, and so is one whose
 /// ticket could not be reached at all — which is the one refusal an operator has to act on, and the one logged as

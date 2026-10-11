@@ -57,6 +57,33 @@ public sealed class ClientSignalEndpointsTests
             await tickets.RedeemAsync(answered.Value.Ticket, TestContext.Current.CancellationToken));
     }
 
+    /// <summary>
+    /// The channel a ticket opens announces a notification by its headline beside the mail that arrived, so a ticket is
+    /// minted only for a caller who may read both, and one missing either is refused naming it before a ticket is held.
+    /// </summary>
+    [Theory]
+    [InlineData("mailfathom.mail.read", "mailfathom.notifications.read")]
+    [InlineData("mailfathom.notifications.read", "mailfathom.mail.read")]
+    public async Task MintTicket_ACallerMissingOneOfTheTwoGrantsTheChannelAnnounces_IsRefusedNamingIt(
+        string held,
+        string missing)
+    {
+        // Arrange
+        Assert.True(MailFathomPermission.TryParse(held, out var granted));
+        var store = new InMemoryClientSignalTicketStore();
+        var tickets = new ClientSignalTickets(store, new FakeTimeProvider(Instant));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() => ClientSignalEndpoints.MintTicket(
+            AuthorizationFor(SyntheticUser.Deployment, granted),
+            tickets,
+            NullLoggerFactory.Instance,
+            TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(missing, refusal.RequiredPermission.Name);
+    }
+
     /// <summary>A deployment already holding every ticket it will hold says so as a condition that passes, not as a fault.</summary>
     [Fact]
     public async Task MintTicket_WithAsManyTicketsOutstandingAsAreHeld_AnswersServiceUnavailableRatherThanATicket()
@@ -129,11 +156,13 @@ public sealed class ClientSignalEndpointsTests
         Assert.False(options.Transports.HasFlag(HttpTransportType.LongPolling));
     }
 
-    private static AccessAuthorization AuthorizationFor(UserId user)
+    private static AccessAuthorization AuthorizationFor(UserId user) =>
+        AuthorizationFor(user, MailFathomPermission.MailRead, MailFathomPermission.NotificationsRead);
+
+    private static AccessAuthorization AuthorizationFor(UserId user, params MailFathomPermission[] granted)
     {
         var principals = Substitute.For<IAuthorizedPrincipalSource>();
-        principals.Current.Returns(
-            AuthorizedPrincipal.CallerActingFor(user, "a-client", [MailFathomPermission.MailRead]));
+        principals.Current.Returns(AuthorizedPrincipal.CallerActingFor(user, "a-client", granted));
 
         return new AccessAuthorization(principals);
     }

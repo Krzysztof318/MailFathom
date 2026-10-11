@@ -82,18 +82,18 @@ public sealed class ContactRelationshipReader
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The card, or <see cref="ContactRelationship.Nothing" /> where none was derived.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="contact" /> is <see langword="null" />.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted both <see cref="MailFathomPermission.MailAsk" /> and <see cref="MailFathomPermission.MailRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted both <see cref="MailFathomPermission.AssistantUse" /> and <see cref="MailFathomPermission.MailRead" />.</exception>
     /// <exception cref="SensitiveContentScannerUnavailableException">Thrown when a switched-on scanner could not establish what the correspondence or the card carries, which withholds it rather than publishing it unscanned.</exception>
     /// <remarks>
-    /// The grant asked here is the one that puts mail in front of a chat provider rather than the one that reads it,
-    /// because that is what this does. The read grant is asked by the correlation below, which is the use case that
-    /// publishes mail, so a caller granted one and not the other is refused naming the grant they are missing.
+    /// The grant asked here is the one that puts something in front of a chat provider rather than the one that reads
+    /// mail, because that is what this adds. The read grant is asked by the correlation below, which is the use case
+    /// that publishes mail, so a caller granted one and not the other is refused naming the grant they are missing.
     /// </remarks>
     public async Task<ContactRelationship> ReadAsync(Contact contact, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(contact);
 
-        this.authorization.RequirePermission(MailFathomPermission.MailAsk);
+        this.authorization.RequirePermission(MailFathomPermission.AssistantUse);
 
         using var actingFor = this.egressGuard.ActingFor(
             await this.egressGuard.ReadPostureAcrossAccountsOfAsync(this.scopeResolver.User, cancellationToken));

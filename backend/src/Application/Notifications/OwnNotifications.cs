@@ -18,10 +18,11 @@ namespace MailFathom.Application.Notifications;
 /// that does not exist.
 /// </para>
 /// <para>
-/// Every act is admitted under <see cref="MailFathomPermission.MailRead" />, which is the grant a signed-in person
-/// already holds, and none of them adds a name to the published set. Marking a notification read is deliberately not a
-/// write grant: it changes what this deployment draws for one person about mail they can already see, reaches no mail
-/// server, and a person whose mail accounts an administrator maintains has to be able to clear their own bell.
+/// The two reads are admitted under <see cref="MailFathomPermission.NotificationsRead" /> and the three writes under
+/// <see cref="MailFathomPermission.NotificationsWrite" />. Neither is a grant over mail, because a notification is
+/// what this deployment drew for one person rather than anything in a mailbox: marking one read or taking it out of
+/// the centre reaches no mail server and leaves what it points at exactly where it is, so a person whose mail accounts
+/// an administrator maintains clears their own bell under a grant that says nothing about those accounts.
 /// </para>
 /// <para>
 /// A page is bounded and the bound is clamped rather than refused, which is the one place this reading differs from
@@ -74,7 +75,7 @@ public sealed class OwnNotifications
     /// <param name="cursor">The cursor a previous page returned, or <see langword="null" /> for the newest page.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The page, or <see langword="null" /> when the cursor is not one this deployment issued to this caller.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.NotificationsRead" />.</exception>
     /// <remarks>
     /// A page size below one is served the default rather than refused, for the reason a page size above the maximum is
     /// clamped: both are a client asking for something no screen wants, and the number this deployment serves is a
@@ -85,7 +86,7 @@ public sealed class OwnNotifications
         string? cursor,
         CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.MailRead);
+        this.authorization.RequirePermission(MailFathomPermission.NotificationsRead);
 
         var user = this.authorization.RequireUser();
         var fingerprint = NotificationCursor.FingerprintOf(user);
@@ -115,10 +116,10 @@ public sealed class OwnNotifications
     /// <summary>Counts what the signed-in person has not read.</summary>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>How many of their notifications stand unread.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.NotificationsRead" />.</exception>
     public Task<int> CountUnreadAsync(CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.MailRead);
+        this.authorization.RequirePermission(MailFathomPermission.NotificationsRead);
 
         return this.store.CountUnreadAsync(this.authorization.RequireUser(), cancellationToken);
     }
@@ -128,13 +129,13 @@ public sealed class OwnNotifications
     /// <param name="isRead">The read state it is to stand in.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>What became of the request.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.NotificationsWrite" />.</exception>
     public Task<NotificationReadOutcome> SetReadAsync(
         NotificationId notification,
         bool isRead,
         CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.MailRead);
+        this.authorization.RequirePermission(MailFathomPermission.NotificationsWrite);
 
         return this.store.SetReadAsync(
             this.authorization.RequireUser(),
@@ -146,12 +147,29 @@ public sealed class OwnNotifications
     /// <summary>Marks every one of the signed-in person's unread notifications read.</summary>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>How many notifications the request changed.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.NotificationsWrite" />.</exception>
     public Task<int> MarkAllReadAsync(CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.MailRead);
+        this.authorization.RequirePermission(MailFathomPermission.NotificationsWrite);
 
         return this.store.MarkAllReadAsync(this.authorization.RequireUser(), cancellationToken);
+    }
+
+    /// <summary>Counts what a change to the centre left unread, for the answer that change is given.</summary>
+    /// <param name="cancellationToken">Propagates caller cancellation.</param>
+    /// <returns>How many of the signed-in person's notifications stand unread.</returns>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.NotificationsWrite" />.</exception>
+    /// <remarks>
+    /// Asked under the writing grant, because it is the tail of a write rather than a read somebody asked for. No
+    /// permission implies another, so asking the reading grant here would refuse a caller holding the writing one
+    /// alone — and refuse them after their change had been committed, which reports a change that happened as one
+    /// that did not.
+    /// </remarks>
+    public Task<int> CountUnreadLeftAsync(CancellationToken cancellationToken)
+    {
+        this.authorization.RequirePermission(MailFathomPermission.NotificationsWrite);
+
+        return this.store.CountUnreadAsync(this.authorization.RequireUser(), cancellationToken);
     }
 
     /// <summary>Erases the named notifications, of those the signed-in person holds.</summary>
@@ -160,11 +178,11 @@ public sealed class OwnNotifications
     /// <returns>How many notifications were erased.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="notifications" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when more than <see cref="MaximumErasedAtOnce" /> are named.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.NotificationsWrite" />.</exception>
     /// <remarks>
-    /// It is the person's own centre being tidied rather than mail being removed, so it is admitted under the same
-    /// grant every other act here is: nothing leaves a mailbox, and the record erased is one this deployment derived
-    /// about mail the caller can already read.
+    /// It is the person's own centre being tidied rather than mail being removed, so it is admitted under the grant
+    /// that changes the centre and never under one that removes mail: nothing leaves a mailbox, and the record erased
+    /// is one this deployment derived.
     /// </remarks>
     public Task<int> EraseAsync(
         IReadOnlyCollection<NotificationId> notifications,
@@ -173,7 +191,7 @@ public sealed class OwnNotifications
         ArgumentNullException.ThrowIfNull(notifications);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(notifications.Count, MaximumErasedAtOnce);
 
-        this.authorization.RequirePermission(MailFathomPermission.MailRead);
+        this.authorization.RequirePermission(MailFathomPermission.NotificationsWrite);
 
         return this.store.EraseAsync(this.authorization.RequireUser(), notifications, cancellationToken);
     }

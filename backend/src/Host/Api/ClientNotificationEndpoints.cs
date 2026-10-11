@@ -32,14 +32,13 @@ namespace MailFathom.Host.Api;
 /// nobody holds — so nothing here reports whether such a notification exists.
 /// </para>
 /// <para>
-/// <b>Every route is <see cref="MailFathomPermission.MailRead" />, the three writes included.</b> Marking a
-/// notification read, and taking one out of the centre, each change what this deployment draws for one person about
-/// mail they can already see; neither reaches a mail server and neither moves anything in a mailbox — what an erasure
-/// removes is a record this deployment derived, and the message it pointed at stays exactly where it is, which is why
-/// it is not <see cref="MailFathomPermission.MailDelete" />. It is the preferences write's reasoning rather than the
-/// mutation routes': a person whose mail accounts an administrator maintains does not hold a write grant and still has
-/// to be able to clear their own bell. Nothing here is a power a credential granted to read a mailbox did not already
-/// have.
+/// <b>The two reads are <see cref="MailFathomPermission.NotificationsRead" /> and the three writes are
+/// <see cref="MailFathomPermission.NotificationsWrite" />.</b> Marking a notification read, and taking one out of the
+/// centre, each change what this deployment drew for one person; neither reaches a mail server and neither moves
+/// anything in a mailbox — what an erasure removes is a record this deployment derived, and the message it pointed at
+/// stays exactly where it is, which is why it is not <see cref="MailFathomPermission.MailDelete" />. Neither grant is
+/// one over mail, so a person whose mail accounts an administrator maintains clears their own bell, and a credential
+/// granted to read a mailbox changes nothing here.
 /// </para>
 /// <para>
 /// <b>The page is clamped rather than refused.</b> Every other paged reading in this repository serves an operator
@@ -101,23 +100,23 @@ internal static class ClientNotificationEndpoints
         ArgumentNullException.ThrowIfNull(api);
 
         api.MapGet(NotificationsRoute, ReadPageAsync)
-            .RequirePermission(MailFathomPermission.MailRead);
+            .RequirePermission(MailFathomPermission.NotificationsRead);
 
         api.MapGet(UnreadCountRoute, ReadUnreadCountAsync)
-            .RequirePermission(MailFathomPermission.MailRead);
+            .RequirePermission(MailFathomPermission.NotificationsRead);
 
         // The attribute is reached for its metadata rather than as an MVC filter, for the reason the record routes
         // state: it implements IRequestSizeLimitMetadata, which the routing pipeline applies to the request body.
         api.MapPost(ReadStateRoute, SetReadStateAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxWriteRequestBytes))
-            .RequirePermission(MailFathomPermission.MailRead);
+            .RequirePermission(MailFathomPermission.NotificationsWrite);
 
         api.MapPost(MarkAllReadRoute, MarkAllReadAsync)
-            .RequirePermission(MailFathomPermission.MailRead);
+            .RequirePermission(MailFathomPermission.NotificationsWrite);
 
         api.MapPost(DeletionsRoute, EraseAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxDeletionRequestBytes))
-            .RequirePermission(MailFathomPermission.MailRead);
+            .RequirePermission(MailFathomPermission.NotificationsWrite);
     }
 
     /// <summary>Serves one page of the acting person's notifications, newest first.</summary>
@@ -193,7 +192,7 @@ internal static class ClientNotificationEndpoints
             _ => TypedResults.Ok(new ClientNotificationReadStateResponse(
                 notificationId,
                 request.Read,
-                await notifications.CountUnreadAsync(cancellationToken))),
+                await notifications.CountUnreadLeftAsync(cancellationToken))),
         };
     }
 
@@ -257,7 +256,7 @@ internal static class ClientNotificationEndpoints
 
         return TypedResults.Ok(new ClientDeletedNotificationsResponse(
             erased,
-            await notifications.CountUnreadAsync(cancellationToken)));
+            await notifications.CountUnreadLeftAsync(cancellationToken)));
     }
 
     /// <summary>States what a caller has to change, without echoing what they sent.</summary>

@@ -32,7 +32,7 @@ public sealed class OwnPortraitTests
     public async Task ReadAsync_APersonWhoSuppliedAPicture_AnswersItUnderTheKindItIs()
     {
         // Arrange
-        var portraits = ReachedBy(FilesHolding(Png), LinksTo(Linked), MailFathomPermission.MailRead);
+        var portraits = ReachedBy(FilesHolding(Png), LinksTo(Linked), MailFathomPermission.ProfileRead, MailFathomPermission.ProfileWrite);
 
         // Act
         var read = await portraits.ReadAsync(TestContext.Current.CancellationToken);
@@ -48,7 +48,7 @@ public sealed class OwnPortraitTests
     {
         // Arrange
         var files = Substitute.For<IStoredFileStore>();
-        var portraits = ReachedBy(files, LinksTo(null), MailFathomPermission.MailRead);
+        var portraits = ReachedBy(files, LinksTo(null), MailFathomPermission.ProfileRead, MailFathomPermission.ProfileWrite);
 
         // Act
         var read = await portraits.ReadAsync(TestContext.Current.CancellationToken);
@@ -63,7 +63,7 @@ public sealed class OwnPortraitTests
     public async Task ReadAsync_StoredOctetsOfNoKindThisBuildPublishes_AnswerAsNoPictureAtAll()
     {
         // Arrange
-        var portraits = ReachedBy(FilesHolding("GIF89a"u8.ToArray()), LinksTo(Linked), MailFathomPermission.MailRead);
+        var portraits = ReachedBy(FilesHolding("GIF89a"u8.ToArray()), LinksTo(Linked), MailFathomPermission.ProfileRead, MailFathomPermission.ProfileWrite);
 
         // Assert
         Assert.Null(await portraits.ReadAsync(TestContext.Current.CancellationToken));
@@ -76,7 +76,7 @@ public sealed class OwnPortraitTests
         // Arrange
         var files = FilesHolding(Png);
         var links = LinksTo(Linked);
-        var portraits = ReachedBy(files, links, SyntheticUser.Another, MailFathomPermission.MailRead);
+        var portraits = ReachedBy(files, links, SyntheticUser.Another, MailFathomPermission.ProfileRead, MailFathomPermission.ProfileWrite);
 
         // Act
         await portraits.ReadAsync(TestContext.Current.CancellationToken);
@@ -104,7 +104,7 @@ public sealed class OwnPortraitTests
     {
         // Arrange
         var portraits = new OwnPortrait(
-            AccessAuthorizations.ForAdministratorGranted(MailFathomPermission.MailRead),
+            AccessAuthorizations.ForAdministratorGranted(MailFathomPermission.ProfileRead),
             Substitute.For<IStoredFileStore>(),
             LinksTo(Linked));
 
@@ -126,7 +126,7 @@ public sealed class OwnPortraitTests
         links.RelinkOwnPortraitAsync(Arg.Any<StoredFileId?>(), Arg.Any<CancellationToken>())
             .Returns(new PortraitRelinking(UserHeld: true, Replaced: Linked));
 
-        var portraits = ReachedBy(files, links, MailFathomPermission.MailRead);
+        var portraits = ReachedBy(files, links, MailFathomPermission.ProfileRead, MailFathomPermission.ProfileWrite);
 
         // Act
         var replaced = await portraits.ReplaceAsync(UserPortrait.Of(Png)!, TestContext.Current.CancellationToken);
@@ -150,7 +150,7 @@ public sealed class OwnPortraitTests
         links.RelinkOwnPortraitAsync(Arg.Any<StoredFileId?>(), Arg.Any<CancellationToken>())
             .Returns(new PortraitRelinking(UserHeld: true, Replaced: null));
 
-        var portraits = ReachedBy(files, links, MailFathomPermission.MailRead);
+        var portraits = ReachedBy(files, links, MailFathomPermission.ProfileRead, MailFathomPermission.ProfileWrite);
 
         // Act
         var replaced = await portraits.ReplaceAsync(UserPortrait.Of(Png)!, TestContext.Current.CancellationToken);
@@ -170,7 +170,7 @@ public sealed class OwnPortraitTests
         links.RelinkOwnPortraitAsync(Arg.Any<StoredFileId?>(), Arg.Any<CancellationToken>())
             .Returns<PortraitRelinking>(_ => throw new InvalidOperationException("The record refused the link."));
 
-        var portraits = ReachedBy(files, links, MailFathomPermission.MailRead);
+        var portraits = ReachedBy(files, links, MailFathomPermission.ProfileRead, MailFathomPermission.ProfileWrite);
 
         // Act
         await Assert.ThrowsAsync<InvalidOperationException>(
@@ -190,7 +190,7 @@ public sealed class OwnPortraitTests
             .Returns((StoredFileId?)null);
 
         var links = Substitute.For<IUserRecordFileLinks>();
-        var portraits = ReachedBy(files, links, MailFathomPermission.MailRead);
+        var portraits = ReachedBy(files, links, MailFathomPermission.ProfileRead, MailFathomPermission.ProfileWrite);
 
         // Act
         var replaced = await portraits.ReplaceAsync(UserPortrait.Of(Png)!, TestContext.Current.CancellationToken);
@@ -208,7 +208,7 @@ public sealed class OwnPortraitTests
         links.RelinkOwnPortraitAsync(Arg.Any<StoredFileId?>(), Arg.Any<CancellationToken>())
             .Returns(PortraitRelinking.NoSuchUser);
 
-        var portraits = ReachedBy(FilesWriting(Written), links, MailFathomPermission.MailRead);
+        var portraits = ReachedBy(FilesWriting(Written), links, MailFathomPermission.ProfileRead, MailFathomPermission.ProfileWrite);
 
         // Act
         var replaced = await portraits.ReplaceAsync(UserPortrait.Of(Png)!, TestContext.Current.CancellationToken);
@@ -217,7 +217,34 @@ public sealed class OwnPortraitTests
         Assert.Equal(PortraitChange.NoSuchUser, replaced);
     }
 
-    /// <summary>The write is the grant a signed-in person already holds, never the one that decides which mailboxes this deployment connects to.</summary>
+    /// <summary>Seeing the picture is not replacing it, so a caller granted only the reading half writes no file.</summary>
+    [Fact]
+    public async Task ReplaceAsync_ACallerGrantedOnlyReadingTheirProfile_IsRefused()
+    {
+        // Arrange
+        var files = Substitute.For<IStoredFileStore>();
+        var portraits = ReachedBy(files, LinksTo(Linked), MailFathomPermission.ProfileRead);
+
+        // Assert
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
+            () => portraits.ReplaceAsync(UserPortrait.Of(Png)!, TestContext.Current.CancellationToken));
+
+        await files.DidNotReceive().WriteAsync(Arg.Any<UserId>(), Arg.Any<string>(), Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>What a person is drawn by is not mail, so the grant that reads mail reads no portrait.</summary>
+    [Fact]
+    public async Task ReadAsync_ACallerGrantedOnlyReadingMail_IsRefused()
+    {
+        // Arrange
+        var portraits = ReachedBy(Substitute.For<IStoredFileStore>(), LinksTo(Linked), MailFathomPermission.MailRead);
+
+        // Assert
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
+            () => portraits.ReadAsync(TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>The write is a grant over the person's own profile, never the one that decides which mailboxes this deployment connects to.</summary>
     [Fact]
     public async Task ReplaceAsync_ACallerGrantedOnlyTheirMailConfiguration_IsRefused()
     {
@@ -237,7 +264,7 @@ public sealed class OwnPortraitTests
     {
         // Arrange
         var files = Substitute.For<IStoredFileStore>();
-        var portraits = ReachedBy(files, LinksTo(Linked), MailFathomPermission.MailRead);
+        var portraits = ReachedBy(files, LinksTo(Linked), MailFathomPermission.ProfileRead, MailFathomPermission.ProfileWrite);
 
         // Assert
         await Assert.ThrowsAsync<ArgumentNullException>(
@@ -255,7 +282,7 @@ public sealed class OwnPortraitTests
         links.RelinkOwnPortraitAsync(Arg.Any<StoredFileId?>(), Arg.Any<CancellationToken>())
             .Returns(new PortraitRelinking(UserHeld: true, Replaced: Linked));
 
-        var portraits = ReachedBy(files, links, SyntheticUser.Another, MailFathomPermission.MailRead);
+        var portraits = ReachedBy(files, links, SyntheticUser.Another, MailFathomPermission.ProfileRead, MailFathomPermission.ProfileWrite);
 
         // Act
         await portraits.RemoveAsync(TestContext.Current.CancellationToken);
@@ -298,7 +325,7 @@ public sealed class OwnPortraitTests
         links.RelinkOwnPortraitAsync(Arg.Any<StoredFileId?>(), Arg.Any<CancellationToken>())
             .Returns(new PortraitRelinking(UserHeld: true, Replaced: null) { Refusal = "Portrait is held by the organization." });
 
-        var portraits = ReachedBy(files, links, MailFathomPermission.MailRead);
+        var portraits = ReachedBy(files, links, MailFathomPermission.ProfileRead, MailFathomPermission.ProfileWrite);
 
         // Act
         var replaced = await portraits.ReplaceAsync(UserPortrait.Of(Png)!, TestContext.Current.CancellationToken);
@@ -317,7 +344,7 @@ public sealed class OwnPortraitTests
         links.RelinkOwnPortraitAsync(Arg.Any<StoredFileId?>(), Arg.Any<CancellationToken>())
             .Returns(new PortraitRelinking(UserHeld: true, Replaced: null) { Refusal = "Portrait is held by the organization." });
 
-        var portraits = ReachedBy(files, links, MailFathomPermission.MailRead);
+        var portraits = ReachedBy(files, links, MailFathomPermission.ProfileRead, MailFathomPermission.ProfileWrite);
 
         // Act
         var removed = await portraits.RemoveAsync(TestContext.Current.CancellationToken);

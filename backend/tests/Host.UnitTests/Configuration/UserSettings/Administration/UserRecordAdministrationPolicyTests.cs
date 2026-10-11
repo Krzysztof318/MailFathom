@@ -478,7 +478,9 @@ public sealed class UserRecordAdministrationPolicyTests
 
     private static UserRecordDeployment SignedIn(string record, GoverningSettingsPolicies policies) =>
         Holding(
-            new UserRecordDeployment([MailFathomPermission.MailRead, MailFathomPermission.MailAccountsWrite], actingFor: Alex),
+            new UserRecordDeployment(
+                [MailFathomPermission.MailRead, MailFathomPermission.MailAccountsWrite, MailFathomPermission.ProfileWrite],
+                actingFor: Alex),
             record,
             policies);
 

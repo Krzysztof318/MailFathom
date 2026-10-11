@@ -130,5 +130,6 @@ deliberately asked for.
 
 [AI configuration § `Chat:ReplyDrafting`](../operations/configuration-ai.md#drafting-a-reply--chatreplydrafting) holds
 the two keys, and [the client endpoint](../operations/client-endpoint.md#the-reply-drafting-routes) the two routes it is
-published on. Both are published under `mailfathom.mail.ask` rather than under the reading grant, because that is what
-drafting does: mail leaves this deployment for a chat provider.
+published on. Both are published under `mailfathom.assistant.use` rather than under the reading grant, because that is what
+drafting does: mail leaves this deployment for a chat provider. The one that drafts asks for `mailfathom.mail.read`
+beneath it as well, because the message being answered is mail the caller has to be allowed to read before a model is.

@@ -46,8 +46,24 @@ import { WorkspaceProvider } from './workspace/Workspace';
 
 export type Answer = Omit<ClientResponse, 'headers'> & { readonly headers?: Readonly<Record<string, string>> };
 
+/**
+ * The grants over what a deployment keeps beside the mailbox — the task list, the calendar, the notification centre,
+ * and the person's own profile. A test that is not about one of them holds them all, which is what an ordinary
+ * person's credential carries; a test about one states exactly the grants it means.
+ */
+export const keptBesideTheMailbox = [
+    'mailfathom.tasks.read',
+    'mailfathom.tasks.write',
+    'mailfathom.calendar.read',
+    'mailfathom.calendar.write',
+    'mailfathom.notifications.read',
+    'mailfathom.notifications.write',
+    'mailfathom.profile.read',
+    'mailfathom.profile.write',
+] as const;
+
 /** What a deployment answers a caller it accepts, which is what proves the address is MailFathom and the password works. */
-export const accepted = sessionAnswering(['mailfathom.mail.read', 'mailfathom.mail.ask']);
+export const accepted = sessionAnswering(['mailfathom.mail.read', 'mailfathom.assistant.use', ...keptBesideTheMailbox]);
 
 /**
  * A deployment reporting itself, what it grants the credential that just reached it, and how much of the client's own

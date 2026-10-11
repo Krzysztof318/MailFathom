@@ -32,8 +32,8 @@ namespace MailFathom.Host.Api;
 /// background pass; a contact nobody opened costs nothing at all.
 /// </para>
 /// <para>
-/// It is published under the grant that governs asking a question rather than the one that governs reading mail,
-/// because that is what it does: a correspondence leaves this deployment for a chat provider, and the call is charged
+/// It is published under the assistant grant rather than the one that governs reading mail, because that is what it
+/// adds: a correspondence leaves this deployment for a chat provider, and the call is charged
 /// to the same allowance a question is. The two grants the correlation beneath it needs are asked by the use cases
 /// that need them, so a caller granted this one and not those is refused naming the one they are missing.
 /// </para>
@@ -60,7 +60,7 @@ internal static class ClientContactRelationshipEndpoint
         ArgumentNullException.ThrowIfNull(api);
 
         api.MapGet(ContactRelationshipRoute, ReadRelationshipAsync)
-            .RequirePermission(MailFathomPermission.MailAsk);
+            .RequirePermission(MailFathomPermission.AssistantUse);
     }
 
     /// <summary>Derives the card for one of the acting user's own contacts.</summary>
@@ -68,7 +68,7 @@ internal static class ClientContactRelationshipEndpoint
     /// <param name="contacts">Reads the contact, for a caller the book's own grant admits.</param>
     /// <param name="relationship">Derives the card, or <see langword="null" /> where this deployment declared no chat endpoint or declined this.</param>
     /// <param name="cancellationToken">Cancels the derivation when the client disconnects.</param>
-    /// <returns><c>200</c> with the card or with the statement that none was derived, <c>404</c> where no book in this caller's scope holds the contact, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.ask</c>.</returns>
+    /// <returns><c>200</c> with the card or with the statement that none was derived, <c>404</c> where no book in this caller's scope holds the contact, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.assistant.use</c>.</returns>
     /// <remarks>
     /// A contact this caller does not hold and one no deployment ever held answer identically, so nothing here tells a
     /// caller that somebody else's correspondent exists. A person the readable mail says nothing about answers with no

@@ -135,7 +135,7 @@ public sealed class AgentAnswerLauncherTests
     }
 
     private static AuthorizedPrincipal Caller =>
-        AuthorizedPrincipal.CallerActingFor(SyntheticUser.Deployment, "test-caller", [MailFathomPermission.MailAsk]);
+        AuthorizedPrincipal.CallerActingFor(SyntheticUser.Deployment, "test-caller", [MailFathomPermission.AssistantUse]);
 
     private AgentConversationEmbedding Embedding() =>
         new(

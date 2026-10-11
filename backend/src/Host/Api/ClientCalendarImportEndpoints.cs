@@ -76,12 +76,12 @@ internal static class ClientCalendarImportEndpoints
         api.MapPost(CalendarImportSummaryRoute, SummariseAsync)
             .WithMetadata(new RequestSizeLimitAttribute(CalendarFileImport.MaximumFileBytes))
             .Accepts<Stream>(CalendarMediaType, UnnamedMediaType)
-            .RequirePermission(MailFathomPermission.MailRead);
+            .RequirePermission(MailFathomPermission.CalendarWrite);
 
         api.MapPost(CalendarImportRoute, ImportAsync)
             .WithMetadata(new RequestSizeLimitAttribute(CalendarFileImport.MaximumFileBytes))
             .Accepts<Stream>(CalendarMediaType, UnnamedMediaType)
-            .RequirePermission(MailFathomPermission.MailRead);
+            .RequirePermission(MailFathomPermission.CalendarWrite);
     }
 
     /// <summary>Reports what the offered file would put on the acting person's calendar, writing nothing.</summary>

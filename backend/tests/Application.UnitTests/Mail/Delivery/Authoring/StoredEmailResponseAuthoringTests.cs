@@ -891,7 +891,7 @@ public sealed class StoredEmailResponseAuthoringTests
         var authoring = AuthoringOver(
             Rendering(),
             contentStore: contentStore,
-            authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailAsk));
+            authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.AssistantUse));
 
         // Act
         var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(async () =>

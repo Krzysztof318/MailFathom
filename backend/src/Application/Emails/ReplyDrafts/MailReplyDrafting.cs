@@ -124,15 +124,18 @@ public sealed class MailReplyDrafting
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="request" /> is <see langword="null" />.</exception>
     /// <exception cref="MailAnsweringBudgetExhaustedException">Thrown when this deployment has spent what it allows a provider for the period.</exception>
     /// <exception cref="SensitiveContentScannerUnavailableException">Thrown when a switched-on scanner could not establish what the draft carries, which withholds it rather than publishing it unscanned.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.MailAsk" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted both <see cref="MailFathomPermission.AssistantUse" /> and <see cref="MailFathomPermission.MailRead" />.</exception>
     public async Task<ReplyDraft?> DraftAsync(ReplyDraftRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        // The grant that puts mail in front of a chat provider rather than the one that reads it, because that is what
-        // this does: the conversation and a sample of the account's own sent mail leave this deployment, and the call
-        // is charged to the same allowance a question is.
-        this.authorization.RequirePermission(MailFathomPermission.MailAsk);
+        // The grant that puts something in front of a chat provider, and the one that reads mail beside it, because
+        // answering a message does both: the conversation and a sample of the account's own sent mail leave this
+        // deployment, and the call is charged to the same allowance a question is. A draft written from an
+        // instruction alone reads no mail and is asked for the reading grant all the same: drafting is published as
+        // one act, and which grants admit a caller to it must not turn on a field of the request's body.
+        this.authorization.RequirePermission(MailFathomPermission.AssistantUse);
+        this.authorization.RequirePermission(MailFathomPermission.MailRead);
 
         var user = this.scopeResolver.User;
 

@@ -149,7 +149,7 @@ public sealed class DiscoveryRunLauncherTests
         AuthorizedPrincipal.CallerActingFor(
             SyntheticUser.Deployment,
             "test-caller",
-            [MailFathomPermission.MailAsk]);
+            [MailFathomPermission.AssistantUse]);
 
     private static ILogger<DiscoveryRunLauncher> NoLogger => new RecordingLogger<DiscoveryRunLauncher>();
 

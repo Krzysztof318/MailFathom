@@ -61,6 +61,15 @@ public sealed class OrchestratedSchemaArtifactTests(MailFathomOrchestrationFixtu
     /// <summary>How the mail-grant test reads a credential list that names nothing, which no joined list of names can spell.</summary>
     private const string NamesNothing = "(none)";
 
+    /// <summary>Reading mail, as the release that stored these credentials published it.</summary>
+    private const string ReadingMailAsStored = "mailfathom.mail.read";
+
+    /// <summary>Asking the assistant, as the release that stored these credentials published it.</summary>
+    private const string AskingAsStored = "mailfathom.mail.ask";
+
+    /// <summary>Sending mail, as the release that stored these credentials published it.</summary>
+    private const string SendingAsStored = "mailfathom.mail.send";
+
     private const string CarriedAccount = "artifact-carry-forward";
 
     [Fact]
@@ -206,10 +215,16 @@ public sealed class OrchestratedSchemaArtifactTests(MailFathomOrchestrationFixtu
     /// <remarks>
     /// Like the case above, it is a claim about rows that exist while one migration runs, so the chain is applied in
     /// two parts with the users and their credentials written between them. The five users are the five outcomes the
-    /// migration distinguishes: a credential naming the whole mail half, credentials whose union is narrower, no
+    /// migration distinguishes: a credential naming the whole user-facing half, credentials whose union is narrower, no
     /// credential at all, credentials that all name nothing, and a user whose roles were already assigned and whom the
     /// migration leaves alone. Every credential's list is read back, because a list the migration widened is the one
     /// outcome that would grant somebody more than they held before it.
+    /// <para>
+    /// The credentials are written with the names the release that stored them published, and read back under the
+    /// names the rest of the chain carries them to: the split of the user-facing permissions by domain renames asking
+    /// and writes out, beside reading mail, the names split out of it. That is the same reach under more names, so the
+    /// claim above is unchanged by it — a list that named reading mail gains nothing a reader of mail could not do.
+    /// </para>
     /// </remarks>
     [Fact]
     public async Task SchemaArtifact_AppliedOverCredentialsStoredBeforeGrantsMovedToUsers_CarriesEachGrantOntoItsUser()
@@ -229,22 +244,36 @@ public sealed class OrchestratedSchemaArtifactTests(MailFathomOrchestrationFixtu
             options: MigrationsSqlGenerationOptions.Idempotent);
         await ApplyAsync(connectionString, releaseBeforeGrantsMoved, cancellationToken);
 
-        string[] wholeMailHalf = [.. MailFathomPermission.PublishedFor(ProtectedSurface.Mail).Select(permission => permission.Name)];
+        string[] wholeHalfAsStored =
+        [
+            ReadingMailAsStored, AskingAsStored, "mailfathom.mail.contacts.read", "mailfathom.mail.contacts.write",
+            "mailfathom.mail.flags.write", "mailfathom.mail.move", "mailfathom.mail.delete",
+            "mailfathom.mail.drafts.write", SendingAsStored, "mailfathom.mail.accounts.write",
+            "mailfathom.mail.folders.write",
+        ];
+        string[] readingMailCarried =
+        [
+            MailFathomPermission.CalendarRead.Name, MailFathomPermission.CalendarWrite.Name,
+            MailFathomPermission.MailRead.Name, MailFathomPermission.NotificationsRead.Name,
+            MailFathomPermission.NotificationsWrite.Name, MailFathomPermission.ProfileRead.Name,
+            MailFathomPermission.ProfileWrite.Name, MailFathomPermission.TasksRead.Name,
+            MailFathomPermission.TasksWrite.Name,
+        ];
         var mailUser = await context.Roles.AsNoTracking().SingleAsync(role => role.Name == "Mail user", cancellationToken);
         var wholeHalf = await SeedUserAsync(
             connectionString,
-            [wholeMailHalf, [MailFathomPermission.MailRead.Name]],
+            [wholeHalfAsStored, [ReadingMailAsStored]],
             assignedRole: null,
             cancellationToken);
         var narrower = await SeedUserAsync(
             connectionString,
-            [[MailFathomPermission.MailAsk.Name], [MailFathomPermission.MailRead.Name]],
+            [[AskingAsStored], [ReadingMailAsStored]],
             assignedRole: null,
             cancellationToken);
         var withoutCredential = await SeedUserAsync(connectionString, [], assignedRole: null, cancellationToken);
         var alreadyAssigned = await SeedUserAsync(
             connectionString,
-            [[MailFathomPermission.MailSend.Name]],
+            [[SendingAsStored]],
             mailUser.Id,
             cancellationToken);
         var namingNothing = await SeedUserAsync(connectionString, [[], []], assignedRole: null, cancellationToken);
@@ -266,7 +295,7 @@ public sealed class OrchestratedSchemaArtifactTests(MailFathomOrchestrationFixtu
             (await context.Roles.AsNoTracking().SingleAsync(role => role.Id == narrowerRole.RoleId, cancellationToken)).Name,
             StringComparison.Ordinal);
         Assert.Equal(
-            [MailFathomPermission.MailAsk.Name, MailFathomPermission.MailRead.Name],
+            [MailFathomPermission.AssistantUse.Name, .. readingMailCarried],
             await context.RolePermissions.AsNoTracking()
                 .Where(permission => permission.RoleId == narrowerRole.RoleId)
                 .Select(permission => permission.Permission)
@@ -274,8 +303,8 @@ public sealed class OrchestratedSchemaArtifactTests(MailFathomOrchestrationFixtu
                 .ToListAsync(cancellationToken));
         Assert.DoesNotContain(assignments, assignment => assignment.PrincipalUserId == namingNothing);
 
-        Assert.Equal([NamesNothing, MailFathomPermission.MailRead.Name], ListsHeldBy(wholeHalf));
-        Assert.Equal([MailFathomPermission.MailAsk.Name, MailFathomPermission.MailRead.Name], ListsHeldBy(narrower));
+        Assert.Equal([NamesNothing, string.Join(',', readingMailCarried)], ListsHeldBy(wholeHalf));
+        Assert.Equal([MailFathomPermission.AssistantUse.Name, string.Join(',', readingMailCarried)], ListsHeldBy(narrower));
         Assert.Equal([MailFathomPermission.MailSend.Name], ListsHeldBy(alreadyAssigned));
         Assert.Equal([string.Empty, string.Empty], ListsHeldBy(namingNothing));
 

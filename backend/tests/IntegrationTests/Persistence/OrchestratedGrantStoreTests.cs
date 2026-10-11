@@ -47,22 +47,28 @@ public sealed class OrchestratedGrantStoreTests(MailFathomOrchestrationFixture o
 
     private static readonly RolePermissions ReadMail = RolePermissions.Of([MailFathomPermission.MailRead]);
 
-    /// <summary>The mail half as the seeding migration wrote it, in ordinal order.</summary>
-    private static readonly string[] MailHalf =
+    /// <summary>The user-facing half as the migrations left it on <c>Mail user</c>, in ordinal order.</summary>
+    /// <remarks>
+    /// The seeding migration wrote the names of its day, and the split of the user-facing permissions by domain carried
+    /// that list to the names its holders already acted under — the one later migration that rewrites it.
+    /// </remarks>
+    private static readonly string[] UserFacingHalf =
     [
-        "mailfathom.mail.accounts.write", "mailfathom.mail.ask", "mailfathom.mail.contacts.read",
-        "mailfathom.mail.contacts.write", "mailfathom.mail.delete", "mailfathom.mail.drafts.write",
-        "mailfathom.mail.flags.write", "mailfathom.mail.folders.write", "mailfathom.mail.move",
-        "mailfathom.mail.read", "mailfathom.mail.send",
+        "mailfathom.assistant.use", "mailfathom.calendar.read", "mailfathom.calendar.write",
+        "mailfathom.contacts.read", "mailfathom.contacts.write", "mailfathom.mail.accounts.write",
+        "mailfathom.mail.delete", "mailfathom.mail.drafts.write", "mailfathom.mail.flags.write",
+        "mailfathom.mail.folders.write", "mailfathom.mail.move", "mailfathom.mail.read", "mailfathom.mail.send",
+        "mailfathom.notifications.read", "mailfathom.notifications.write", "mailfathom.profile.read",
+        "mailfathom.profile.write", "mailfathom.tasks.read", "mailfathom.tasks.write",
     ];
 
     private static readonly AdministrativeListingQuery FirstPage =
         AdministrativeListingQuery.Create(AdministrativeListingQuery.MaximumPageSize, after: null)!;
 
     /// <summary>
-    /// The two lists written out by name are fixed by the migration that wrote them, so they are stated here as the names
-    /// it wrote rather than read from what this build publishes: a later release publishing a permission adds it to
-    /// neither, and a name this build does not publish yet is still on the row, reported rather than granted.
+    /// The two lists written out by name are fixed by the migrations that wrote them, so they are stated here as the
+    /// names those left rather than read from what this build publishes: a release publishing a new permission adds it
+    /// to neither, and a name this build does not publish yet is still on the row, reported rather than granted.
     /// <c>Administrator</c> is the one the later migration rewrote, and what proves the rewrite ran is the entry as it is
     /// stored: the single pattern, which reaches everything this build publishes rather than a list that happens to.
     /// </summary>
@@ -77,7 +83,7 @@ public sealed class OrchestratedGrantStoreTests(MailFathomOrchestrationFixture o
         var roles = await ReadEveryRoleAsync(services, cancellationToken);
 
         // Assert
-        Assert.Equal(MailHalf, ListedNames(roles, "Mail user"));
+        Assert.Equal(UserFacingHalf, ListedNames(roles, "Mail user"));
         Assert.Equal(
             [
                 "mailfathom.admin.audit.read", "mailfathom.admin.configuration.write",
@@ -252,7 +258,7 @@ public sealed class OrchestratedGrantStoreTests(MailFathomOrchestrationFixture o
         await ProvisionUserAsync(services, user, cancellationToken);
         await ProvisionUserAsync(services, member, cancellationToken);
         await ProvisionUserAsync(services, bystander, cancellationToken);
-        Assert.True(RolePermissions.TryCreate(["mailfathom.mail.read", "mailfathom.mail.contacts.*"], out var listed, out _));
+        Assert.True(RolePermissions.TryCreate(["mailfathom.mail.read", "mailfathom.contacts.*"], out var listed, out _));
 
         try
         {
@@ -285,20 +291,20 @@ public sealed class OrchestratedGrantStoreTests(MailFathomOrchestrationFixture o
             var byNameAlone = await HoldsWideningRoleAsync(services, AssignmentPrincipal.User(UserId.Create(bystander)), cancellationToken);
 
             // Assert
-            Assert.Equal(["mailfathom.mail.read", "mailfathom.mail.contacts.*"], stored.Permissions.Written);
+            Assert.Equal(["mailfathom.mail.read", "mailfathom.contacts.*"], stored.Permissions.Written);
             Assert.Equal(
                 new HashSet<MailFathomPermission>
                 {
-                    MailFathomPermission.MailRead, MailFathomPermission.MailContactsRead, MailFathomPermission.MailContactsWrite,
+                    MailFathomPermission.MailRead, MailFathomPermission.ContactsRead, MailFathomPermission.ContactsWrite,
                 },
                 held.Permissions.ToHashSet());
-            Assert.Equal([AssignmentScope.User(UserId.Create(user))], held.ScopesOf(MailFathomPermission.MailContactsWrite));
+            Assert.Equal([AssignmentScope.User(UserId.Create(user))], held.ScopesOf(MailFathomPermission.ContactsWrite));
             Assert.Equal(
                 new HashSet<(string, string?, Guid)>
                 {
                     ("mailfathom.mail.read", null, assignment),
-                    ("mailfathom.mail.contacts.read", "mailfathom.mail.contacts.*", assignment),
-                    ("mailfathom.mail.contacts.write", "mailfathom.mail.contacts.*", assignment),
+                    ("mailfathom.contacts.read", "mailfathom.contacts.*", assignment),
+                    ("mailfathom.contacts.write", "mailfathom.contacts.*", assignment),
                 },
                 sources.Select(source => (source.Permission.Name, source.Pattern, source.AssignmentId)).ToHashSet());
             Assert.Equal(2, bounded.Count);
@@ -758,7 +764,7 @@ public sealed class OrchestratedGrantStoreTests(MailFathomOrchestrationFixture o
                 (scope, token) => Store(scope).CreateRoleAsync(
                     role,
                     $"role-{role:N}",
-                    RolePermissions.Of([MailFathomPermission.MailRead, MailFathomPermission.MailAsk]),
+                    RolePermissions.Of([MailFathomPermission.MailRead, MailFathomPermission.AssistantUse]),
                     RecordedAt,
                     token),
                 cancellationToken);
@@ -783,7 +789,7 @@ public sealed class OrchestratedGrantStoreTests(MailFathomOrchestrationFixture o
 
             // Assert
             Assert.Equal(
-                new HashSet<MailFathomPermission> { MailFathomPermission.MailRead, MailFathomPermission.MailAsk },
+                new HashSet<MailFathomPermission> { MailFathomPermission.MailRead, MailFathomPermission.AssistantUse },
                 before.Permissions);
             Assert.Equal([MailFathomPermission.MailRead], afterNarrowing.Permissions);
             Assert.Empty(afterLeaving.Permissions);

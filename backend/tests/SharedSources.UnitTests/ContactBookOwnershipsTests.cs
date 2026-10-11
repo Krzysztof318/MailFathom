@@ -24,7 +24,7 @@ public sealed class ContactBookOwnershipsTests
         // Arrange
         var authorization = AccessAuthorizations.ForUserGranted(
             SyntheticUser.Another,
-            MailFathomPermission.MailContactsRead);
+            MailFathomPermission.ContactsRead);
 
         // Act
         var ownership = ContactBookOwnerships.For(authorization);
@@ -59,7 +59,7 @@ public sealed class ContactBookOwnershipsTests
         // Arrange
         var authorization = AccessAuthorizations.ForUserGranted(
             SyntheticUser.Another,
-            MailFathomPermission.MailContactsRead);
+            MailFathomPermission.ContactsRead);
 
         // Act
         var ownership = ContactBookOwnerships.For(

@@ -29,7 +29,7 @@ test('offers a person it wrote down to a message, opens their page, and lets the
     page,
     deployment,
 }) => {
-    deployment.grant('mailfathom.mail.contacts.read', 'mailfathom.mail.contacts.write', 'mailfathom.mail.drafts.write');
+    deployment.grant('mailfathom.contacts.read', 'mailfathom.contacts.write', 'mailfathom.mail.drafts.write');
 
     await openSignedIn(page, '/#/people');
 

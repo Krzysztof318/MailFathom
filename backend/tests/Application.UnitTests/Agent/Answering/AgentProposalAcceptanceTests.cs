@@ -112,7 +112,7 @@ public sealed class AgentProposalAcceptanceTests : IAsyncDisposable
         this.ProposalStands();
 
         // Act and assert
-        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() => this.Acceptance(Granted(MailFathomPermission.MailAsk, MailFathomPermission.MailDraftsWrite))
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() => this.Acceptance(Granted(MailFathomPermission.AssistantUse, MailFathomPermission.MailDraftsWrite))
             .AcceptAsync(Conversation, SyntheticUser.Deployment, ProposedAt, TestContext.Current.CancellationToken));
         await this.store.DidNotReceive().TryResolveProposalAsync(
             Arg.Any<AgentConversationId>(), Arg.Any<UserId>(), Arg.Any<long>(), Arg.Any<AgentProposalState>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
@@ -163,7 +163,7 @@ public sealed class AgentProposalAcceptanceTests : IAsyncDisposable
 
     private static AccessAuthorization Granted(params MailFathomPermission[] permissions) =>
         AccessAuthorizations.ForCallerGranted(permissions.Length is 0
-            ? [MailFathomPermission.MailAsk, MailFathomPermission.MailDraftsWrite, MailFathomPermission.MailSend]
+            ? [MailFathomPermission.AssistantUse, MailFathomPermission.MailDraftsWrite, MailFathomPermission.MailSend]
             : permissions);
 
     private void ProposalStands() =>

@@ -37,10 +37,10 @@ namespace MailFathom.Host.Api;
 /// deployment and on every proxy in front of it.
 /// </para>
 /// <para>
-/// It is published under the grant that governs asking a question rather than the one that governs reading mail,
-/// because that is what it does: a sentence leaves this deployment for a chat provider and is charged to the same
-/// allowance a question is. A caller holding only the reading grant is refused here and searches by words, which is the
-/// same search a deployment with no provider serves.
+/// It is published under the assistant grant rather than the one that governs reading mail, because that is what it
+/// does: a sentence leaves this deployment for a chat provider and is charged to the same allowance a question is.
+/// Nothing but that sentence leaves, so it asks for no reading grant beneath. A caller holding only the reading grant
+/// is refused here and searches by words, which is the same search a deployment with no provider serves.
 /// </para>
 /// </remarks>
 internal static class ClientMailSearchPhraseEndpoint
@@ -60,19 +60,19 @@ internal static class ClientMailSearchPhraseEndpoint
         ArgumentNullException.ThrowIfNull(api);
 
         api.MapGet(MailSearchPhrasingRoute, ReadsPhrases)
-            .RequirePermission(MailFathomPermission.MailAsk);
+            .RequirePermission(MailFathomPermission.AssistantUse);
 
         // The MVC attribute is what a minimal API states this with, whatever its namespace suggests: it implements
         // IRequestSizeLimitMetadata, which the routing pipeline applies to the request body feature, so a body over
         // the bound is refused before anything reads it.
         api.MapPost(MailSearchPhrasingRoute, ReadPhraseAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxPhraseRequestBytes))
-            .RequirePermission(MailFathomPermission.MailAsk);
+            .RequirePermission(MailFathomPermission.AssistantUse);
     }
 
     /// <summary>Says whether this deployment turns a sentence into filters.</summary>
     /// <param name="reader">Reads a sentence, or <see langword="null" /> where this deployment declared no chat endpoint or declined this.</param>
-    /// <returns><c>200</c> saying whether a sentence is read, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.ask</c>.</returns>
+    /// <returns><c>200</c> saying whether a sentence is read, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.assistant.use</c>.</returns>
     /// <remarks>
     /// A capability rather than a probe: it resolves a registration and calls nothing, so a screen asking it once
     /// costs no provider call and no mail read. The two reasons a deployment does not read a sentence — no endpoint,
@@ -88,7 +88,7 @@ internal static class ClientMailSearchPhraseEndpoint
     /// <param name="reader">Reads the sentence, or <see langword="null" /> where this deployment does not.</param>
     /// <param name="userClock">Reads the instant the person is standing on, which every relative time expression is resolved against.</param>
     /// <param name="cancellationToken">Cancels the reading when the client disconnects.</param>
-    /// <returns><c>200</c> with the interpretation, <c>400</c> naming what was wrong with the request, <c>429</c> where the deployment has spent what it allows a provider, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.ask</c>.</returns>
+    /// <returns><c>200</c> with the interpretation, <c>400</c> naming what was wrong with the request, <c>429</c> where the deployment has spent what it allows a provider, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.assistant.use</c>.</returns>
     /// <remarks>
     /// <para>
     /// A deployment that reads no sentence answers <c>200</c> saying so rather than <c>404</c>, because a client

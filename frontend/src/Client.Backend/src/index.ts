@@ -87,8 +87,8 @@ export {
 } from './contacts';
 export { resolveDeploymentEntry, type DeploymentEntryRefusal, type DeploymentEntryResult } from './deployment';
 export {
+    clientPermissions,
     deploymentSessionRoute,
-    mailPermissions,
     readDeploymentSession,
     type DeploymentSession,
     type MailFathomPermission,

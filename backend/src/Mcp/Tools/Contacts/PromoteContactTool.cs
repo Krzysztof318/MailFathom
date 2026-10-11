@@ -34,7 +34,7 @@ namespace MailFathom.Mcp.Tools.Contacts;
 /// <para>
 /// <b>It answers with the outcome and never with the record.</b> The caller supplied an identifier rather than a
 /// person, so publishing the promoted contact back would hand the whole of what <c>get_contact</c> serves to a caller
-/// holding only <c>mailfathom.mail.contacts.write</c> — and no permission in this system implies another. A caller that
+/// holding only <c>mailfathom.contacts.write</c> — and no permission in this system implies another. A caller that
 /// also holds the reading grant reads the person through the tool published for reading them. The administrative route
 /// behind the same use case answers the same way and for the same reason.
 /// </para>
@@ -49,7 +49,7 @@ internal sealed class PromoteContactTool(ContactBookWriter contactBookWriter)
 
     /// <summary>The capability a caller must hold to be offered this tool and to reach the use case behind it.</summary>
     /// <remarks>The writing grant rather than a name of its own, because promotion is a write to the book: it is what a caller does instead of amending a record it may not amend in place.</remarks>
-    public static MailFathomPermission RequiredPermission => MailFathomPermission.MailContactsWrite;
+    public static MailFathomPermission RequiredPermission => MailFathomPermission.ContactsWrite;
 
     /// <summary>The kind of thing this tool is for, which is what a deployment publishes or withholds it by.</summary>
     /// <remarks>The book is an assembled record about identified third parties rather than mail that arrived, so a deployment decides separately whether this endpoint offers it. A category decides what this endpoint offers rather than who may reach it, so it turns nothing on: the tool appears only where the capability behind it is available and the caller's grant reaches it.</remarks>

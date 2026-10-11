@@ -30,13 +30,13 @@ public sealed class ContactBookReaderTests
     {
         // Arrange
         var directory = Substitute.For<IContactDirectory>();
-        var reader = ReaderOver(directory, MailFathomPermission.MailContactsWrite);
+        var reader = ReaderOver(directory, MailFathomPermission.ContactsWrite);
 
         // Act, Assert
         var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
             reader.ReadPageAsync(new ContactPageRequest(), TestContext.Current.CancellationToken));
 
-        Assert.Equal(MailFathomPermission.MailContactsRead, refusal.RequiredPermission);
+        Assert.Equal(MailFathomPermission.ContactsRead, refusal.RequiredPermission);
         await directory.DidNotReceiveWithAnyArgs().ReadPageAsync(default!, default!, TestContext.Current.CancellationToken);
     }
 
@@ -273,7 +273,7 @@ public sealed class ContactBookReaderTests
             AuthorizationOf(AuthorizedPrincipal.CallerActingFor(
                 SyntheticUser.Deployment,
                 "a-caller",
-                granted.Length == 0 ? [MailFathomPermission.MailContactsRead] : granted)));
+                granted.Length == 0 ? [MailFathomPermission.ContactsRead] : granted)));
     }
 
     private static IContactDirectory DirectoryAnswering(ContactPage page)

@@ -562,7 +562,8 @@ internal sealed record AgentConversationScenario(
             [],
             ["agreement", "contract", "Leśny", "Lesny", "sign", "date", "legal", "Grzegorz"]),
 
-        // A grant that reads and does not send, which leaves the two mail-proposing tools unoffered.
+        // A grant that reads and does not send, which leaves the two mail-proposing tools unoffered; the second keeps
+        // the task list, which is a grant of its own and is what still lets a task be proposed.
         new(
             "Agent.Grant.ReadOnlyAskedToWrite",
             "Email courier.desk@example.test to confirm the archive box pickup between 14:00 and 16:00.",
@@ -570,7 +571,7 @@ internal sealed record AgentConversationScenario(
             [],
             ["courier", "archive", "box", "collect", "pick", "14:00", "16:00", "permission", "send"])
         {
-            Grant = [MailFathomPermission.MailRead],
+            Grant = [MailFathomPermission.MailRead, MailFathomPermission.CalendarRead, MailFathomPermission.TasksRead],
             MinimumIntentResolution = 3,
         },
         new(
@@ -580,7 +581,14 @@ internal sealed record AgentConversationScenario(
             [],
             ["courier", "archive", "box", "call", "task", "15 September"])
         {
-            Grant = [MailFathomPermission.MailRead],
+            Grant =
+            [
+                MailFathomPermission.MailRead,
+                MailFathomPermission.CalendarRead,
+                MailFathomPermission.CalendarWrite,
+                MailFathomPermission.TasksRead,
+                MailFathomPermission.TasksWrite,
+            ],
             Proposes = ["task due 2026-09-15"],
         },
 
@@ -1012,7 +1020,15 @@ internal sealed record AgentConversationScenario(
 
     /// <summary>Gets the permissions the person's grant carries, which decide which tools are offered.</summary>
     public IReadOnlyList<MailFathomPermission> Grant { get; init; } =
-        [MailFathomPermission.MailRead, MailFathomPermission.MailDraftsWrite, MailFathomPermission.MailSend];
+    [
+        MailFathomPermission.MailRead,
+        MailFathomPermission.MailDraftsWrite,
+        MailFathomPermission.MailSend,
+        MailFathomPermission.CalendarRead,
+        MailFathomPermission.CalendarWrite,
+        MailFathomPermission.TasksRead,
+        MailFathomPermission.TasksWrite,
+    ];
 
     /// <summary>Gets the lowest intent-resolution rating, from one to five, a model may score.</summary>
     public int MinimumIntentResolution { get; init; } = 4;
@@ -1192,7 +1208,7 @@ internal sealed record AgentConversationScenario(
         var called = new ConcurrentQueue<string>();
         IReadOnlyList<AITool> offered = [.. tools.Create().OfType<AIFunction>().Select(tool => new CalledFunction(tool, called))];
 
-        var composed = AgentConversationAgent.ComposeMessages(brief, CorpusKnowledgeSearch.Scope);
+        var composed = AgentConversationAgent.ComposeMessages(brief, tools.NamedAccounts);
 
         // Refused rather than sent, as a deployment refuses it: a conversation past the model's bound fails the run.
         ChatRequestBounds.RequireForAttempt(composed, plan);

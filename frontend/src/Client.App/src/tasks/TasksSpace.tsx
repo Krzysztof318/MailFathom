@@ -137,6 +137,8 @@ export function TasksSpace({
     session,
     transport,
     asksDeployment,
+    readsCalendar,
+    writesCalendar,
     onOpenMessage,
 }: {
     /** Who is asking and where, or `null` where there is nothing to ask with. */
@@ -147,8 +149,20 @@ export function TasksSpace({
     /** Whether this credential may ask the deployment anything, which the arranged day is reached under. */
     readonly asksDeployment: boolean;
 
-    /** Opens the message a task cites, which is the Mail space's to draw and therefore the frame's to perform. */
-    readonly onOpenMessage: (messageId: string) => void;
+    /**
+     * Whether this credential may read the calendar, which is a record of its own beside the task list: the day beside
+     * the list is read and drawn only under it.
+     */
+    readonly readsCalendar: boolean;
+
+    /** Whether this credential may change the calendar, which is what putting a task in it does. */
+    readonly writesCalendar: boolean;
+
+    /**
+     * Opens the message a task cites, which is the Mail space's to draw and therefore the frame's to perform — or
+     * `undefined` where this credential reads no mail.
+     */
+    readonly onOpenMessage: ((messageId: string) => void) | undefined;
 }) {
     const { locale, translate } = useLocalization();
     const timeZone = useReadingZone();
@@ -181,7 +195,7 @@ export function TasksSpace({
     const panel = useRef<HTMLDialogElement | null>(null);
 
     const reading = useTasks(session, transport);
-    const day = useTodayCalendar(session, transport, now);
+    const day = useTodayCalendar(readsCalendar ? session : null, transport, now);
 
     // Whether this deployment arranges a day at all, which decides whether the panel offers the act rather than
     // whether the act then works. A request going out is the one thing an effect is for, and the answer is dropped
@@ -518,9 +532,13 @@ export function TasksSpace({
                     onComplete={() => {
                         complete(picked);
                     }}
-                    onSchedule={() => {
-                        schedule(picked);
-                    }}
+                    onSchedule={
+                        writesCalendar
+                            ? () => {
+                                  schedule(picked);
+                              }
+                            : undefined
+                    }
                     onAskErasure={() => {
                         askErasure(picked);
                     }}
@@ -577,7 +595,7 @@ export function TasksSpace({
                         setAnnouncing(task);
                         panel.current?.showModal();
                     }}
-                    onSchedule={schedule}
+                    onSchedule={writesCalendar ? schedule : undefined}
                     onAskErasure={askErasure}
                     onReadMore={reading.readMore}
                     onReadAgain={() => {
@@ -586,25 +604,28 @@ export function TasksSpace({
                 />
 
                 {/* Beside the list where there is room and under it where there is not, and reached by scrolling
-                    either way — a panel dropped at a narrow width would take the day off the screen entirely. */}
-                <aside className="flex shrink-0 flex-col gap-3.5 border-line bg-sunken px-5 py-5 panes:w-tasks-side panes:overflow-y-auto panes:border-s">
-                    <TodayCalendar day={day} />
+                    either way — a panel dropped at a narrow width would take the day off the screen entirely. It is
+                    the calendar's day, so a credential that reads no calendar meets the list alone. */}
+                {!readsCalendar ? null : (
+                    <aside className="flex shrink-0 flex-col gap-3.5 border-line bg-sunken px-5 py-5 panes:w-tasks-side panes:overflow-y-auto panes:border-s">
+                        <TodayCalendar day={day} />
 
-                    <DayCapacity
-                        dueToday={dueToday}
-                        eventsToday={day.events.length}
-                        offered={arrangesThisDay}
-                        arranging={arranging}
-                        layout={layout}
-                        placed={reading.tasks}
-                        applying={applying}
-                        onArrange={arrange}
-                        onApply={apply}
-                        onPutDown={() => {
-                            setLayout(null);
-                        }}
-                    />
-                </aside>
+                        <DayCapacity
+                            dueToday={dueToday}
+                            eventsToday={day.events.length}
+                            offered={arrangesThisDay}
+                            arranging={arranging}
+                            layout={layout}
+                            placed={reading.tasks}
+                            applying={applying}
+                            onArrange={arrange}
+                            onApply={apply}
+                            onPutDown={() => {
+                                setLayout(null);
+                            }}
+                        />
+                    </aside>
+                )}
             </div>
 
             {/* The narrow composition's own way to write a task down, which is where a thumb reaches rather than at the

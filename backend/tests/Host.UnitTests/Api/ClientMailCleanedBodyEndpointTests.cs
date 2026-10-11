@@ -177,7 +177,7 @@ public sealed class ClientMailCleanedBodyEndpointTests
             new UnaskableMailBodyCleaner(),
             scopeResolver,
             SensitiveContentEgressGuards.Inactive(),
-            AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead, MailFathomPermission.MailAsk));
+            AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead, MailFathomPermission.AssistantUse));
     }
 
     private static MailDocument DocumentSaying(string text) => MailDocument.Reduced(

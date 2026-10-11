@@ -107,12 +107,11 @@ public sealed class ClientUserRecordEndpointTests
     }
 
     /// <summary>
-    /// The read needs less than the record's own write does, so a caller granted the read alone is told a property is
-    /// theirs to change only where a route of their own writes it: the zone and the portrait, and nothing the save
-    /// they would be refused carries.
+    /// The read needs less than any write does, so a caller granted the read alone is told nothing is theirs to change:
+    /// the save would refuse them, and so would each route that writes one property of the record.
     /// </summary>
     [Fact]
-    public async Task ReadAsync_ACallerWhoseGrantOmitsTheRecordWrite_ReportsOnlyWhatARouteOfTheirOwnWritesAsChangeable()
+    public async Task ReadAsync_ACallerGrantedTheReadAlone_ReportsNothingAsChangeable()
     {
         // Arrange
         var deployment = SignedInAs(SyntheticUser.Deployment, MailFathomPermission.MailRead);
@@ -126,9 +125,65 @@ public sealed class ClientUserRecordEndpointTests
         // Assert
         var record = Assert.IsType<Ok<UserRecordResponse>>(result.Result).Value!;
 
+        Assert.DoesNotContain(record.Properties, property => property.Changeable);
+    }
+
+    /// <summary>
+    /// A caller who may change their profile and not save their record is told a property is theirs to change only
+    /// where a profile route writes it: the name, the zone, and the portrait, and nothing the save they would be
+    /// refused carries.
+    /// </summary>
+    [Fact]
+    public async Task ReadAsync_ACallerWhoMayChangeTheirProfileAndNotTheRecord_ReportsOnlyWhatAProfileRouteWritesAsChangeable()
+    {
+        // Arrange
+        var deployment = SignedInAs(
+            SyntheticUser.Deployment,
+            MailFathomPermission.MailRead,
+            MailFathomPermission.ProfileWrite);
+        deployment.Holding(SyntheticUser.Deployment, EmptyRecord, version: 2);
+
+        // Act
+        var result = await ClientUserRecordEndpoint.ReadAsync(
+            deployment.Records,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var record = Assert.IsType<Ok<UserRecordResponse>>(result.Result).Value!;
+
         Assert.Equal(
-            ["Portrait", "TimeZone"],
+            ["DisplayName", "Portrait", "TimeZone"],
             record.Properties.Where(property => property.Changeable).Select(property => property.Path).Order());
+    }
+
+    /// <summary>
+    /// The name is a column no save of the record writes, so a caller who may save the record and may not change their
+    /// profile is told the name is not theirs to change — while the zone and the portrait, which a save does carry, are.
+    /// </summary>
+    [Fact]
+    public async Task ReadAsync_ACallerWhoMaySaveTheRecordAndNotChangeTheirProfile_ReportsTheNameAsNotTheirsToChange()
+    {
+        // Arrange
+        var deployment = SignedInAs(
+            SyntheticUser.Deployment,
+            MailFathomPermission.MailRead,
+            MailFathomPermission.MailAccountsWrite);
+        deployment.Holding(SyntheticUser.Deployment, EmptyRecord, version: 2);
+
+        // Act
+        var result = await ClientUserRecordEndpoint.ReadAsync(
+            deployment.Records,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var record = Assert.IsType<Ok<UserRecordResponse>>(result.Result).Value!;
+
+        Assert.Equal(
+            [("DisplayName", false), ("Portrait", true), ("TimeZone", true)],
+            record.Properties
+                .Where(property => property.Path is "DisplayName" or "Portrait" or "TimeZone")
+                .Select(property => (property.Path, property.Changeable))
+                .Order());
     }
 
     /// <summary>
@@ -500,8 +555,8 @@ public sealed class ClientUserRecordEndpointTests
         Assert.Equal(primary, Assert.Single(deployment.MailAccountRecords.Accounts));
     }
 
-    private static UserRecordDeployment SignedInAs(UserId user, MailFathomPermission granted) =>
-        new([granted], user);
+    private static UserRecordDeployment SignedInAs(UserId user, params MailFathomPermission[] granted) =>
+        new(granted, user);
 
     /// <summary>A mailbox already held and assigned, whose credential was provisioned for the user it belongs to.</summary>
     private static MailAccountRecord Mailbox(UserId user, string name, string? folderAlias = null)

@@ -146,18 +146,18 @@ public sealed class PersistedGrantsTests
     {
         // Arrange
         var assignment = new Guid("0198f0aa-0000-7000-8000-0000000000c8");
-        GrantSourceRow row = new("mailfathom.mail.contacts.*", Role, "Contacts", assignment, GroupId: null, GroupName: null, ScopeOrganizationId: null, User);
+        GrantSourceRow row = new("mailfathom.contacts.*", Role, "Contacts", assignment, GroupId: null, GroupName: null, ScopeOrganizationId: null, User);
 
         // Act
         var sources = PersistedGrants.SourcesOf(row);
 
         // Assert
         Assert.Equal(
-            [MailFathomPermission.MailContactsRead, MailFathomPermission.MailContactsWrite],
+            [MailFathomPermission.ContactsRead, MailFathomPermission.ContactsWrite],
             sources.Select(source => source.Permission));
         Assert.All(sources, source =>
         {
-            Assert.Equal("mailfathom.mail.contacts.*", source.Pattern);
+            Assert.Equal("mailfathom.contacts.*", source.Pattern);
             Assert.Equal(assignment, source.AssignmentId);
             Assert.Equal(AssignmentScope.User(UserId.Create(User)), source.Scope);
         });

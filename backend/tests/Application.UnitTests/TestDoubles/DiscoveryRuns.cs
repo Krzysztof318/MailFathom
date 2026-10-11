@@ -95,7 +95,7 @@ internal static class DiscoveryRuns
                 // capability reads: this deployment registers the planner and the answerer behind one declaration.
                 planner is null ? null : new RecordingMailQuestionAnswerer()),
             new PlannedMailRetrieval(search, ledger ?? NewRunLedger()),
-            authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailAsk),
+            authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.AssistantUse, MailFathomPermission.MailRead),
             egressGuard ?? SensitiveContentEgressGuards.Inactive(),
             new DiscoveryCoverageReader(freshnessReader, new MailSynchronizationRunLedger(timeProvider)),
             spendLedger ?? PeriodAdmitting(),

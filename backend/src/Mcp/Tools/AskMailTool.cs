@@ -57,8 +57,8 @@ internal sealed class AskMailTool(
     public const string ToolName = "ask_mail";
 
     /// <summary>The capability a caller must hold to be offered this tool and to reach the use case behind it.</summary>
-    /// <remarks>It is the tool that sends mail content to a model provider, which is a decision about what leaves this process rather than only about what a caller may read, so it carries a permission of its own. <see cref="MailFathomPermission.MailAsk" /> neither implies nor is implied by <see cref="MailFathomPermission.MailRead" />, and it is not the weaker of the two: a cited answer returns mail content. Declaring it beside the name is what keeps <see cref="PublishedTools" /> able to answer for every tool this surface publishes.</remarks>
-    public static MailFathomPermission RequiredPermission => MailFathomPermission.MailAsk;
+    /// <remarks>It is the tool that sends mail content to a model provider, which is a decision about what leaves this process rather than only about what a caller may read, so it carries a permission of its own. <see cref="MailFathomPermission.AssistantUse" /> neither implies nor is implied by <see cref="MailFathomPermission.MailRead" />, and the use case beneath asks for both, because a cited answer returns mail content: a caller holding this one alone is offered the tool and refused by it. Declaring it beside the name is what keeps <see cref="PublishedTools" /> able to answer for every tool this surface publishes.</remarks>
+    public static MailFathomPermission RequiredPermission => MailFathomPermission.AssistantUse;
 
     /// <summary>The kind of thing this tool is for, which is what a deployment publishes or withholds it by.</summary>
     /// <remarks>It is the one tool here whose work leaves the deployment for a model provider, which is what a deployment may decline to offer while publishing everything that reads the same mail locally. A category decides what this endpoint offers rather than who may reach it, so it turns nothing on: the tool appears only where the capability behind it is available and the caller's grant reaches it.</remarks>

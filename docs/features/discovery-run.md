@@ -216,8 +216,9 @@ owed rather than an error page: the mail was read, and what could not be done wa
 
 Two refusals come before any of the above, and neither is a fallback.
 
-- **The caller must hold the grant that lets mail reach a chat provider.** A Discover run is subject to it exactly as
-  asking a question is, and a caller without it is refused before the capability is even read.
+- **The caller must hold the grant that lets something of theirs reach a chat provider, and the one that reads mail.**
+  A Discover run is subject to both exactly as asking a question is, and a caller without either is refused before the
+  capability is even read.
 - **The deployment must currently answer questions at all.** The reading is the same one
   [mail answering](mail-answering.md#when-a-deployment-answers-questions-at-all) publishes, and the two states refuse
   differently on purpose: *inactive* is a deployment that does not do this — no chat endpoint, or no embedded mail —

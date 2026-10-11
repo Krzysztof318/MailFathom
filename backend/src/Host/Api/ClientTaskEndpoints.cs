@@ -41,20 +41,21 @@ namespace MailFathom.Host.Api;
 /// told apart only by the word a screen puts on the button.
 /// </para>
 /// <para>
-/// <b>Every route that reads or writes the list is <see cref="MailFathomPermission.MailRead" />, the five writes
-/// included.</b> A task is this deployment's own record of what one person owes: nothing here reaches a mail server,
-/// nothing moves in a mailbox, and the citation a task carries is a value rather than a reading of mail. It is the
-/// notification centre's reasoning rather than the mutation routes' — a person whose mail accounts an administrator
-/// maintains does not hold a write grant and still has to be able to keep their own list.
+/// <b>The three routes that read the list are <see cref="MailFathomPermission.TasksRead" /> and the five that write
+/// it are <see cref="MailFathomPermission.TasksWrite" />.</b> A task is this deployment's own record of what one
+/// person owes: nothing here reaches a mail server, nothing moves in a mailbox, and the citation a task carries is a
+/// value rather than a reading of mail. So neither is a grant over mail, and a person whose mail accounts an
+/// administrator maintains keeps their own list.
 /// </para>
 /// <para>
-/// <b>The day-layout pair is <see cref="MailFathomPermission.MailAsk" /> instead, and the arrangement asks
-/// <see cref="MailFathomPermission.MailRead" /> beneath it.</b> What the published grant follows is where the lines
-/// go: arranging a day leaves this deployment for a chat provider and is charged to the same allowance a question is.
-/// What the arrangement then reads to compose that turn is this list and the day's calendar, both of them the reading
-/// grant's own records, so the use case beneath asks for it on its own and a caller holding the asking grant alone is
-/// refused naming the one they are missing — the shape the contact card already stands in. The route that only says
-/// whether a day is arranged at all reads neither, and answers on the asking grant alone.
+/// <b>The day-layout pair is <see cref="MailFathomPermission.AssistantUse" /> instead, and the arrangement asks
+/// <see cref="MailFathomPermission.TasksRead" /> and <see cref="MailFathomPermission.CalendarRead" /> beneath
+/// it.</b> What the published grant follows is where the lines go: arranging a day leaves this deployment for a chat
+/// provider and is charged to the same allowance a question is. What the arrangement then reads to compose that turn
+/// is this list and the day's calendar, each under its own reading grant, so the use case beneath asks for both on its
+/// own and a caller holding the assistant grant alone is refused naming the one they are missing — the shape the
+/// contact card already stands in. The route that only says whether a day is arranged at all reads neither, and
+/// answers on the assistant grant alone.
 /// </para>
 /// </remarks>
 internal static class ClientTaskEndpoints
@@ -117,50 +118,50 @@ internal static class ClientTaskEndpoints
         ArgumentNullException.ThrowIfNull(api);
 
         api.MapGet(TasksRoute, ReadCommittedAsync)
-            .RequirePermission(MailFathomPermission.MailRead);
+            .RequirePermission(MailFathomPermission.TasksRead);
 
         api.MapGet(ProposedTasksRoute, ReadProposedAsync)
-            .RequirePermission(MailFathomPermission.MailRead);
+            .RequirePermission(MailFathomPermission.TasksRead);
 
         api.MapGet(TaskRoute, FindAsync)
-            .RequirePermission(MailFathomPermission.MailRead);
+            .RequirePermission(MailFathomPermission.TasksRead);
 
         // The attribute is reached for its metadata rather than as an MVC filter, for the reason the record routes
         // state: it implements IRequestSizeLimitMetadata, which the routing pipeline applies to the request body.
         api.MapPost(TasksRoute, RecordAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxWriteRequestBytes))
-            .RequirePermission(MailFathomPermission.MailRead);
+            .RequirePermission(MailFathomPermission.TasksWrite);
 
         api.MapPut(TaskRoute, ReviseAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxWriteRequestBytes))
-            .RequirePermission(MailFathomPermission.MailRead);
+            .RequirePermission(MailFathomPermission.TasksWrite);
 
         api.MapPost(TaskCompletionRoute, SetCompletionAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxWriteRequestBytes))
-            .RequirePermission(MailFathomPermission.MailRead);
+            .RequirePermission(MailFathomPermission.TasksWrite);
 
         api.MapPost(TaskAcceptanceRoute, AcceptAsync)
-            .RequirePermission(MailFathomPermission.MailRead);
+            .RequirePermission(MailFathomPermission.TasksWrite);
 
         api.MapDelete(TaskRoute, EraseAsync)
-            .RequirePermission(MailFathomPermission.MailRead);
+            .RequirePermission(MailFathomPermission.TasksWrite);
 
-        // The two routes of the arrangement, under the grant that governs asking rather than the one the list is read
-        // under: laying out a day is a provider call charged to the same allowance a question is, which is what
-        // decides the grant here rather than which records are read to compose it. The use case beneath the
-        // arrangement asks for the reading grant as well, since the list and the calendar it reads are that grant's
-        // own records, so a caller holding this one alone is refused naming the one it is missing.
+        // The two routes of the arrangement, under the assistant grant rather than the one the list is read under:
+        // laying out a day is a provider call charged to the same allowance a question is, which is what decides the
+        // grant here rather than which records are read to compose it. The use case beneath the arrangement asks for
+        // the task list's reading grant and the calendar's as well, since those are the records it sends, so a caller
+        // holding this one alone is refused naming the one it is missing.
         api.MapGet(TodayLayoutRoute, ArrangesDays)
-            .RequirePermission(MailFathomPermission.MailAsk);
+            .RequirePermission(MailFathomPermission.AssistantUse);
 
         api.MapPost(TodayLayoutRoute, LayOutTodayAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxWriteRequestBytes))
-            .RequirePermission(MailFathomPermission.MailAsk);
+            .RequirePermission(MailFathomPermission.AssistantUse);
     }
 
     /// <summary>Says whether this deployment arranges a day at all.</summary>
     /// <param name="planner">Arranges a day, in whichever state the deployment left it.</param>
-    /// <returns><c>200</c> saying whether days are arranged, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.ask</c>.</returns>
+    /// <returns><c>200</c> saying whether days are arranged, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.assistant.use</c>.</returns>
     /// <remarks>
     /// A capability rather than a probe: it resolves a registration and calls nothing, so a screen asking it once
     /// costs no provider call and reads nobody's list. It exists for the reason the drafting capability does — a
@@ -179,7 +180,7 @@ internal static class ClientTaskEndpoints
     /// <param name="request">The window the person's day runs in, as their own client drew it.</param>
     /// <param name="layout">Composes the arrangement, for the person the credential names.</param>
     /// <param name="cancellationToken">Cancels the arrangement when the client disconnects.</param>
-    /// <returns><c>200</c> with the arrangement, <c>400</c> where the window is not a day this deployment arranges, <c>429</c> where the deployment has spent what it allows a provider, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.ask</c>.</returns>
+    /// <returns><c>200</c> with the arrangement, <c>400</c> where the window is not a day this deployment arranges, <c>429</c> where the deployment has spent what it allows a provider, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.assistant.use</c>.</returns>
     /// <remarks>
     /// <para>
     /// Nothing is written by asking. No task is rescheduled, no proposal is accepted, and no event is put on a

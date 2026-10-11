@@ -40,8 +40,8 @@ namespace MailFathom.Host.Api;
 /// person at a time, and emptying what a mailbox picked up is an act about the mailbox that an operator takes.
 /// </para>
 /// <para>
-/// Reading is <see cref="MailFathomPermission.MailContactsRead" /> and every write is
-/// <see cref="MailFathomPermission.MailContactsWrite" />, the same split the tools over this book already publish, and
+/// Reading is <see cref="MailFathomPermission.ContactsRead" /> and every write is
+/// <see cref="MailFathomPermission.ContactsWrite" />, the same split the tools over this book already publish, and
 /// the erasure is behind the writing grant rather than a narrower one — a grant that may edit the book may take
 /// somebody out of it, and no smaller grant reaches an act that cannot be undone.
 /// </para>
@@ -78,13 +78,13 @@ internal static class ClientContactEndpoints
         ArgumentNullException.ThrowIfNull(api);
 
         api.MapGet(ContactsRoute, ReadOwnBookAsync)
-            .RequirePermission(MailFathomPermission.MailContactsRead);
+            .RequirePermission(MailFathomPermission.ContactsRead);
 
         api.MapGet(CollectedContactsRoute, ReadCollectedAsync)
-            .RequirePermission(MailFathomPermission.MailContactsRead);
+            .RequirePermission(MailFathomPermission.ContactsRead);
 
         api.MapGet(ContactRoute, FindAsync)
-            .RequirePermission(MailFathomPermission.MailContactsRead);
+            .RequirePermission(MailFathomPermission.ContactsRead);
 
         // The attribute is reached for its metadata rather than as an MVC filter, exactly as the administrative writes
         // reach it: it implements IRequestSizeLimitMetadata, which the routing pipeline applies to the request body
@@ -92,17 +92,17 @@ internal static class ClientContactEndpoints
         // administrative one because it bounds the same record.
         api.MapPost(ContactsRoute, RecordAsync)
             .WithMetadata(new RequestSizeLimitAttribute(ContactEndpoints.MaxRecordRequestBytes))
-            .RequirePermission(MailFathomPermission.MailContactsWrite);
+            .RequirePermission(MailFathomPermission.ContactsWrite);
 
         api.MapPut(ContactRoute, AmendAsync)
             .WithMetadata(new RequestSizeLimitAttribute(ContactEndpoints.MaxRecordRequestBytes))
-            .RequirePermission(MailFathomPermission.MailContactsWrite);
+            .RequirePermission(MailFathomPermission.ContactsWrite);
 
         api.MapPost(ContactPromotionRoute, PromoteAsync)
-            .RequirePermission(MailFathomPermission.MailContactsWrite);
+            .RequirePermission(MailFathomPermission.ContactsWrite);
 
         api.MapDelete(ContactRoute, EraseAsync)
-            .RequirePermission(MailFathomPermission.MailContactsWrite);
+            .RequirePermission(MailFathomPermission.ContactsWrite);
     }
 
     /// <summary>Serves one bounded page of the people the user wrote down.</summary>

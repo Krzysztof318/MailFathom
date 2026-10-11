@@ -42,9 +42,9 @@ internal static class AgentConversationComposition
             instructionEnvelope,
             loggerFactory);
 
-    /// <summary>Composes the question's turn: the instant it was asked at, the person's accounts, what they are looking at, and the question.</summary>
+    /// <summary>Composes the question's turn: the instant it was asked at, the person's accounts where the model is told of them, what they are looking at, and the question.</summary>
     /// <param name="askedAt">When the question was asked, which is what a relative date in it is read against.</param>
-    /// <param name="accounts">The accounts the person reads, by the deployment's own names for them.</param>
+    /// <param name="accounts">The accounts the model is told of, by the deployment's own names for them, or none where no tool it is offered takes one.</param>
     /// <param name="scope">What the question was asked about, where it named something.</param>
     /// <param name="question">The question, already guarded for egress.</param>
     /// <returns>The turn's text.</returns>
@@ -63,9 +63,10 @@ internal static class AgentConversationComposition
             ? string.Create(CultureInfo.InvariantCulture, $"The person is looking at the conversation with id {thread}.\n")
             : string.Empty;
         var named = string.Join(", ", accounts.Select(static account => account.Value));
+        var holding = named.Length == 0 ? string.Empty : $"The person's accounts: {named}.\n";
 
         return string.Create(
             CultureInfo.InvariantCulture,
-            $"{AgentTimeAnchor.Stated(askedAt)}\nThe person's accounts: {named}.\n{looking}\n{question}");
+            $"{AgentTimeAnchor.Stated(askedAt)}\n{holding}{looking}\n{question}");
     }
 }

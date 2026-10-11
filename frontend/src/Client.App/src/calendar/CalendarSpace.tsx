@@ -109,8 +109,11 @@ export function CalendarSpace({
     /** What the clock says, which a test decides for itself rather than inheriting from the machine it runs on. */
     readonly now?: () => Date;
 
-    /** Opens one message, which is the Mail space's to draw and therefore the frame's to perform. */
-    readonly onOpenMessage: (messageId: string) => void;
+    /**
+     * Opens one message, which is the Mail space's to draw and therefore the frame's to perform — or `undefined`
+     * where this credential reads no mail.
+     */
+    readonly onOpenMessage: ((messageId: string) => void) | undefined;
 }) {
     const { translate } = useLocalization();
     const twoPanes = useTwoPanes();

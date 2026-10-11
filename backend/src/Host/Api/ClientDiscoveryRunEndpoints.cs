@@ -45,9 +45,10 @@ namespace MailFathom.Host.Api;
 /// the guarantee.
 /// </para>
 /// <para>
-/// The run reads mail and sends what it reads to a chat provider, so all three routes are published under the grant
-/// that governs asking a question about mail anywhere else. The reading route is under the same one rather than the
-/// reading grant, because what it hands back is the answer to a question that was asked under it.
+/// The run reads mail and sends what it reads to a chat provider, so all three routes are published under the
+/// assistant grant, and starting one asks for the grant that reads mail beneath it. The reading route is published
+/// under the assistant grant as well rather than the reading one, because what it hands back is the answer to a
+/// question that was asked under both.
 /// </para>
 /// <para>
 /// Everything a run composes about the mail — a source, a quoted fragment, a subject — reaches the caller here and
@@ -84,13 +85,13 @@ internal static class ClientDiscoveryRunEndpoints
 
         api.MapPost(DiscoveryRunsRoute, Start)
             .WithMetadata(new RequestSizeLimitAttribute(MaxQuestionRequestBytes))
-            .RequirePermission(MailFathomPermission.MailAsk);
+            .RequirePermission(MailFathomPermission.AssistantUse);
 
         api.MapGet(DiscoveryRunRoute, Read)
-            .RequirePermission(MailFathomPermission.MailAsk);
+            .RequirePermission(MailFathomPermission.AssistantUse);
 
         api.MapDelete(DiscoveryRunRoute, Stop)
-            .RequirePermission(MailFathomPermission.MailAsk);
+            .RequirePermission(MailFathomPermission.AssistantUse);
     }
 
     /// <summary>Composes the address one run is read at.</summary>
@@ -110,6 +111,7 @@ internal static class ClientDiscoveryRunEndpoints
 
     /// <summary>Starts a run over the question, or reports what was wrong with it.</summary>
     /// <param name="request">The question and the mail it may be answered from.</param>
+    /// <param name="authorization">Answers whether the caller may read the mail a run answers from, before one is opened.</param>
     /// <param name="scopeResolver">Resolves which accounts and folders the answer may be drawn from, and names the acting user.</param>
     /// <param name="userClock">Reads the instant the acting person is standing on, which every relative period in the question is resolved against.</param>
     /// <param name="principals">Reports the principal the transport admitted, which the run executes under.</param>
@@ -117,8 +119,14 @@ internal static class ClientDiscoveryRunEndpoints
     /// <param name="timeProvider">Stamps the run, which its retention and its ceiling are measured from.</param>
     /// <param name="launcher">Puts the run on a scope of its own and starts it.</param>
     /// <param name="cancellationToken">Cancels opening the run, which is the one part of this a caller waits for.</param>
-    /// <returns><c>202</c> naming the run, <c>400</c> naming what was wrong with the question or its scope, <c>429</c> where this person is already running as many as they may, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.ask</c>.</returns>
+    /// <returns><c>202</c> naming the run, <c>400</c> naming what was wrong with the question or its scope, <c>429</c> where this person is already running as many as they may, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.assistant.use</c> and <c>mailfathom.mail.read</c>.</returns>
+    /// <exception cref="PrincipalNotAuthorizedException">The caller's grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
     /// <remarks>
+    /// <para>
+    /// The route is published under the asking grant, and the reading one is asked here rather than left to the run,
+    /// which asks for both again: a run is opened before it executes, so a caller it would refuse would otherwise be
+    /// answered <c>202</c>, hold one of their concurrent runs, and learn only that the run failed.
+    /// </para>
     /// <para>
     /// The question and the scope are validated here rather than in the run, so a mistake in either is a refusal a
     /// person can act on instead of a run that opens and immediately fails. Everything after that — whether this
@@ -133,6 +141,7 @@ internal static class ClientDiscoveryRunEndpoints
     /// </remarks>
     internal static async Task<Results<Accepted<ClientDiscoveryRunResponse>, ProblemHttpResult>> Start(
         [FromBody] ClientDiscoveryRunRequest? request,
+        [FromServices] AccessAuthorization authorization,
         [FromServices] MailboxScopeResolver scopeResolver,
         [FromServices] UserClock userClock,
         [FromServices] IAuthorizedPrincipalSource principals,
@@ -141,6 +150,7 @@ internal static class ClientDiscoveryRunEndpoints
         [FromServices] DiscoveryRunLauncher launcher,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(authorization);
         ArgumentNullException.ThrowIfNull(scopeResolver);
         ArgumentNullException.ThrowIfNull(userClock);
         ArgumentNullException.ThrowIfNull(principals);
@@ -152,6 +162,8 @@ internal static class ClientDiscoveryRunEndpoints
         {
             return Refuse("A run is asked for by a caller this deployment admitted.");
         }
+
+        authorization.RequirePermission(MailFathomPermission.MailRead);
 
         MailQuestion question;
         try
@@ -197,7 +209,7 @@ internal static class ClientDiscoveryRunEndpoints
     /// <param name="runs">Where the deployment holds its runs, which every replica reads the same rows of.</param>
     /// <param name="timeProvider">Stamps the read, which the run's retention window is measured from.</param>
     /// <param name="cancellationToken">Cancels the read where the caller has gone away.</param>
-    /// <returns>The run's standing and everything after that sequence, <c>404</c> where this user has no such run, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.ask</c>.</returns>
+    /// <returns>The run's standing and everything after that sequence, <c>404</c> where this user has no such run, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.assistant.use</c>.</returns>
     /// <remarks>
     /// <para>
     /// <strong>One route serves the first read and every later one.</strong> A cursor left out means from the
@@ -253,7 +265,7 @@ internal static class ClientDiscoveryRunEndpoints
     /// <param name="executing">The runs this replica is executing, so a stop that landed here reaches the work at once.</param>
     /// <param name="timeProvider">Stamps the stop.</param>
     /// <param name="cancellationToken">Cancels recording the stop.</param>
-    /// <returns><c>204</c> where the run was this user's and is now stopping, <c>404</c> where the deployment holds no such run for this user, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.ask</c>.</returns>
+    /// <returns><c>204</c> where the run was this user's and is now stopping, <c>404</c> where the deployment holds no such run for this user, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.assistant.use</c>.</returns>
     /// <remarks>
     /// <para>
     /// <strong>Stopping stops the spending rather than the watching.</strong> Ending a read says nothing about the run,

@@ -20,7 +20,7 @@ public sealed class TransportGrantTests
     public void PermissionsCarriedBy_APrincipalCarryingWhatClaimsForWrote_ReportsTheSameGrant()
     {
         // Arrange
-        MailFathomPermission[] granted = [MailFathomPermission.MailRead, MailFathomPermission.MailAsk];
+        MailFathomPermission[] granted = [MailFathomPermission.MailRead, MailFathomPermission.AssistantUse];
         var principal = PrincipalCarrying(TransportGrant.ClaimsFor(granted));
 
         // Act

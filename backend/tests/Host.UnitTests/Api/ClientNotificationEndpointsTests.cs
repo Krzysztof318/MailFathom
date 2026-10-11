@@ -232,6 +232,65 @@ public sealed class ClientNotificationEndpointsTests
         Assert.Equal(2, answered.UnreadCount);
     }
 
+    /// <summary>
+    /// No permission implies another, so a caller who may change the centre and not read it is answered their change:
+    /// the count beside it is the tail of the write, and refusing it would report a committed change as a refusal.
+    /// </summary>
+    [Fact]
+    public async Task SetReadStateAsync_ACallerGrantedTheWritingHalfAlone_IsAnsweredTheChangeAndWhatItLeftUnread()
+    {
+        // Arrange
+        var notifications = Substitute.For<INotificationStore>();
+        notifications.SetReadAsync(
+                User,
+                NotificationId.Create(NotificationIdentifier),
+                true,
+                Arg.Any<CancellationToken>())
+            .Returns(NotificationReadOutcome.Applied);
+        notifications.CountUnreadAsync(User, Arg.Any<CancellationToken>()).Returns(1);
+        var writing = new OwnNotifications(
+            AccessAuthorizations.ForUserGranted(User, MailFathomPermission.NotificationsWrite),
+            notifications);
+
+        // Act
+        var result = await ClientNotificationEndpoints.SetReadStateAsync(
+            NotificationIdentifier,
+            new ClientNotificationReadStateRequest(true),
+            writing,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(1, Assert.IsType<Ok<ClientNotificationReadStateResponse>>(result.Result).Value!.UnreadCount);
+    }
+
+    /// <summary>Erasing is answered under the grant that erased, so the count that leaves it is not a second grant to hold.</summary>
+    [Fact]
+    public async Task EraseAsync_ACallerGrantedTheWritingHalfAlone_IsAnsweredHowManyWentAndTheCountThatLeaves()
+    {
+        // Arrange
+        var notifications = Substitute.For<INotificationStore>();
+        notifications.EraseAsync(
+                User,
+                Arg.Any<IReadOnlyCollection<NotificationId>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(1);
+        notifications.CountUnreadAsync(User, Arg.Any<CancellationToken>()).Returns(3);
+        var writing = new OwnNotifications(
+            AccessAuthorizations.ForUserGranted(User, MailFathomPermission.NotificationsWrite),
+            notifications);
+
+        // Act
+        var result = await ClientNotificationEndpoints.EraseAsync(
+            new ClientNotificationDeletionRequest([NotificationIdentifier]),
+            writing,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var erased = Assert.IsType<Ok<ClientDeletedNotificationsResponse>>(result.Result).Value!;
+
+        Assert.Equal((1, 3), (erased.Deleted, erased.UnreadCount));
+    }
+
     /// <summary>The refusal is the same one an absent notification gets, so nothing here reports whose notifications exist.</summary>
     [Fact]
     public async Task SetReadStateAsync_ANotificationSomebodyElseHolds_AnswersAsOneThatDoesNotExist()
@@ -442,7 +501,10 @@ public sealed class ClientNotificationEndpointsTests
     private static JsonSerializerOptions WebFormat { get; } = new(JsonSerializerDefaults.Web);
 
     private static OwnNotifications SignedIn(INotificationStore store) => new(
-        AccessAuthorizations.ForUserGranted(User, MailFathomPermission.MailRead),
+        AccessAuthorizations.ForUserGranted(
+            User,
+            MailFathomPermission.NotificationsRead,
+            MailFathomPermission.NotificationsWrite),
         store);
 
     private static Notification MailNotification(NotificationStatement? statement) => Notification.Compose(

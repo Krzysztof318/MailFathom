@@ -112,17 +112,17 @@ public sealed class GrantEndpointsTests
         var role = new Role(
             RoleId,
             "Contacts",
-            RolePermissions.Read(["mailfathom.mail.contacts.*", "mailfathom.mail.read", "mailfathom.retired.*", "mailfathom.admin.everything"]),
+            RolePermissions.Read(["mailfathom.contacts.*", "mailfathom.mail.read", "mailfathom.retired.*", "mailfathom.admin.everything"]),
             RecordedAt);
 
         // Act
         var response = RoleResponse.For(role);
 
         // Assert
-        Assert.Equal(["mailfathom.mail.read", "mailfathom.mail.contacts.*"], response.Permissions);
+        Assert.Equal(["mailfathom.mail.read", "mailfathom.contacts.*"], response.Permissions);
         var pattern = Assert.Single(response.Patterns);
-        Assert.Equal("mailfathom.mail.contacts.*", pattern.Pattern);
-        Assert.Equal(["mailfathom.mail.contacts.read", "mailfathom.mail.contacts.write"], pattern.Reaches);
+        Assert.Equal("mailfathom.contacts.*", pattern.Pattern);
+        Assert.Equal(["mailfathom.contacts.read", "mailfathom.contacts.write"], pattern.Reaches);
         Assert.Equal(["mailfathom.admin.everything", "mailfathom.retired.*"], response.Unpublished);
     }
 

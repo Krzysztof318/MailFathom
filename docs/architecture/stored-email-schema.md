@@ -746,7 +746,7 @@ The migrations seed three roles, as ordinary rows an operator may rename, edit, 
 
 | Role | What it lists |
 |---|---|
-| `Mail user` | Every name the mail half published when it was seeded |
+| `Mail user` | Every name the user-facing half published when it was seeded, carried to the names those are published under now |
 | `Organization administrator` | `mailfathom.admin.read`, `mailfathom.admin.audit.read`, `mailfathom.admin.operate`, `mailfathom.admin.credentials.write`, `mailfathom.admin.configuration.write`, `mailfathom.admin.erase`, and `mailfathom.admin.roles.write` |
 | `Administrator` | The pattern `*` alone, which reaches every name both halves publish, a name a later release adds included |
 
@@ -754,14 +754,24 @@ The migrations seed three roles, as ordinary rows an operator may rename, edit, 
 migration listed, and only where the role still listed exactly those names. A seeded `Administrator` an operator had
 narrowed, emptied, or deleted was left as it stood, because rewriting it would have handed its holders every permission
 they were deliberately denied. It changes no table: whether an entry is a name or a pattern is decided when a grant is
-computed. No migration edits either of the other two.
+computed. No migration widens either of the other two.
+
+`SplitUserFacingPermissionsByDomain` is the migration that carried every stored list — each role's, each credential's
+narrowing, and each session's — to the names the user-facing half is published under, and it changes no table either. A
+renamed name is rewritten where it stands; a list that reached `mailfathom.mail.read` holds the names of the task list,
+the calendar, the notification centre, and the profile beside it; and one that reached `mailfathom.mail.accounts.write`
+holds `mailfathom.profile.write`. A role's pattern is carried by what it reached, so the names a role held through one
+are written out wherever its list no longer reaches them, and a role listing `*` alone gained no row. It treats every
+role alike, seeded or not, because what it carries is the reach of a name rather than anybody's decision about a role.
+It carries what was stored when it ran and nothing written afterwards, so a list a replica of the build before it wrote
+during a rolling upgrade — a session signed in there, above all — holds the names that build knew until it is replaced.
 
 The migration that moved mail grants from credentials onto users, `HoldMailGrantsOnUsers`, gave every user who held no
 assignment one at their own scope reproducing the union of what their credentials listed: `Mail user` where that union
-was the whole mail half — and for a user holding no credential, whom only an endpoint requiring none could have served —
+was the whole user-facing half — and for a user holding no credential, whom only an endpoint requiring none could have served —
 and otherwise a role of its own, `Carried-over mail grant <n>`, one per distinct union and numbered in the order of the
 names it lists. A user whose credentials all listed nothing was given nothing. The same migration recorded no narrowing
-on every credential whose list held the whole mail half, so it holds what its user holds. Those roles are ordinary rows
+on every credential whose list held the whole user-facing half, so it holds what its user holds. Those roles are ordinary rows
 like the seeded ones.
 
 `user_groups` holds one row per group: `Id`; `Name`, at most 128 characters and unique across the deployment under
@@ -912,7 +922,7 @@ records both halves of that, and records why nothing caches what this table answ
 | `Identifier` | The public half of the token, as the minting replica drew it — the base64url of sixteen random bytes — at most 64 characters, and the primary key. It is the only half a statement looks a session up by |
 | `UserId` | Whose session it is. It is the foreign key onto `settings_accounts` with `ON DELETE CASCADE`, which is what an erasure reaches a session by even where no credential stands behind one |
 | `CredentialId` | Which credential admitted the sign-in, nullable, and the foreign key onto `user_credentials` with `ON DELETE CASCADE`. It is null for a session minted on an endpoint requiring no credential, because such a sign-in names no row an operator could act on and a foreign key cannot take a sentinel |
-| `Permissions` | The narrowing the credential applied at the exchange — every name the mail half published where it named none — carried forward unchanged by every renewal. It is never the grant itself, which is computed from the user's roles on every request, so a role assigned or revoked reaches the session at its next request |
+| `Permissions` | The narrowing the credential applied at the exchange — every name the user-facing half published where it named none — carried forward unchanged by every renewal. It is never the grant itself, which is computed from the user's roles on every request, so a role assigned or revoked reaches the session at its next request |
 | `SecretDigest` | The SHA-256 digest of the token's secret half, 32 bytes. The secret itself is never stored, so a row read out of the database or out of a backup authenticates nothing. Verifying a request reads the row and compares the two digests in fixed time; a renewal and a revocation instead carry the digest in the removing statement's own condition, which is what makes the removal and the judgement one act rather than two a second request could arrive between |
 | `ExpiresAt` | When the token stops working, thirty days after it was minted. It is the one index beside the key and the two foreign keys' own, and the index is what makes the removal proportional to what has expired rather than to everything the deployment holds |
 

@@ -39,6 +39,7 @@ export function AccountMenu({
     accounts,
     deploymentVersion,
     telemetryForwarding,
+    writesProfile,
     preferences,
     profile,
     onSignOut,
@@ -56,6 +57,9 @@ export function AccountMenu({
      * there.
      */
     readonly telemetryForwarding: TelemetryForwarding;
+
+    /** Whether this credential may change what the deployment holds about the person, which the settings screen reads. */
+    readonly writesProfile: boolean;
 
     /** The settings that follow the person, and the four ways of changing one. */
     readonly preferences: ClientPreferencesInForce;
@@ -186,6 +190,7 @@ export function AccountMenu({
                     profile={profile}
                     preferences={preferences}
                     telemetryForwarding={telemetryForwarding}
+                    writesProfile={writesProfile}
                     deploymentVersion={deploymentVersion}
                     onClose={closeSettings}
                 />

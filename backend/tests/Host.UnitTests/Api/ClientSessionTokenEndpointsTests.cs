@@ -79,7 +79,7 @@ public sealed class ClientSessionTokenEndpointsTests
             "Basic dXNlcjpwYXNzd29yZA==",
             CredentialId,
             MailFathomPermission.MailRead,
-            MailFathomPermission.MailAsk,
+            MailFathomPermission.AssistantUse,
             MailFathomPermission.MailSend);
 
         // Act
@@ -93,7 +93,7 @@ public sealed class ClientSessionTokenEndpointsTests
         var answered = Assert.IsType<Ok<ClientSessionTokenResponse>>(result.Result);
         var admitted = await sessions.VerifyAsync(answered.Value!.Token, TestContext.Current.CancellationToken);
         Assert.Equal(
-            [MailFathomPermission.MailRead, MailFathomPermission.MailAsk, MailFathomPermission.MailSend],
+            [MailFathomPermission.MailRead, MailFathomPermission.MailSend, MailFathomPermission.AssistantUse],
             admitted?.Permissions);
     }
 

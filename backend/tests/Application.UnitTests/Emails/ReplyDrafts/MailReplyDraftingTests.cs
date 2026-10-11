@@ -192,9 +192,28 @@ public sealed class MailReplyDraftingTests
             Arg.Any<CancellationToken>());
     }
 
+    /// <summary>Asking is not reading: the drafting sends a conversation to a provider, so a caller granted only the asking half is refused naming the reading one.</summary>
+    [Fact]
+    public async Task DraftAsync_ACallerGrantedOnlyAsking_IsRefusedBeforeAnythingIsRead()
+    {
+        // Arrange
+        var sourceReader = SourceReaderReturning(Sources());
+        var drafting = CreateDrafting(
+            sourceReader,
+            WriterReturning(Written("We accept.")),
+            authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.AssistantUse));
+
+        // Act and assert
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            drafting.DraftAsync(Request(), TestContext.Current.CancellationToken));
+
+        Assert.Equal(MailFathomPermission.MailRead, refusal.RequiredPermission);
+        Assert.Empty(sourceReader.ReceivedCalls());
+    }
+
     /// <summary>The drafting is what puts mail in front of a provider, so it is behind the grant that governs doing so.</summary>
     [Fact]
-    public async Task DraftAsync_ACallerWithoutTheMailAskGrant_IsRefusedBeforeAnythingIsRead()
+    public async Task DraftAsync_ACallerWithoutTheAssistantGrant_IsRefusedBeforeAnythingIsRead()
     {
         // Arrange
         var sourceReader = SourceReaderReturning(Sources());
@@ -207,7 +226,7 @@ public sealed class MailReplyDraftingTests
         var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
             drafting.DraftAsync(Request(), TestContext.Current.CancellationToken));
 
-        Assert.Equal(MailFathomPermission.MailAsk, refusal.RequiredPermission);
+        Assert.Equal(MailFathomPermission.AssistantUse, refusal.RequiredPermission);
         await sourceReader.DidNotReceiveWithAnyArgs().ReadSourcesAsync(
             Arg.Any<StoredEmailId>(),
             Arg.Any<MailboxScope>(),
@@ -389,7 +408,7 @@ public sealed class MailReplyDraftingTests
             writer,
             scopeResolver,
             egressGuard ?? SensitiveContentEgressGuards.Inactive(),
-            authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailAsk),
+            authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.AssistantUse, MailFathomPermission.MailRead),
             LanguagesAnswering(language),
             derivesStyleFromSentMail);
     }

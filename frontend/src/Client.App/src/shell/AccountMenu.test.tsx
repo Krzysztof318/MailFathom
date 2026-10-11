@@ -144,6 +144,7 @@ function renderMenu({
                             accounts={accounts}
                             deploymentVersion={deploymentVersion}
                             telemetryForwarding={telemetryForwarding}
+                            writesProfile
                             preferences={preferences}
                             profile={profile}
                             onSignOut={onSignOut}

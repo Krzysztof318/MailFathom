@@ -34,9 +34,10 @@ namespace MailFathom.Host.Api;
 /// exactly what its neighbour means.
 /// </para>
 /// <para>
-/// Every route is <see cref="MailFathomPermission.MailRead" />, the four writes included, exactly as the task routes
-/// beside them are: what they serve is a record native to this deployment rather than a mailbox, and a person whose
-/// mail accounts an administrator maintains still has to be able to keep their own calendar.
+/// The two reads are <see cref="MailFathomPermission.CalendarRead" /> and the four writes are
+/// <see cref="MailFathomPermission.CalendarWrite" />, the shape the task routes beside them take with their own pair:
+/// what they serve is a record native to this deployment rather than a mailbox, so neither is a grant over mail and a
+/// person whose mail accounts an administrator maintains keeps their own calendar.
 /// </para>
 /// <para>
 /// <b>Nothing an event carries reaches a refusal.</b> Every message a refusal states comes from this system rather
@@ -75,27 +76,27 @@ internal static class ClientCalendarEndpoints
         ArgumentNullException.ThrowIfNull(api);
 
         api.MapGet(CalendarRoute, ReadWindowAsync)
-            .RequirePermission(MailFathomPermission.MailRead);
+            .RequirePermission(MailFathomPermission.CalendarRead);
 
         api.MapGet(CalendarEventRoute, FindAsync)
-            .RequirePermission(MailFathomPermission.MailRead);
+            .RequirePermission(MailFathomPermission.CalendarRead);
 
         // The attribute is reached for its metadata rather than as an MVC filter, exactly as every other write on this
         // surface reaches it: it implements IRequestSizeLimitMetadata, which the routing pipeline applies to the
         // request body feature, so a body over the bound is answered 413 before the handler is reached.
         api.MapPost(CalendarRoute, CreateAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxWriteRequestBytes))
-            .RequirePermission(MailFathomPermission.MailRead);
+            .RequirePermission(MailFathomPermission.CalendarWrite);
 
         api.MapPut(CalendarEventRoute, AmendAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxWriteRequestBytes))
-            .RequirePermission(MailFathomPermission.MailRead);
+            .RequirePermission(MailFathomPermission.CalendarWrite);
 
         api.MapPost(CalendarEventAcceptanceRoute, AcceptAsync)
-            .RequirePermission(MailFathomPermission.MailRead);
+            .RequirePermission(MailFathomPermission.CalendarWrite);
 
         api.MapDelete(CalendarEventRoute, DeleteAsync)
-            .RequirePermission(MailFathomPermission.MailRead);
+            .RequirePermission(MailFathomPermission.CalendarWrite);
     }
 
     /// <summary>Serves one window of the acting person's calendar, earliest first.</summary>

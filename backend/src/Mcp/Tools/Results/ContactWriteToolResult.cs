@@ -91,7 +91,7 @@ internal sealed record ContactWriteToolResult
     /// <remarks>
     /// A promotion names one person and changes their origin, so a record in the answer would be the whole of what
     /// <c>get_contact</c> publishes, reached from an identifier alone under a grant that never included reading it.
-    /// <c>mailfathom.mail.contacts.write</c> does not imply <c>mailfathom.mail.contacts.read</c>, and this is where that
+    /// <c>mailfathom.contacts.write</c> does not imply <c>mailfathom.contacts.read</c>, and this is where that
     /// would otherwise leak.
     /// </remarks>
     public static ContactWriteToolResult OutcomeOf(ContactWriteResult result)

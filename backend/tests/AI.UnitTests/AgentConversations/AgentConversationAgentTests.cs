@@ -266,7 +266,7 @@ public sealed class AgentConversationAgentTests : IAsyncDisposable
                 Calendar: null!,
                 Tasks: null!,
                 ResponseAuthoring: null!,
-                AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailAsk));
+                AccessAuthorizations.ForCallerGranted(MailFathomPermission.AssistantUse));
 
             return new AgentConversationAgent(
                 plan,

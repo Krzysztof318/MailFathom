@@ -81,7 +81,8 @@ public sealed class AgentActPerformer : IAgentActPerformer
         {
             AgentMessageSending => [MailFathomPermission.MailDraftsWrite, MailFathomPermission.MailSend],
             AgentResponseSending => [MailFathomPermission.MailRead, MailFathomPermission.MailDraftsWrite, MailFathomPermission.MailSend],
-            AgentEventScheduling or AgentTaskRecording => [MailFathomPermission.MailRead],
+            AgentEventScheduling => [MailFathomPermission.CalendarWrite],
+            AgentTaskRecording => [MailFathomPermission.TasksWrite],
             _ => throw new ArgumentException("The act is not one this build declares.", nameof(act)),
         };
     }

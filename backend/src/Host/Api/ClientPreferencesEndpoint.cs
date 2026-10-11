@@ -28,11 +28,11 @@ namespace MailFathom.Host.Api;
 /// there is no argument to put another user's identifier in and no listing to discover one from.
 /// </para>
 /// <para>
-/// Both are <see cref="MailFathomPermission.MailRead" />, and neither adds a name to the published permission set. The
-/// write deliberately does not take <see cref="MailFathomPermission.MailAccountsWrite" /> as the record's writes do:
-/// that grant decides what this deployment reads out of somebody's mailboxes, somebody whose mail configuration an
-/// administrator maintains in full does not hold it, and what may be said about a person must not be decided by a
-/// grant over their mail configuration.
+/// The read is <see cref="MailFathomPermission.ProfileRead" /> and the write is
+/// <see cref="MailFathomPermission.ProfileWrite" />. The write deliberately does not take
+/// <see cref="MailFathomPermission.MailAccountsWrite" /> as the record's writes do: that grant decides what this
+/// deployment reads out of somebody's mailboxes, somebody whose mail configuration an administrator maintains in full
+/// does not hold it, and what may be said about a person must not be decided by a grant over their mail configuration.
 /// </para>
 /// <para>
 /// A write states the whole document, which is what makes it a closed set rather than a patch: a preference the body
@@ -73,13 +73,13 @@ internal static class ClientPreferencesEndpoint
         ArgumentNullException.ThrowIfNull(api);
 
         api.MapGet(PreferencesRoute, ReadAsync)
-            .RequirePermission(MailFathomPermission.MailRead);
+            .RequirePermission(MailFathomPermission.ProfileRead);
 
         // The attribute is reached for its metadata rather than as an MVC filter, for the reason the record routes
         // state: it implements IRequestSizeLimitMetadata, which the routing pipeline applies to the request body.
         api.MapPost(PreferencesRoute, SaveAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxWriteRequestBytes))
-            .RequirePermission(MailFathomPermission.MailRead);
+            .RequirePermission(MailFathomPermission.ProfileWrite);
     }
 
     /// <summary>Hands the acting person what they set about their own client.</summary>
@@ -223,7 +223,7 @@ internal static class ClientPreferencesEndpoint
     {
         try
         {
-            return (await preferences.ReadAsync(cancellationToken)).TelemetryEnabled;
+            return await preferences.ReadTelemetryAnswerToCarryAsync(cancellationToken);
         }
         catch (JsonException)
         {

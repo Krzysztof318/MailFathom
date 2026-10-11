@@ -100,8 +100,8 @@ internal sealed record ContactPageResponse(IReadOnlyList<ContactResponse> Contac
 /// <para>
 /// What decides whether a record comes back is whether the caller stated one. Writing the book and reading it are
 /// separate grants on both surfaces this shape is answered from — <c>mailfathom.admin.operate</c> beside
-/// <c>mailfathom.admin.audit.read</c> for an operator, and <c>mailfathom.mail.contacts.write</c> beside
-/// <c>mailfathom.mail.contacts.read</c> for the signed-in user — so a body carrying a record the caller never sent is a
+/// <c>mailfathom.admin.audit.read</c> for an operator, and <c>mailfathom.contacts.write</c> beside
+/// <c>mailfathom.contacts.read</c> for the signed-in user — so a body carrying a record the caller never sent is a
 /// read served to a grant that does not admit one. Recording and amending state the
 /// whole record, so <see cref="For" /> hands the written form of it back; a promotion states an identity and nothing
 /// else, so <see cref="OutcomeOf" /> is what answers it. A refusal carries no record on either path, including the two

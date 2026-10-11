@@ -62,7 +62,7 @@ public sealed class RouteAuthorizationTests
         Assert.Equal("served", answer);
     }
 
-    /// <summary>The same arrangement on the surface a client reaches, whose grants are drawn from the mailbox half.</summary>
+    /// <summary>The same arrangement on the surface a client reaches, whose grants are drawn from the user-facing half.</summary>
     [Fact]
     public async Task RefuseUnpermittedAsync_ACallerHoldingWhatAClientRoutePublishes_ReachesTheHandler()
     {
@@ -316,7 +316,7 @@ public sealed class RouteAuthorizationTests
         // Arrange
         var context = ContextFor(
             RoutePermission.Requiring(MailFathomPermission.MailRead),
-            AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailAsk));
+            AccessAuthorizations.ForCallerGranted(MailFathomPermission.AssistantUse));
 
         // Act
         var answer = await RouteAuthorization.RefuseUnpermittedAsync(context, Served, ProtectedSurface.Mail);
@@ -576,7 +576,7 @@ public sealed class RouteAuthorizationTests
         var refusals = Substitute.For<IAuthorizationRefusalTelemetry>();
         var context = ContextFor(
             RoutePermission.Requiring(MailFathomPermission.MailRead),
-            AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailAsk),
+            AccessAuthorizations.ForCallerGranted(MailFathomPermission.AssistantUse),
             refusals);
 
         // Act

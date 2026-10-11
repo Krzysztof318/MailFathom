@@ -90,7 +90,7 @@ A request is served when three things hold, in this order:
 2. **The request arrived from a network the credential accepts**, where it names any — see
    [where a credential may be presented from](#where-a-credential-may-be-presented-from).
 3. **The credential's user holds at least one administrative permission**, at any scope, that the credential's own
-   `--permission` list keeps where it names one. A credential narrowed to mail names alone, or to nothing, is therefore
+   `--permission` list keeps where it names one. A credential narrowed to user-facing names alone, or to nothing, is therefore
    refused here however much its user holds.
 
 A credential failing any of the three is answered `401`, the answer a credential nobody holds gets, so a refusal says
@@ -215,7 +215,7 @@ more way in. [The stored schema](../architecture/stored-email-schema.md#the-defa
 ## What a credential may do
 
 A caller here holds its user's grant — what the roles assigned to the user grant, at the scope each assignment gives,
-the mail names among it held only as the ceiling a credential written here and a role given here are bounded by — and
+the user-facing names among it held only as the ceiling a credential written here and a role given here are bounded by — and
 that grant holds on every credential the user presents
 here, narrowed by what the credential keeps. A credential's own `--permission` list may name names of both halves, and
 each surface reads the half it guards, so `--permission mailfathom.admin.read` makes a credential that reads this
@@ -258,7 +258,7 @@ The route reports the grant twice over, beside the `user` and the `roles` those 
 for — the listings apart, which answer with what any scope covers. `scopes` names each scope the caller holds anything at — the deployment first, then each organization, then
 each user, by identifier — with the administrative names held there, and with any name held there that
 [only the deployment scope grants](permissions.md#what-only-the-deployment-scope-grants) listed apart under
-`reachingNothing`. Neither reports a mail name: this endpoint performs none, whatever the caller's roles list:
+`reachingNothing`. Neither reports a user-facing name: this endpoint performs none, whatever the caller's roles list:
 
 ```json
 {
@@ -454,9 +454,9 @@ These routes accept a grant held at any of the three, and check it against the t
 | `POST /api/admin/users/{userId}/record` | The user |
 | `POST /api/admin/users/{userId}/secrets` | The user |
 | `GET /api/admin/users/{userId}/credentials` | The user |
-| `POST /api/admin/users/{userId}/credentials` | The user, each scope the user holds each of their administrative [names](#user-credentials) at, and every mail name the user holds, held at any scope; where a role the user holds lists a pattern, the whole deployment under `mailfathom.admin.roles.write` as well |
-| `PUT /api/admin/users/{userId}/credentials/{credentialId}/material` | The user, each scope the user holds each of their administrative names at, and every mail name the user holds, held at any scope; where a role the user holds lists a pattern, the whole deployment under `mailfathom.admin.roles.write` as well |
-| `PUT /api/admin/users/{userId}/credentials/{credentialId}/enablement` | The user, and — to enable — each scope the user holds each of their administrative names at, and every mail name the user holds, held at any scope; where a role the user holds lists a pattern, the whole deployment under `mailfathom.admin.roles.write` as well |
+| `POST /api/admin/users/{userId}/credentials` | The user, each scope the user holds each of their administrative [names](#user-credentials) at, and every user-facing name the user holds, held at any scope; where a role the user holds lists a pattern, the whole deployment under `mailfathom.admin.roles.write` as well |
+| `PUT /api/admin/users/{userId}/credentials/{credentialId}/material` | The user, each scope the user holds each of their administrative names at, and every user-facing name the user holds, held at any scope; where a role the user holds lists a pattern, the whole deployment under `mailfathom.admin.roles.write` as well |
+| `PUT /api/admin/users/{userId}/credentials/{credentialId}/enablement` | The user, and — to enable — each scope the user holds each of their administrative names at, and every user-facing name the user holds, held at any scope; where a role the user holds lists a pattern, the whole deployment under `mailfathom.admin.roles.write` as well |
 | `DELETE /api/admin/users/{userId}/credentials/{credentialId}` | The user |
 | `PUT /api/admin/users/{userId}/organization` | The user where they stand, and the organization the body moves them into; a move out of every organization is the deployment's alone |
 | `GET /api/admin/mail-accounts` | — lists the mail accounts the caller's scopes for `mailfathom.admin.read` cover |
@@ -2371,7 +2371,7 @@ it:
 
 ```console
 $ mfctl role add --name Reader \
-    --permission mailfathom.mail.ask \
+    --permission mailfathom.assistant.use \
     --permission 'mailfathom.*.read'
 ```
 
@@ -2380,7 +2380,7 @@ refusal saying which of the two each entry was:
 
 ```text
 This build publishes no permission named 'mailfathom.admin.reads'. This build publishes nothing in the reach of the
-pattern 'mailfathom.calendar.*'. A role lists published names, and patterns reaching at least one of them, in which
+pattern 'mailfathom.archive.*'. A role lists published names, and patterns reaching at least one of them, in which
 '*' is a whole dot-separated segment standing for one or more segments.
 ```
 
@@ -2398,7 +2398,7 @@ each pattern reaches, one line per role and pattern, then the roles carrying an 
 
 ```text
 A pattern holds what this deployment publishes in its reach, a permission a later release adds there included. What each reaches now:
-  0199c3d4-… (Reader): mailfathom.*.read reaches mailfathom.mail.read, mailfathom.mail.contacts.read, mailfathom.admin.read, mailfathom.admin.audit.read
+  0199c3d4-… (Reader): mailfathom.*.read reaches mailfathom.mail.read, mailfathom.contacts.read, mailfathom.admin.read, mailfathom.admin.audit.read
 ```
 
 What a pattern reaches is the answer of the build the deployment runs, so the same role reads differently after an
@@ -2637,7 +2637,7 @@ given one that can mint a way into a mailbox. Each route is [checked at a scope]
 covering the user it names, so an organization's administrator administers the credentials of its members and nobody
 else's. **Provisioning, rotating, and enabling one also needs every name its user holds**, because placing a credential
 is a way in as that user: every administrative name, held by the caller at a scope covering each scope the user holds
-it at, and every mail name, held at all, since a mail name's scope is never read. So a caller kept to
+it at, and every user-facing name, held at all, since a user-facing name's scope is never read. So a caller kept to
 `mailfathom.admin.credentials.write` cannot mint itself, or a root, a key that administers with everything that user
 holds; an organization's administrator cannot set a password for a member who holds a name over the whole deployment;
 and an administrator whose own roles grant no `mailfathom.mail.send` cannot place a way in as somebody who sends. Each

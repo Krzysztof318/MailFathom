@@ -635,7 +635,7 @@ public sealed class MailTimelineBrowserTests
         // Arrange
         var browser = BrowserOver(
             new InMemoryStoredEmailTimeline().WithAll(SyntheticEmailSummaries.CreateDailyRun(2, FirstJuly)),
-            authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailAsk));
+            authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.AssistantUse));
 
         // Act
         var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
