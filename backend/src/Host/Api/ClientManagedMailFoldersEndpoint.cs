@@ -250,6 +250,7 @@ internal static class ClientManagedMailFoldersEndpoint
             MailFolderActRefusal.TooManyFolders => (StatusCodes.Status409Conflict, $"An account holds at most {LocalMailFolderTree.MaximumFolders} folders."),
             MailFolderActRefusal.RoleAlreadyPlayed => (StatusCodes.Status409Conflict, "The account already has a folder for that role, and one account has at most one folder per role."),
             MailFolderActRefusal.NotDeclaredByTheAccount => (StatusCodes.Status409Conflict, "This folder is one the deployment's own configuration states, so it is changed by whoever administers the deployment rather than here."),
+            MailFolderActRefusal.FoldersHeldByPolicy => (StatusCodes.Status409Conflict, "A settings policy holds this account's list of folders, so a folder is added to it by whoever administers the organization or the deployment rather than here. Nothing was changed."),
             MailFolderActRefusal.ServerRefused => (StatusCodes.Status502BadGateway, "The account's mail server refused the act, and nothing was changed."),
             MailFolderActRefusal.ServerUnavailable => (StatusCodes.Status503ServiceUnavailable, "The account's mail server did not answer, and nothing was changed."),
             MailFolderActRefusal.NotRecorded => (StatusCodes.Status500InternalServerError, "The act reached the account's mail server and MailFathom could not record it. Read the folders again before asking for anything else."),

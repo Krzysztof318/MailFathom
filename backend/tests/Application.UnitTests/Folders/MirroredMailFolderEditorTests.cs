@@ -72,6 +72,45 @@ public sealed class MirroredMailFolderEditorTests
         Assert.Equal(["Projects", "Shared", "Trash"], management.Folders.Select(folder => folder.Name));
     }
 
+    /// <summary>A creation has no declared folder to be refused over, so a record taking none is asked about before the server is.</summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData(MailFolderSpecialUse.Archive)]
+    public async Task CreateAsync_AnAccountWhoseRecordTakesNoNewFolder_IsRefusedAndReachesNoServer(MailFolderSpecialUse? role)
+    {
+        // Arrange
+        await using var deployment = new EditorDeployment();
+        deployment.CreatesAt("Projects");
+        deployment.Declarations.DeclarationRefusal = MailFolderActRefusal.FoldersHeldByPolicy;
+
+        // Act
+        var outcome = await deployment.Editor.CreateAsync(Account, parentAlias: null, "Projects", role, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailFolderActRefusal.FoldersHeldByPolicy, outcome.Refusal);
+        Assert.Empty(deployment.RemoteCreator.ReceivedCalls());
+        Assert.Empty(deployment.Log);
+        Assert.Empty(deployment.Channel.Published);
+    }
+
+    /// <summary>A control that can only fail is not offered: neither the act nor a role a creation might name.</summary>
+    [Fact]
+    public async Task ReadAsync_AnAccountWhoseRecordTakesNoNewFolder_OffersNeitherCreateNorARole()
+    {
+        // Arrange
+        await using var deployment = new EditorDeployment();
+        deployment.Declares(MailFolderMapping.ToRemotePath(Projects, RemoteFolderPath.Create("Projects", '/')));
+        deployment.Declarations.DeclarationRefusal = MailFolderActRefusal.FoldersHeldByPolicy;
+
+        // Act
+        var management = await deployment.Editor.ReadAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(management.AllowedActs);
+        Assert.Empty(management.CreatableRoles);
+        Assert.Equal(["Projects"], management.Folders.Select(folder => folder.Name));
+    }
+
     [Fact]
     public async Task CreateAsync_AnOrdinaryFolder_CreatesItOnTheServerAndThenDeclaresIt()
     {
@@ -551,10 +590,18 @@ public sealed class MirroredMailFolderEditorTests
         /// <summary>The token each write was given, which is how a test reads whether the write could have been cancelled.</summary>
         internal List<CancellationToken> WriteTokens { get; } = [];
 
+        /// <summary>Why the record takes no new folder, which a test states to stand for a settings policy holding the list.</summary>
+        internal MailFolderActRefusal? DeclarationRefusal { get; set; }
+
         public Task<IReadOnlySet<MailFolderAlias>> AliasesTheAccountDeclaresAsync(
             MailAccountId accountId,
             CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlySet<MailFolderAlias>>(this.Declared);
+
+        public Task<MailFolderActRefusal?> FindDeclarationRefusalAsync(
+            MailAccountId accountId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(this.DeclarationRefusal);
 
         public Task<MailFolderDeclarationOutcome> DeclareAsync(
             MailAccountId accountId,
