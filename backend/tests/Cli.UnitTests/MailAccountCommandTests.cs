@@ -166,6 +166,7 @@ public sealed class MailAccountCommandTests : IDisposable
             "  Host: imap.corp.example.test  [OrganizationForced, held by the organization, not changeable while the policy forces it]",
             this.harness.Console.Lines);
         Assert.Contains("  Port: (nothing stated)  [BuiltIn]", this.harness.Console.Lines);
+        Assert.Contains("  Secrets:Password: (not shown)  [Record]", this.harness.Console.Lines);
         Assert.Contains(this.harness.Console.Lines, line => line.StartsWith("  DisplayName: Work", StringComparison.Ordinal));
         Assert.DoesNotContain(FakeMailAccountDeployment.Declaration, this.harness.Console.Lines);
         Assert.DoesNotContain(this.harness.Console.Lines, line => line.Contains('\u001b', StringComparison.Ordinal));

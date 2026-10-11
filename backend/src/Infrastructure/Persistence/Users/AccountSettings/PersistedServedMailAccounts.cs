@@ -22,8 +22,9 @@ namespace MailFathom.Infrastructure.Persistence.Users.AccountSettings;
 /// <para>
 /// A singleton over the pool rather than a scoped context, because what asks is as often a singleton — the scanning
 /// postures, the reload of the rule set — as a work unit, and every answer is one short statement that joins no
-/// transaction. The statements are written out rather than composed, so what runs against the database is exactly what
-/// is read here.
+/// transaction, or two where the records are handed on with the settings policies governing them. The statements are
+/// written out rather than composed, so what runs against the database is exactly what is read here and in
+/// <see cref="GoverningSettingsPolicyStatements" />.
 /// </para>
 /// <para>
 /// The served predicate is one fragment every statement shares, which is what keeps every answer about the same set of
@@ -205,20 +206,19 @@ internal sealed class PersistedServedMailAccounts(
         }
 
         // What an account declares is its settings as the policies governing it resolve them, so each record is
-        // handed on with the policies of its own organization.
-        // ponytail: one statement per organization holding a served account. Read every stored policy in one
-        // statement if a deployment of many organizations measures this read slow.
-        var policies = new Dictionary<Guid, GoverningSettingsPolicies>();
-
-        foreach (var organization in records.Select(static record => record.OrganizationId).Distinct())
-        {
-            policies[organization ?? Guid.Empty] = await GoverningSettingsPolicyStatements.ReadAsync(
-                connection,
-                transaction: null,
-                organization,
-                this.CommandTimeoutSeconds,
-                cancellationToken);
-        }
+        // handed on with the policies of its own organization, read for all of them in one second statement.
+        var stored = await GoverningSettingsPolicyStatements.ReadStoredAsync(
+            connection,
+            transaction: null,
+            [.. records.Select(static record => record.OrganizationId).OfType<Guid>().Distinct()],
+            this.CommandTimeoutSeconds,
+            cancellationToken);
+        var policies = records
+            .Select(static record => record.OrganizationId)
+            .Distinct()
+            .ToDictionary(
+                static organization => organization ?? Guid.Empty,
+                organization => GoverningSettingsPolicies.Among(stored, organization));
 
         return
         [

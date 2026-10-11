@@ -31,8 +31,10 @@ namespace MailFathom.Host.Configuration.Policies;
 /// does. Which settings decide that is not enumerated, for the reason the per-account bound does not enumerate them.
 /// </para>
 /// <para>
-/// An account one of whose candidate policies this build does not read refuses nothing and keeps its columns: there
-/// is nothing to derive them from.
+/// An account one of whose candidate policies this build does not read keeps its columns: there is nothing to
+/// derive them from. It refuses nothing to a grant held at the deployment. To a grant held below it, it refuses an
+/// account naming a secret that is not its users', because what the write would move on that account cannot be told
+/// and a replica that does read the policy would serve whatever it moved.
 /// </para>
 /// </remarks>
 // ponytail: an account whose effective settings a write moves is bound four times, twice for what it refuses and
@@ -85,7 +87,13 @@ internal sealed class MailAccountPolicyJudge(UserAccountDocumentBinder binder) :
     {
         if (candidate is null)
         {
-            return Unmoved;
+            // Compared against settings stating nothing, so every secret the declaration itself names is asked about:
+            // a secret block takes no policy value, which makes the declaration's the ones the account is served.
+            return underANarrowerGrant
+                && UserRecordAdministration.FindSecretsANarrowerScopeMayNotName(governed.Users, "{}", governed.Account.Document)
+                    is { Count: > 0 } namedBeyondTheGrant
+                    ? new MailAccountPolicyJudgement(Settings: null, namedBeyondTheGrant)
+                    : Unmoved;
         }
 
         var account = governed.Account;

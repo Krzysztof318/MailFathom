@@ -185,7 +185,8 @@ internal static class FakeMailAccountDeployment
           "properties":[
             {"path":"DisplayName","value":"Work\u001b[2J\u202e","source":"Record","heldBy":null,"changeable":true},
             {"path":"Host","value":"imap.corp.example.test","source":"OrganizationForced","heldBy":"Organization","changeable":false},
-            {"path":"Port","value":null,"source":"BuiltIn","heldBy":null,"changeable":true}],
+            {"path":"Port","value":null,"source":"BuiltIn","heldBy":null,"changeable":true},
+            {"path":"Secrets:Password","value":null,"source":"Record","heldBy":null,"changeable":true}],
           "unresolved":null}
           """);
 

@@ -2289,7 +2289,10 @@ themselves, and saves the whole of `Users` and `MailAccounts:Editing`; a grant a
 every policy and is not asked this at all. What an account was served under a policy in force that the answering
 replica cannot judge whole — one a newer build stored while two builds were serving during an upgrade — is unknown
 to it, so replacing such a policy under a grant held at the organization counts as moving every account the policy
-governs, and is refused over each that names a secret that is not its users'.
+governs, and is refused over each that names a secret that is not its users'. The same holds the other way round:
+where the policy the save would leave governing an account cannot be judged whole — an organization's policy saved
+while the deployment's is one this replica does not read — what the save would move is unknown, a replica that does
+read it would serve whatever that is, and the save is refused over each such account.
 
 **A stored policy past the size above is refused rather than read.** No save produces one, so it is a row written
 beside MailFathom. Every route that reads it — both `GET`s, and both `POST`s, which read the policy in force before
@@ -2542,7 +2545,9 @@ caller's grant does not carry `mailfathom.admin.configuration.write` over the ac
 `DisplayName` are answered from the account's row, and a secret block is listed with no value: its reference is
 redacted in the declaration and does not come back through this list. Where a policy governing the account is one
 this build does not read, `properties` is empty and `unresolved` carries the sentence naming which. `mfctl account
-show --effective` prints the list in place of the declaration, one setting a line:
+show --effective` prints the list in place of the declaration, one setting a line, with `(nothing stated)` for a
+setting nothing supplies and `(not shown)` for one that is supplied and answered without its value, which is what a
+secret block the account states prints as:
 
 ```console
 $ mfctl account show --account 5b0c... --effective
@@ -2553,6 +2558,7 @@ $ mfctl account show --account 5b0c... --effective
   Host: imap.corp.example.test  [OrganizationForced, held by the organization, not changeable while the policy forces it]
   Mode: Polling  [BuiltIn]
   Port: 993  [DeploymentDefault]
+  Secrets:Password: (not shown)  [Record]
 ```
 
 **Moving an account changes which policy governs it, and the move is judged like a policy write.** `mfctl account
@@ -2560,7 +2566,9 @@ set-organization` resolves the account under the policy of the organization it w
 deployment's alone, for a move out of every one — inside the transaction that moves it. An account that policy would
 leave one no start would serve is not moved and is answered `409` with what it would be left without; so is an
 account naming a secret not provisioned for one of its users, where the move is made under a grant held below the
-deployment and would change what the account is served. Nothing is rewritten on the account to make a move pass,
+deployment and would change what the account is served. As with a policy write, what refuses a move is what the move
+breaks: an account no start would serve where it stands is moved wherever the target leaves it no worse, and one the
+target leaves served exactly what it was is not asked at all. Nothing is rewritten on the account to make a move pass,
 and a move that commits rewrites the columns the deployment reads across accounts in the same transaction.
 
 **Ending an assignment erases mail, and ending the last one erases the account.** `mfctl account unassign` erases the

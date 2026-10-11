@@ -73,7 +73,7 @@ public sealed class MailAccountPolicyJudgeTests
         Assert.Equal(MailSynchronizationMode.Push, judgement.Settings?.SynchronizationMode);
     }
 
-    /// <summary>A candidate policy this build does not read resolves nothing, so there is nothing to refuse over and nothing to derive a column from.</summary>
+    /// <summary>A candidate policy this build does not read resolves nothing, so a grant held at the deployment is refused nothing over it and there is nothing to derive a column from.</summary>
     [Fact]
     public void Judge_ACandidatePolicyThisBuildDoesNotRead_RefusesNothingAndMovesNoColumn()
     {
@@ -82,6 +82,34 @@ public sealed class MailAccountPolicyJudgeTests
 
         // Assert
         Assert.Empty(judgement.Refusals);
+        Assert.Null(judgement.Settings);
+    }
+
+    /// <summary>
+    /// Under a grant held below the deployment, a candidate policy this build does not read is not the benefit of the
+    /// doubt: what the write would move cannot be told, a replica that reads the policy would serve it, and so an
+    /// account naming a secret that is not its users' refuses the write while one naming only its user's does not.
+    /// </summary>
+    [Theory]
+    [InlineData("file:/run/secrets/shared-password", true)]
+    [InlineData(null, false)]
+    public void Judge_ACandidatePolicyThisBuildDoesNotReadUnderANarrowerGrant_IsRefusedOverAnAccountNamingASecretNotItsUsers(
+        string? secretReference,
+        bool refused)
+    {
+        // Arrange
+        var account = Mailbox(
+            secretReference: secretReference ?? $"file:/run/secrets/user-{SyntheticUser.Deployment.Value:D}-work");
+
+        // Act
+        var judgement = Judge(
+            account,
+            StatedPolicies.Governing(),
+            StatedPolicies.Governing(deployment: NotAPolicy, organization: ForcingPush),
+            underANarrowerGrant: true);
+
+        // Assert
+        Assert.Equal(refused, judgement.Refusals.Count > 0);
         Assert.Null(judgement.Settings);
     }
 

@@ -15,6 +15,9 @@ namespace MailFathom.Cli.Commands;
 /// </remarks>
 internal static class EffectiveSettingsOutput
 {
+    /// <summary>The source the deployment answers for a setting nothing states, which the build's own default supplies.</summary>
+    private const string BuiltIn = "BuiltIn";
+
     /// <summary>Writes a record as the settings policies governing it resolve it.</summary>
     /// <param name="console">Where the record is written.</param>
     /// <param name="unresolved">The sentence saying which settings policy the deployment could not read, where the properties were not resolved.</param>
@@ -41,13 +44,14 @@ internal static class EffectiveSettingsOutput
     /// <remarks>
     /// Every part the deployment answered with is reduced before it is written. A value is what somebody stated — a
     /// name is one a person sets for themselves — so it could otherwise carry the characters a terminal acts on into
-    /// an administrator's listing.
+    /// an administrator's listing. A setting answered without a value that something nonetheless supplied is one
+    /// the deployment withholds, a secret reference above all, and is printed as withheld rather than as unstated.
     /// </remarks>
     private static string Describe(UserRecordProperty property)
     {
         var value = property.Value is { ValueKind: not (JsonValueKind.Null or JsonValueKind.Undefined) } stated
             ? ConsoleSafeText.Sanitize(stated.ValueKind == JsonValueKind.String ? stated.GetString() : stated.GetRawText())
-            : "(nothing stated)";
+            : string.Equals(property.Source, BuiltIn, StringComparison.Ordinal) ? "(nothing stated)" : "(not shown)";
         var heldBy = property.HeldBy is { } holder
             ? $", held by the {ConsoleSafeText.Sanitize(holder.ToLowerInvariant())}"
             : string.Empty;
