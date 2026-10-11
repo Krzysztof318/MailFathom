@@ -223,7 +223,7 @@ MailFathomDesign.artboards.toasts = (DCLogic, React) => {
           return {
             name: s.name, kind: s.kind, desc: s.desc, title: s.title, body: s.body,
             hasBody: !!s.body, hasAction: !!s.action, actionLabel: s.action,
-            chipStyle: "font-size:11px;padding:3px 9px;border-radius:12px;background:;font-weight:600;" + K.soft + ";color:" + K.c,
+            chipStyle: "font-size:11px;padding:3px 9px;border-radius:12px;font-weight:600;background:" + K.soft + ";color:" + K.c,
             demo: Object.assign({}, v, { hasBar: v.hasBar && bar }),
             spawn: () => {
               if (s.kind === "loading") {

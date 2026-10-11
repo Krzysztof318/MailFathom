@@ -197,7 +197,7 @@ MailFathomDesign.artboards.aiBlocks = (DCLogic, React) => {
               : "border:1px solid var(--line);background:var(--panel);"),
           phaseLabel: pending ? "pending · needs confirmation" : declined ? "declined" : s.failed ? "accepted · not done" : "accepted",
           phaseIcon: pending ? "help" : declined ? "block" : s.failed ? "error" : "check_circle",
-          phaseIconStyle: mIcon(13, "inherit"),
+          phaseIconStyle: mIcon(14, "inherit"),
           phaseChipStyle: "display:inline-flex;align-items:center;gap:5px;border-radius:16px;padding:3px 9px;font-size:11px;white-space:nowrap;" +
             (pending ? "color:var(--accent-d);background:var(--panel);border:1px solid var(--accent-line);"
               : s.failed ? "color:var(--warn-text);background:var(--warn-soft);border:1px solid var(--warn-soft);"
@@ -228,7 +228,7 @@ MailFathomDesign.artboards.aiBlocks = (DCLogic, React) => {
           hasEffect: !!s.effect,
           effect: s.effect || "",
           effectStyle: "display:flex;align-items:flex-start;gap:7px;font-size:13px;color:var(--muted);text-wrap:pretty",
-          effectIconStyle: mIcon(15, "var(--muted)"),
+          effectIconStyle: mIcon(16, "var(--muted)"),
           partialNote: s.type === "event" ? "One calendar has not answered - a conflict may still appear."
             : s.type === "draft" ? "The closing paragraph is still being written."
             : "Part of the source data is still being read.",

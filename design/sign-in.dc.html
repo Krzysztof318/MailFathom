@@ -111,7 +111,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
 
           <sc-if value="{{ showOauth }}" hint-placeholder-val="{{ true }}">
             <div style="display:flex;flex-direction:column;gap:9px">
-                <div style="font-size:12px;font-weight:500;letter-spacing:0.02em;color:var(--faint)">Sign in with a provider</div>
+                <div style="font-size:12px;font-weight:500;color:var(--faint)">Sign in with a provider</div>
                 <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
                   <sc-for list="{{ oauthBtns }}" as="ob" hint-placeholder-count="3">
                     <div onClick="{{ ob.click }}" title="{{ ob.title }}" style="{{ ob.style }}" style-hover="cursor:pointer;border-color:var(--border2);background:var(--hover)">

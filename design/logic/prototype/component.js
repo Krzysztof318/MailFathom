@@ -1808,7 +1808,7 @@ MailFathomDesign.artboards.prototype = (DCLogic, React) => {
         hasChip: !!chip,
         chipLabel: chip ? chip.label : "",
         chipIcon: chip ? chip.icon : "",
-        chipIconStyle: icon(13, "inherit"),
+        chipIconStyle: icon(14, "inherit"),
         chipStyle: "margin-left:auto;display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:3px 9px;font-size:11px;white-space:nowrap;" +
           (phase === "pending" ? "color:var(--accent-d);background:var(--panel);border:1px solid var(--accent-line);"
             : failed ? "color:var(--text);background:var(--hl);border:1px solid var(--hl-line);"
@@ -1840,7 +1840,7 @@ MailFathomDesign.artboards.prototype = (DCLogic, React) => {
         retryAria: "Try again: " + (LABEL[b.type] || "block").toLowerCase(),
         retryStyle: btn("quiet"),
         noteStyle: "display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted)",
-        noteIconStyle: icon(15, "var(--muted)"),
+        noteIconStyle: icon(16, "var(--muted)"),
         partialNote: b.partialNote || "Still being read - more may appear.",
 
         isTimeline: b.type === "timeline",
@@ -1873,7 +1873,7 @@ MailFathomDesign.artboards.prototype = (DCLogic, React) => {
         })) : b.type === "attachments" ? (b.items || []).map((f, i) => ({
           name: f.name, meta: f.meta, icon: f.icon,
           style: "display:flex;align-items:center;gap:10px;padding:8px 0;" + (i ? "border-top:1px solid var(--line2);" : ""),
-          iconStyle: icon(19, "var(--muted)"),
+          iconStyle: icon(20, "var(--muted)"),
           nameStyle: "font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap",
           metaStyle: "font-size:12px;color:var(--faint)",
         })) : [],
@@ -1907,7 +1907,7 @@ MailFathomDesign.artboards.prototype = (DCLogic, React) => {
         hasEffect: !!b.effect,
         effect: b.effect || "",
         effectStyle: "display:flex;align-items:flex-start;gap:7px;font-size:13px;color:var(--muted);text-wrap:pretty",
-        effectIconStyle: icon(15, "var(--muted)"),
+        effectIconStyle: icon(16, "var(--muted)"),
 
         editing: editing,
         notEditing: !editing,
@@ -3608,7 +3608,7 @@ MailFathomDesign.artboards.prototype = (DCLogic, React) => {
         agDayColStyle: isMobile
           ? "display:flex;align-items:baseline;gap:8px"
           : "flex:0 0 78px;display:flex;flex-direction:column;gap:2px",
-        agDowStyle: "font-family:'Geist',system-ui,sans-serif;color:var(--muted);font-size:;font-weight:600;" + (isMobile ? 11 : 10) + "px",
+        agDowStyle: "font-family:'Geist',system-ui,sans-serif;color:var(--muted);font-weight:600;font-size:11px",
         srcLinkStyle: touch
           ? "align-self:flex-start;display:inline-flex;align-items:center;gap:7px;min-height:40px;max-width:100%;padding:0 12px;border:1px solid var(--line);border-radius:12px;background:var(--sub);font-size:13px;color:var(--accent-d);overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
           : "align-self:flex-start;display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--accent-d);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap",
@@ -4473,7 +4473,7 @@ MailFathomDesign.artboards.prototype = (DCLogic, React) => {
         composeTitle: (st.composeMin ? composeKind + " - collapsed" : composeKind),
         composeToChips: composeTo.map(n => ({ name: n })),
         ccOpen: !!st.ccOpen,
-        ccTitle: st.ccOpen ? "Hide CC and BCC fields" : "Show CC and BCC fields",
+        ccTitle: st.ccOpen ? "Hide Cc and Bcc fields" : "Show Cc and Bcc fields",
         ccToggleStyle: "font-size:12px;padding:2px 8px;border-radius:8px;" + (st.ccOpen ? "color:var(--accent-d);background:var(--accent-soft)" : "color:var(--muted)"),
         toggleCc: () => this.setState(s => ({ ccOpen: !s.ccOpen })),
         composeCcChips: (st.composeCc || []).map((n, i) => ({ name: n, remove: () => this.setState(s => ({ composeCc: (s.composeCc || []).filter((_, j) => j !== i) })) })),

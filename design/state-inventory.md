@@ -57,14 +57,15 @@ rather than per screen, and the scales below are what every inline value in an a
 | Labels | every section caption | Sentence case at weight 600, never capitals and never tracked out |
 
 A message shown as its sender wrote it is somebody else's HTML, so the bodies in `data/prototype/mail-bodies.js` follow
-none of these scales and are not meant to.
+none of these scales and are not meant to. Neither does an opened attachment: its page is the document's own, typed in
+`data/prototype/documents.js` and sized by `docZoom`, so its lines land wherever the zoom puts them.
 
 Three reactions are stated there as well, and no rendered preview shows any of them at rest:
 
 | State | Selector | What happens |
 |---|---|---|
 | Pressed | `:active` on a `button` and on `role="button"`, `"tab"` and `"menuitem"` | the control scales to 0.98 over 140 ms. A list row does not: it is swiped and long-pressed, and shrinking under the finger would read as a fault |
-| Keyboard focus | `:focus-visible` on a control and on anything carrying `tabindex` | a 2 px `--accent` outline, 2 px off the edge. A text field keeps its own treatment instead — its border turns `--accent` (`style-focus`) |
+| Keyboard focus | `:focus-visible` on a control and on anything carrying `tabindex` | a 2 px `--accent` outline, 2 px off the edge. A text field keeps its own treatment instead — its border turns `--accent` (`style-focus`), and one drawn with no edge of its own hands the outline to the box around it, inset. The message body being written shows its caret and nothing else |
 | Less motion asked for | `prefers-reduced-motion: reduce` | every animation and transition ends at once: the pulses, the shimmer, the row and toast movement, and the press itself |
 
 ## Discover — `isDiscover`
@@ -164,7 +165,7 @@ and deleting it cannot be undone.*
 | State | Flag | Reveal |
 |---|---|---|
 | AI summary | `aiSumOpen` | the `auto_awesome` control on a message row, or *AI summary* at the top of that row's context menu |
-| Its cards | `aiSumCards` | **three at most**, each a heading, the claim, a *Why:* line, a model chip reading *Model — mailfathom-email-enrichment*, and the fragment of the message it rests on |
+| Its cards | `aiSumCards` | **three at most**, each a heading, the claim, a *Why:* line, a model chip reading *Model - mailfathom-email-enrichment*, and the fragment of the message it rests on |
 | Which headings exist | — | *What is settled*, *What is still open*, *What is the commitment*, *What the deadline is*, *What changed between versions* for a `Version difference` state, and *What this is about* where the list's own reading fills a card out. The cards follow the thread's state list and stop at three, so a fourth state never reaches the dialog — which is where both seeded `Version difference` states sit |
 | Jump to the source | `ac.showSrc` | only where the thread holds more than one message — *Open message N in the thread* |
 
@@ -517,7 +518,7 @@ control is marked `data-nodrag` so pressing it closes the panel instead of start
 | The address is fixed | the `E-mail address` input | it is `readOnly` with `tabIndex` `-1`, drawn on `--bg` rather than `--sub`, under *The address identifies the account and cannot be changed here.* |
 | Save refused | `acctSaveStyle` | the display name or the address is empty — the button is drawn flat and refuses the pointer |
 | The password shown | `acctPassType` / `acctPassIcon` | the `visibility` control beside the field |
-| Login left empty | `acctLoginHint` | nothing typed in LOGIN — *Empty = the e-mail address is used as the login.* |
+| Login left empty | `acctLoginHint` | nothing typed in *Login* — *Empty = the e-mail address is used as the login.* |
 | Connection test refused | `acctTestBad` | *Test connection* while a host, a port, a login or a password is missing — it names every field still empty |
 | Connection test passed | `acctTestOk` | *Test connection* with all six filled — it names the two hosts |
 | An earliest date set | `acctEarliestClearShown` / `acctEarliestHint` | the date field — the hint states that older mail stays on the mail server, and reverts to *No limit* when cleared |

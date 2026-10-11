@@ -1102,16 +1102,16 @@ Project repository: https://github.com/Krzysztof318/MailFathom
           <sc-if value="{{ composeExpanded }}" hint-placeholder-val="{{ true }}">
             <div style="display:flex;flex-direction:column;min-height:0;flex:1">
               <div style="display:flex;align-items:center;gap:10px;padding:9px 15px;border-bottom:1px solid var(--line2)">
-                <span style="font-size:12px;color:var(--muted);width:88px">Do</span>
+                <span style="font-size:12px;color:var(--muted);width:88px">To</span>
                 <sc-for list="{{ composeToChips }}" as="ct" hint-placeholder-count="1">
                   <span style="display:flex;align-items:center;gap:7px;font-size:13px;background:var(--rail);border:1px solid var(--line);border-radius:12px;padding:3px 10px">{{ ct.name }} <span style="color:var(--faint)"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:16px;line-height:1">close</span></span></span>
                 </sc-for>
                 <span style="flex:1;font-size:13px;color:var(--faint)">add a recipient…</span>
-                <span onClick="{{ toggleCc }}" title="{{ ccTitle }}" style="{{ ccToggleStyle }}" style-hover="cursor:pointer;color:var(--text)">CC · BCC</span>
+                <span onClick="{{ toggleCc }}" title="{{ ccTitle }}" style="{{ ccToggleStyle }}" style-hover="cursor:pointer;color:var(--text)">Cc · Bcc</span>
               </div>
               <sc-if value="{{ ccOpen }}" hint-placeholder-val="{{ false }}">
                 <div style="display:flex;align-items:center;gap:10px;padding:9px 15px;border-bottom:1px solid var(--line2)">
-                  <span style="font-size:12px;color:var(--muted);width:88px">DW</span>
+                  <span style="font-size:12px;color:var(--muted);width:88px">Cc</span>
                   <sc-for list="{{ composeCcChips }}" as="cc" hint-placeholder-count="0">
                     <span style="display:flex;align-items:center;gap:7px;font-size:13px;background:var(--rail);border:1px solid var(--line);border-radius:12px;padding:3px 10px">{{ cc.name }} <span onClick="{{ cc.remove }}" style="color:var(--faint)" style-hover="cursor:pointer;color:var(--text)"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:16px;line-height:1">close</span></span></span>
                   </sc-for>
@@ -1122,7 +1122,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
                   <span style="flex:1;min-width:0;font-size:12px;line-height:1.45;color:var(--text2);text-wrap:pretty">Every recipient can see CC addresses. To hide recipients from each other, use BCC.</span>
                 </div>
                 <div style="display:flex;align-items:center;gap:10px;padding:9px 15px;border-bottom:1px solid var(--line2)">
-                  <span style="font-size:12px;color:var(--muted);width:88px">UDW</span>
+                  <span style="font-size:12px;color:var(--muted);width:88px">Bcc</span>
                   <sc-for list="{{ composeBccChips }}" as="bc" hint-placeholder-count="0">
                     <span style="display:flex;align-items:center;gap:7px;font-size:13px;background:var(--rail);border:1px solid var(--line);border-radius:12px;padding:3px 10px">{{ bc.name }} <span onClick="{{ bc.remove }}" style="color:var(--faint)" style-hover="cursor:pointer;color:var(--text)"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:16px;line-height:1">close</span></span></span>
                   </sc-for>
@@ -1998,7 +1998,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
               </sc-for>
             </div>
             <div style="{{ remRowStyle }}">
-              <input ref="{{ tkRem.numRef }}" type="number" min="1" placeholder="e.g. 45" style="width:78px;font-family:inherit;font-size:13px;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 9px;outline:none" />
+              <input ref="{{ tkRem.numRef }}" type="number" min="1" placeholder="e.g. 45" style="width:78px;font-family:inherit;font-size:13px;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 9px;outline:none" style-focus="border-color:var(--accent)" />
               <div style="display:flex;gap:2px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:2px">
                 <sc-for list="{{ tkRem.units }}" as="u" hint-placeholder-count="3">
                   <div onClick="{{ u.pick }}" style="{{ u.style }}" style-hover="cursor:pointer">{{ u.label }}</div>
@@ -2071,7 +2071,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
             </sc-for>
           </div>
           <div style="{{ remRowStyle }}">
-            <input ref="{{ remModal.numRef }}" type="number" min="1" placeholder="e.g. 45" style="width:78px;font-family:inherit;font-size:13px;color:var(--text);background:var(--sub);border:1px solid var(--line);border-radius:8px;padding:7px 9px;outline:none" />
+            <input ref="{{ remModal.numRef }}" type="number" min="1" placeholder="e.g. 45" style="width:78px;font-family:inherit;font-size:13px;color:var(--text);background:var(--sub);border:1px solid var(--line);border-radius:8px;padding:7px 9px;outline:none" style-focus="border-color:var(--accent)" />
             <div style="display:flex;gap:2px;background:var(--sub);border:1px solid var(--line);border-radius:8px;padding:2px">
               <sc-for list="{{ remModal.units }}" as="u" hint-placeholder-count="3">
                 <div onClick="{{ u.pick }}" style="{{ u.style }}" style-hover="cursor:pointer">{{ u.label }}</div>
@@ -2082,7 +2082,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
           </div>
           <sc-if value="{{ remModal.any }}" hint-placeholder-val="{{ true }}">
             <div style="display:flex;flex-direction:column;gap:7px;border-top:1px solid var(--line2);padding-top:12px">
-              <div style="font-family:'Geist',system-ui,sans-serif;font-size:11px;color:var(--muted);font-weight:600">SET</div>
+              <div style="font-family:'Geist',system-ui,sans-serif;font-size:11px;color:var(--muted);font-weight:600">Set</div>
               <div style="display:flex;flex-wrap:wrap;gap:6px">
                 <sc-for list="{{ remModal.list }}" as="r" hint-placeholder-count="2">
                   <span style="display:flex;align-items:center;gap:6px;font-size:12px;background:var(--sub);border:1px solid var(--accent-line);border-radius:12px;padding:4px 10px">{{ r.label }} <span onClick="{{ r.remove }}" style="color:var(--faint)" style-hover="cursor:pointer;color:var(--text)"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:16px;line-height:1">close</span></span></span>
@@ -2554,7 +2554,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
               </sc-for>
             </div>
             <div style="{{ remRowStyle }}">
-              <input ref="{{ evRem.numRef }}" type="number" min="1" placeholder="e.g. 90" style="width:78px;font-family:inherit;font-size:13px;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 9px;outline:none" />
+              <input ref="{{ evRem.numRef }}" type="number" min="1" placeholder="e.g. 90" style="width:78px;font-family:inherit;font-size:13px;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 9px;outline:none" style-focus="border-color:var(--accent)" />
               <div style="display:flex;gap:2px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:2px">
                 <sc-for list="{{ evRem.units }}" as="u" hint-placeholder-count="3">
                   <div onClick="{{ u.pick }}" style="{{ u.style }}" style-hover="cursor:pointer">{{ u.label }}</div>
@@ -2672,7 +2672,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
               <div style="font-size:13px;color:var(--faint)">The address identifies the account and cannot be changed here.</div>
             </div>
             <div style="display:flex;flex-direction:column;gap:4px">
-              <div style="font-family:'Geist',system-ui,sans-serif;font-size:12px;color:var(--faint);font-weight:600">LOGIN</div>
+              <div style="font-family:'Geist',system-ui,sans-serif;font-size:12px;color:var(--faint);font-weight:600">Login</div>
               <input value="{{ acctLogin }}" onChange="{{ onAcctLogin }}" placeholder="same as the e-mail address" style="width:100%;max-width:440px;box-sizing:border-box;font-family:inherit;font-size:14px;color:var(--text);background:var(--sub);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;outline:none" style-focus="border-color:var(--accent)" />
               <sc-if value="{{ acctLoginHint }}" hint-placeholder-val="{{ false }}">
                 <div style="font-size:13px;color:var(--faint)">{{ acctLoginHint }}</div>
@@ -2689,11 +2689,11 @@ Project repository: https://github.com/Krzysztof318/MailFathom
             <div style="font-family:'Geist',system-ui,sans-serif;font-size:12px;color:var(--faint);font-weight:600">Incoming mail - IMAP</div>
             <div style="display:flex;gap:7px;max-width:540px">
               <div style="flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:4px">
-                <div style="font-family:'Geist',system-ui,sans-serif;font-size:12px;color:var(--faint);font-weight:600">HOST</div>
+                <div style="font-family:'Geist',system-ui,sans-serif;font-size:12px;color:var(--faint);font-weight:600">Host</div>
                 <input value="{{ acctImapHost }}" onChange="{{ onAcctImapHost }}" placeholder="imap.company.com" style="width:100%;max-width:440px;box-sizing:border-box;font-family:inherit;font-size:14px;color:var(--text);background:var(--sub);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;outline:none" style-focus="border-color:var(--accent)" />
               </div>
               <div style="flex:0 0 80px;display:flex;flex-direction:column;gap:4px">
-                <div style="font-family:'Geist',system-ui,sans-serif;font-size:12px;color:var(--faint);font-weight:600">PORT</div>
+                <div style="font-family:'Geist',system-ui,sans-serif;font-size:12px;color:var(--faint);font-weight:600">Port</div>
                 <input value="{{ acctImapPort }}" onChange="{{ onAcctImapPort }}" placeholder="993" style="width:100%;max-width:440px;box-sizing:border-box;font-family:inherit;font-size:14px;color:var(--text);background:var(--sub);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;outline:none" style-focus="border-color:var(--accent)" />
               </div>
             </div>
@@ -2709,11 +2709,11 @@ Project repository: https://github.com/Krzysztof318/MailFathom
             <div style="font-family:'Geist',system-ui,sans-serif;font-size:12px;color:var(--faint);font-weight:600">Outgoing mail - SMTP</div>
             <div style="display:flex;gap:7px;max-width:540px">
               <div style="flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:4px">
-                <div style="font-family:'Geist',system-ui,sans-serif;font-size:12px;color:var(--faint);font-weight:600">HOST</div>
+                <div style="font-family:'Geist',system-ui,sans-serif;font-size:12px;color:var(--faint);font-weight:600">Host</div>
                 <input value="{{ acctSmtpHost }}" onChange="{{ onAcctSmtpHost }}" placeholder="smtp.company.com" style="width:100%;max-width:440px;box-sizing:border-box;font-family:inherit;font-size:14px;color:var(--text);background:var(--sub);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;outline:none" style-focus="border-color:var(--accent)" />
               </div>
               <div style="flex:0 0 80px;display:flex;flex-direction:column;gap:4px">
-                <div style="font-family:'Geist',system-ui,sans-serif;font-size:12px;color:var(--faint);font-weight:600">PORT</div>
+                <div style="font-family:'Geist',system-ui,sans-serif;font-size:12px;color:var(--faint);font-weight:600">Port</div>
                 <input value="{{ acctSmtpPort }}" onChange="{{ onAcctSmtpPort }}" placeholder="465" style="width:100%;max-width:440px;box-sizing:border-box;font-family:inherit;font-size:14px;color:var(--text);background:var(--sub);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;outline:none" style-focus="border-color:var(--accent)" />
               </div>
             </div>

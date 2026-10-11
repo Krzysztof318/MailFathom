@@ -27,6 +27,7 @@ h2 { font-size: 12px; font-weight: 600; color: var(--muted); margin: 0; }
 .chip { display: flex; align-items: center; gap: 5px; background: var(--accent-soft); color: var(--accent-d);
         border-radius: 6px; padding: 3px 8px; font-size: 13px; }
 .chip button { all: unset; line-height: 1; padding: 1px 3px; border-radius: 4px; cursor: pointer; }
+.chip button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .fold { color: var(--muted); font-size: 13px; }
 .rows { background: var(--panel); }
 .row { height: var(--row); border-bottom: 1px solid var(--line2); padding: 0 12px;

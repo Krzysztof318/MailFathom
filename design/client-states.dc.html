@@ -63,7 +63,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
   </sc-if>
 
   <sc-if value="{{ g.discover }}" hint-placeholder-val="{{ true }}">
-    <div style="font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding-top:18px;width:1100px;font-weight:600">1 · DISCOVER</div>
+    <div style="font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding-top:18px;width:1100px;font-weight:600">1 · Discover</div>
   </sc-if>
 
   <sc-if value="{{ show.d_refusal }}" hint-placeholder-val="{{ true }}">
@@ -466,7 +466,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
   </sc-if>
 
   <sc-if value="{{ g.mail }}" hint-placeholder-val="{{ true }}">
-    <div style="font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding-top:18px;width:1100px;font-weight:600">2 · MAIL</div>
+    <div style="font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding-top:18px;width:1100px;font-weight:600">2 · Mail</div>
   </sc-if>
 
   <sc-if value="{{ show.m_verdict }}" hint-placeholder-val="{{ true }}">
@@ -705,7 +705,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
       </div></sc-for>
     </div>
     <sc-for list="{{ vthemes }}" as="vt" hint-placeholder-count="1"><div data-theme="{{ vt.theme }}" style="{{ vt.style }}">
-      <div style="{{ vt.head }}">“AN ORDINARY FOLDER” CHOSEN · NAME AND INSIDE RETURN UNDER THE LIST</div>
+      <div style="{{ vt.head }}">“An ordinary folder” chosen · name and inside return under the list</div>
       <div style="width:440px;display:flex;flex-direction:column;gap:14px;padding:18px;background:var(--panel);border:1px solid var(--line);border-radius:12px;box-sizing:border-box">
         <div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:11px;color:var(--muted);font-weight:600">Kind of folder</span>
           <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--accent);background:var(--accent-soft);border-radius:8px"><span style="width:16px;height:16px;flex:0 0 16px;box-sizing:border-box;border-radius:50%;border:5px solid var(--accent);background:var(--panel)"></span><span style="font-size:14px;font-weight:600">An ordinary folder</span></div>
@@ -835,7 +835,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
   </sc-if>
 
   <sc-if value="{{ g.work }}" hint-placeholder-val="{{ true }}">
-    <div style="font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding-top:18px;width:1100px;font-weight:600">3 · TASKS, CALENDAR, PEOPLE</div>
+    <div style="font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding-top:18px;width:1100px;font-weight:600">3 · Tasks, calendar, people</div>
   </sc-if>
 
   <sc-if value="{{ show.c_edit }}" hint-placeholder-val="{{ true }}">
@@ -857,7 +857,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
                 <div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:11px;color:var(--muted);font-weight:600">Title</span><div style="font-size:14px;background:var(--sub);border:1px solid var(--line);border-radius:8px;padding:10px 12px">{{ sample.work.eventTitle }}</div></div>
                 <div style="display:flex;align-items:center;gap:10px;font-size:14px"><span role="checkbox" aria-checked="false" style="width:18px;height:18px;flex:0 0 18px;box-sizing:border-box;border-radius:6px;border:1.5px solid var(--border2);background:var(--panel)"></span>All day</div>
                 <div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:11px;color:var(--muted);font-weight:600">Starts</span><div style="display:flex;gap:10px"><div style="flex:1;min-width:0;font-size:14px;background:var(--sub);border:1px solid var(--line);border-radius:8px;padding:10px 12px">{{ sample.work.eventDay }}</div><div style="flex:0 0 96px;font-size:14px;background:var(--sub);border:1px solid var(--accent);border-radius:8px;padding:10px 12px;font-variant-numeric:tabular-nums">{{ sample.work.eventStartTime }}</div></div></div>
-                <div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:11px;color:var(--muted);font-weight:600">ENDS</span><div style="display:flex;gap:10px"><div style="flex:1;min-width:0;font-size:14px;background:var(--sub);border:1px solid var(--line);border-radius:8px;padding:10px 12px">{{ sample.work.eventDay }}</div><div style="flex:0 0 96px;font-size:14px;background:var(--sub);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-variant-numeric:tabular-nums">{{ sample.work.eventEndTime }}</div></div><span style="font-size:12px;color:var(--muted)">{{ sample.work.eventDuration }}</span></div>
+                <div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:11px;color:var(--muted);font-weight:600">Ends</span><div style="display:flex;gap:10px"><div style="flex:1;min-width:0;font-size:14px;background:var(--sub);border:1px solid var(--line);border-radius:8px;padding:10px 12px">{{ sample.work.eventDay }}</div><div style="flex:0 0 96px;font-size:14px;background:var(--sub);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-variant-numeric:tabular-nums">{{ sample.work.eventEndTime }}</div></div><span style="font-size:12px;color:var(--muted)">{{ sample.work.eventDuration }}</span></div>
               </div>
               <div style="display:flex;gap:9px;justify-content:flex-end;padding:0 18px 18px;margin-top:auto"><div style="{{ f.btnS }}">Cancel</div><div style="{{ f.btnP }}">Save</div></div>
             </div>
@@ -870,12 +870,12 @@ Project repository: https://github.com/Krzysztof318/MailFathom
       <div style="{{ vt.head }}">All day · save disabled · same form at every composition</div>
       <div style="width:440px;display:flex;flex-direction:column;gap:14px;padding:18px;background:var(--panel);border:1px solid var(--line);border-radius:12px;box-sizing:border-box"><div style="font-size:12px;color:var(--muted)">All day - the times fold away</div>
         <div style="display:flex;align-items:center;gap:10px;font-size:14px"><span role="checkbox" aria-checked="true" style="width:18px;height:18px;flex:0 0 18px;border-radius:6px;background:var(--accent);color:var(--onaccent);display:flex;align-items:center;justify-content:center;font-family:'Material Symbols Rounded';font-variation-settings:'wght' 400;font-size:16px;line-height:1">check</span>All day</div>
-        <div style="display:flex;gap:10px"><div style="flex:1;display:flex;flex-direction:column;gap:6px"><span style="font-size:11px;color:var(--muted);font-weight:600">Starts</span><div style="font-size:14px;background:var(--sub);border:1px solid var(--line);border-radius:8px;padding:10px 12px">{{ sample.work.eventDay }}</div></div><div style="flex:1;display:flex;flex-direction:column;gap:6px"><span style="font-size:11px;color:var(--muted);font-weight:600">ENDS</span><div style="font-size:14px;background:var(--sub);border:1px solid var(--line);border-radius:8px;padding:10px 12px">{{ sample.work.eventAllDayEndDay }}</div></div></div>
+        <div style="display:flex;gap:10px"><div style="flex:1;display:flex;flex-direction:column;gap:6px"><span style="font-size:11px;color:var(--muted);font-weight:600">Starts</span><div style="font-size:14px;background:var(--sub);border:1px solid var(--line);border-radius:8px;padding:10px 12px">{{ sample.work.eventDay }}</div></div><div style="flex:1;display:flex;flex-direction:column;gap:6px"><span style="font-size:11px;color:var(--muted);font-weight:600">Ends</span><div style="font-size:14px;background:var(--sub);border:1px solid var(--line);border-radius:8px;padding:10px 12px">{{ sample.work.eventAllDayEndDay }}</div></div></div>
         <span style="font-size:12px;color:var(--muted)">2 days · ends at the close of Saturday</span>
         <div style="display:flex;gap:9px;justify-content:flex-end"><div style="display:inline-flex;padding:7px 14px;border-radius:8px;font-size:13px;color:var(--text2);background:var(--panel);border:1px solid var(--border2)">Cancel</div><div style="display:inline-flex;padding:7px 14px;border-radius:8px;font-size:13px;font-weight:600;color:var(--onaccent);background:var(--accent)">Save</div></div></div>
       <div style="width:440px;display:flex;flex-direction:column;gap:14px;padding:18px;background:var(--panel);border:1px solid var(--line);border-radius:12px;box-sizing:border-box"><div style="font-size:12px;color:var(--muted)">Save disabled - ends before it starts</div>
         <div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:11px;color:var(--muted);font-weight:600">Starts</span><div style="display:flex;gap:10px"><div style="flex:1;font-size:14px;background:var(--sub);border:1px solid var(--line);border-radius:8px;padding:10px 12px">{{ sample.work.eventDay }}</div><div style="flex:0 0 96px;font-size:14px;background:var(--sub);border:1px solid var(--line);border-radius:8px;padding:10px 12px">{{ sample.work.eventStartTime }}</div></div></div>
-        <div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:11px;color:var(--muted);font-weight:600">ENDS</span><div style="display:flex;gap:10px"><div style="flex:1;font-size:14px;background:var(--sub);border:1px solid var(--line);border-radius:8px;padding:10px 12px">{{ sample.work.eventDay }}</div><div aria-invalid="true" style="flex:0 0 96px;font-size:14px;background:var(--sub);border:1px solid var(--err);border-radius:8px;padding:10px 12px">{{ sample.work.eventConflictEndTime }}</div></div><span role="alert" style="font-size:12px;color:var(--err-text)">The event ends before it starts.</span></div>
+        <div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:11px;color:var(--muted);font-weight:600">Ends</span><div style="display:flex;gap:10px"><div style="flex:1;font-size:14px;background:var(--sub);border:1px solid var(--line);border-radius:8px;padding:10px 12px">{{ sample.work.eventDay }}</div><div aria-invalid="true" style="flex:0 0 96px;font-size:14px;background:var(--sub);border:1px solid var(--err);border-radius:8px;padding:10px 12px">{{ sample.work.eventConflictEndTime }}</div></div><span role="alert" style="font-size:12px;color:var(--err-text)">The event ends before it starts.</span></div>
         <div style="display:flex;gap:9px;justify-content:flex-end"><div style="display:inline-flex;padding:7px 14px;border-radius:8px;font-size:13px;color:var(--text2);background:var(--panel);border:1px solid var(--border2)">Cancel</div><div aria-disabled="true" style="display:inline-flex;padding:7px 14px;border-radius:8px;font-size:13px;font-weight:600;color:var(--onaccent);background:var(--accent);opacity:0.45">Save</div></div></div>
     </div></sc-for>
   </div>
@@ -913,7 +913,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
       </div></sc-for>
     </div>
     <sc-for list="{{ vthemes }}" as="vt" hint-placeholder-count="1"><div data-theme="{{ vt.theme }}" style="{{ vt.style }}">
-      <div style="{{ vt.head }}">WAITING · NOTHING LEFT · ALLOWANCE SPENT · UNAVAILABLE - THE SAME PANEL AT EVERY COMPOSITION</div>
+      <div style="{{ vt.head }}">Waiting · nothing left · allowance spent · unavailable - the same panel at every composition</div>
       <sc-for list="{{ layoutStates }}" as="x" hint-placeholder-count="4"><div style="width:240px;display:flex;flex-direction:column;gap:7px"><div style="font-size:12px;color:var(--muted)">{{ x.label }}</div>
         <div style="display:flex;flex-direction:column;gap:10px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:15px 16px;min-height:190px;box-sizing:border-box">
           <div style="font-size:11px;color:var(--muted);font-weight:600">Today's capacity</div>
@@ -986,7 +986,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
       </div></sc-for>
     </div>
     <sc-for list="{{ vthemes }}" as="vt" hint-placeholder-count="1"><div data-theme="{{ vt.theme }}" style="{{ vt.style }}">
-      <div style="{{ vt.head }}">EVERYTHING DONE · LOADING · READING MORE · FAILED - INSIDE THE LIST AT EVERY COMPOSITION</div>
+      <div style="{{ vt.head }}">Everything done · loading · reading more · failed - inside the list at every composition</div>
       <div style="width:240px;display:flex;flex-direction:column;gap:7px"><div style="font-size:12px;color:var(--muted)">Everything done</div><div style="display:flex;flex-direction:column;align-items:center;gap:10px;padding:34px 16px;text-align:center;background:var(--panel);border:1px solid var(--line);border-radius:12px;min-height:220px;box-sizing:border-box"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:32px;line-height:1;color:var(--ok-text)">done_all</span><div style="font-size:14px;line-height:1.55;color:var(--text2);text-wrap:pretty">Everything on the list is done. Turn on “Show done” to see it.</div></div></div>
       <div style="width:240px;display:flex;flex-direction:column;gap:7px"><div style="font-size:12px;color:var(--muted)">Reading</div><div aria-busy="true" style="display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:12px;min-height:220px;overflow:hidden"><sc-for list="{{ shimList }}" as="x" hint-placeholder-count="4"><div style="display:flex;align-items:center;gap:11px;padding:12px 14px;border-bottom:1px solid var(--line2)"><div style="{{ x.a }};width:18px;height:18px;flex:0 0 18px"></div><div style="flex:1;display:flex;flex-direction:column;gap:6px"><div style="{{ x.b }}"></div><div style="{{ x.c }}"></div></div></div></sc-for></div></div>
       <div style="width:240px;display:flex;flex-direction:column;gap:7px"><div style="font-size:12px;color:var(--muted)">Reading more</div><div style="display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:12px;min-height:220px;overflow:hidden"><sc-for list="{{ tasksToday }}" as="t" hint-placeholder-count="3"><div style="display:flex;align-items:center;gap:11px;padding:11px 14px;border-bottom:1px solid var(--line2)"><span style="width:18px;height:18px;flex:0 0 18px;box-sizing:border-box;border-radius:50%;border:1.5px solid var(--border2)"></span><span style="font-size:14px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ t.t }}</span></div></sc-for><div role="status" style="display:flex;align-items:center;gap:7px;padding:12px 14px;font-size:13px;color:var(--muted)"><span style="display:inline-block;font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:16px;line-height:1;color:var(--accent-d);animation:mfspin 1.15s linear infinite">progress_activity</span>Reading more of the list…</div></div></div>
@@ -1058,7 +1058,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
   </sc-if>
 
   <sc-if value="{{ g.agent }}" hint-placeholder-val="{{ true }}">
-    <div style="font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding-top:18px;width:1100px;font-weight:600">4 · AGENT</div>
+    <div style="font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding-top:18px;width:1100px;font-weight:600">4 · Agent</div>
   </sc-if>
 
   <sc-if value="{{ show.a_steer }}" hint-placeholder-val="{{ true }}">
