@@ -348,6 +348,7 @@ internal sealed class PersistedOrganizations(
             return new OrganizationWriteResult(OrganizationWriteOutcome.RecordLeftInvalid) { Corrections = judgement.Refusals };
         }
 
+        var derived = judgement.EndpointAccess is not null;
         var served = judgement.EndpointAccess ?? new UserEndpointAccess(held.McpEndpointEnabled, held.ClientEndpointEnabled);
         var now = timeProvider.GetUtcNow();
 
@@ -356,18 +357,28 @@ internal sealed class PersistedOrganizations(
             // The version moves with the organization, because which policy governs somebody is part of what they are
             // served and a replica learns that it has to compose a user again by their record's version moving. The
             // stamp is written with the switches, naming the version this statement produces and the organization
-            // they were derived under.
+            // they were derived under — but only where they were derived. A record this build could not resolve
+            // keeps the switches it had, and its stamp with them, so the row reads as one still to derive and the
+            // reconciliation comes back to it.
             await dbContext.UserAccounts
                 .Where(record => record.Id == userId)
                 .ExecuteUpdateAsync(
-                    setters => setters
-                        .SetProperty(record => record.OrganizationId, organizationId)
-                        .SetProperty(record => record.McpEndpointEnabled, served.McpEndpoint)
-                        .SetProperty(record => record.ClientEndpointEnabled, served.ClientEndpoint)
-                        .SetProperty(record => record.EndpointSwitchesVersion, record => record.Version + 1)
-                        .SetProperty(record => record.EndpointSwitchesOrganizationId, organizationId)
-                        .SetProperty(record => record.Version, record => record.Version + 1)
-                        .SetProperty(record => record.UpdatedAt, now),
+                    setters =>
+                    {
+                        setters
+                            .SetProperty(record => record.OrganizationId, organizationId)
+                            .SetProperty(record => record.McpEndpointEnabled, served.McpEndpoint)
+                            .SetProperty(record => record.ClientEndpointEnabled, served.ClientEndpoint)
+                            .SetProperty(record => record.Version, record => record.Version + 1)
+                            .SetProperty(record => record.UpdatedAt, now);
+
+                        if (derived)
+                        {
+                            setters
+                                .SetProperty(record => record.EndpointSwitchesVersion, record => record.Version + 1)
+                                .SetProperty(record => record.EndpointSwitchesOrganizationId, organizationId);
+                        }
+                    },
                     cancellationToken);
 
             await dbContext.UserCredentials
