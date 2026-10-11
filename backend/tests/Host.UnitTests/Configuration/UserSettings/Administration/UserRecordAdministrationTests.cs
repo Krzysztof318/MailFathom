@@ -439,7 +439,7 @@ public sealed class UserRecordAdministrationTests
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(OwnSettingChange.Settled, changed);
+        Assert.Equal(OwnSettingChange.SettledServing("Asia/Tokyo"), changed);
         await harness.Store.Received(1).CommitAsync(
             SyntheticUser.Deployment,
             Arg.Is<string>(json => json!.Contains("Asia/Tokyo", StringComparison.Ordinal)),
@@ -466,7 +466,7 @@ public sealed class UserRecordAdministrationTests
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(OwnSettingChange.Settled, changed);
+        Assert.Equal(OwnSettingChange.SettledServing("Europe/Warsaw"), changed);
         await harness.Store.DidNotReceiveWithAnyArgs()
             .CommitAsync(default, default!, default, default, TestContext.Current.CancellationToken);
     }
@@ -488,7 +488,7 @@ public sealed class UserRecordAdministrationTests
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(OwnSettingChange.Settled, changed);
+        Assert.Equal(OwnSettingChange.SettledServing(UserTimeZone.Coordinated.Id), changed);
         await harness.Store.Received(1).CommitAsync(
             SyntheticUser.Deployment,
             Arg.Is<string>(json => json!.Contains(UserTimeZone.Coordinated.Id, StringComparison.Ordinal)),

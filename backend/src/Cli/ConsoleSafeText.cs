@@ -30,24 +30,39 @@ internal static class ConsoleSafeText
     /// <remarks>Long enough for a sentence naming a collection, a row, and a reason, short enough that the line it is embedded in stays one thing an operator reads rather than a screen they scroll.</remarks>
     private const int MaximumLength = 200;
 
+    /// <summary>The longest explanation kept, past which it is truncated.</summary>
+    /// <remarks>
+    /// An explanation is a sentence the deployment composed to say why something was not done and what clears it, and
+    /// the instruction is its last clause: the bound a name is held to would cut exactly that off. It is still a
+    /// bound, so text passed off as an explanation buries a few lines rather than the screen.
+    /// </remarks>
+    private const int MaximumExplanationLength = 600;
+
     /// <summary>Reduces a message this command did not compose to printable, single-line text of bounded length.</summary>
     /// <param name="reported">What the provider or the deployment said, which may be anything.</param>
     /// <returns>The reduced message, or <see langword="null" /> when nothing usable remained.</returns>
-    internal static string? Sanitize(string? reported)
+    internal static string? Sanitize(string? reported) => Reduce(reported, MaximumLength);
+
+    /// <summary>Reduces an explanation the deployment answered with to printable, single-line text, keeping the whole of an ordinary one.</summary>
+    /// <param name="reported">The sentences the deployment said, which may be anything.</param>
+    /// <returns>The reduced explanation, or <see langword="null" /> when nothing usable remained.</returns>
+    internal static string? SanitizeExplanation(string? reported) => Reduce(reported, MaximumExplanationLength);
+
+    private static string? Reduce(string? reported, int maximumLength)
     {
         if (reported is null)
         {
             return null;
         }
 
-        var kept = new StringBuilder(Math.Min(reported.Length, MaximumLength));
+        var kept = new StringBuilder(Math.Min(reported.Length, maximumLength));
 
         foreach (var character in reported)
         {
             // Tested before anything is appended rather than after, so that the collapsing space below is bounded by
             // the same ceiling as the text is. Testing it afterwards leaves a message whose 200th character arrives as
             // that space one character over the bound and never equal to it again, which is unbounded rather than long.
-            if (kept.Length >= MaximumLength)
+            if (kept.Length >= maximumLength)
             {
                 break;
             }

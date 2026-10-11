@@ -212,6 +212,57 @@ public sealed class ClientTimeZoneEndpointTests
             .CommitAsync(default, default!, default, default, TestContext.Current.CancellationToken);
     }
 
+    /// <summary>
+    /// Choosing the zone the record already states under a policy forcing another writes nothing, and the answer is
+    /// the zone the person is read in rather than the one they asked for, so a client never draws their dates in a
+    /// zone no reader on the server uses.
+    /// </summary>
+    [Fact]
+    public async Task ChangeAsync_TheRecordsOwnZoneChosenUnderAPolicyForcingAnother_AnswersTheZoneThePersonIsReadIn()
+    {
+        // Arrange
+        var deployment = Holding("""{"Language": "English", "TimeZone": "Europe/Paris"}""");
+        deployment.GovernedBy(
+            Person,
+            StatedPolicies.Governing(deployment: """{"Users":{"Forced":{"TimeZone":"Europe/Warsaw"}}}"""));
+
+        // Act
+        var result = await ClientTimeZoneEndpoint.ChangeAsync(
+            deployment.Records,
+            new ClientTimeZoneRequest("Europe/Paris"),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal("Europe/Warsaw", Assert.IsType<Ok<ClientTimeZoneResponse>>(result.Result).Value!.TimeZone);
+        await deployment.Store.DidNotReceiveWithAnyArgs()
+            .CommitAsync(default, default!, default, default, TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>A policy this build does not read holds the record, which the route answers as a refusal with the sentence rather than as a failure.</summary>
+    [Fact]
+    public async Task ChangeAsync_APolicyThisBuildDoesNotRead_IsRefusedNamingThePolicy()
+    {
+        // Arrange
+        var deployment = Holding("""{"Language": "English"}""");
+        deployment.GovernedBy(
+            Person,
+            StatedPolicies.Governing(deployment: """{"Users":{"Forced":{"Dialect":"Silesian"}}}"""));
+
+        // Act
+        var result = await ClientTimeZoneEndpoint.ChangeAsync(
+            deployment.Records,
+            new ClientTimeZoneRequest("Asia/Tokyo"),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(result.Result);
+
+        Assert.Equal(StatusCodes.Status400BadRequest, refusal.StatusCode);
+        Assert.StartsWith("The settings policy of the deployment", refusal.ProblemDetails.Detail, StringComparison.Ordinal);
+        await deployment.Store.DidNotReceiveWithAnyArgs()
+            .CommitAsync(default, default!, default, default, TestContext.Current.CancellationToken);
+    }
+
     private static UserRecordDeployment Holding(string json)
     {
         var deployment = new UserRecordDeployment([MailFathomPermission.MailRead], Person);

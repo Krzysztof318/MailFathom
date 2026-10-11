@@ -242,8 +242,9 @@ internal sealed class PersistedSettingsPolicies(
     /// <para>
     /// A policy past what this build reads one from is answered as empty text, as it is to every other reader, which
     /// no build judges as a policy: its users are then judged as unreadable under the policy that stands and under
-    /// the candidate alike, so they refuse nothing and their rows are left as they are, instead of one organization's
-    /// row stopping a write for the whole deployment.
+    /// the candidate alike, so they refuse nothing, instead of one organization's row stopping a write for the whole
+    /// deployment. Their rows keep the switches they hold, except for each switch the deployment's candidate policy
+    /// forces, which is written over them: a force reaches a user whatever else governing them cannot be read.
     /// </para>
     /// </remarks>
     private async Task<Dictionary<Guid, SettingsPolicyDocument>> ReadTheOtherScopesAsync(

@@ -349,9 +349,12 @@ internal sealed class UserRecordAdministration(
                 return OwnSettingChange.NoSuchUser;
             }
 
-            if (StatedTimeZoneIdOf(inForce.Json) == zone.Id)
+            var standing = ResolveUnderItsPolicies(inForce);
+
+            // A record nothing resolves is left to the judgement below, which holds it and says which policy does.
+            if (standing is not null && StatedTimeZoneIdOf(inForce.Json) == zone.Id)
             {
-                return OwnSettingChange.Settled;
+                return OwnSettingChange.SettledServing(ServedZoneIdOf(standing, zone));
             }
 
             var outcome = (await this.JudgeAndCommitAsync(
@@ -371,7 +374,7 @@ internal sealed class UserRecordAdministration(
 
             if (outcome.IsSettled)
             {
-                return OwnSettingChange.Settled;
+                return OwnSettingChange.SettledServing(ServedZoneIdOf(standing, zone));
             }
 
             if (outcome.IsHeld)
@@ -504,6 +507,17 @@ internal sealed class UserRecordAdministration(
             Unresolved = layers is null ? SettingsPolicyLayers.DescribeUnreadable(unreadable) : null,
         };
     }
+
+    /// <summary>Answers the zone a person is read in once their record states the one they asked for.</summary>
+    /// <returns>The zone a settings policy forces where one does, and otherwise the zone asked for, which the record now states.</returns>
+    /// <remarks>
+    /// A person may state their record's own zone under a force, which is carried through and writes nothing, so
+    /// answering what they asked for would show them a zone no reader of theirs uses.
+    /// </remarks>
+    private static string ServedZoneIdOf(ResolvedRecord? standing, UserTimeZone asked) =>
+        standing?.Find(nameof(UserAccountOptions.TimeZone)) is { ForcedBy: not null, EffectiveValue: { } forced }
+            ? forced.ToString()
+            : asked.Id;
 
     /// <summary>Resolves a record through the policies it was read with.</summary>
     /// <returns>The record as it resolves, or <see langword="null" /> where a policy governing the user is not one this build reads.</returns>
@@ -748,9 +762,17 @@ internal sealed class UserRecordAdministration(
                 candidateJson,
                 Bound: null);
 
+        // Held rather than refused as a candidate somebody could correct: nothing about what was sent is wrong, and
+        // a route changing one setting answers a held record with the sentence where it would fail on any other
+        // refusal.
         if (SettingsPolicyLayers.Read(policies, SettingsPolicySection.Users, out var unreadable) is not { } layers)
         {
-            return Refused([$"{SettingsPolicyLayers.DescribeUnreadable(unreadable)} Nothing was written."]);
+            return new JudgedCandidate(
+                UserRecordWriteOutcome.Held(
+                    inForce.Version,
+                    [$"{SettingsPolicyLayers.DescribeUnreadable(unreadable)} Nothing was written."]),
+                candidateJson,
+                Bound: null);
         }
 
         // Which endpoints somebody is served on and what their client is asked to record are the deployment's

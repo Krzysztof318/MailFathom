@@ -56,11 +56,12 @@ internal sealed record UserRecordWriteOutcome
     /// <summary>Gets whether a version was spent, which is false for a write that found the record already as asked.</summary>
     public bool IsCommitted { get; }
 
-    /// <summary>Gets whether the write was refused because it would move a setting held against whoever was writing.</summary>
+    /// <summary>Gets whether the write was refused because it would move a setting held against whoever was writing, or because a policy governing the user is one this build does not read, which holds the whole record.</summary>
     /// <remarks>
     /// Apart from every other refusal because the writer cannot correct their way past it: the setting is a settings
-    /// policy's or an administrator's, so a route that changes one setting answers it as a refusal of the request
-    /// rather than as a defect in the record.
+    /// policy's or an administrator's, or the policy is one only another build or an administrator can make
+    /// readable, so a route that changes one setting answers it as a refusal of the request rather than as a defect
+    /// in the record.
     /// </remarks>
     public bool IsHeld { get; private init; }
 

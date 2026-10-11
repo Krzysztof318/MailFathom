@@ -341,7 +341,68 @@ public sealed class UserRecordAdministrationPolicyTests
         var change = await deployment.Records.ChangeOwnTimeZoneAsync(Zone("Europe/Warsaw"), TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(OwnSettingChange.Settled, change);
+        Assert.Equal(OwnSettingChange.SettledServing("Europe/Warsaw"), change);
+        await AssertNothingCommittedAsync(deployment);
+    }
+
+    /// <summary>
+    /// A person may state their record's own zone under a force, which writes nothing, and is answered the zone the
+    /// policy forces rather than the one they asked for: no reader of theirs uses the record's.
+    /// </summary>
+    [Fact]
+    public async Task ChangeOwnTimeZoneAsync_TheRecordsOwnZoneChosenUnderAForce_IsSettledServingTheForcedZone()
+    {
+        // Arrange
+        var deployment = SignedIn(EnglishInParis, StatedPolicies.Governing(organization: ForcingWarsaw));
+
+        // Act
+        var change = await deployment.Records.ChangeOwnTimeZoneAsync(Zone("Europe/Paris"), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(OwnSettingChange.SettledServing("Europe/Warsaw"), change);
+        await AssertNothingCommittedAsync(deployment);
+    }
+
+    /// <summary>
+    /// A policy this build does not read holds the record, so a change to one setting is answered with the sentence
+    /// naming the policy rather than failing — whether the zone is a new one or the one the record already states.
+    /// </summary>
+    [Theory]
+    [InlineData("Asia/Tokyo")]
+    [InlineData("Europe/Paris")]
+    public async Task ChangeOwnTimeZoneAsync_APolicyThisBuildDoesNotRead_IsRefusedNamingThePolicy(string zoneId)
+    {
+        // Arrange
+        var deployment = SignedIn(EnglishInParis, StatedPolicies.Governing(organization: NotAPolicy));
+
+        // Act
+        var change = await deployment.Records.ChangeOwnTimeZoneAsync(Zone(zoneId), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(change.UserHeld);
+        Assert.Null(change.Served);
+        Assert.StartsWith("The settings policy of this record's organization", change.RefusalMessage, StringComparison.Ordinal);
+        await AssertNothingCommittedAsync(deployment);
+    }
+
+    /// <summary>
+    /// The same policy holds the portrait link, which is answered as a refusal so the route that wrote the file for
+    /// it removes the file again rather than leaving it stored and unlinked.
+    /// </summary>
+    [Fact]
+    public async Task RelinkOwnPortraitAsync_APolicyThisBuildDoesNotRead_IsRefusedNamingThePolicyAndLinksNothing()
+    {
+        // Arrange
+        var deployment = SignedIn(EnglishInParis, StatedPolicies.Governing(deployment: NotAPolicy));
+
+        // Act
+        var relinking = await deployment.Records.RelinkOwnPortraitAsync(
+            StoredFileId.Create(Guid.Parse("0197a3c0-0000-7000-8000-0000000000b1")),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(relinking.UserHeld);
+        Assert.StartsWith("The settings policy of the deployment", relinking.Refusal, StringComparison.Ordinal);
         await AssertNothingCommittedAsync(deployment);
     }
 

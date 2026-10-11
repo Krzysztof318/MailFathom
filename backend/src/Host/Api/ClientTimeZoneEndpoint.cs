@@ -87,7 +87,7 @@ internal static class ClientTimeZoneEndpoint
     /// <param name="records">The record administration, which judges and commits the change.</param>
     /// <param name="request">The zone they would be read in.</param>
     /// <param name="cancellationToken">Cancels the read and the write.</param>
-    /// <returns><c>200</c> with the zone now recorded, <c>404</c> when this deployment holds no record for the caller, or <c>400</c> when the identifier names no zone this deployment knows or a settings policy holds the zone against the caller, naming the organization or the deployment.</returns>
+    /// <returns><c>200</c> with the zone the caller is now read in, which is the one asked for unless a settings policy forces another over a record already stating it, <c>404</c> when this deployment holds no record for the caller, or <c>400</c> when the identifier names no zone this deployment knows or a settings policy holds the zone against the caller, naming the organization or the deployment.</returns>
     internal static async Task<Results<Ok<ClientTimeZoneResponse>, NotFound<ProblemDetails>, ProblemHttpResult>> ChangeAsync(
         [FromServices] UserRecordAdministration records,
         [FromBody] ClientTimeZoneRequest request,
@@ -113,8 +113,10 @@ internal static class ClientTimeZoneEndpoint
         }
 
         // Never the default afterwards, whichever zone was named: the record now states one because this person said so.
-        return change.UserHeld
-            ? TypedResults.Ok(new ClientTimeZoneResponse(zone.Id, IsDefault: false))
+        // The zone answered is the one they are read in, which is what a settings policy forces where one does rather
+        // than the one the record states.
+        return change.Served is { } served
+            ? TypedResults.Ok(new ClientTimeZoneResponse(served, IsDefault: false))
             : TypedResults.NotFound(new ProblemDetails
             {
                 Status = StatusCodes.Status404NotFound,

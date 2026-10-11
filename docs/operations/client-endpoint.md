@@ -2297,7 +2297,10 @@ of a record stating none. A record no policy supplies a zone for, stating none i
 
 **A zone a policy holds is refused naming who holds it.** Where the organization or the deployment forces the zone, or
 does not leave it to the person to change, a write naming another zone is answered `400` with the sentence saying
-which of the two holds it, and nothing is written. A write naming the zone in force passes and writes nothing.
+which of the two holds it, and nothing is written. A write naming the zone in force passes and writes nothing, and so
+does one naming the zone the record itself already states beneath a force — and the answer to that one carries the
+zone the person is read in, which is the forced one, never the one they named. A policy this replica's build does not
+read holds the whole record, so a write under it is answered `400` with the sentence naming that policy.
 
 **`isDefault` is stated rather than left to be inferred, and it says whether anything states a zone at all** — the
 record or a policy above it, not
@@ -2488,7 +2491,8 @@ answered `404` on the upload, and `204` on the removal like anybody else.
 **A portrait a policy holds is refused naming who holds it.** Where the
 [settings policy](admin-endpoint.md#settings-policies) of the person's organization or of the deployment does not
 leave `Portrait` to them to change, an upload and a removal are each answered `400` with the sentence saying which of
-the two holds it. Nothing is stored for a refused upload, and the picture in force stays.
+the two holds it. A policy this replica's build does not read holds the whole record, and is answered the same way
+with the sentence naming that policy. Nothing is stored for a refused upload, and the picture in force stays.
 
 **The served picture is named, and the client revalidates against that name.** The response carries an entity tag over
 the octets and `Cache-Control: private, no-cache`, so the second screen that draws the same portrait is answered `304`

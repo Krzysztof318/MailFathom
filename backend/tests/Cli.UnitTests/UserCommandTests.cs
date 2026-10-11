@@ -772,6 +772,39 @@ public sealed class UserCommandTests : IDisposable
         Assert.DoesNotContain(this.harness.Console.Lines, line => line.Contains('\u202e', StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// A record no policy resolves answers a sentence in place of its settings, and that sentence is text the
+    /// deployment supplied: it is printed reduced and whole, down to the instruction it ends in, alone, and the
+    /// command still succeeds.
+    /// </summary>
+    [Fact]
+    public async Task Show_TheEffectiveViewOfARecordLeftUnresolved_PrintsTheReducedSentenceAndNoSetting()
+    {
+        // Arrange
+        using var deployment = FakeUserRecordDeployment.HoldingARecordLeftUnresolved(User);
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "user",
+            "show",
+            "--user",
+            $"{User:D}",
+            "--effective",
+            "--endpoint",
+            Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Contains(
+            this.harness.Console.Lines,
+            line => line.StartsWith("  The settings policy of the deployment", StringComparison.Ordinal)
+                && line.EndsWith("or bring this replica to the build that wrote it.", StringComparison.Ordinal));
+        Assert.DoesNotContain(this.harness.Console.Lines, line => line.Contains('\u001b', StringComparison.Ordinal));
+        Assert.DoesNotContain(this.harness.Console.Lines, line => line.Contains('\u202e', StringComparison.Ordinal));
+        Assert.DoesNotContain(this.harness.Console.Lines, line => line.Contains(": ", StringComparison.Ordinal) && line.Contains('[', StringComparison.Ordinal));
+    }
+
     /// <summary>Nothing is opened without an editor to open it in, and nothing about one person's mailboxes is fetched for a session that cannot start.</summary>
     [Fact]
     public async Task Edit_NoEditorNamedByTheShell_FailsWithoutReadingTheRecord()

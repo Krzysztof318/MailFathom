@@ -95,7 +95,7 @@ internal static class ShowUserRecordCommand
 
         if (record.Unresolved is { } unresolved)
         {
-            context.Console.WriteLine($"  {ConsoleSafeText.Sanitize(unresolved)}");
+            context.Console.WriteLine($"  {ConsoleSafeText.SanitizeExplanation(unresolved)}");
 
             return CliExitCode.Success;
         }

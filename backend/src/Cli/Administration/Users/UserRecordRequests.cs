@@ -78,7 +78,7 @@ internal sealed record UserRecord(
 /// <param name="Value">The value the user is served with, absent where nothing states one.</param>
 /// <param name="Source">Which step of the resolution order supplied the value.</param>
 /// <param name="HeldBy">Whose policy holds the property against the person the record is about, if any.</param>
-/// <param name="Changeable">Whether an administrator may change the property, which is false only where a policy forces it.</param>
+/// <param name="Changeable">Whether a change to the property from whoever read the record would be accepted, which is false where a policy forces it and where the reader's grant does not let them write the user's record.</param>
 internal sealed record UserRecordProperty(
     [property: JsonPropertyName("path")] string? Path,
     [property: JsonPropertyName("value")] JsonElement? Value,

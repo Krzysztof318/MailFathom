@@ -133,4 +133,23 @@ public sealed class ConsoleSafeTextTests
         // Assert
         Assert.Null(reduced);
     }
+
+    /// <summary>
+    /// An explanation ends in the instruction that clears it, so one longer than a name may be is kept whole, without
+    /// what a terminal would act on, and is still bounded.
+    /// </summary>
+    [Fact]
+    public void SanitizeExplanation_ASentenceLongerThanANameMayBe_KeepsItWholeReducedAndStillBounded()
+    {
+        // Arrange
+        var explanation = $"{new string('a', 250)}\u001b[2J\u202e ends with what clears it.";
+
+        // Act
+        var reduced = ConsoleSafeText.SanitizeExplanation(explanation);
+        var bulk = ConsoleSafeText.SanitizeExplanation(new string('b', 5000));
+
+        // Assert
+        Assert.Equal($"{new string('a', 250)} [2J ends with what clears it.", reduced);
+        Assert.Equal(600, bulk?.Length);
+    }
 }

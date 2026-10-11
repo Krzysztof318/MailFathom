@@ -43,7 +43,7 @@ internal static class GovernedUserJudgements
     /// <summary>Finds the rows whose endpoint switches a policy write moves, grouped by the switches each is to carry.</summary>
     /// <param name="users">The governed users' rows.</param>
     /// <param name="judgements">One judgement per row, in the same order.</param>
-    /// <returns>The identifiers of the rows to rewrite under each pair of switches; a row already carrying what its record resolves to, and a row whose record could not be resolved, is in none.</returns>
+    /// <returns>The identifiers of the rows to rewrite under each pair of switches; a row already carrying what its judgement answers is in none, and so is a row whose judgement answers no switches, which is a record that could not be resolved under policies none of which forces one.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when the two lists differ in length.</exception>
     internal static IReadOnlyDictionary<UserEndpointAccess, Guid[]> FindMovedSwitches(
