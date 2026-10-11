@@ -92,8 +92,6 @@ AppHost provisions its synthetic credential after the service reports ready;
 | `GET /api/client/record` | `mailfathom.mail.read` |
 | `POST /api/client/record` | `mailfathom.mail.accounts.write` |
 | `GET /api/client/record/mail-accounts` | `mailfathom.mail.read` |
-| `POST /api/client/record/mail-accounts` | `mailfathom.mail.accounts.write` |
-| `POST /api/client/record/mail-accounts/removal` | `mailfathom.mail.accounts.write` |
 | `POST /api/client/record/mail-accounts/folders` | `mailfathom.mail.accounts.write` |
 | `POST /api/client/record/mail-accounts/folders/replacement` | `mailfathom.mail.accounts.write` |
 | `POST /api/client/record/mail-accounts/folders/removal` | `mailfathom.mail.accounts.write` |
@@ -2059,19 +2057,20 @@ subject, no correspondent, no body, and no keyword reaches a log line or a telem
 
 ### The record routes
 
-These eight are how a person maintains what this deployment reads for them: which mailboxes it synchronizes, which
-folders of each it reads, what each one is reached with, and the settings that are theirs rather than the
-deployment's. Reading is `mailfathom.mail.read` like the rest of this surface; the six writes are
-`mailfathom.mail.accounts.write`, separately granted for the reason every write here is separately granted — reading
-somebody's mail is not deciding which mailboxes are read for them.
+These six are how a person maintains what this deployment reads for them: which folders of each mailbox assigned to
+them it reads, and the settings that are theirs rather than the deployment's. Reading is `mailfathom.mail.read` like
+the rest of this surface; the four writes are `mailfathom.mail.accounts.write`, separately granted for the reason
+every write here is separately granted — reading somebody's mail is not deciding what is read out of their mailboxes.
+
+**Which mailboxes a person has is not decided here.** A mailbox is declared, assigned to somebody, and withdrawn
+through [the administrative endpoint](admin-endpoint.md#mail-accounts-and-who-they-are-assigned-to) alone, so no route
+on this surface creates one or ends an assignment to one.
 
 | Route | What it does |
 | --- | --- |
 | `GET /api/client/record` | Hands over the signed-in user's record as redacted JSON, with the version it was read at and each of its settings as [the settings policies governing them](configuration-sources.md#how-a-settings-policy-resolves-a-users-record) resolve it |
 | `POST /api/client/record` | Commits that record back edited, as one change against the version it was opened over |
-| `GET /api/client/record/mail-accounts` | Hands over each mailbox assigned to the signed-in user as [the settings policies governing it](configuration-mail.md#how-a-settings-policy-resolves-a-mail-account) resolve it, and what a mailbox they declared now would start from |
-| `POST /api/client/record/mail-accounts` | Creates one more mailbox, assigned to the signed-in user alone |
-| `POST /api/client/record/mail-accounts/removal` | Ends the signed-in user's assignment to one mailbox, named by its identifier, and erases the mail stored for it |
+| `GET /api/client/record/mail-accounts` | Hands over each mailbox assigned to the signed-in user as [the settings policies governing it](configuration-mail.md#how-a-settings-policy-resolves-a-mail-account) resolve it |
 | `POST /api/client/record/mail-accounts/folders` | Declares one more folder in one of those mailboxes |
 | `POST /api/client/record/mail-accounts/folders/replacement` | States one folder afresh, in place of the one carrying an alias |
 | `POST /api/client/record/mail-accounts/folders/removal` | Stops the mailbox declaring one folder, named by its alias |
@@ -2151,24 +2150,17 @@ each of the caller's mailboxes served:
       ],
       "unresolved": null
     }
-  ],
-  "newAccount": { "id": null, "properties": [ … ], "unresolved": null }
+  ]
 }
 ```
 
 `accounts` carries one entry per mailbox assigned to the caller, in identifier order, each `properties` list in the
-shape the record read answers and listing every setting of the mailbox — the example shows four. Three things are
+shape the record read answers and listing every setting of the mailbox — the example shows four. Two things are
 particular to it:
 
-- **`changeable` on a mailbox already declared is `true` for `Folders` at most.** The folder routes are the only
-  routes of the person's that write a declared mailbox, so the list of folders is the one setting of it that can be
-  theirs, and it is where no policy forces it or withholds it and the caller's grant carries
-  `mailfathom.mail.accounts.write`.
-- **`newAccount` is what a mailbox declared now would start from.** Its `id` is `null`, each `value` is what a
-  declaration stating nothing would be served, and `changeable` says whether the setting is the caller's to state in
-  `POST /api/client/record/mail-accounts` — so a dialog shows a forced server as fixed and leaves out a setting a
-  default already supplies. It is `false` for every setting where the grant does not carry
-  `mailfathom.mail.accounts.write`.
+- **`changeable` is `true` for `Folders` at most.** The folder routes are the only routes of the person's that write
+  a mailbox, so the list of folders is the one setting of it that can be theirs, and it is where no policy forces it
+  or withholds it and the caller's grant carries `mailfathom.mail.accounts.write`.
 - **No secret travels on this route.** A secret block is listed with a `null` value whatever the mailbox states for
   it, and the route answers nothing of a mailbox beyond the settings a declaration states: no synchronization state,
   and no mail.
@@ -2178,14 +2170,10 @@ its `unresolved` carries the sentence naming which scope's policy it is. A calle
 `404`, as on the record read. [The accounts route](#the-accounts-route) stays what a client renders its mailbox list
 from: it answers each mailbox's two names and how fresh its copy is, and nothing a policy decides.
 
-**The four routes that write a mailbox refuse a setting held against the person.** A declaration sent to
-`POST /api/client/record/mail-accounts` is judged as the record save is: a setting a policy forces may be left out or
-stated as `newAccount` answered it, and stating it otherwise — or stating a setting the policy's editing restriction
-withholds — is refused in a sentence naming the setting and who holds it. The restriction reaches the address and the
-name as well, so under a policy that leaves a person only their folders, declaring a mailbox is an administrator's.
-The three folder routes change the list of folders and nothing else, so each is refused the same way where `Folders`
-is forced or withheld. What these routes fix for every folder — that it is synchronized, and that one naming a
-`RemotePath` is created where it is missing — is unchanged by any policy.
+**The three folder routes refuse a list of folders held against the person.** They change the list of folders and
+nothing else, so each is refused in a sentence naming the setting and who holds it where a policy forces `Folders` or
+its editing restriction withholds it. What these routes fix for every folder — that it is synchronized, and that one
+naming a `RemotePath` is created where it is missing — is unchanged by any policy.
 
 ```
 Folders is held by the organization, whose settings policy does not leave it to you to change. Leave it as it stands, or ask whoever administers the organization.
@@ -2202,7 +2190,7 @@ create the folder its own configuration names, a replacement states that mapping
 held, and a removal takes the mapping out. Renaming, deleting, subscribing, and unsubscribing a folder *on the server*
 are refused outright by [ADR 0007](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md), which is why a removal here
 stops the deployment reading a folder rather than removing one — the mail already stored stays where it is, and so does
-the folder on the server. That is unlike removing a whole mailbox, which erases its stored mail. A removal withdraws only the alias
+the folder on the server. That is unlike an administrator ending the last assignment to a whole mailbox, which erases its stored mail. A removal withdraws only the alias
 it names: a folder sitting beneath it stays declared and is read as a folder of its own from then on.
 
 Each of the three takes the account by the identifier the deployment generated for it — the one the account list the
@@ -2224,9 +2212,7 @@ server advertises none at that path; a folder found instead by the role it plays
 folder that does not exist advertises no role, and a request stating one on such a folder is refused naming
 `RemotePath`. `GenerateEmbeddings`, `VisibleToTools`, and `RemotePath` stay the person's on every folder, special ones
 included — which is what lets a folder declared against the wrong place on the server be corrected rather than started
-over. A declared mailbox carries its folders, so the same rules hold over the folders in a request to
-`POST /api/client/record/mail-accounts`; the record route carries no mailbox at all and is therefore no way around
-them.
+over. The record route carries no mailbox at all and is therefore no way around them.
 
 **A folder's role is stated when the folder is declared and never afterwards, and the folder playing one stays.** The
 folder carrying a `SpecialUse` is named after the role it plays — `Inbox`, `Drafts`, `Sent`, `Junk`, `Trash`, and the
@@ -2245,26 +2231,6 @@ user cannot be composed at all — there is nowhere to put the name — and a de
 no route through which any of them learns that the others exist. [The administrative
 surface](admin-endpoint.md#users-and-their-records) is where a roster is read, and it is not reachable with a
 credential issued for this one.
-
-**A mailbox added here is the user's own, and an address somebody holds is refused without saying whose.** The account
-is created assigned to the signed-in user and nobody else, in [their organization](admin-endpoint.md#organizations)
-or in none when they belong to none; an administrator is who assigns it to a second person afterwards, only to
-somebody of that same organization, and never while it belongs to none — an account in no organization stays one
-person's. One address is held by one account in the whole deployment, and an address already held — by anybody — is
-refused with the same sentence whoever holds it. It tells the caller the address cannot be added, and it never says who holds it:
-
-```
-This mail account cannot be added for you. Ask whoever administers this deployment to add it.
-```
-
-**Removing a mailbox ends this user's hold on it, and erases its mail once nobody else holds it.** A removal ends the
-signed-in user's assignment and erases what they authored under the account — their drafts and their standing
-instructions — because neither is readable by anybody once they are not assigned. Where that was the last assignment
-the account goes with it, together with every message, folder, and attachment this deployment holds for it, because an
-account nobody is assigned to serves nobody; where somebody else is still assigned, the mail stays whole and is theirs
-to read. The removal asks
-`mailfathom.mail.accounts.write` and nothing more, because the grant is the person's own and the mailbox they dispose of
-is their own; an administrator ending somebody else's assignment takes `mailfathom.admin.erase` instead.
 
 **Nothing here reports a secret, and nothing here can overwrite one blindly.** A record is handed over with every
 password, token, and client secret replaced by the redaction marker; a save is read as the difference from what the row
@@ -2287,31 +2253,20 @@ to correct — for a scanning one, the deployment setting behind it — and carr
 device, or an administrator — is refused as superseded rather than overwritten, so the client re-reads and composes the
 change again.
 
-**A mailbox declared here names a credential this deployment provisioned for this user, and nothing else.** A record
-never carries a password: what it carries is a [reference](secret-provisioning.md) to material the deployment can
-resolve, and that material is reached by whatever the reference names — a mounted file, a systemd credential, an
-environment variable. The mail server the account names is the user's own, so a reference written here decides what
-this deployment hands to a machine that person controls; unbounded, `mailfathom.mail.accounts.write` would reach the
-database password and every other secret this deployment can resolve.
-
-Two references are therefore admissible and no others. One the record already carries stays admissible whoever put it
-there, so a change that was never about the credential is never refused over it. And one whose material was provisioned
-for this user is admissible, which is read from the name the operator gave it: **the last segment of the reference's
-target begins with `user-<user identifier>-`**. So `file:/run/secrets/user-3f1d…-work-password` and
-`systemd-credential:user-3f1d…-work-password` are the user's to name, and `file:/run/secrets/database-password` is
-not — whatever path is written in front of it, because the bound is the name of the material rather than the way to it.
-An operator provisioning a mailbox credential for somebody to declare themselves names it that way; one who would
-rather not creates the mail account with [`mfctl account
-add`](admin-endpoint.md#mail-accounts-and-who-they-are-assigned-to) instead, which is bounded by nothing here. A refusal names both
-routes out.
+**No write here states a mailbox's credential.** A mailbox's server, login, and the
+[reference](secret-provisioning.md) to its password are part of its declaration, which whoever administers the
+deployment states with [`mfctl account add` and `mfctl account
+edit`](admin-endpoint.md#mail-accounts-and-who-they-are-assigned-to). The folder routes write the list of folders and
+nothing else, and the record route carries no mailbox, so `mailfathom.mail.accounts.write` reaches no secret this
+deployment can resolve.
 
 **A user whose mail accounts are still read from this deployment's configuration cannot write here.** The write is
 refused, naming the declaration as where those mailboxes are changed, because committing it would leave two answers to
 which mailboxes this deployment reads and the files would win at the next restart. Nothing on this surface changes
 that: which decisions a deployment's own files make is the operator's, not the user's.
 
-**An accepted record change reaches the running process.** A mailbox declared here is stored and scheduled
-without a restart. The coordinator drains work already in flight against the immutable document version it began with,
+**An accepted record change reaches the running process.** A folder declared here is stored and read by the
+account's next run without a restart. The coordinator drains work already in flight against the immutable document version it began with,
 then starts the replacement supervisor, so one run never reads two answers.
 
 ### The name routes
@@ -2417,8 +2372,8 @@ recomposes that person on, which is a cost to pay for a change rather than for a
 
 **Both routes are `mailfathom.mail.read`.** The write is under the reading grant for the reason
 [the portrait routes](#the-portrait-routes) are: which zone somebody's own days are read in is not a decision about
-which mailboxes this deployment connects to and under whose credentials, so gating it on the record's own write would
-refuse a change about nothing but themselves to somebody whose mailboxes an administrator maintains.
+what this deployment reads out of their mailboxes, so gating it on the record's own write would refuse a change about
+nothing but themselves to somebody whose mail configuration an administrator maintains in full.
 
 ### The preferences routes
 
@@ -2546,8 +2501,8 @@ way these routes differ from [the record routes](#the-record-routes), which are 
 that authenticated, resolved from the request rather than read out of the body or the path.
 
 **Reading and writing are both `mailfathom.mail.read`.** The write is deliberately not
-`mailfathom.mail.accounts.write`, which every record write is: that grant decides which mailboxes this deployment
-connects to and under whose credentials, somebody whose mail accounts an administrator maintains does not hold it, and
+`mailfathom.mail.accounts.write`, which every record write is: that grant decides what this deployment reads out of
+somebody's mailboxes, somebody whose mail configuration an administrator maintains in full does not hold it, and
 what may be said about a person must not be decided by a grant over their mail configuration. Neither route adds a name
 to [the published permission set](permissions.md).
 
@@ -2662,8 +2617,8 @@ authenticated, resolved from the request rather than read out of the body or the
 
 **All three are `mailfathom.mail.read`**, and none adds a name to [the published permission set](permissions.md). The
 two writes are deliberately not `mailfathom.mail.accounts.write`, for the reason [the preferences
-write](#the-preferences-routes) is not: that grant decides which mailboxes this deployment connects to, and what a
-person is drawn by must not be decided by a grant over their mail configuration.
+write](#the-preferences-routes) is not: that grant decides what this deployment reads out of somebody's mailboxes,
+and what a person is drawn by must not be decided by a grant over their mail configuration.
 
 **The file hangs off the user row.** Erasing a user erases their portrait with everything else derived from them, in
 the database and in the object store alike, and [moving stored content](moving-stored-content.md) into the object store

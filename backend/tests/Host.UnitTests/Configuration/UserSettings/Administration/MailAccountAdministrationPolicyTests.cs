@@ -29,7 +29,6 @@ public sealed class MailAccountAdministrationPolicyTests
     private const string ForcingTheHost = """{"MailAccounts":{"Forced":{"Host":"imap.corp.example.test"}}}""";
     private const string WithholdingTheHost = """{"MailAccounts":{"Editing":{"Mode":"AllExcept","Properties":["Host"]}}}""";
     private const string WithholdingTheFolders = """{"MailAccounts":{"Editing":{"Mode":"AllExcept","Properties":["Folders"]}}}""";
-    private const string LeavingOnlyTheFolders = """{"MailAccounts":{"Editing":{"Mode":"NoneExcept","Properties":["Folders"]}}}""";
     private const string NotAPolicy = """{"MailAccounts":{"Forced":{"Dialect":"Silesian"}}}""";
 
     private const string DefaultingTheServer =
@@ -235,20 +234,17 @@ public sealed class MailAccountAdministrationPolicyTests
     /// document keeps what was stated and nothing a default lent it.
     /// </summary>
     [Fact]
-    public async Task AddOwnAsync_ADeclarationOmittingWhatADefaultSupplies_CommitsAndKeepsOnlyWhatWasStated()
+    public async Task CreateAsync_ADeclarationOmittingWhatADefaultSupplies_CommitsAndKeepsOnlyWhatWasStated()
     {
         // Arrange
         var policies = StatedPolicies.Governing(deployment: DefaultingTheServer);
-        var deployment = SignedIn(policies);
+        var deployment = Administered(policies);
 
         // Act
-        var outcome = await deployment.MailAccounts.AddOwnAsync(
-            WithoutAServer,
-            expectedVersion: 1,
-            TestContext.Current.CancellationToken);
+        var creation = await deployment.MailAccounts.CreateAsync(Alex, WithoutAServer, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.True(outcome!.IsCommitted);
+        Assert.True(creation!.Outcome.IsCommitted);
         var created = Assert.Single(deployment.MailAccountRecords.Accounts);
         Assert.DoesNotContain(CorporateHost, created.Document, StringComparison.Ordinal);
         Assert.DoesNotContain("Language", created.Document, StringComparison.Ordinal);
@@ -258,61 +254,35 @@ public sealed class MailAccountAdministrationPolicyTests
 
     /// <summary>The control of the test above: the same declaration under no policy is one no start would serve.</summary>
     [Fact]
-    public async Task AddOwnAsync_ADeclarationOmittingWhatNoPolicySupplies_IsRefusedAndCreatesNothing()
+    public async Task CreateAsync_ADeclarationOmittingWhatNoPolicySupplies_IsRefusedAndCreatesNothing()
     {
         // Arrange
-        var deployment = SignedIn(StatedPolicies.Governing());
+        var deployment = Administered(StatedPolicies.Governing());
 
         // Act
-        var outcome = await deployment.MailAccounts.AddOwnAsync(
-            WithoutAServer,
-            expectedVersion: 1,
-            TestContext.Current.CancellationToken);
+        var creation = await deployment.MailAccounts.CreateAsync(Alex, WithoutAServer, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, creation!.Outcome.Refusal);
         Assert.Empty(deployment.MailAccountRecords.Accounts);
     }
 
+    /// <summary>A forced value binds a declaration as it binds a save, so an account is never created stating another.</summary>
     [Fact]
-    public async Task AddOwnAsync_APersonStatingASettingAPolicyForcesOtherwise_IsRefusedNamingWhoHoldsIt()
+    public async Task CreateAsync_ADeclarationStatingASettingAPolicyForcesOtherwise_IsRefusedNamingWhoHoldsIt()
     {
         // Arrange
-        var deployment = SignedIn(StatedPolicies.Governing(deployment: ForcingTheHost));
+        var deployment = Administered(StatedPolicies.Governing(deployment: ForcingTheHost));
 
         // Act
-        var outcome = await deployment.MailAccounts.AddOwnAsync(
+        var creation = await deployment.MailAccounts.CreateAsync(
+            Alex,
             Declaration(host: "imap.example.test"),
-            expectedVersion: 1,
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.True(outcome!.IsHeld);
-        Assert.StartsWith("Host is held by the deployment", Assert.Single(outcome.Messages), StringComparison.Ordinal);
-        Assert.Empty(deployment.MailAccountRecords.Accounts);
-    }
-
-    /// <summary>
-    /// An address is a column no policy takes a value for, and an editing restriction still says who may state one. A
-    /// policy leaving a person only their folders therefore leaves declaring a mailbox to an administrator.
-    /// </summary>
-    [Fact]
-    public async Task AddOwnAsync_APersonUnderAPolicyLeavingThemOnlyFolders_IsRefusedNamingTheAddress()
-    {
-        // Arrange
-        var deployment = SignedIn(StatedPolicies.Governing(deployment: LeavingOnlyTheFolders));
-
-        // Act
-        var outcome = await deployment.MailAccounts.AddOwnAsync(
-            Declaration(host: "imap.example.test"),
-            expectedVersion: 1,
-            TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.True(outcome!.IsHeld);
-        Assert.Contains(
-            outcome.Messages,
-            message => message.StartsWith("EmailAddress is held by the deployment", StringComparison.Ordinal));
+        Assert.True(creation!.Outcome.IsHeld);
+        Assert.StartsWith("Host is held by the deployment", Assert.Single(creation.Outcome.Messages), StringComparison.Ordinal);
         Assert.Empty(deployment.MailAccountRecords.Accounts);
     }
 
@@ -451,12 +421,11 @@ public sealed class MailAccountAdministrationPolicyTests
     }
 
     /// <summary>
-    /// A person changes an account already declared through the folder routes alone, so the list of folders is the
-    /// one property of it that can be theirs; every property is stated when an account is declared, so there it is
-    /// every property no policy holds against them.
+    /// A person changes an account through the folder routes alone, so the list of folders is the one property of it
+    /// that can be theirs.
     /// </summary>
     [Fact]
-    public async Task ReadOwnAccountPoliciesAsync_AnAccountAndANewOne_SaysWhichPropertiesOfEachAreThePersonsToChange()
+    public async Task ReadOwnAccountPoliciesAsync_AnAccountUnderPolicies_SaysOnlyItsFoldersAreThePersonsToChange()
     {
         // Arrange
         var work = Mailbox();
@@ -466,15 +435,11 @@ public sealed class MailAccountAdministrationPolicyTests
         var reading = await deployment.MailAccounts.ReadOwnAccountPoliciesAsync(TestContext.Current.CancellationToken);
 
         // Assert
-        var held = Assert.Single(reading!.Accounts);
+        var held = Assert.Single(reading!);
         Assert.Equal(work.Id, held.Key);
         Assert.Equal(["Folders"], held.Value.Changeable);
         Assert.Equal(SettingsValueSource.OrganizationDefault, PropertyOf(held.Value, "Folders").Source);
-
-        Assert.Contains("Language", reading.NewAccount.Changeable);
-        Assert.Contains("EmailAddress", reading.NewAccount.Changeable);
-        Assert.DoesNotContain("Host", reading.NewAccount.Changeable);
-        Assert.Equal(SettingsPolicyScope.Deployment, PropertyOf(reading.NewAccount, "Host").HeldBy);
+        Assert.Equal(SettingsPolicyScope.Deployment, PropertyOf(held.Value, "Host").HeldBy);
     }
 
     /// <summary>A reader who may not write an account is offered no control whose change would be refused.</summary>
@@ -490,9 +455,9 @@ public sealed class MailAccountAdministrationPolicyTests
         var reading = await deployment.MailAccounts.ReadOwnAccountPoliciesAsync(TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Empty(Assert.Single(reading!.Accounts).Value.Changeable);
-        Assert.Empty(reading.NewAccount.Changeable);
-        Assert.NotEmpty(reading.NewAccount.Properties);
+        var held = Assert.Single(reading!).Value;
+        Assert.Empty(held.Changeable);
+        Assert.NotEmpty(held.Properties);
     }
 
     private static ResolvedProperty PropertyOf(MailAccountPolicyReading reading, string path) =>
@@ -527,7 +492,7 @@ public sealed class MailAccountAdministrationPolicyTests
     private static string DeclarationOf(MailAccountRecord account, string host) =>
         MailAccountDeclaration.Of(account).Replace("imap.example.test", host, StringComparison.Ordinal);
 
-    /// <summary>The declaration of a mailbox a person adds for themselves.</summary>
+    /// <summary>The declaration of a mailbox being created.</summary>
     private static string Declaration(string host) =>
         $$"""
           {

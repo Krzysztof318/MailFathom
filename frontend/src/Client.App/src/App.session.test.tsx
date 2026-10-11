@@ -86,7 +86,7 @@ describe('App session', () => {
         ).toBeDefined();
     });
 
-    // Changing which mailboxes a deployment reads and changing the folders inside one are two grants on the service,
+    // Saving a person's own record and changing the folders inside a mailbox are two grants on the service,
     // and the folder acts are refused under the first alone — so the client offers them under the second.
     it('offers the folder acts under the grant the deployment asks them of, rather than the one for the record', async () => {
         const folderSentence =

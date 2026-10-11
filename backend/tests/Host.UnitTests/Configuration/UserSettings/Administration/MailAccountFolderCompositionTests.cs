@@ -473,48 +473,7 @@ public sealed class MailAccountFolderCompositionTests
         Assert.Contains("Drafts", change.Refusal!, StringComparison.Ordinal);
     }
 
-    /// <summary>A declared account carries its folders, so it is a folder route by another name rather than the way around the three.</summary>
-    [Fact]
-    public void WithFoldersDeclared_AnAccountDeclaringFolders_CarriesTheSwitchesOnEachOfThem()
-    {
-        // Arrange
-        const string account =
-            """{"Host":"mail.example.test","Folders":[{"Alias":"INBOX","RemotePath":"INBOX"},{"Alias":"SENT","RemotePath":"Sent"}]}""";
-
-        // Act
-        var candidate = MailAccountFolderComposition.WithFoldersDeclared(account).Candidate;
-
-        // Assert
-        Assert.True(ReadFolderSwitch(candidate, "0", "CreateIfMissing"));
-        Assert.True(ReadFolderSwitch(candidate, "1", "CreateIfMissing"));
-    }
-
-    [Fact]
-    public void WithFoldersDeclared_AnAccountWhoseFolderStatesSynchronizeFalse_IsRefusedNamingTheSwitch()
-    {
-        // Act
-        var change = MailAccountFolderComposition.WithFoldersDeclared(
-            """{"Folders":[{"Alias":"INBOX","RemotePath":"INBOX","Synchronize":false}]}""");
-
-        // Assert
-        Assert.Null(change.Candidate);
-        Assert.Contains("Synchronize", change.Refusal!, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void WithFoldersDeclared_AnAccountDeclaringNoFolder_LeavesItsSettingsAsTheyWere()
-    {
-        // Act
-        var candidate = MailAccountFolderComposition.WithFoldersDeclared("""{"Host":"mail.example.test"}""").Candidate;
-
-        // Assert
-        var written = JsonNode.Parse(candidate!)!.AsObject();
-
-        Assert.Equal("mail.example.test", written["Host"]!.GetValue<string>());
-        Assert.False(written.ContainsKey("Folders"));
-    }
-
-    /// <summary>A declaration the folder-management surface composes is held to the same rules a person's own declaration is.</summary>
+    /// <summary>A declaration the folder-management surface composes is held to the same rules a folder route's is.</summary>
     [Fact]
     public void WithFolderDeclared_AFolderTheMailServerNowAdvertises_DeclaresItSynchronizedAndCreatedIfMissing()
     {

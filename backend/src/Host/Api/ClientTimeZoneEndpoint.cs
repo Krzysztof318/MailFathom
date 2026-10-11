@@ -29,8 +29,8 @@ namespace MailFathom.Host.Api;
 /// <para>
 /// Both routes are <see cref="MailFathomPermission.MailRead" />, which is the grant a signed-in person already holds.
 /// The write is under the read's grant for the reason the portrait routes are: what a person's own days are read in is
-/// not a decision about which mailboxes this deployment connects to and under whose credentials, so gating it on the
-/// record's own write would refuse somebody whose mailboxes an administrator maintains a change about nothing but
+/// not a decision about what this deployment reads out of their mailboxes, so gating it on the record's own write
+/// would refuse somebody whose mail configuration an administrator maintains in full a change about nothing but
 /// themselves.
 /// </para>
 /// </remarks>

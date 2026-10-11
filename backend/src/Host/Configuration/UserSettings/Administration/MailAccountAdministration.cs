@@ -32,16 +32,14 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// only caller that assigns an account to a user. An account of an organization is served to as many of its members
 /// as an administrator assigns it to: the mail graph is keyed by the account alone, so one mailbox is synchronized
 /// once, holds one copy of its mail, and applies each rule and mutation once, whoever reads it. An account in no
-/// organization is one person's, and a second assignment of it is refused. A user adds an account for themselves
-/// alone, withdraws one of their own, and changes the folders of one — and every one of those writes states the version
-/// of their own record, which is what every account write moves, so the version a client already holds is the one it
-/// composes against.
+/// organization is one person's, and a second assignment of it is refused. A user neither declares an account nor
+/// ends an assignment to one: what a user changes is the folders of an account assigned to them, and that write states
+/// the version of their own record, which is what every account write moves, so the version a client already holds is
+/// the one it composes against.
 /// </para>
 /// <para>
-/// An address is held by one account in the whole deployment. An administrator told the address is held is told so by
-/// name. A user is refused with one sentence whether the address is held, whoever holds it, or is not an address at all,
-/// so the refusal never says whose mailbox it is nor tells a held address from an unusable one; a free, usable address
-/// commits.
+/// An address is held by one account in the whole deployment, and an administrator told the address is held is told so
+/// by name.
 /// </para>
 /// <para>
 /// An account is governed by the settings policy of the deployment and of the organization it stands in. So a change
@@ -146,15 +144,15 @@ internal sealed class MailAccountAdministration(
 
     /// <summary>Reads how the settings policies governing the signed-in user's mail accounts resolve each of them.</summary>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>Every account assigned to the user as it is served, and what an account they declared now would start from; or <see langword="null" /> when this deployment holds no record for the acting user.</returns>
+    /// <returns>Every account assigned to the user as it is served, by the identifier the deployment generated for it; or <see langword="null" /> when this deployment holds no record for the acting user.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
     /// <remarks>
-    /// A property of an account already declared is the reader's to change only where a route of theirs writes it,
-    /// which is the list of folders and nothing else; every property is stated when an account is declared, so there
-    /// it is every property no policy holds against them. Both need <see cref="MailFathomPermission.MailAccountsWrite" />,
-    /// so a reader without it is told nothing is theirs to change rather than offered a control whose change is refused.
+    /// A property of an account is the reader's to change only where a route of theirs writes it, which is the list of
+    /// folders and nothing else. That needs <see cref="MailFathomPermission.MailAccountsWrite" />, so a reader without
+    /// it is told nothing is theirs to change rather than offered a control whose change is refused.
     /// </remarks>
-    internal async Task<OwnMailAccountsPolicyReading?> ReadOwnAccountPoliciesAsync(CancellationToken cancellationToken)
+    internal async Task<IReadOnlyDictionary<Guid, MailAccountPolicyReading>?> ReadOwnAccountPoliciesAsync(
+        CancellationToken cancellationToken)
     {
         authorization.RequirePermission(MailFathomPermission.MailRead);
 
@@ -165,18 +163,11 @@ internal sealed class MailAccountAdministration(
 
         var writes = authorization.Permits(MailFathomPermission.MailAccountsWrite);
 
-        return new OwnMailAccountsPolicyReading(
-            record.MailAccounts.ToDictionary(
-                account => account.Id,
-                account => PolicyReadingOf(
-                    account,
-                    property => writes && property.IsThePersonsToChange && property.Property.Path == FoldersProperty)),
-            PolicyReadingOf(
-                new MailAccountRecord(Guid.Empty, EmailAddress: null, string.Empty, StatingNothing, Version: 0)
-                {
-                    Policies = record.Policies,
-                },
-                property => writes && property.IsThePersonsToChange));
+        return record.MailAccounts.ToDictionary(
+            account => account.Id,
+            account => PolicyReadingOf(
+                account,
+                property => writes && property.IsThePersonsToChange && property.Property.Path == FoldersProperty));
     }
 
     /// <summary>Creates an account in the organization of the user it is created for, and assigns it to them.</summary>
@@ -202,7 +193,7 @@ internal sealed class MailAccountAdministration(
             return null;
         }
 
-        var outcome = await this.CreateForAsync(record, declarationJson, UserRecordAuthority.Administrator, cancellationToken);
+        var outcome = await this.CreateForAsync(record, declarationJson, cancellationToken);
 
         return new MailAccountCreation(outcome.AccountId, outcome.Outcome);
     }
@@ -446,84 +437,6 @@ internal sealed class MailAccountAdministration(
         return erased;
     }
 
-    /// <summary>Creates an account for the signed-in user alone.</summary>
-    /// <param name="declarationJson">The declaration.</param>
-    /// <param name="expectedVersion">The version of the user's own record the change was composed over.</param>
-    /// <param name="cancellationToken">Cancels the reads and the commit.</param>
-    /// <returns>What the write did, its version the user's record's, or <see langword="null" /> when this deployment holds no record for the acting user.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="declarationJson" /> is <see langword="null" />.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailAccountsWrite" />.</exception>
-    internal async Task<UserRecordWriteOutcome?> AddOwnAsync(
-        string declarationJson,
-        long expectedVersion,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(declarationJson);
-        authorization.RequirePermission(MailFathomPermission.MailAccountsWrite);
-
-        if (await this.OpenOwnAsync(expectedVersion, cancellationToken) is not { } opened)
-        {
-            return null;
-        }
-
-        return opened.Refusal ?? (await this.CreateForAsync(
-            opened.Record,
-            declarationJson,
-            UserRecordAuthority.User,
-            cancellationToken)).Outcome;
-    }
-
-    /// <summary>Ends the signed-in user's assignment to one of their accounts.</summary>
-    /// <param name="accountId">The account's identifier, as the record the user was served names it.</param>
-    /// <param name="expectedVersion">The version of the user's own record the change was composed over.</param>
-    /// <param name="cancellationToken">Cancels the reads and the commit.</param>
-    /// <returns>What the write did, its version the user's record's, or <see langword="null" /> when this deployment holds no record for the acting user.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="accountId" /> is <see langword="null" />, empty, or white space.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailAccountsWrite" />.</exception>
-    /// <remarks>
-    /// Every removal ends the caller's assignment, and erases the account and every message, folder, and attachment
-    /// stored for it only where nobody else is assigned it — a mailbox somebody else still reads keeps its mail, and
-    /// what goes with the departing user is what they alone could read there: their drafts and their recurring sends.
-    /// It stays under
-    /// <see cref="MailFathomPermission.MailAccountsWrite" /> rather than <see cref="MailFathomPermission.AdminErase" />
-    /// because a person removing their own mailbox disposes of their own data, unlike an administrator unassigning
-    /// somebody else's.
-    /// </remarks>
-    internal async Task<UserRecordWriteOutcome?> RemoveOwnAsync(
-        string accountId,
-        long expectedVersion,
-        CancellationToken cancellationToken)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(accountId);
-        authorization.RequirePermission(MailFathomPermission.MailAccountsWrite);
-
-        if (await this.OpenOwnAsync(expectedVersion, cancellationToken) is not { } opened)
-        {
-            return null;
-        }
-
-        if (opened.Refusal is { } refusal)
-        {
-            return refusal;
-        }
-
-        if (AssignedAccount(opened.Record, accountId) is not { } account)
-        {
-            return NotAssigned(opened.Record.Version, accountId);
-        }
-
-        var unassignment = await accounts.UnassignAsync(account.Id, opened.Record.User, cancellationToken);
-
-        if (!unassignment.Unassigned)
-        {
-            return NotAssigned(opened.Record.Version, accountId);
-        }
-
-        await this.PublishAsync(cancellationToken);
-
-        return UserRecordWriteOutcome.Committed(await this.VersionOfAsync(opened.Record, cancellationToken));
-    }
-
     /// <summary>Declares one more folder in one of the signed-in user's accounts.</summary>
     /// <param name="accountId">The account's identifier.</param>
     /// <param name="folderJson">The folder, as the JSON object a file would have written.</param>
@@ -535,14 +448,14 @@ internal sealed class MailAccountAdministration(
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailAccountsWrite" />.</exception>
     /// <remarks>
     /// <para>
-    /// The folder acts carry the grant an account's own settings carry rather than one of their own: a folder names a
-    /// path on that account's server and decides what is mirrored from it, so a deployment that lets somebody state
-    /// their own mailboxes has already let them state what is read out of one.
+    /// The folder acts carry the grant a person's own record is saved under rather than one of their own: a folder
+    /// names a path on that account's server and decides what is mirrored from it, which is a change to what this
+    /// deployment reads for them exactly as a setting of their record is.
     /// </para>
     /// <para>
     /// Part of what they may state is fixed, and <see cref="MailAccountFolderComposition" /> is where those rules are:
     /// the synchronization switches, the role a folder plays, and the name a folder playing one carries. They hold on
-    /// all three folder acts and on a user's own account declaration, and on nothing an administrator states.
+    /// all three folder acts, and on nothing an administrator states.
     /// </para>
     /// </remarks>
     internal Task<UserRecordWriteOutcome?> AddOwnFolderAsync(
@@ -807,24 +720,6 @@ internal sealed class MailAccountAdministration(
             GovernedRecordResolution.ReadDocument(standing.Document),
             GovernedRecordResolution.ReadDocument(candidate.Document));
 
-    /// <summary>Says why a change to an account's address is refused, where it is.</summary>
-    /// <remarks>
-    /// The address is a column no declaration document states, so the judgement of a document cannot reach it. A
-    /// policy takes no value for it and says only who may change it, which binds a person stating the address of a
-    /// mailbox they declare and nobody administering one.
-    /// </remarks>
-    private static IEnumerable<string> FindAddressRefusal(
-        SettingsPolicyLayers layers,
-        MailAccountRecord? standing,
-        MailAccountRecord stated,
-        bool byThePerson) =>
-        string.Equals(standing?.EmailAddress, stated.EmailAddress, StringComparison.OrdinalIgnoreCase)
-        || GovernedRecordResolution.Resolve(SettingsPolicySection.MailAccounts, layers, StatingNothing)
-            .Find(MailAccountRecordComposition.EmailAddressProperty)
-            .FindRefusal(byThePerson) is not { } refusal
-            ? []
-            : [refusal];
-
     /// <summary>Answers a change every part of which is held where it stands.</summary>
     private static UserRecordWriteOutcome NothingHeldMoves(long version) =>
         UserRecordWriteOutcome.NothingToChange(
@@ -920,14 +815,6 @@ internal sealed class MailAccountAdministration(
                 $"Another mail account already holds '{emailAddress}', and one address is held by one account in this deployment, so nothing was written.",
             ]);
 
-    /// <summary>The refusal a user receives for an address somebody's account already holds, or one that is not an address at all.</summary>
-    /// <remarks>The same sentence for both, so the answer never tells a held address from an unusable one, and never names whose mailbox a held address is.</remarks>
-    private static UserRecordWriteOutcome AddressRefusedForUser(long version) =>
-        UserRecordWriteOutcome.Refused(
-            MailFathomErrorCode.ConfigurationCandidateInvalid,
-            version,
-            ["This mail account cannot be added for you. Ask whoever administers this deployment to add it."]);
-
     private static AdministrativeTarget TargetOf(MailAccountHolding holding) =>
         AdministrativeTarget.MailAccount(holding.OrganizationId, holding.Users);
 
@@ -974,72 +861,37 @@ internal sealed class MailAccountAdministration(
     /// <summary>Creates an account from a declaration and assigns it to the user whose record it was judged against.</summary>
     /// <remarks>
     /// The refusal version is the user's record's, because it is the only version the caller composed against: an
-    /// account that was never created has none of its own. A committed account reports the version the caller composes
-    /// its next change over — the account's to an administrator, the user's record's to the user.
+    /// account that was never created has none of its own. A committed account reports its own version, which is the
+    /// one the administrator composes its next change over.
     /// </remarks>
     private async Task<(Guid? AccountId, UserRecordWriteOutcome Outcome)> CreateForAsync(
         UserSettingsDocument record,
         string declarationJson,
-        UserRecordAuthority authority,
         CancellationToken cancellationToken)
     {
         MailAccountDeclaration declaration;
 
         try
         {
-            declaration = authority == UserRecordAuthority.User
-                ? MailAccountDeclaration.ReadWithAnyAddress(declarationJson)
-                : MailAccountDeclaration.Read(declarationJson);
+            declaration = MailAccountDeclaration.Read(declarationJson);
         }
         catch (Exception refused) when (refused is FormatException or JsonException)
         {
             return (null, NotADeclaration(record.Version, refused));
         }
 
-        if (!MailAccountDeclaration.IsAnAddress(declaration.EmailAddress))
-        {
-            return (null, AddressRefusedForUser(record.Version));
-        }
-
-        var document = declaration.Document;
-
-        // A declared account carries its folders, so a user declaring one reaches the folder routes' rules through it
-        // rather than around them. An administrator states a whole account, which those rules do not bind.
-        if (authority == UserRecordAuthority.User)
-        {
-            MailAccountFolderChange folders;
-
-            try
-            {
-                folders = MailAccountFolderComposition.WithFoldersDeclared(document);
-            }
-            catch (Exception refused) when (refused is FormatException or JsonException)
-            {
-                return (null, NotADeclaration(record.Version, refused));
-            }
-
-            if (folders.Refusal is { } broken)
-            {
-                return (
-                    null,
-                    UserRecordWriteOutcome.Refused(MailFathomErrorCode.ConfigurationCandidateInvalid, record.Version, [broken]));
-            }
-
-            document = folders.Candidate ?? document;
-        }
-
         var candidate = new MailAccountRecord(
             Guid.CreateVersion7(),
             declaration.EmailAddress,
             declaration.DisplayName,
-            document,
+            declaration.Document,
             Version: 0);
 
         var opened = await this.JudgeAsync(
             standing: null,
             candidate,
             [record.User],
-            authority == UserRecordAuthority.User ? record.User : null,
+            actingUser: null,
             record.Version,
             record.Policies,
             cancellationToken);
@@ -1057,18 +909,15 @@ internal sealed class MailAccountAdministration(
 
             return (null, write.Result switch
             {
-                MailAccountWriteResult.AddressHeld when authority == UserRecordAuthority.User => AddressRefusedForUser(current),
                 MailAccountWriteResult.AddressHeld => AddressHeldForAdministrator(current, candidate.EmailAddress),
                 MailAccountWriteResult.NothingComposed when pending.CommittedAs.Refusal is { } refusedAtCommit => refusedAtCommit,
                 _ => Superseded(record.Version, current, "user record"),
             });
         }
 
-        var version = authority == UserRecordAuthority.User
-            ? await this.VersionOfAsync(record, cancellationToken)
-            : write.Version;
-
-        return (candidate.Id, await this.ServedAsync(UserRecordWriteOutcome.Committed(version, pending.StandingProblems), cancellationToken));
+        return (
+            candidate.Id,
+            await this.ServedAsync(UserRecordWriteOutcome.Committed(write.Version, pending.StandingProblems), cancellationToken));
     }
 
     /// <summary>Composes one folder change over one of the signed-in user's accounts, and saves the account it produced.</summary>
@@ -1290,11 +1139,9 @@ internal sealed class MailAccountAdministration(
             statedDeclaration,
             byThePerson);
 
-        string[] held = [.. change.Refusals, .. FindAddressRefusal(layers, standing, stated, byThePerson)];
-
-        if (held.Length > 0)
+        if (change.Refusals.Count > 0)
         {
-            return Held(held);
+            return Held(change.Refusals);
         }
 
         var carriedThrough = !ReferenceEquals(change.Json, statedDeclaration);

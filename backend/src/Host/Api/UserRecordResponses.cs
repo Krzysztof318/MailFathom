@@ -186,44 +186,40 @@ internal sealed record UserRecordPropertyResponse(
 
 /// <summary>The acting user's mail accounts as the settings policies governing them resolve each.</summary>
 /// <param name="Accounts">One entry per account the caller is assigned, in identifier order.</param>
-/// <param name="NewAccount">What an account the caller declared now would start from: each property as it resolves where a declaration states nothing, and whether it is the caller's to state.</param>
-internal sealed record UserMailAccountsResponse(
-    IReadOnlyList<UserMailAccountResponse> Accounts,
-    UserMailAccountResponse NewAccount)
+internal sealed record UserMailAccountsResponse(IReadOnlyList<UserMailAccountResponse> Accounts)
 {
     /// <summary>Builds the response for one reading.</summary>
-    /// <param name="reading">The accounts as they were read.</param>
+    /// <param name="accounts">The accounts as they were read, by the identifier the deployment generated for each.</param>
     /// <returns>The response.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="reading" /> is <see langword="null" />.</exception>
-    internal static UserMailAccountsResponse For(OwnMailAccountsPolicyReading reading)
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="accounts" /> is <see langword="null" />.</exception>
+    internal static UserMailAccountsResponse For(IReadOnlyDictionary<Guid, MailAccountPolicyReading> accounts)
     {
-        ArgumentNullException.ThrowIfNull(reading);
+        ArgumentNullException.ThrowIfNull(accounts);
 
         return new UserMailAccountsResponse(
             [
-                .. reading.Accounts
+                .. accounts
                     .OrderBy(account => account.Key.ToString("D"), StringComparer.Ordinal)
                     .Select(account => UserMailAccountResponse.For(account.Key.ToString("D"), account.Value)),
-            ],
-            UserMailAccountResponse.For(id: null, reading.NewAccount));
+            ]);
     }
 }
 
 /// <summary>One mail account of the acting user's as the settings policies governing it resolve it.</summary>
-/// <param name="Id">The identifier the deployment generated for the account, or <see langword="null" /> for the account the caller has not declared yet.</param>
+/// <param name="Id">The identifier the deployment generated for the account.</param>
 /// <param name="Properties">Every property of the account, in path order; empty where <paramref name="Unresolved" /> says why it could not be resolved.</param>
 /// <param name="Unresolved">The sentence saying which settings policy this build does not read, or <see langword="null" /> where the account was resolved.</param>
 internal sealed record UserMailAccountResponse(
-    string? Id,
+    string Id,
     IReadOnlyList<UserRecordPropertyResponse> Properties,
     string? Unresolved)
 {
     /// <summary>Builds the response for one account.</summary>
-    /// <param name="id">The account's identifier, or <see langword="null" /> for one not declared yet.</param>
+    /// <param name="id">The account's identifier.</param>
     /// <param name="policy">The account as it resolved.</param>
     /// <returns>The response.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="policy" /> is <see langword="null" />.</exception>
-    internal static UserMailAccountResponse For(string? id, MailAccountPolicyReading policy)
+    internal static UserMailAccountResponse For(string id, MailAccountPolicyReading policy)
     {
         ArgumentNullException.ThrowIfNull(policy);
 
@@ -239,22 +235,11 @@ internal sealed record UserMailAccountResponse(
 /// <param name="Document">The record as the operator saved it.</param>
 internal sealed record UserRecordSaveRequest(long Version, string? Document);
 
-/// <summary>One mail account declared into a user's record.</summary>
-/// <param name="Version">The version the record was read at.</param>
-/// <param name="Account">The declaration, as the JSON object a configuration file would have written.</param>
-/// <remarks>The settings travel as the document a file states them in rather than as a typed body, so what an operator writes for an account of their own is what they would have written for one of the deployment's — and so a setting added to that shape needs nothing added here.</remarks>
-internal sealed record UserMailAccountRequest(long Version, string? Account);
-
-/// <summary>The mail account the acting user withdraws, which erases it with every message stored for it.</summary>
-/// <param name="Version">The version the record was read at.</param>
-/// <param name="AccountId">The identifier the deployment generated for the account.</param>
-internal sealed record UserMailAccountRemovalRequest(long Version, string? AccountId);
-
 /// <summary>One folder declared into a mail account of the acting user's record.</summary>
 /// <param name="Version">The version the record was read at.</param>
 /// <param name="AccountId">The identifier the account the folder belongs to was declared under.</param>
 /// <param name="Folder">The declaration, as the JSON object a configuration file would have written.</param>
-/// <remarks>The folder travels as the document a file states it in for the reason a mail account does: it is the same shape, judged by the same binder, so a setting a folder gains needs nothing added here.</remarks>
+/// <remarks>The folder travels as the document a file states it in rather than as a typed body: it is the shape a configuration file declares a folder in, judged by the same binder, so a setting a folder gains needs nothing added here.</remarks>
 internal sealed record UserFolderRequest(long Version, string? AccountId, string? Folder);
 
 /// <summary>One folder of the acting user's record stated afresh, in place of the one carrying an alias.</summary>

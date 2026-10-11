@@ -30,8 +30,9 @@ namespace MailFathom.Host.Api;
 /// <para>
 /// Both are <see cref="MailFathomPermission.MailRead" />, and neither adds a name to the published permission set. The
 /// write deliberately does not take <see cref="MailFathomPermission.MailAccountsWrite" /> as the record's writes do:
-/// that grant decides which mailboxes this deployment connects to, somebody whose accounts an administrator maintains
-/// does not hold it, and what may be said about a person must not be decided by a grant over their mail configuration.
+/// that grant decides what this deployment reads out of somebody's mailboxes, somebody whose mail configuration an
+/// administrator maintains in full does not hold it, and what may be said about a person must not be decided by a
+/// grant over their mail configuration.
 /// </para>
 /// <para>
 /// A write states the whole document, which is what makes it a closed set rather than a patch: a preference the body

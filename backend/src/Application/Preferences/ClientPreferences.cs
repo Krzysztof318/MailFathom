@@ -27,7 +27,7 @@ namespace MailFathom.Application.Preferences;
 /// </para>
 /// <para>
 /// It is deliberately not part of the user record. That document is configuration, binds strictly against the rules a
-/// configuration file does, and is written under a grant that decides which mailboxes this deployment reads; none of
+/// configuration file does, and is written under a grant that decides what this deployment reads for a person; none of
 /// those has anything to do with whether a person may turn telemetry off or choose a theme.
 /// </para>
 /// <para>

@@ -14,10 +14,11 @@ namespace MailFathom.Host.Api;
 /// <summary>Serves the signed-in user their own record, and takes back the parts of it they maintain.</summary>
 /// <remarks>
 /// <para>
-/// The one place a person changes what this deployment reads for them: which mailboxes it synchronizes, and the
-/// settings that belong to those mailboxes. It is the same record an administrator reaches through
+/// The one place a person changes what this deployment reads for them: the settings of their own record, and which
+/// folders of each mailbox assigned to them it reads. It is the same record an administrator reaches through
 /// <see cref="UserRecordEndpoints" />, judged by the same rules and committed by the same writer, so what this surface
-/// accepts is exactly what the next start would read.
+/// accepts is exactly what the next start would read. Which mailboxes a person has is not theirs to change here: an
+/// account is declared, assigned, and withdrawn through <see cref="MailAccountEndpoints" /> alone.
 /// </para>
 /// <para>
 /// <b>No route here names a user.</b> The acting user comes off the credential that authenticated, which is what
@@ -30,8 +31,8 @@ namespace MailFathom.Host.Api;
 /// <para>
 /// Reading is <see cref="MailFathomPermission.MailRead" /> — the grant that already carries seeing which accounts this
 /// deployment holds for the caller — and every write is <see cref="MailFathomPermission.MailAccountsWrite" />, a grant
-/// of its own because it decides which mailboxes the deployment connects to and under whose credentials. A client that
-/// reads somebody's mail has not thereby been granted the ability to point this deployment at another mailbox.
+/// of its own because it decides what this deployment reads out of somebody's mailboxes. A client that reads
+/// somebody's mail has not thereby been granted the ability to change what is mirrored from their mail server.
 /// </para>
 /// <para>
 /// The record is handed over with every secret-bearing value replaced by the redaction marker, and a save is read as
@@ -44,11 +45,8 @@ internal static class ClientUserRecordEndpoint
     /// <summary>The route the acting user's record is read at and saved back to, relative to the client prefix.</summary>
     internal const string RecordRoute = "/record";
 
-    /// <summary>The route one mail account is declared at, and the one the acting user's accounts are read at as the settings policies governing them resolve each.</summary>
+    /// <summary>The route the acting user's mail accounts are read at, as the settings policies governing them resolve each.</summary>
     internal const string MailAccountsRoute = $"{RecordRoute}/mail-accounts";
-
-    /// <summary>The route one mail account is withdrawn at.</summary>
-    internal const string MailAccountRemovalRoute = $"{MailAccountsRoute}/removal";
 
     /// <summary>The route one folder of one mail account is declared at.</summary>
     /// <remarks>
@@ -64,7 +62,7 @@ internal static class ClientUserRecordEndpoint
     internal const string FolderReplacementRoute = $"{FoldersRoute}/replacement";
 
     /// <summary>The route one folder is withdrawn at.</summary>
-    /// <remarks>The alias travels in the body for the reason a withdrawn mail account's identifier does, and for one more: an alias nests on a slash, so a name a route segment could carry is not a name every alias has.</remarks>
+    /// <remarks>The alias travels in the body because it nests on a slash, so a name a route segment could carry is not a name every alias has.</remarks>
     internal const string FolderRemovalRoute = $"{FoldersRoute}/removal";
 
     /// <summary>Maps the record routes into the client group, so they inherit its requirement, its policy, and its limits.</summary>
@@ -86,14 +84,6 @@ internal static class ClientUserRecordEndpoint
 
         api.MapGet(MailAccountsRoute, ReadMailAccountsAsync)
             .RequirePermission(MailFathomPermission.MailRead);
-
-        api.MapPost(MailAccountsRoute, AddMailAccountAsync)
-            .WithMetadata(new RequestSizeLimitAttribute(UserRecordEndpoints.MaxWriteRequestBytes))
-            .RequirePermission(MailFathomPermission.MailAccountsWrite);
-
-        api.MapPost(MailAccountRemovalRoute, RemoveMailAccountAsync)
-            .WithMetadata(new RequestSizeLimitAttribute(UserRecordEndpoints.MaxWriteRequestBytes))
-            .RequirePermission(MailFathomPermission.MailAccountsWrite);
 
         api.MapPost(FoldersRoute, AddFolderAsync)
             .WithMetadata(new RequestSizeLimitAttribute(UserRecordEndpoints.MaxWriteRequestBytes))
@@ -140,7 +130,7 @@ internal static class ClientUserRecordEndpoint
     /// <summary>Hands the acting user each of their mail accounts as the settings policies governing it resolve it.</summary>
     /// <param name="accounts">The account administration.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
-    /// <returns><c>200</c> with every account the caller is assigned and what an account they declared now would start from, each property carrying its effective value, the source that supplied it, who holds it, and whether the caller may change it; or <c>404</c> when this deployment holds no record for the caller.</returns>
+    /// <returns><c>200</c> with every account the caller is assigned, each property carrying its effective value, the source that supplied it, who holds it, and whether the caller may change it; or <c>404</c> when this deployment holds no record for the caller.</returns>
     /// <remarks>
     /// What it answers is the settings of mailboxes the caller is already served, so it names their server and their
     /// login and never a credential: every secret-bearing property is answered without its value. It is apart from
@@ -183,59 +173,6 @@ internal static class ClientUserRecordEndpoint
         }
 
         return Answered(await records.ApplyOwnRecordAsync(document, request.Version, cancellationToken));
-    }
-
-    /// <summary>Creates a mail account for the acting user alone.</summary>
-    /// <param name="records">The account administration.</param>
-    /// <param name="request">The declaration and the version the record was read at.</param>
-    /// <param name="cancellationToken">Cancels the read and the commit.</param>
-    /// <returns><c>200</c> with what the write did, <c>404</c> when this deployment holds no record for the caller, or <c>400</c> when the request carries no declaration.</returns>
-    internal static async Task<Results<Ok<UserRecordWriteResponse>, NotFound<ProblemDetails>, ProblemHttpResult>> AddMailAccountAsync(
-        [FromServices] MailAccountAdministration records,
-        [FromBody] UserMailAccountRequest request,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(records);
-        ArgumentNullException.ThrowIfNull(request);
-
-        if (StatedVersion(request.Version) is { } refused)
-        {
-            return refused;
-        }
-
-        if (request.Account is not { Length: > 0 } account)
-        {
-            return Refusal("A declared mail account carries its address, its display name, and the settings it is read with.");
-        }
-
-        return Answered(await records.AddOwnAsync(account, request.Version, cancellationToken));
-    }
-
-    /// <summary>Ends the acting user's assignment to one of their mail accounts.</summary>
-    /// <param name="records">The account administration.</param>
-    /// <param name="request">The identifier and the version the record was read at.</param>
-    /// <param name="cancellationToken">Cancels the read and the commit.</param>
-    /// <returns><c>200</c> with what the write did, <c>404</c> when this deployment holds no record for the caller, or <c>400</c> when the request names no account.</returns>
-    /// <remarks>An account nobody else is assigned is erased with every message this deployment stored for it.</remarks>
-    internal static async Task<Results<Ok<UserRecordWriteResponse>, NotFound<ProblemDetails>, ProblemHttpResult>> RemoveMailAccountAsync(
-        [FromServices] MailAccountAdministration records,
-        [FromBody] UserMailAccountRemovalRequest request,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(records);
-        ArgumentNullException.ThrowIfNull(request);
-
-        if (StatedVersion(request.Version) is { } refused)
-        {
-            return refused;
-        }
-
-        if (request.AccountId is not { Length: > 0 } accountId || string.IsNullOrWhiteSpace(accountId))
-        {
-            return Refusal("A withdrawn mail account names the identifier it is served under.");
-        }
-
-        return Answered(await records.RemoveOwnAsync(accountId, request.Version, cancellationToken));
     }
 
     /// <summary>Declares one more folder in one of the acting user's mail accounts.</summary>
@@ -310,7 +247,7 @@ internal static class ClientUserRecordEndpoint
     /// <param name="request">The account, the alias, and the version the record was read at.</param>
     /// <param name="cancellationToken">Cancels the read and the commit.</param>
     /// <returns><c>200</c> with what the write did, <c>404</c> when this deployment holds no record for the caller, or <c>400</c> when the request names no account or no folder.</returns>
-    /// <remarks>The mail already stored out of that folder stays, unlike withdrawing the whole mail account, which erases it. What this does is stop the deployment reading the folder.</remarks>
+    /// <remarks>The mail already stored out of that folder stays. What this does is stop the deployment reading the folder.</remarks>
     internal static async Task<Results<Ok<UserRecordWriteResponse>, NotFound<ProblemDetails>, ProblemHttpResult>> RemoveFolderAsync(
         [FromServices] MailAccountAdministration records,
         [FromBody] UserFolderRemovalRequest request,
