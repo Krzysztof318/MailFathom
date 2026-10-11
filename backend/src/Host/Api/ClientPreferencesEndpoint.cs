@@ -223,7 +223,7 @@ internal static class ClientPreferencesEndpoint
     {
         try
         {
-            return (await preferences.ReadAsync(cancellationToken)).TelemetryEnabled;
+            return await preferences.ReadTelemetryAnswerToCarryAsync(cancellationToken);
         }
         catch (JsonException)
         {

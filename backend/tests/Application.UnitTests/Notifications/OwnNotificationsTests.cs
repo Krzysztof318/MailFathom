@@ -363,6 +363,20 @@ public sealed class OwnNotificationsTests
             () => notifications.MarkAllReadAsync(TestContext.Current.CancellationToken));
     }
 
+    /// <summary>The count a change is answered with is the tail of that change, so the reading half alone does not reach it.</summary>
+    [Fact]
+    public async Task CountUnreadLeftAsync_ACallerGrantedOnlyReadingTheCentre_IsRefused()
+    {
+        // Arrange
+        var notifications = new OwnNotifications(
+            AccessAuthorizations.ForUserGranted(User, MailFathomPermission.NotificationsRead),
+            new InMemoryNotificationStore());
+
+        // Act and assert
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
+            () => notifications.CountUnreadLeftAsync(TestContext.Current.CancellationToken));
+    }
+
     private static OwnNotifications SignedIn(INotificationStore store) => new(
         AccessAuthorizations.ForUserGranted(
             User,

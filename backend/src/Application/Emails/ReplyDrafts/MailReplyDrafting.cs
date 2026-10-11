@@ -130,9 +130,10 @@ public sealed class MailReplyDrafting
         ArgumentNullException.ThrowIfNull(request);
 
         // The grant that puts something in front of a chat provider, and the one that reads mail beside it, because
-        // this does both: the conversation and a sample of the account's own sent mail leave this deployment, and the
-        // call is charged to the same allowance a question is. A reply with no message to answer still sends that
-        // sample, so the reading grant is asked whichever kind this is.
+        // answering a message does both: the conversation and a sample of the account's own sent mail leave this
+        // deployment, and the call is charged to the same allowance a question is. A draft written from an
+        // instruction alone reads no mail and is asked for the reading grant all the same: drafting is published as
+        // one act, and which grants admit a caller to it must not turn on a field of the request's body.
         this.authorization.RequirePermission(MailFathomPermission.AssistantUse);
         this.authorization.RequirePermission(MailFathomPermission.MailRead);
 

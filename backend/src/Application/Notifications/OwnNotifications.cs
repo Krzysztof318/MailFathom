@@ -155,6 +155,23 @@ public sealed class OwnNotifications
         return this.store.MarkAllReadAsync(this.authorization.RequireUser(), cancellationToken);
     }
 
+    /// <summary>Counts what a change to the centre left unread, for the answer that change is given.</summary>
+    /// <param name="cancellationToken">Propagates caller cancellation.</param>
+    /// <returns>How many of the signed-in person's notifications stand unread.</returns>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.NotificationsWrite" />.</exception>
+    /// <remarks>
+    /// Asked under the writing grant, because it is the tail of a write rather than a read somebody asked for. No
+    /// permission implies another, so asking the reading grant here would refuse a caller holding the writing one
+    /// alone — and refuse them after their change had been committed, which reports a change that happened as one
+    /// that did not.
+    /// </remarks>
+    public Task<int> CountUnreadLeftAsync(CancellationToken cancellationToken)
+    {
+        this.authorization.RequirePermission(MailFathomPermission.NotificationsWrite);
+
+        return this.store.CountUnreadAsync(this.authorization.RequireUser(), cancellationToken);
+    }
+
     /// <summary>Erases the named notifications, of those the signed-in person holds.</summary>
     /// <param name="notifications">The notifications to erase, which may name none and at most <see cref="MaximumErasedAtOnce" />.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>

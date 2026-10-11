@@ -46,8 +46,9 @@ namespace MailFathom.Host.Api;
 /// <para>
 /// The name routes, which <see cref="ClientDisplayNameEndpoint" /> describes, stand beside the record rather than
 /// inside it: what this deployment records a person as is the envelope its record hangs on, so a client reading the
-/// record alone would still have nothing to draw the person with. They are written under the record's own grant and
-/// refused for the same person, and the read says which, so a screen is drawn from one answer.
+/// record alone would still have nothing to draw the person with. They are written under
+/// <see cref="MailFathomPermission.ProfileWrite" />, the grant over a person's own profile rather than the record's
+/// own, and the read says whether a write would be accepted, so a screen is drawn from one answer.
 /// </para>
 /// <para>
 /// The preferences routes, which <see cref="ClientPreferencesEndpoint" /> describes, are the surface's other write and

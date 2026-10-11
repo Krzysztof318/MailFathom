@@ -331,6 +331,30 @@ public sealed class ClientPreferencesEndpointTests
             (store.Stored!.TelemetryEnabled, store.Stored.Theme, answered.TelemetryEnabled));
     }
 
+    /// <summary>
+    /// No permission implies another, so a caller who may change their preferences and not read them saves an ordinary
+    /// document: carrying the stored telemetry answer forward is a step of the write and is asked under its grant.
+    /// </summary>
+    [Fact]
+    public async Task SaveAsync_ACallerGrantedTheWritingHalfAlone_KeepsTheStoredAnswerAndCommitsTheRest()
+    {
+        // Arrange
+        var store = Holding(ClientPreferences.Unset with { TelemetryEnabled = false });
+        var writing = AccessAuthorizations.ForUserGranted(SyntheticUser.Deployment, MailFathomPermission.ProfileWrite);
+
+        // Act
+        var result = await ClientPreferencesEndpoint.SaveAsync(
+            new OwnClientPreferences(writing, store),
+            writing,
+            Serving(),
+            new ClientPreferencesRequest(Theme: "dark"),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.IsType<Ok<ClientPreferencesResponse>>(result.Result);
+        Assert.Equal((false, ClientThemeChoice.Dark), (store.Stored!.TelemetryEnabled, store.Stored.Theme));
+    }
+
     /// <summary>The fifth preference binds like the four beside it, and a body written before it existed still states the rest.</summary>
     [Fact]
     public void Deserialize_ABodyOmittingThreadExpansion_StatesItAsTheUnsetAnswer()

@@ -192,7 +192,7 @@ public sealed class MailReplyDraftingTests
             Arg.Any<CancellationToken>());
     }
 
-    /// <summary>The drafting is what puts mail in front of a provider, so it is behind the grant that governs doing so.</summary>
+    /// <summary>Asking is not reading: the drafting sends a conversation to a provider, so a caller granted only the asking half is refused naming the reading one.</summary>
     [Fact]
     public async Task DraftAsync_ACallerGrantedOnlyAsking_IsRefusedBeforeAnythingIsRead()
     {
@@ -211,8 +211,9 @@ public sealed class MailReplyDraftingTests
         Assert.Empty(sourceReader.ReceivedCalls());
     }
 
+    /// <summary>The drafting is what puts mail in front of a provider, so it is behind the grant that governs doing so.</summary>
     [Fact]
-    public async Task DraftAsync_ACallerWithoutTheMailAskGrant_IsRefusedBeforeAnythingIsRead()
+    public async Task DraftAsync_ACallerWithoutTheAssistantGrant_IsRefusedBeforeAnythingIsRead()
     {
         // Arrange
         var sourceReader = SourceReaderReturning(Sources());

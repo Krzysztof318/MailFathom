@@ -192,7 +192,7 @@ internal static class ClientNotificationEndpoints
             _ => TypedResults.Ok(new ClientNotificationReadStateResponse(
                 notificationId,
                 request.Read,
-                await notifications.CountUnreadAsync(cancellationToken))),
+                await notifications.CountUnreadLeftAsync(cancellationToken))),
         };
     }
 
@@ -256,7 +256,7 @@ internal static class ClientNotificationEndpoints
 
         return TypedResults.Ok(new ClientDeletedNotificationsResponse(
             erased,
-            await notifications.CountUnreadAsync(cancellationToken)));
+            await notifications.CountUnreadLeftAsync(cancellationToken)));
     }
 
     /// <summary>States what a caller has to change, without echoing what they sent.</summary>

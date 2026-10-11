@@ -130,7 +130,7 @@ public sealed class ContactRelationshipReaderTests
 
     /// <summary>The grant is the one that puts mail in front of a provider, asked here rather than at the transport, so an entrypoint added later meets the same refusal.</summary>
     [Fact]
-    public async Task ReadAsync_ACallerWithoutTheMailAskGrant_IsRefusedWithTheTransportAbsent()
+    public async Task ReadAsync_ACallerWithoutTheAssistantGrant_IsRefusedWithTheTransportAbsent()
     {
         // Arrange
         var reader = ReaderOver(
