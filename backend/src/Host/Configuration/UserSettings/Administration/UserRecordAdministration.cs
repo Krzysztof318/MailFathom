@@ -319,8 +319,8 @@ internal sealed class UserRecordAdministration(
     /// <para>
     /// Asked for under the grant a signed-in person already holds rather than under the record's own write, for the
     /// reason the portrait above is: what the zone decides is how that person's own days are read, which is not a
-    /// decision about which mailboxes this deployment connects to and under whose credentials. Somebody whose mailboxes
-    /// an administrator maintains still reads their mail in their own week.
+    /// decision about what this deployment reads out of their mailboxes. Somebody whose mail configuration an
+    /// administrator maintains in full still reads their mail in their own week.
     /// </para>
     /// <para>
     /// Composed over whatever version is in force rather than over one a caller read, and judged as a record already

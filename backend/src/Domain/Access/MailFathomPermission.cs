@@ -168,17 +168,15 @@ public readonly record struct MailFathomPermission
     /// </remarks>
     public static MailFathomPermission MailSend { get; } = new("mailfathom.mail.send", ProtectedSurface.Mail);
 
-    /// <summary>Gets the permission covering a user maintaining the mail accounts their own record declares.</summary>
+    /// <summary>Gets the permission covering a user maintaining their own record and the folders read out of the mail accounts assigned to them.</summary>
     /// <remarks>
     /// <para>
-    /// The one grant on this surface that decides which mailboxes the deployment serves a person at all: declaring one
-    /// points this deployment at a mail server and gives it a credential reference to authenticate with, and withdrawing
-    /// one ends that person's assignment to the mailbox — erasing the account and every message, folder, and attachment
-    /// this deployment stored for it when nobody else is left assigned, and erasing only what they authored there when
-    /// somebody is. That is the person disposing of their own hold on a mailbox, which is why it is not the
-    /// administrative <see cref="AdminErase" />. It follows from nothing —
-    /// <see cref="MailRead" /> is a person reading their own mail, and nothing about reading implies deciding which
-    /// mailboxes are read at all.
+    /// The one grant on this surface that changes what the deployment reads for a person: the settings their own
+    /// record states, the name they are recorded under, and which folders of a mailbox assigned to them are mirrored.
+    /// It declares no mailbox and ends no assignment to one — which mailboxes a person has is decided under
+    /// <see cref="AdminConfigurationWrite" /> and <see cref="AdminErase" />. It follows from nothing —
+    /// <see cref="MailRead" /> is a person reading their own mail, and nothing about reading implies deciding what is
+    /// read out of a mailbox.
     /// </para>
     /// <para>
     /// It reaches one user's own record and cannot reach another's. Whose record it is comes from the principal
@@ -188,8 +186,8 @@ public readonly record struct MailFathomPermission
     /// <para>
     /// It is deliberately not the administrative <see cref="AdminConfigurationWrite" /> under another name. That one
     /// decides what the deployment is — the endpoints it opens, the grants it honours, the model it bills — and a
-    /// user holds none of it; this one decides which mailboxes are that person's, which is the only configuration
-    /// that is theirs at all.
+    /// user holds none of it; this one decides what is read for that person out of what an administrator assigned
+    /// them, which is the only configuration that is theirs at all.
     /// </para>
     /// </remarks>
     public static MailFathomPermission MailAccountsWrite { get; } =

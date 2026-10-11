@@ -27,8 +27,8 @@ namespace MailFathom.Host.Api;
 /// <para>
 /// All three are <see cref="MailFathomPermission.MailRead" />, and none adds a name to the published permission set.
 /// The two writes are deliberately not <see cref="MailFathomPermission.MailAccountsWrite" />, for the reason the
-/// preferences write is not: that grant decides which mailboxes this deployment connects to, and what a person is
-/// drawn by must not be decided by a grant over their mail configuration.
+/// preferences write is not: that grant decides what this deployment reads out of somebody's mailboxes, and what a
+/// person is drawn by must not be decided by a grant over their mail configuration.
 /// </para>
 /// <para>
 /// <b>An upload is bounded and then judged by its octets.</b> The bound is applied by the routing pipeline before a

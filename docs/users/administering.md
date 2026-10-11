@@ -884,13 +884,10 @@ theirs, and it waits up to half a minute for a run or a job already going to fin
 after that refuses the whole erasure, naming what is running, and nothing at all is erased. Run it again once that has
 ended.
 
-**A mailbox somebody adds from the client names a credential you provisioned for them.** An account carries a
-reference rather than a password, and a reference is a path into what the deployment can read, so a person adding
-their own mailbox may name material provisioned for them and nothing else: its name begins with `user-<their
-identifier>-`. Provision one that way — a file or a systemd credential called `user-3f1d…-work-password` — and they
-add the mailbox themselves; provision it under any other name and `mfctl account add` is what creates it, on this side.
-A person adding a mailbox whose address another account already holds is refused without being told why, and only you
-can assign that account to them. [The client endpoint](../operations/client-endpoint.md#the-record-routes) states the rule in full.
+**Nobody adds or removes a mailbox from the client.** `mfctl account add` creates each mailbox and assigns it,
+`mfctl account assign` and `mfctl account unassign` decide who else reads it, and a person signed in to the client
+changes the folders of a mailbox assigned to them and nothing else about it.
+[The client endpoint](../operations/client-endpoint.md#the-record-routes) states what that surface writes.
 
 **Several companies on one deployment sign in under an organization.** `mfctl organization add --short-name TESTFIRMA
 --display-name "Test Firma"` records one, and `mfctl user set-organization --user 7c02... --organization <id>` moves a
@@ -965,8 +962,8 @@ that state beneath the listing, and
 [records this deployment will not read](../operations/admin-endpoint.md#records-this-deployment-will-not-read) is the
 route that reports all three kinds with the settings to correct.
 
-A person served this way maintains their own mailboxes from [the client](../operations/client-endpoint.md) without
-reaching this command at all — and sees only their own. Who else a deployment serves is administrative, and no surface
+A person served this way maintains the folders of the mailboxes assigned to them from
+[the client](../operations/client-endpoint.md) without reaching this command at all — and sees only their own. Who else a deployment serves is administrative, and no surface
 a person signs in to publishes it.
 
 [Administering a deployment](../operations/admin-endpoint.md#users-and-their-records) is the operator's reference for

@@ -122,51 +122,6 @@ public sealed class MailAccountAdministrationTests
         Assert.Single(deployment.MailAccountRecords.Accounts);
     }
 
-    /// <summary>A user is told the same sentence whoever holds the address, so nobody learns through this which addresses somebody else's mail arrives at.</summary>
-    [Fact]
-    public async Task AddOwnAsync_AnAddressAnotherAccountHolds_IsRefusedWithoutSayingWhoHoldsIt()
-    {
-        // Arrange
-        var deployment = new UserRecordDeployment([MailFathomPermission.MailAccountsWrite], Alex);
-        deployment.Holding(Sam, EmptyRecord, version: 1, Mailbox("shared@example.test", "theirs"));
-        deployment.Holding(Alex, EmptyRecord, version: 2);
-
-        // Act
-        var outcome = await deployment.MailAccounts.AddOwnAsync(
-            Declaration("shared@example.test", "mine", ProvisionedFor(Alex, "mine")),
-            expectedVersion: 2,
-            TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.Equal(
-            "This mail account cannot be added for you. Ask whoever administers this deployment to add it.",
-            Assert.Single(outcome!.Messages));
-        Assert.Equal(2, outcome.Version);
-        Assert.Single(deployment.MailAccountRecords.Accounts);
-    }
-
-    /// <summary>An unusable address reads exactly as a held one does, so a user cannot tell which addresses the deployment serves by trying ones that might be malformed.</summary>
-    [Fact]
-    public async Task AddOwnAsync_AnAddressThatIsNotAnAddress_IsRefusedWithTheSentenceAHeldAddressGets()
-    {
-        // Arrange
-        var deployment = new UserRecordDeployment([MailFathomPermission.MailAccountsWrite], Alex);
-        deployment.Holding(Alex, EmptyRecord, version: 2);
-
-        // Act
-        var outcome = await deployment.MailAccounts.AddOwnAsync(
-            Declaration("not-an-address", "mine", ProvisionedFor(Alex, "mine")),
-            expectedVersion: 2,
-            TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.Equal(
-            "This mail account cannot be added for you. Ask whoever administers this deployment to add it.",
-            Assert.Single(outcome!.Messages));
-        Assert.Equal(2, outcome.Version);
-        Assert.Empty(deployment.MailAccountRecords.Accounts);
-    }
-
     /// <summary>The identifier is this deployment's to generate, so a declaration deciding one is refused before anything is judged.</summary>
     [Fact]
     public async Task CreateAsync_ADeclarationStatingAnIdentifier_IsRefusedAndCreatesNothing()
@@ -205,40 +160,6 @@ public sealed class MailAccountAdministrationTests
         Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, created!.Outcome.Refusal);
         Assert.Contains(created.Outcome.Messages, message => message.Contains("'work'", StringComparison.Ordinal));
         Assert.Single(deployment.MailAccountRecords.Accounts);
-    }
-
-    /// <summary>A reference outside this user's own material would hand one person another's credential to present to a mail server.</summary>
-    [Fact]
-    public async Task AddOwnAsync_AMailboxNamingAnotherUsersCredential_IsRefusedAndCreatesNothing()
-    {
-        // Arrange
-        var deployment = new UserRecordDeployment([MailFathomPermission.MailAccountsWrite], Alex);
-        deployment.Holding(Alex, EmptyRecord, version: 1);
-
-        // Act
-        var outcome = await deployment.MailAccounts.AddOwnAsync(
-            Declaration("archive@example.test", "archive", ProvisionedFor(Sam, "archive")),
-            expectedVersion: 1,
-            TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
-        Assert.Empty(deployment.MailAccountRecords.Accounts);
-    }
-
-    /// <summary>A user's grant is not an administrator's, so their entry point refuses a caller holding only the administrative one.</summary>
-    [Fact]
-    public async Task AddOwnAsync_ACallerHoldingOnlyTheAdministrativeWrite_IsRefused()
-    {
-        // Arrange
-        var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite], Alex);
-
-        // Act & Assert
-        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
-            () => deployment.MailAccounts.AddOwnAsync(
-                Declaration("archive@example.test", "archive", ProvisionedFor(Alex, "archive")),
-                expectedVersion: 1,
-                TestContext.Current.CancellationToken));
     }
 
     /// <summary>A mailbox of an organization that one member already holds is served to a second member as well, which is what sharing one is.</summary>
@@ -713,26 +634,6 @@ public sealed class MailAccountAdministrationTests
         Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
         Assert.Contains("Drafts", Assert.Single(outcome.Messages), StringComparison.Ordinal);
         Assert.Equal(work, Assert.Single(deployment.MailAccountRecords.Accounts));
-    }
-
-    /// <summary>A declared account carries its folders, so it is a folder route by another name rather than the way around the three.</summary>
-    [Fact]
-    public async Task AddOwnAsync_ADeclarationWhoseFolderAsksNotToBeSynchronized_IsRefusedAndCreatesNothing()
-    {
-        // Arrange
-        var deployment = new UserRecordDeployment([MailFathomPermission.MailAccountsWrite], Alex);
-        deployment.Holding(Alex, EmptyRecord, version: 1);
-
-        // Act
-        var outcome = await deployment.MailAccounts.AddOwnAsync(
-            DeclarationWithFolder("""{"Alias":"INBOX","RemotePath":"INBOX","Synchronize":false}"""),
-            expectedVersion: 1,
-            TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
-        Assert.Contains("Synchronize", Assert.Single(outcome.Messages), StringComparison.Ordinal);
-        Assert.Empty(deployment.MailAccountRecords.Accounts);
     }
 
     /// <summary>The rules bind the client surface alone: an administrator states a whole account rather than an act against one.</summary>

@@ -216,39 +216,6 @@ internal static class MailAccountFolderComposition
         return WithFolderReplaced(accountJson, alias, folder.ToJsonString());
     }
 
-    /// <summary>Holds every folder a whole mail account declares to the rules a folder route applies.</summary>
-    /// <param name="accountJson">The account as the client declared it.</param>
-    /// <returns>The settings the declaration would leave, or the rule one of its folders broke.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="accountJson" /> is <see langword="null" />.</exception>
-    /// <exception cref="FormatException">Thrown when the settings are not a JSON object, or when a folder's alias nests too deep.</exception>
-    /// <exception cref="JsonException">Thrown when the settings are not JSON at all.</exception>
-    /// <remarks>
-    /// A declared account carries its folders, so it is a folder route by another name and would otherwise be the way
-    /// around the three. Every folder in it is new, which is why each is judged as a declaration and none as a change
-    /// to one.
-    /// </remarks>
-    public static MailAccountFolderChange WithFoldersDeclared(string accountJson)
-    {
-        ArgumentNullException.ThrowIfNull(accountJson);
-
-        var account = AccountOf(accountJson);
-        List<JsonNode> declared = [];
-
-        foreach (var entry in FoldersIn(account))
-        {
-            var folder = Declared(FolderOf(entry));
-
-            if (folder.Refusal is { } refusal)
-            {
-                return MailAccountFolderChange.Refused(refusal);
-            }
-
-            declared.Add(folder.Folder);
-        }
-
-        return MailAccountFolderChange.Composed(WithFolders(account, [.. declared]));
-    }
-
     /// <summary>Reads a folder declaration the client stated, refusing what this surface fixes and writing what it sets.</summary>
     /// <remarks>
     /// A declaration stating no alias is passed over, because the binder refuses one with a sentence naming that rule

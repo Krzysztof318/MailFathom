@@ -18,9 +18,9 @@ namespace MailFathom.Application.Portraits;
 /// <para>
 /// All three acts are admitted under <see cref="MailFathomPermission.MailRead" />, the grant a signed-in person
 /// already holds, and none of them adds a name to the published set. The two writes are deliberately not
-/// <see cref="MailFathomPermission.MailAccountsWrite" />: that grant decides which mailboxes this deployment connects
-/// to, an administrator maintains it for somebody whose accounts are declared in the deployment's own files, and what
-/// a person is drawn by must not be decided by a grant over their mail configuration.
+/// <see cref="MailFathomPermission.MailAccountsWrite" />: that grant decides what this deployment reads out of
+/// somebody's mailboxes, somebody whose mail configuration an administrator maintains in full does not hold it, and
+/// what a person is drawn by must not be decided by a grant over their mail configuration.
 /// </para>
 /// <para>
 /// The picture is a stored file the user record links to. A replacement writes the new file, then links it, then

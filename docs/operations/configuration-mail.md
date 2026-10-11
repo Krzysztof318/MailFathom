@@ -313,9 +313,8 @@ saved, over the accounts it would reach.
 **A write may not move a held setting, and may carry it through.** A forced value binds everybody, an administrator
 included: a declaration stating another value is refused naming the setting and whether the organization or the
 deployment holds it. An editing restriction binds the people the account is assigned to and nobody administering it,
-on every route of theirs that writes an account — declaring a mailbox, and adding, restating, or withdrawing a folder.
-It is asked when a mailbox is declared as well, so a policy that leaves a person only `Folders` leaves declaring a
-mailbox to an administrator: the declaration states an address and a name, and the restriction withholds both. A held
+on every route of theirs that writes an account — which is adding, restating, and withdrawing a folder, so `Folders`
+is the one setting of an account a restriction decides anything about today. A held
 setting stated as a read showed it — unchanged from the declaration's own value, or as the value in force — passes
 and writes nothing over the declaration's own value.
 

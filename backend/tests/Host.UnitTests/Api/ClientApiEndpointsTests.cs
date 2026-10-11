@@ -215,11 +215,9 @@ public sealed class ClientApiEndpointsTests
                 $"{ClientEndpointOptions.RoutePrefix}{ClientUserRecordEndpoint.RecordRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientUserRecordEndpoint.RecordRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientUserRecordEndpoint.MailAccountsRoute}",
-                $"{ClientEndpointOptions.RoutePrefix}{ClientUserRecordEndpoint.MailAccountsRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientUserRecordEndpoint.FoldersRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientUserRecordEndpoint.FolderRemovalRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientUserRecordEndpoint.FolderReplacementRoute}",
-                $"{ClientEndpointOptions.RoutePrefix}{ClientUserRecordEndpoint.MailAccountRemovalRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientReplyDraftingEndpoint.ReplyDraftingRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientReplyDraftingEndpoint.ReplyDraftingRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientApiEndpoints.SessionRoute}",
@@ -373,11 +371,9 @@ public sealed class ClientApiEndpointsTests
                 $"POST {prefix}{ClientPortraitEndpoint.PortraitRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"POST {prefix}{ClientPreferencesEndpoint.PreferencesRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"POST {prefix}{ClientUserRecordEndpoint.RecordRoute} -> {MailFathomPermission.MailAccountsWrite.Name}",
-                $"POST {prefix}{ClientUserRecordEndpoint.MailAccountsRoute} -> {MailFathomPermission.MailAccountsWrite.Name}",
                 $"POST {prefix}{ClientUserRecordEndpoint.FoldersRoute} -> {MailFathomPermission.MailAccountsWrite.Name}",
                 $"POST {prefix}{ClientUserRecordEndpoint.FolderRemovalRoute} -> {MailFathomPermission.MailAccountsWrite.Name}",
                 $"POST {prefix}{ClientUserRecordEndpoint.FolderReplacementRoute} -> {MailFathomPermission.MailAccountsWrite.Name}",
-                $"POST {prefix}{ClientUserRecordEndpoint.MailAccountRemovalRoute} -> {MailFathomPermission.MailAccountsWrite.Name}",
                 $"POST {prefix}{ClientReplyDraftingEndpoint.ReplyDraftingRoute} -> {MailFathomPermission.MailAsk.Name}",
                 $"POST {prefix}{ClientSessionTokenEndpoints.ExchangeRoute} -> none",
                 $"POST {prefix}{ClientSessionTokenEndpoints.RevocationRoute} -> none",
@@ -688,8 +684,6 @@ public sealed class ClientApiEndpointsTests
     /// <param name="route">The route the write is made on.</param>
     [Theory]
     [InlineData(ClientUserRecordEndpoint.RecordRoute)]
-    [InlineData(ClientUserRecordEndpoint.MailAccountsRoute)]
-    [InlineData(ClientUserRecordEndpoint.MailAccountRemovalRoute)]
     [InlineData(ClientUserRecordEndpoint.FoldersRoute)]
     [InlineData(ClientUserRecordEndpoint.FolderReplacementRoute)]
     [InlineData(ClientUserRecordEndpoint.FolderRemovalRoute)]

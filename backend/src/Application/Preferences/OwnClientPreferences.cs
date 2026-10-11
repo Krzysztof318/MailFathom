@@ -17,8 +17,8 @@ namespace MailFathom.Application.Preferences;
 /// <para>
 /// Both acts are admitted under <see cref="MailFathomPermission.MailRead" />, which is the grant a signed-in person
 /// already holds, and neither adds a name to the published set. The write is deliberately not
-/// <see cref="MailFathomPermission.MailAccountsWrite" />: that grant decides which mailboxes this deployment connects
-/// to, an administrator maintains it for somebody whose accounts are declared in the deployment's own files, and
+/// <see cref="MailFathomPermission.MailAccountsWrite" />: that grant decides what this deployment reads out of
+/// somebody's mailboxes, somebody whose mail configuration an administrator maintains in full does not hold it, and
 /// hanging a person's own telemetry switch on it would let a grant they do not hold over their mail configuration
 /// decide what may be said about them. Nor is it an administrative grant, since nothing here reaches beyond the caller.
 /// </para>

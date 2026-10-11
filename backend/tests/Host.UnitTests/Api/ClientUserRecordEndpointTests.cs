@@ -133,8 +133,8 @@ public sealed class ClientUserRecordEndpointTests
 
     /// <summary>
     /// A person reads their accounts as the policies governing them resolve each: what an account is served, where
-    /// it came from, who holds it, and whether it is theirs to change — the list of folders on an account they hold,
-    /// and every property no policy holds on one they have yet to declare. No secret-bearing value travels with it.
+    /// it came from, who holds it, and whether it is theirs to change, which is the list of folders at most. No
+    /// secret-bearing value travels with it.
     /// </summary>
     [Fact]
     public async Task ReadMailAccountsAsync_AnAccountUnderAPolicy_ReportsEachPropertyAsItIsServedAndWhatIsThePersonsToChange()
@@ -165,10 +165,6 @@ public sealed class ClientUserRecordEndpointTests
         Assert.Equal(("DeploymentForced", "Deployment", false), (host.Source, host.HeldBy, host.Changeable));
         Assert.Equal(["Folders"], held.Properties.Where(property => property.Changeable).Select(property => property.Path));
         Assert.Null(held.Properties.Single(property => property.Path == "Secrets:Password").Value);
-
-        Assert.Null(accounts.NewAccount.Id);
-        Assert.False(accounts.NewAccount.Properties.Single(property => property.Path == "Host").Changeable);
-        Assert.True(accounts.NewAccount.Properties.Single(property => property.Path == "Language").Changeable);
     }
 
     [Fact]
@@ -234,74 +230,6 @@ public sealed class ClientUserRecordEndpointTests
             () => ClientUserRecordEndpoint.ReadAsync(deployment.Records, TestContext.Current.CancellationToken));
     }
 
-    /// <summary>Maintaining one's mailboxes is a grant of its own, so a caller holding only the read cannot write with it.</summary>
-    [Fact]
-    public async Task AddMailAccountAsync_ACallerHoldingOnlyTheMailRead_IsRefused()
-    {
-        // Arrange
-        var deployment = SignedInAs(SyntheticUser.Deployment, MailFathomPermission.MailRead);
-
-        // Act & Assert
-        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
-            () => ClientUserRecordEndpoint.AddMailAccountAsync(
-                deployment.MailAccounts,
-                new UserMailAccountRequest(1, DeclarationProvisionedFor(SyntheticUser.Deployment, "archive")),
-                TestContext.Current.CancellationToken));
-    }
-
-    /// <summary>
-    /// A user declares one more mailbox of their own, and the answer carries the version their record moved to, which is
-    /// the one they compose their next change over. The credential it names is material provisioned for this user —
-    /// which is what a user may name, and what the operator declares by naming the material after the person it belongs to.
-    /// </summary>
-    [Fact]
-    public async Task AddMailAccountAsync_ADeclarationTheirMailboxesAccept_CreatesTheAccountAndAnswersTheirRecordsNewVersion()
-    {
-        // Arrange
-        var deployment = SignedInAs(SyntheticUser.Deployment, MailFathomPermission.MailAccountsWrite);
-        deployment.Holding(SyntheticUser.Deployment, EmptyRecord, version: 4);
-
-        // Act
-        var result = await ClientUserRecordEndpoint.AddMailAccountAsync(
-            deployment.MailAccounts,
-            new UserMailAccountRequest(4, DeclarationProvisionedFor(SyntheticUser.Deployment, "archive")),
-            TestContext.Current.CancellationToken);
-
-        // Assert
-        var written = Assert.IsType<Ok<UserRecordWriteResponse>>(result.Result).Value!;
-
-        Assert.True(written.Committed);
-        Assert.Equal(5, written.Version);
-        Assert.Equal(
-            ["archive@example.test"],
-            deployment.MailAccountRecords.DocumentOf(SyntheticUser.Deployment)!.MailAccounts.Select(account => account.EmailAddress));
-    }
-
-    /// <summary>
-    /// A refusal about the change itself arrives as an outcome with a success status, because it is something the user
-    /// acts on and continues from — and it carries the version they compose the next attempt over.
-    /// </summary>
-    [Fact]
-    public async Task AddMailAccountAsync_AVersionSomebodyElseHasMovedPast_AnswersWithTheOutcomeRatherThanAnError()
-    {
-        // Arrange
-        var deployment = SignedInAs(SyntheticUser.Deployment, MailFathomPermission.MailAccountsWrite);
-        deployment.Holding(SyntheticUser.Deployment, EmptyRecord, version: 8);
-
-        // Act
-        var result = await ClientUserRecordEndpoint.AddMailAccountAsync(
-            deployment.MailAccounts,
-            new UserMailAccountRequest(3, DeclarationProvisionedFor(SyntheticUser.Deployment, "archive")),
-            TestContext.Current.CancellationToken);
-
-        // Assert
-        var written = Assert.IsType<Ok<UserRecordWriteResponse>>(result.Result).Value!;
-
-        Assert.False(written.Committed);
-        Assert.Equal(8, written.Version);
-        Assert.Empty(deployment.MailAccountRecords.Accounts);
-    }
-
     [Theory]
     [InlineData(null)]
     [InlineData("")]
@@ -338,9 +266,9 @@ public sealed class ClientUserRecordEndpointTests
     }
 
     /// <summary>
-    /// The whole-record save is the widest write this surface publishes, and a mailbox is not part of it any more: one
-    /// pasted into the record is refused before the commit, so the save cannot reach past the account routes and the
-    /// bound they hold on which credentials a user may name.
+    /// The whole-record save is the widest write this surface publishes, and a mailbox is not part of it: one pasted
+    /// into the record is refused before the commit, so the save cannot declare what the administrative endpoint alone
+    /// declares.
     /// </summary>
     [Fact]
     public async Task SaveAsync_ARecordNamingMailAccounts_IsRefusedBeforeItIsCommitted()
@@ -364,46 +292,6 @@ public sealed class ClientUserRecordEndpointTests
         Assert.Contains(written.Messages, said => said.Contains("mfctl account edit", StringComparison.Ordinal));
         await deployment.Store.DidNotReceiveWithAnyArgs()
             .CommitAsync(default, default!, default, default, TestContext.Current.CancellationToken);
-    }
-
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("   ")]
-    public async Task RemoveMailAccountAsync_ARequestNamingNoAccount_IsRefused(string? accountId)
-    {
-        // Arrange
-        var deployment = SignedInAs(SyntheticUser.Deployment, MailFathomPermission.MailAccountsWrite);
-
-        // Act
-        var result = await ClientUserRecordEndpoint.RemoveMailAccountAsync(
-            deployment.MailAccounts,
-            new UserMailAccountRemovalRequest(1, accountId),
-            TestContext.Current.CancellationToken);
-
-        // Assert
-        AssertRefusal(result.Result);
-    }
-
-    /// <summary>An account is named by the identifier it is served under, and ending the last assignment to it is what erases it.</summary>
-    [Fact]
-    public async Task RemoveMailAccountAsync_AnAccountAssignedToThem_EndsTheAssignmentAndLeavesTheOthers()
-    {
-        // Arrange
-        var primary = Mailbox(SyntheticUser.Deployment, "primary");
-        var archive = Mailbox(SyntheticUser.Deployment, "archive");
-        var deployment = SignedInAs(SyntheticUser.Deployment, MailFathomPermission.MailAccountsWrite);
-        deployment.Holding(SyntheticUser.Deployment, EmptyRecord, version: 1, primary, archive);
-
-        // Act
-        var result = await ClientUserRecordEndpoint.RemoveMailAccountAsync(
-            deployment.MailAccounts,
-            new UserMailAccountRemovalRequest(1, archive.Id.ToString("D")),
-            TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.True(Assert.IsType<Ok<UserRecordWriteResponse>>(result.Result).Value!.Committed);
-        Assert.Equal([primary.Id], deployment.MailAccountRecords.Accounts.Select(account => account.Id));
     }
 
     [Theory]
@@ -614,19 +502,6 @@ public sealed class ClientUserRecordEndpointTests
 
     private static UserRecordDeployment SignedInAs(UserId user, MailFathomPermission granted) =>
         new([granted], user);
-
-    /// <summary>A mailbox whose credential this deployment provisioned for one user, as that user declares it.</summary>
-    private static string DeclarationProvisionedFor(UserId user, string name) =>
-        $$"""
-          {
-            "EmailAddress": "{{name}}@example.test",
-            "DisplayName": "{{name}}",
-            "Language": "English",
-            "Host": "imap.example.test",
-            "UserName": "{{name}}@example.test",
-            "Secrets": { "Password": { "Name": "{{name}}-password", "SecretReference": "file:/run/secrets/user-{{user.Value:D}}-{{name}}" } }
-          }
-          """;
 
     /// <summary>A mailbox already held and assigned, whose credential was provisioned for the user it belongs to.</summary>
     private static MailAccountRecord Mailbox(UserId user, string name, string? folderAlias = null)

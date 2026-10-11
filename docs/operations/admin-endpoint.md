@@ -2523,14 +2523,10 @@ it](#organizations) is refused, because sharing a mailbox is something an organi
 is the decision, and what it costs a user is stated under the per-user ceilings there: a shared account counts in full
 against every assigned user's ceiling, and work on it proceeds only while every one of them is under theirs.
 
-**A person adding a mailbox is never told who holds its address.** Adding a mailbox from [the
-client](client-endpoint.md#the-record-routes) creates an account assigned to that person and nobody else, and an address
-somebody's account already holds is refused there with the same sentence whoever holds it. The answer tells them the
-address cannot be added, and it never says who holds it:
-
-```
-This mail account cannot be added for you. Ask whoever administers this deployment to add it.
-```
+**These commands are the only way a mailbox is declared, assigned, or withdrawn.** [The
+client](client-endpoint.md#the-record-routes) publishes no route that creates an account or ends an assignment to one:
+a person signed in there reads the mailboxes assigned to them and changes the folders of each, and nothing else about
+which mailboxes they have.
 
 **A display name is unique within each user's assigned set.** Two of one person's accounts may not share one, or take
 the other's identifier, so a name always names one mailbox for that person; two people's accounts may. An assignment

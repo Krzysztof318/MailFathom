@@ -11279,59 +11279,10 @@
         ],
         "type": "object"
       },
-      "UserMailAccountRemovalRequest": {
-        "properties": {
-          "accountId": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "version": {
-            "format": "int64",
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "integer",
-              "string"
-            ]
-          }
-        },
-        "required": [
-          "version",
-          "accountId"
-        ],
-        "type": "object"
-      },
-      "UserMailAccountRequest": {
-        "properties": {
-          "account": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "version": {
-            "format": "int64",
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "integer",
-              "string"
-            ]
-          }
-        },
-        "required": [
-          "version",
-          "account"
-        ],
-        "type": "object"
-      },
       "UserMailAccountResponse": {
         "properties": {
           "id": {
-            "type": [
-              "null",
-              "string"
-            ]
+            "type": "string"
           },
           "properties": {
             "items": {
@@ -11360,14 +11311,10 @@
               "$ref": "#/components/schemas/UserMailAccountResponse"
             },
             "type": "array"
-          },
-          "newAccount": {
-            "$ref": "#/components/schemas/UserMailAccountResponse"
           }
         },
         "required": [
-          "accounts",
-          "newAccount"
+          "accounts"
         ],
         "type": "object"
       },
@@ -19463,48 +19410,6 @@
         "tags": [
           "Client"
         ]
-      },
-      "post": {
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UserMailAccountRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UserRecordWriteResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Not Found"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Client"
-        ]
       }
     },
     "/api/client/record/mail-accounts/folders": {
@@ -19602,50 +19507,6 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/UserFolderReplacementRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UserRecordWriteResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Not Found"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Client"
-        ]
-      }
-    },
-    "/api/client/record/mail-accounts/removal": {
-      "post": {
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UserMailAccountRemovalRequest"
               }
             }
           },

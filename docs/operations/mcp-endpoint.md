@@ -852,8 +852,8 @@ one covers, how a caller's grant is computed from the user's roles, what naming 
 
 Seven of the eleven publish a tool here. `mailfathom.mail.accounts.write`, `mailfathom.mail.move`,
 `mailfathom.mail.delete`, and `mailfathom.mail.folders.write` publish none: the first reaches [the client endpoint's
-record routes](client-endpoint.md#the-record-routes), which is where a person maintains which mailboxes this deployment
-reads for them, the next two reach [its mutation routes](client-endpoint.md#the-mutation-routes), which is where they
+record routes](client-endpoint.md#the-record-routes), which is where a person maintains their own record and the
+folders this deployment reads out of their mailboxes, the next two reach [its mutation routes](client-endpoint.md#the-mutation-routes), which is where they
 file mail into another folder and where they delete a message off the server outright, and the last reaches [its
 folder-management routes](client-endpoint.md#the-folder-management-routes), which is where they arrange the folders of
 any mailbox they hold an account for — on their own server where it is mirrored from one. Any of them is written on an
