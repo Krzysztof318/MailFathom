@@ -185,7 +185,8 @@ internal static class ClientApiEndpoints
                     principal,
                     forwardsTelemetry,
                     deploymentTelemetryLevel,
-                    StatedTelemetryLevelOf(servedUsers, principal)));
+                    StatedTelemetryLevelOf(servedUsers, principal),
+                    IsTelemetryHeldOffFor(servedUsers, principal)));
             })
             .RequireNoPermission();
 
@@ -245,13 +246,27 @@ internal static class ClientApiEndpoints
         AuthorizedPrincipal? principal) => principal?.User is { } user
         ? servedUsers.Peek(user)?.ClientTelemetryLevel
         : null;
+
+    /// <summary>Reports whether a settings policy holds the acting person's telemetry switch off.</summary>
+    /// <param name="servedUsers">The served-user cache this request's acting person was read into when its scope was prepared.</param>
+    /// <param name="principal">What admitted this request, or nothing where the transport established none.</param>
+    /// <returns><see langword="true" /> where the deployment's policy or the policy of that person's organization forces the switch off; <see langword="false" /> where none does, where one forces it on, and where the request names no user.</returns>
+    /// <remarks>
+    /// Out of the cache for the reason <see cref="StatedTelemetryLevelOf" /> gives, and it is the composition the
+    /// telemetry routes read the same force from, which is what keeps this route's answer and their refusal one
+    /// decision.
+    /// </remarks>
+    internal static bool IsTelemetryHeldOffFor(
+        ServedUsers servedUsers,
+        AuthorizedPrincipal? principal) =>
+        principal?.User is { } user && servedUsers.Peek(user)?.ForcedClientTelemetry is { Enabled: false };
 }
 
 /// <summary>What the client endpoint reports back about an authenticated caller.</summary>
 /// <param name="Service">The product this is, so a client can tell it reached MailFathom rather than something else answering the port.</param>
 /// <param name="Version">The running version, which is what tells a client which contract it is talking to.</param>
 /// <param name="Permissions">The published names of what this caller's grant carries, in the order this repository publishes them, and empty for a credential granted nothing.</param>
-/// <param name="Telemetry">The least severe log record this deployment asks this caller's client to write, <c>none</c> where it asks for no log record and still takes the client's traces and metrics, or <c>off</c> where it forwards nothing at all — configuration rather than a grant, and the deployment's own answer unless this person's record raised or lowered it for them alone.</param>
+/// <param name="Telemetry">The least severe log record this deployment asks this caller's client to write, <c>none</c> where it asks for no log record and still takes the client's traces and metrics, or <c>off</c> where it forwards nothing at all or a settings policy holds this person's telemetry off — configuration rather than a grant, and the deployment's own answer unless this person's record raised or lowered it for them alone.</param>
 /// <remarks>
 /// <para>
 /// It names no credential, which is the one way it differs from what the administrative surface answers. That surface's
@@ -299,25 +314,36 @@ internal sealed record ClientSessionResponse(
     /// <param name="forwardsTelemetry">Whether this deployment serves the telemetry routes, which it does where it named a collector of its own.</param>
     /// <param name="deploymentTelemetryLevel">The least severe record this deployment asks every client to write, read where the routes are mapped.</param>
     /// <param name="statedTelemetryLevel">The level this person's own record asks their client for, or <see langword="null" /> where it states none and where the request is served for nobody in particular.</param>
+    /// <param name="telemetryHeldOff">Whether a settings policy forces this person's telemetry switch off, in which case the telemetry routes take nothing from them.</param>
     /// <returns>The response body.</returns>
     /// <remarks>
+    /// <para>
     /// The record's level wins over the deployment's and neither wins over the collector: a deployment forwarding
     /// nothing answers <c>off</c> however anybody's record was raised, because what is being answered there is that
     /// there is nowhere for a record to go rather than how much to write. <c>none</c> is a level like the six below it
     /// and resolves the same way, so it is the other answer that stops log records and the only one that leaves the
-    /// rest of a client's telemetry arriving. The person's own switch is the third
-    /// participant and is not resolved here at all — it is kept on their device and applied by the client, which is
-    /// what lets somebody decline on one machine without deciding for the next one.
+    /// rest of a client's telemetry arriving.
+    /// </para>
+    /// <para>
+    /// A settings policy holding this person's switch off answers <c>off</c> as well, because for them it is the same
+    /// fact: nothing their client sends is taken, whatever level anybody asked for. The person's own switch is the
+    /// one participant not resolved here. Their answer travels on the preferences read and the telemetry routes hold
+    /// it, but answering <c>off</c> for it would tell a client there is nothing behind the switch, and take from
+    /// somebody the control they turned it off with.
+    /// </para>
     /// </remarks>
     internal static ClientSessionResponse For(
         AuthorizedPrincipal? principal,
         bool forwardsTelemetry,
         ClientTelemetryLevel deploymentTelemetryLevel,
-        ClientTelemetryLevel? statedTelemetryLevel = null) => new(
+        ClientTelemetryLevel? statedTelemetryLevel = null,
+        bool telemetryHeldOff = false) => new(
         "MailFathom",
         StampedAssemblyVersion.ReadFrom(typeof(ClientSessionResponse).Assembly).Version,
         GrantOf(principal),
-        forwardsTelemetry ? (statedTelemetryLevel ?? deploymentTelemetryLevel).Published() : NoTelemetry);
+        forwardsTelemetry && !telemetryHeldOff
+            ? (statedTelemetryLevel ?? deploymentTelemetryLevel).Published()
+            : NoTelemetry);
 
     /// <summary>Names what the caller holds, in the order this repository publishes the set.</summary>
     /// <remarks>The published order rather than the grant's own, so two credentials granted the same permissions are reported identically whichever order an operator wrote them in.</remarks>

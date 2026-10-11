@@ -926,8 +926,12 @@ supply, say — is refused naming those people. `mfctl user show --effective` sh
 served, with what supplied each. What a policy states for mail accounts works the same way for every mailbox in its
 scope: the server, the folders, or the scanning posture a company states once is what each of its mailboxes is read
 with, a mailbox's own declaration states only what the policy leaves to it, and `mfctl account show --effective`
-shows one mailbox as it is served. [Settings policies](../operations/admin-endpoint.md#settings-policies) holds what a
-policy may state and what a save is refused over, and
+shows one mailbox as it is served. A policy may also hold the telemetry switch on each person's settings screen on or
+off: their own answer is kept and comes back when you stop holding it, and holding it **on** reports what somebody
+declined to have reported, so
+[read what that sends](../operations/telemetry.md#what-the-client-publishes-about-itself) before you do.
+[Settings policies](../operations/admin-endpoint.md#settings-policies) holds what a policy may state and what a save
+is refused over, and
 [how a settings policy resolves a mail account](../operations/configuration-mail.md#how-a-settings-policy-resolves-a-mail-account)
 what that means for a mailbox.
 

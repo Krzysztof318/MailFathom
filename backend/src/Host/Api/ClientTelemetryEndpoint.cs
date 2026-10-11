@@ -3,7 +3,10 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Globalization;
+using System.Text.Json;
 using MailFathom.Application.Access;
+using MailFathom.Application.Preferences;
+using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.Observability.ClientTelemetry;
 using MailFathom.Host.Security.Basic;
@@ -59,6 +62,15 @@ namespace MailFathom.Host.Api;
 /// something it asks a client for: a client that sends a batch of log records regardless of what it was answered
 /// reaches a collector with none. It is not what stops a client built before the value existed — that one reads
 /// <c>none</c> as a level it does not know, treats it as <c>off</c>, and sends nothing to any of these routes.
+/// </para>
+/// <para>
+/// <b>Whether a person's client reports at all is held here too.</b> Every route refuses a batch from somebody whose
+/// telemetry switch is off, whether they turned it off themselves or a settings policy holds it off, so a forced off
+/// is enforced rather than trusted to a client. A policy forcing it on takes what a client sends whatever its holder
+/// stored, and compels nothing: a client that sends no batch is refused none.
+/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0037-a-settings-policy-at-the-deployment-and-at-each-organization.md">ADR 0037</see>
+/// § <em>Client preferences, and what forcing telemetry costs a person</em> holds what a deployment owes somebody it
+/// does that to.
 /// </para>
 /// </remarks>
 internal static class ClientTelemetryEndpoint
@@ -123,6 +135,7 @@ internal static class ClientTelemetryEndpoint
                     (HttpContext context,
                         [FromServices] AccessAuthorization authorization,
                         [FromServices] ServedUsers servedUsers,
+                        [FromServices] IClientPreferencesStore preferences,
                         [FromServices] ClientTelemetryQuota quota,
                         [FromServices] ClientTelemetryForwarder forwarder,
                         [FromServices] ClientTelemetryProxyTelemetry telemetry,
@@ -131,6 +144,7 @@ internal static class ClientTelemetryEndpoint
                         context,
                         authorization,
                         servedUsers,
+                        preferences,
                         deploymentLevel,
                         quota,
                         forwarder,
@@ -157,7 +171,8 @@ internal static class ClientTelemetryEndpoint
     /// <param name="signal">The signal the route serves.</param>
     /// <param name="context">The request being answered, whose body carries the batch.</param>
     /// <param name="authorization">Answers whose telemetry this is, and refuses a caller acting for nobody.</param>
-    /// <param name="servedUsers">The served-user cache, which holds the level that person's own record states where it states one.</param>
+    /// <param name="servedUsers">The served-user cache, which holds the level that person's own record states where it states one, and what a settings policy forces their telemetry switch to.</param>
+    /// <param name="preferences">Holds the answer that person gave the telemetry switch themselves, which decides where no policy forces it.</param>
     /// <param name="deploymentLevel">The level this deployment asks every client for, which a record stating none of its own is held to.</param>
     /// <param name="quota">Bounds how often one user may export.</param>
     /// <param name="forwarder">Sends the batch to the deployment's own collector.</param>
@@ -167,8 +182,9 @@ internal static class ClientTelemetryEndpoint
     /// <exception cref="ArgumentNullException">Thrown when any resolved dependency is <see langword="null" />.</exception>
     /// <remarks>
     /// The order is deliberate. The credential is resolved to a user first, because an export nobody can be
-    /// attributed to must not be read at all; a log batch from somebody asked for none is refused there, before
-    /// anything about it is read and before it spends any of that person's rate; the media type is read next, which
+    /// attributed to must not be read at all; a batch from somebody whose telemetry switch is off, and a log batch
+    /// from somebody asked for none, are refused there, before anything about either is read and before it spends
+    /// any of that person's rate; the media type is read next, which
     /// costs one header and settles whether this is an export request at all; the quota is spent after that, so a
     /// client past its rate costs this process one refusal rather than a parse; and only then is the batch read,
     /// bounded, and rewritten.
@@ -178,6 +194,7 @@ internal static class ClientTelemetryEndpoint
         HttpContext context,
         AccessAuthorization authorization,
         ServedUsers servedUsers,
+        IClientPreferencesStore preferences,
         ClientTelemetryLevel deploymentLevel,
         ClientTelemetryQuota quota,
         ClientTelemetryForwarder forwarder,
@@ -188,17 +205,32 @@ internal static class ClientTelemetryEndpoint
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(authorization);
         ArgumentNullException.ThrowIfNull(servedUsers);
+        ArgumentNullException.ThrowIfNull(preferences);
         ArgumentNullException.ThrowIfNull(quota);
         ArgumentNullException.ThrowIfNull(forwarder);
         ArgumentNullException.ThrowIfNull(telemetry);
 
         var user = authorization.RequireUser();
+        var served = servedUsers.Peek(user);
+
+        // Forbidden for the reason the level's refusal below is: the route is served, this caller is the one it takes
+        // nothing from, and the specification never retries the status, so a client holds nothing for the batch.
+        if (!await ReportsTelemetryAsync(served, preferences, user, cancellationToken))
+        {
+            return Refused(
+                telemetry,
+                signal,
+                "switched_off",
+                StatusCodes.Status403Forbidden,
+                PermissionDeniedStatus,
+                "This client's telemetry is switched off, by the person it is about or by a settings policy holding it off, so nothing is taken from it.");
+        }
 
         // The record's level over the deployment's, which is the resolution the session route answered this caller
         // with. Forbidden rather than not found: the route is served and this caller is the one it takes nothing from,
         // and it is a status the specification never retries, so a client holds nothing for a batch that will not go.
         if (signal == ClientTelemetrySignal.Logs
-            && (servedUsers.Peek(user)?.ClientTelemetryLevel ?? deploymentLevel) == ClientTelemetryLevel.None)
+            && (served?.ClientTelemetryLevel ?? deploymentLevel) == ClientTelemetryLevel.None)
         {
             return Refused(
                 telemetry,
@@ -261,6 +293,42 @@ internal static class ClientTelemetryEndpoint
         telemetry.RecordForwarding(signal, forwarding);
 
         return Answered(forwarding);
+    }
+
+    /// <summary>Reports whether this deployment may be told what one person's client is doing.</summary>
+    /// <remarks>
+    /// <para>
+    /// The value the preferences read answers them with: what a settings policy forces where one holds the switch,
+    /// and the answer they stored otherwise, which is on for somebody who never answered. So a forced off and a
+    /// person's own refusal are both kept by this deployment rather than asked of a client, and a forced on takes
+    /// what a client sends whatever its holder stored.
+    /// </para>
+    /// <para>
+    /// A stored row that is not a document of preferences is read as a refusal. Nothing can say what its holder
+    /// answered, and taking nothing is the reading that says least about them.
+    /// </para>
+    /// </remarks>
+    private static async Task<bool> ReportsTelemetryAsync(
+        ServedUser? served,
+        IClientPreferencesStore preferences,
+        UserId user,
+        CancellationToken cancellationToken)
+    {
+        if (served?.ForcedClientTelemetry is { } forced)
+        {
+            return forced.Enabled;
+        }
+
+        // ponytail: a key lookup per batch where no policy forces the switch. Hold the answer beside the served user,
+        // moved by the preferences write and its announcement, if an export interval ever measures as a cost.
+        try
+        {
+            return (await preferences.ReadAsync(user, cancellationToken) ?? ClientPreferences.Unset).TelemetryEnabled;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     /// <summary>Answers the client with what the destination said, or with what its silence means for the batch.</summary>

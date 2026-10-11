@@ -5,10 +5,13 @@
 using System.Globalization;
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using MailFathom.Application.Access;
+using MailFathom.Application.Preferences;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Api;
 using MailFathom.Host.Configuration.Endpoints;
+using MailFathom.Host.Configuration.Policies;
 using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.Observability.ClientTelemetry;
 using MailFathom.Host.Security.Basic;
@@ -469,6 +472,146 @@ public sealed class ClientTelemetryEndpointTests
         Assert.Single(collector.RecordedRequests);
     }
 
+    /// <summary>
+    /// What makes a person's refusal something the deployment keeps rather than something it asks their client for: a
+    /// batch of any signal from somebody who turned the switch off is refused with a status no exporter retries.
+    /// </summary>
+    [Theory]
+    [InlineData("traces")]
+    [InlineData("metrics")]
+    [InlineData("logs")]
+    public async Task AcceptAsync_ABatchFromSomebodyWhoTurnedTelemetryOff_RefusesWithoutForwardingAnything(string signalName)
+    {
+        // Arrange
+        using var collector = AcceptingCollector();
+        var request = Requesting(OtlpExportRequests.Batch([], records: 1));
+
+        // Act
+        var answered = await AcceptAsync(
+            request,
+            collector,
+            signal: ClientTelemetrySignal.All.Single(signal => signal.Name == signalName),
+            preferences: Answering(ClientPreferences.Unset with { TelemetryEnabled = false }));
+
+        // Assert
+        Assert.Equal(StatusCodes.Status403Forbidden, answered);
+        Assert.Empty(collector.RecordedRequests);
+    }
+
+    /// <summary>A forced off is enforced rather than trusted to a client: somebody who consented is taken nothing from while a policy holds the switch off.</summary>
+    [Fact]
+    public async Task AcceptAsync_APolicyForcingTelemetryOffOverAStoredConsent_RefusesWithoutForwardingAnything()
+    {
+        // Arrange
+        using var collector = AcceptingCollector();
+        var request = Requesting(OtlpExportRequests.Batch([], records: 1));
+
+        // Act
+        var answered = await AcceptAsync(
+            request,
+            collector,
+            preferences: Answering(ClientPreferences.Unset with { TelemetryEnabled = true }),
+            forced: new ForcedClientTelemetry(Enabled: false, SettingsPolicyScope.Organization));
+
+        // Assert
+        Assert.Equal(StatusCodes.Status403Forbidden, answered);
+        Assert.Empty(collector.RecordedRequests);
+    }
+
+    /// <summary>A forced on takes what a client sends whatever its holder stored, which is the decision the policy took from them.</summary>
+    [Fact]
+    public async Task AcceptAsync_APolicyForcingTelemetryOnOverAStoredRefusal_ForwardsTheBatch()
+    {
+        // Arrange
+        using var collector = AcceptingCollector();
+        var request = Requesting(OtlpExportRequests.Batch([], records: 1));
+
+        // Act
+        var answered = await AcceptAsync(
+            request,
+            collector,
+            preferences: Answering(ClientPreferences.Unset with { TelemetryEnabled = false }),
+            forced: new ForcedClientTelemetry(Enabled: true, SettingsPolicyScope.Deployment));
+
+        // Assert
+        Assert.Equal(StatusCodes.Status200OK, answered);
+        Assert.Single(collector.RecordedRequests);
+    }
+
+    /// <summary>The force lifted, the person's own answer decides again, in both directions.</summary>
+    [Theory]
+    [InlineData(true, StatusCodes.Status200OK)]
+    [InlineData(false, StatusCodes.Status403Forbidden)]
+    public async Task AcceptAsync_NoPolicyForcingTelemetry_TakesOrRefusesByThePersonsOwnAnswer(bool own, int expected)
+    {
+        // Arrange
+        using var collector = AcceptingCollector();
+        var request = Requesting(OtlpExportRequests.Batch([], records: 1));
+
+        // Act
+        var answered = await AcceptAsync(
+            request,
+            collector,
+            preferences: Answering(ClientPreferences.Unset with { TelemetryEnabled = own }));
+
+        // Assert
+        Assert.Equal(expected, answered);
+    }
+
+    /// <summary>A row nobody can read an answer out of is read as a refusal, because taking nothing is what says least about its holder.</summary>
+    [Fact]
+    public async Task AcceptAsync_AStoredRowThatIsNotADocumentOfPreferences_RefusesWithoutForwardingAnything()
+    {
+        // Arrange
+        using var collector = AcceptingCollector();
+        var unreadable = Substitute.For<IClientPreferencesStore>();
+        unreadable.ReadAsync(Arg.Any<UserId>(), Arg.Any<CancellationToken>())
+            .Returns<ClientPreferences?>(_ => throw new JsonException("not a document"));
+        var request = Requesting(OtlpExportRequests.Batch([], records: 1));
+
+        // Act
+        var answered = await AcceptAsync(request, collector, preferences: unreadable);
+
+        // Assert
+        Assert.Equal(StatusCodes.Status403Forbidden, answered);
+        Assert.Empty(collector.RecordedRequests);
+    }
+
+    /// <summary>
+    /// The refusal comes before the rate is spent and is counted under a word of its own, for the reasons the level's
+    /// refusal is: a client refused every time must not burn its burst on batches nobody takes, and a dashboard has to
+    /// tell a switch that is off from a client sending something unreadable.
+    /// </summary>
+    [Fact]
+    public async Task AcceptAsync_ABatchFromSomebodyWhoseTelemetryIsOff_SpendsNoRateAndIsCountedAsSwitchedOff()
+    {
+        // Arrange
+        using var collector = AcceptingCollector();
+        using var quota = new ClientTelemetryQuota();
+        var telemetry = new ClientTelemetryProxyTelemetry(
+            new RecordingLogger<ClientTelemetryProxyTelemetry>(),
+            new FakeTimeProvider());
+        using var measurements = new RecordedMailFathomMeasurements(RefusedInstrumentName);
+        var request = Requesting(OtlpExportRequests.Batch([], records: 1));
+
+        // Act
+        await AcceptAsync(
+            request,
+            collector,
+            quota,
+            telemetry: telemetry,
+            forced: new ForcedClientTelemetry(Enabled: false, SettingsPolicyScope.Deployment));
+
+        // Assert
+        Assert.All(
+            Enumerable.Range(0, ClientTelemetryQuota.BurstCapacity),
+            _ => Assert.True(quota.TryAdmit(AuthenticatedUser.ToString())));
+        Assert.Contains(
+            measurements.Read(RefusedInstrumentName),
+            refused => Equals(refused.Tags[ClientTelemetryProxyTelemetry.SignalTagName], "traces")
+                && Equals(refused.Tags[ClientTelemetryProxyTelemetry.RefusalTagName], "switched_off"));
+    }
+
     /// <summary>Nobody exports on somebody's behalf without a person to attribute it to.</summary>
     [Fact]
     public async Task AcceptAsync_ACallerActingForNoUser_RefusesBeforeReadingTheBody()
@@ -497,7 +640,9 @@ public sealed class ClientTelemetryEndpointTests
         ClientTelemetrySignal? signal = null,
         ClientTelemetryLevel deploymentLevel = ClientTelemetryLevel.Info,
         ClientTelemetryLevel? statedLevel = null,
-        ClientTelemetryProxyTelemetry? telemetry = null)
+        ClientTelemetryProxyTelemetry? telemetry = null,
+        IClientPreferencesStore? preferences = null,
+        ForcedClientTelemetry? forced = null)
     {
         using var owned = quota is null ? new ClientTelemetryQuota() : null;
 
@@ -505,7 +650,12 @@ public sealed class ClientTelemetryEndpointTests
             signal ?? ClientTelemetrySignal.Traces,
             request,
             authorization ?? AccessAuthorizations.ForUserGranted(AuthenticatedUser),
-            ResolvedServedUsers.Serving(new ServedUser(AuthenticatedUser, "alex", []) { ClientTelemetryLevel = statedLevel }),
+            ResolvedServedUsers.Serving(new ServedUser(AuthenticatedUser, "alex", [])
+            {
+                ClientTelemetryLevel = statedLevel,
+                ForcedClientTelemetry = forced,
+            }),
+            preferences ?? Answering(own: null),
             deploymentLevel,
             quota ?? owned!,
             ForwarderOver(collector),
@@ -517,6 +667,15 @@ public sealed class ClientTelemetryEndpointTests
         await answered.ExecuteAsync(request);
 
         return request.Response.StatusCode;
+    }
+
+    /// <summary>Holds the answer one person gave the telemetry switch, or none where they never answered.</summary>
+    private static IClientPreferencesStore Answering(ClientPreferences? own)
+    {
+        var preferences = Substitute.For<IClientPreferencesStore>();
+        preferences.ReadAsync(Arg.Any<UserId>(), Arg.Any<CancellationToken>()).Returns(own);
+
+        return preferences;
     }
 
     /// <summary>Composes the request one export arrives as.</summary>

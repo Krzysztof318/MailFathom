@@ -5,7 +5,7 @@
 namespace MailFathom.Application.Preferences;
 
 /// <summary>What one person set about their own client, which the deployment holds so it follows them between machines.</summary>
-/// <param name="TelemetryEnabled">Whether this deployment may be told what the person's client is doing.</param>
+/// <param name="TelemetryEnabled">Whether this deployment may be told what the person's client is doing, as the person answered it.</param>
 /// <param name="Theme">What the client is painted in once a session exists.</param>
 /// <param name="OpenMailInTabs">Whether opening a message opens a tab rather than replacing what is on the screen.</param>
 /// <param name="MarkReadOnOpen">Whether opening a message in the client marks it read on the user's own mail server.</param>
@@ -34,6 +34,14 @@ namespace MailFathom.Application.Preferences;
 /// Nothing here is personal data about a third party and nothing here is mail. What it does carry is a decision about
 /// what may be said about this person, which is why the switch is theirs to set under the grant they already hold
 /// rather than under one an administrator maintains for them.
+/// </para>
+/// <para>
+/// That decision is theirs unless a settings policy takes it. The deployment's policy, or the policy of the
+/// organization they belong to, may force <see cref="TelemetryEnabled" /> on or off, and while one does the value
+/// held here is their own answer rather than the one applied: it is kept as they gave it, it decides nothing, and it
+/// applies again when no policy forces the switch. The other seven are never governed.
+/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0037-a-settings-policy-at-the-deployment-and-at-each-organization.md">ADR 0037</see>
+/// records the exception and what forcing the switch on owes the person it is about.
 /// </para>
 /// </remarks>
 public sealed record ClientPreferences(

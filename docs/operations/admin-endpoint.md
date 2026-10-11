@@ -2267,6 +2267,27 @@ therefore stops or resumes on its holder's next request on every replica, and th
 — their language, zone, and telemetry level —
 [follows within thirty seconds](configuration-sources.md#what-reaches-every-replica).
 
+**One forced value is not a property of the record: whether a person's client reports telemetry.**
+`Users:Forced` takes `ClientPreferences:TelemetryEnabled`, `true` or `false`, beside the record's own properties:
+
+```json
+{ "Users": { "Forced": { "ClientPreferences": { "TelemetryEnabled": false } } } }
+```
+
+It holds the switch on the client's settings screen for everybody the policy governs, the deployment's force winning
+over an organization's as it does everywhere. While it is forced the person's own answer is kept and decides nothing,
+[the preferences read](client-endpoint.md#a-settings-policy-may-hold-the-telemetry-switch) answers the forced value and
+names whether the deployment or the organization holds it, a write stating the other answer is refused, and
+[the telemetry routes](client-endpoint.md#the-telemetry-routes) take or refuse that person's batches by it. Removing the
+statement puts each person's own answer back in force. It judges no record and rewrites no row, and it reaches a
+replica as the rest of what a policy states for users does,
+[within thirty seconds](configuration-sources.md#what-reaches-every-replica). **Forcing it on reports what somebody
+declined to have reported**, so it is the one statement here that takes a decision about a person away from them:
+[what the client publishes about itself](telemetry.md#what-the-client-publishes-about-itself) says what is then sent
+and what the person is told, and whoever saves the policy is who owes the basis for it. It raises nothing else — not
+[`ClientTelemetryLevel`](configuration-sources.md#the-level-this-persons-client-records-at--clienttelemetrylevel), and
+not a collector the deployment never named.
+
 **Reading is `mailfathom.admin.read` and saving is `mailfathom.admin.configuration.write`.** The deployment's policy
 takes the permission held at the deployment, and a caller holding it only below that is
 [refused](#what-a-refusal-says) rather than answered as nothing found. An organization's accepts it at the deployment

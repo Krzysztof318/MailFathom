@@ -14,6 +14,7 @@ using MailFathom.Domain.Access;
 using MailFathom.Host.Api;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Configuration.Mail;
+using MailFathom.Host.Configuration.Policies;
 using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.Observability.ClientTelemetry;
 using MailFathom.Host.Security.Endpoints;
@@ -1034,6 +1035,52 @@ public sealed class ClientApiEndpointsTests
         Assert.Null(ClientApiEndpoints.StatedTelemetryLevelOf(
             ResolvedServedUsers.Serving(),
             ActingFor(SyntheticUser.Deployment)));
+
+    /// <summary>
+    /// What has the session route agree with the telemetry routes: a policy holding the switch off is read from the
+    /// composition those routes refuse by, so a client is told nothing is taken rather than finding out batch by batch.
+    /// </summary>
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public void IsTelemetryHeldOffFor_AUserWhoseSwitchAPolicyForces_AnswersWhetherItIsForcedOff(bool forcedTo, bool expected)
+    {
+        // Arrange
+        var roster = ResolvedServedUsers.Serving(new ServedUser(SyntheticUser.Deployment, "alex", [])
+        {
+            ForcedClientTelemetry = new ForcedClientTelemetry(forcedTo, SettingsPolicyScope.Organization),
+        });
+
+        // Act
+        var heldOff = ClientApiEndpoints.IsTelemetryHeldOffFor(roster, ActingFor(SyntheticUser.Deployment));
+
+        // Assert
+        Assert.Equal(expected, heldOff);
+    }
+
+    /// <summary>Nobody's switch is held off where no policy forces it, where the request names no user, and where it established no principal at all.</summary>
+    [Fact]
+    public void IsTelemetryHeldOffFor_NobodyWhoseSwitchIsForcedOff_AnswersThatItIsNot()
+    {
+        // Arrange
+        var roster = ResolvedServedUsers.Serving(
+            new ServedUser(SyntheticUser.Deployment, "alex", []),
+            new ServedUser(SyntheticUser.Another, "sam", [])
+            {
+                ForcedClientTelemetry = new ForcedClientTelemetry(Enabled: false, SettingsPolicyScope.Organization),
+            });
+
+        // Act
+        bool[] heldOff =
+        [
+            ClientApiEndpoints.IsTelemetryHeldOffFor(roster, ActingFor(SyntheticUser.Deployment)),
+            ClientApiEndpoints.IsTelemetryHeldOffFor(roster, AuthorizedPrincipal.Caller("reader", [MailFathomPermission.MailRead])),
+            ClientApiEndpoints.IsTelemetryHeldOffFor(roster, principal: null),
+        ];
+
+        // Assert
+        Assert.Equal([false, false, false], heldOff);
+    }
 
     /// <summary>Builds the roster entry of a person an operator raised, which is the one shape the reading above is about.</summary>
     private static ServedUser RaisedTo(ClientTelemetryLevel level) =>

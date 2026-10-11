@@ -241,9 +241,18 @@ all, and a second field could disagree with the first about it.
 
 **`none` and `off` both ask for no log record, and they are not one answer.** `none` is a level: this caller's client
 writes no log record whatever its severity, and goes on recording and exporting its traces and metrics, which the
-deployment forwards as under every other level. `off` has one cause — a deployment that named no collector — and stops
-all three signals, so it wins over every level, `none` included. A client that offers a person a switch over their own
-telemetry still offers it under `none`, because there is still something behind it.
+deployment forwards as under every other level. `off` stops all three signals, so it wins over every level, `none`
+included, and it has two causes: a deployment that named no collector, which answers it to everybody, and a
+[settings policy](admin-endpoint.md#settings-policies) forcing this person's own telemetry switch off, which
+answers it to them alone. Both say the same thing to a client — nothing it sends is taken — and the second is held as
+well as answered: [the telemetry routes](#the-telemetry-routes) refuse every batch that person's client sends. A client
+that offers a person a switch over their own telemetry still offers it under `none`, because there is still something
+behind it.
+
+**The person's own switch is not answered here.** Somebody who turned their telemetry off themselves is still answered
+the level, because `off` tells a client there is nothing behind its switch, and that would take from them the control
+they turned it off with. Their answer travels on [the preferences read](#the-preferences-routes) instead, and the
+telemetry routes hold it either way.
 
 **It is not part of the grant, and it is the one field here that answers per person.** No permission decides it and no
 credential's grant changes it; what changes it is whose record the credential named, because a level worth turning up
@@ -2421,11 +2430,14 @@ and somebody who set the client up the way they work should not have to set it u
   "expandWholeThread": false,
   "messageView": "reduced",
   "aiFiltersShown": true,
-  "notificationSeconds": 5
+  "notificationSeconds": 5,
+  "telemetryHeldBy": null
 }
 ```
 
-**It holds eight preferences and nothing else.** Whether this deployment may be told what the person's client is doing;
+**It holds eight preferences and nothing else.** The ninth field of an answer, `telemetryHeldBy`, is not one: it says
+who holds the first, [as described below](#a-settings-policy-may-hold-the-telemetry-switch), and a write does not
+state it. Whether this deployment may be told what the person's client is doing;
 what the client is painted in, which is `system`, `light`, or `dark`; whether opening a message opens a tab rather
 than replacing what is on the screen; whether opening a message marks it read on the person's own mail server; whether
 opening a conversation draws every message in it rather than the one it was opened at; which of the three renderings an
@@ -2529,6 +2541,40 @@ their preferences with everything else derived from them.
 answer survives a deployment that starts forwarding later. What such a deployment tells a client is
 [`"telemetry": "off"` on the session route](#the-session-route), and what MailFathom's own client draws for that is
 a sentence saying so in place of the switch — a control over a client that is already sending nothing decides nothing.
+
+#### A settings policy may hold the telemetry switch
+
+**`telemetryEnabled` is the one preference somebody else may decide.** The deployment's
+[settings policy](admin-endpoint.md#settings-policies), or the policy of the organization a person belongs to, may
+force it on or off for everybody it governs. Nothing else here is ever governed: the other seven take no default, no
+forced value, and no editing restriction, and the switch itself takes a forced value and nothing else.
+[ADR 0037](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0037-a-settings-policy-at-the-deployment-and-at-each-organization.md)
+holds why this one, and what forcing it on takes from the person it is about.
+
+| While a policy forces the switch | What these routes do |
+| --- | --- |
+| `GET /api/client/preferences` | Answers `telemetryEnabled` as the forced value, whatever the person stored, and `telemetryHeldBy` as `Deployment` or `Organization` |
+| `POST /api/client/preferences` stating the other value | Answers `400` and writes nothing, in a sentence naming `TelemetryEnabled`, what it is forced to, and whether the deployment or the organization holds it |
+| `POST /api/client/preferences` stating the forced value, or omitting the switch | Commits the other seven and answers the forced value with who holds it. The person's own answer is left exactly as it was |
+
+**`telemetryHeldBy` is `null` wherever the answer is the person's own**, so a client reads one field to know whether
+the control is theirs: where it names a holder, their own answer is not what is being applied, and moving the switch
+would be refused.
+
+**The person's own answer is kept, and it comes back.** A forced value is never written into anybody's preferences.
+A write that passes while the switch is held carries the stored answer forward instead of replacing it with what the
+body said — the write is the whole document, so storing the body's value would turn the policy's answer into the
+person's — and the answer they gave is the one in force again once no policy forces the switch. Nobody is left opted in,
+or out, by a rule that no longer exists. A person who never answered stands on the unset answer, which is on.
+
+**The deployment's force wins over an organization's**, as it does for every setting a policy forces: an organization
+holding the switch off for its members is overruled by a deployment holding it on, and `telemetryHeldBy` then names
+the deployment. A person in no organization is governed by the deployment's policy alone.
+
+**The value answered here is the value the deployment applies.** [The telemetry routes](#the-telemetry-routes) take or
+refuse a client's batches by it, so a switch that is off — the person's own or a forced one — is kept by the
+deployment rather than left to a client to honour. A force takes effect on a replica when that replica has adopted
+the policy, which is [within thirty seconds](configuration-sources.md#what-reaches-every-replica) of the save.
 
 ### The portrait routes
 
@@ -3770,6 +3816,18 @@ a batch of log records regardless of what it was answered still reaches a collec
 client built before the value existed: that one treats `none` as `off` and sends nothing to any of the three routes.
 `403` is a status an OTLP exporter does not retry, so nothing is held for a batch that will not go. The traces and the
 metrics routes are unaffected by any level.
+
+**All three take nothing from somebody whose telemetry switch is off.** The switch is
+[`telemetryEnabled` on the preferences routes](#the-preferences-routes), read as those routes answer it: what a
+[settings policy forces](#a-settings-policy-may-hold-the-telemetry-switch) where one holds it, and the person's own
+answer otherwise, which is on for somebody who never gave one. Where it is off, every route answers `403` and forwards
+nothing, before the batch is read and without spending any of that person's export rate. So a refusal is something the
+deployment keeps rather than something it asks a client for, whether the person refused or a policy holds the switch
+off, and a client that exports regardless reaches a collector with nothing. A policy forcing the switch **on** takes
+what a client sends whatever its holder stored, and compels nothing: a client that sends no batch is refused none. It
+raises nothing else either — not the level a client is asked for, and not a collector this deployment never named. A
+stored answer that cannot be read as a preferences document is treated as a refusal, since taking nothing is the
+reading that says least about its holder.
 
 **They authenticate exactly as every other route here does**, on this surface's own credentials, and they add no name to
 [the published permission set](permissions.md) — like the session route, and for a narrower reason: a permission would

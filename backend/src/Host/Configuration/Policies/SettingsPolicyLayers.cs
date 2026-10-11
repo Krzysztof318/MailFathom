@@ -19,6 +19,15 @@ internal sealed record SettingsPolicyLayers(SettingsPolicyStatements Deployment,
     /// <summary>Gets the layers of a record no policy says anything about.</summary>
     internal static SettingsPolicyLayers Nothing { get; } = new(SettingsPolicyStatements.Nothing, Organization: null);
 
+    /// <summary>Gets what these policies force a person's telemetry switch to, or <see langword="null" /> where neither forces it.</summary>
+    /// <remarks>The deployment's force is read first and wins over an organization's, here as for every property of the record.</remarks>
+    internal ForcedClientTelemetry? ForcedClientTelemetry => (this.Deployment.ForcedClientTelemetry, this.Organization?.ForcedClientTelemetry) switch
+    {
+        ({ } deployment, _) => new ForcedClientTelemetry(deployment, SettingsPolicyScope.Deployment),
+        (null, { } organization) => new ForcedClientTelemetry(organization, SettingsPolicyScope.Organization),
+        _ => null,
+    };
+
     /// <summary>Says that a record is not resolved because one of the policies governing it is not one this build reads.</summary>
     /// <param name="unreadable">The scope whose policy it is.</param>
     /// <returns>One sentence naming the scope and what clears it.</returns>

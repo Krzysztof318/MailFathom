@@ -3,9 +3,13 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text.Json;
+using MailFathom.Application.Access;
 using MailFathom.Application.Preferences;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Api;
+using MailFathom.Host.Configuration.Policies;
+using MailFathom.Host.Configuration.UserSettings;
+using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -23,6 +27,9 @@ namespace MailFathom.Host.UnitTests.Api;
 /// </summary>
 public sealed class ClientPreferencesEndpointTests
 {
+    private const string ForcingOn = """{"Users":{"Forced":{"ClientPreferences":{"TelemetryEnabled":true}}}}""";
+    private const string ForcingOff = """{"Users":{"Forced":{"ClientPreferences":{"TelemetryEnabled":false}}}}""";
+
     private static readonly ClientPreferences Chosen =
         new(false, ClientThemeChoice.Dark, true, false, true, ClientMessageView.Cleaned, false, 12);
 
@@ -36,6 +43,8 @@ public sealed class ClientPreferencesEndpointTests
         // Act
         var result = await ClientPreferencesEndpoint.ReadAsync(
             SignedIn(store),
+            Acting(),
+            Serving(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -61,6 +70,8 @@ public sealed class ClientPreferencesEndpointTests
         // Act
         var result = await ClientPreferencesEndpoint.ReadAsync(
             SignedIn(store),
+            Acting(),
+            Serving(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -87,6 +98,8 @@ public sealed class ClientPreferencesEndpointTests
         // Act
         var result = await ClientPreferencesEndpoint.ReadAsync(
             SignedIn(store),
+            Acting(),
+            Serving(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -107,6 +120,8 @@ public sealed class ClientPreferencesEndpointTests
         // Act
         var result = await ClientPreferencesEndpoint.SaveAsync(
             SignedIn(store),
+            Acting(),
+            Serving(),
             new ClientPreferencesRequest(false, "dark", true, false, true, "cleaned", false, 12),
             TestContext.Current.CancellationToken);
 
@@ -129,6 +144,8 @@ public sealed class ClientPreferencesEndpointTests
         // Act
         await ClientPreferencesEndpoint.SaveAsync(
             SignedIn(store),
+            Acting(),
+            Serving(),
             new ClientPreferencesRequest(Theme: "light"),
             TestContext.Current.CancellationToken);
 
@@ -151,6 +168,8 @@ public sealed class ClientPreferencesEndpointTests
         // Act
         var result = await ClientPreferencesEndpoint.SaveAsync(
             SignedIn(store),
+            Acting(),
+            Serving(),
             new ClientPreferencesRequest(true, "system", false, true, false, "reduced"),
             TestContext.Current.CancellationToken);
 
@@ -170,6 +189,8 @@ public sealed class ClientPreferencesEndpointTests
         // Act
         var result = await ClientPreferencesEndpoint.SaveAsync(
             SignedIn(store),
+            Acting(),
+            Serving(),
             new ClientPreferencesRequest(Theme: "solarized"),
             TestContext.Current.CancellationToken);
 
@@ -225,6 +246,8 @@ public sealed class ClientPreferencesEndpointTests
         // Act
         var result = await ClientPreferencesEndpoint.SaveAsync(
             SignedIn(store),
+            Acting(),
+            Serving(),
             new ClientPreferencesRequest(NotificationSeconds: stated),
             TestContext.Current.CancellationToken);
 
@@ -251,6 +274,8 @@ public sealed class ClientPreferencesEndpointTests
         // Act
         await ClientPreferencesEndpoint.SaveAsync(
             SignedIn(store),
+            Acting(),
+            Serving(),
             new ClientPreferencesRequest(NotificationSeconds: stated),
             TestContext.Current.CancellationToken);
 
@@ -320,6 +345,8 @@ public sealed class ClientPreferencesEndpointTests
         // Act
         var result = await ClientPreferencesEndpoint.SaveAsync(
             SignedIn(store),
+            Acting(),
+            Serving(),
             new ClientPreferencesRequest(MessageView: "tidied"),
             TestContext.Current.CancellationToken);
 
@@ -333,10 +360,272 @@ public sealed class ClientPreferencesEndpointTests
             .SaveAsync(Arg.Any<UserId>(), Arg.Any<ClientPreferences>(), Arg.Any<CancellationToken>());
     }
 
+    /// <summary>
+    /// What forcing the switch on takes from a person: they declined, and their client is asked to report anyway. The
+    /// read says so before they try anything, naming who holds it.
+    /// </summary>
+    [Fact]
+    public async Task ReadAsync_APolicyForcingTelemetryOnOverAStoredRefusal_AnswersOnAndNamesWhoHoldsIt()
+    {
+        // Arrange
+        var store = Holding(Chosen with { TelemetryEnabled = false });
+
+        // Act
+        var result = await ClientPreferencesEndpoint.ReadAsync(
+            SignedIn(store),
+            Acting(),
+            Serving(Governed(organization: ForcingOn)),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var preferences = Assert.IsType<Ok<ClientPreferencesResponse>>(result.Result).Value!;
+
+        Assert.True(preferences.TelemetryEnabled);
+        Assert.Equal("Organization", preferences.TelemetryHeldBy);
+    }
+
+    [Fact]
+    public async Task ReadAsync_APolicyForcingTelemetryOffOverAStoredConsent_AnswersOffAndNamesWhoHoldsIt()
+    {
+        // Arrange
+        var store = Holding(Chosen with { TelemetryEnabled = true });
+
+        // Act
+        var result = await ClientPreferencesEndpoint.ReadAsync(
+            SignedIn(store),
+            Acting(),
+            Serving(Governed(organization: ForcingOff)),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var preferences = Assert.IsType<Ok<ClientPreferencesResponse>>(result.Result).Value!;
+
+        Assert.False(preferences.TelemetryEnabled);
+        Assert.Equal("Organization", preferences.TelemetryHeldBy);
+    }
+
+    /// <summary>The deployment's force wins over an organization's here as for every setting, so an organization holding the switch off is overruled by a deployment holding it on.</summary>
+    [Fact]
+    public async Task ReadAsync_TheDeploymentForcingTelemetryOverItsOrganization_AnswersTheDeploymentsAndNamesIt()
+    {
+        // Arrange
+        var store = Holding(Chosen with { TelemetryEnabled = false });
+
+        // Act
+        var result = await ClientPreferencesEndpoint.ReadAsync(
+            SignedIn(store),
+            Acting(),
+            Serving(Governed(deployment: ForcingOn, organization: ForcingOff)),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var preferences = Assert.IsType<Ok<ClientPreferencesResponse>>(result.Result).Value!;
+
+        Assert.True(preferences.TelemetryEnabled);
+        Assert.Equal("Deployment", preferences.TelemetryHeldBy);
+    }
+
+    /// <summary>Only the switch is governed: the seven preferences beside it are answered as the person set them, whoever holds the switch.</summary>
+    [Fact]
+    public async Task ReadAsync_APolicyForcingTelemetry_AnswersEveryOtherPreferenceAsThePersonSetIt()
+    {
+        // Arrange
+        var store = Holding(Chosen);
+
+        // Act
+        var result = await ClientPreferencesEndpoint.ReadAsync(
+            SignedIn(store),
+            Acting(),
+            Serving(Governed(deployment: ForcingOn)),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var preferences = Assert.IsType<Ok<ClientPreferencesResponse>>(result.Result).Value!;
+
+        Assert.Equal(
+            ClientPreferencesResponse.For(Chosen) with { TelemetryEnabled = true, TelemetryHeldBy = "Deployment" },
+            preferences);
+    }
+
+    /// <summary>
+    /// The whole reason a forced value is kept off the stored document: a person who declined, saved their settings
+    /// while their organization held the switch on, and whose organization then lifted it, is answered their refusal
+    /// again rather than left opted in by a rule that no longer exists.
+    /// </summary>
+    [Fact]
+    public async Task ReadAsync_TheForceLiftedAfterAWriteMadeUnderIt_AnswersThePersonsOwnAnswerAgain()
+    {
+        // Arrange
+        var store = Holding(Chosen with { TelemetryEnabled = false });
+
+        await ClientPreferencesEndpoint.SaveAsync(
+            SignedIn(store),
+            Acting(),
+            Serving(Governed(organization: ForcingOn)),
+            new ClientPreferencesRequest(TelemetryEnabled: true, Theme: "light"),
+            TestContext.Current.CancellationToken);
+
+        // Act
+        var result = await ClientPreferencesEndpoint.ReadAsync(
+            SignedIn(store),
+            Acting(),
+            Serving(),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var preferences = Assert.IsType<Ok<ClientPreferencesResponse>>(result.Result).Value!;
+
+        Assert.False(preferences.TelemetryEnabled);
+        Assert.Null(preferences.TelemetryHeldBy);
+        Assert.Equal("light", preferences.Theme);
+    }
+
+    /// <summary>A person whose switch nobody holds is answered that nobody holds it, which is what tells a client the control is theirs.</summary>
+    [Fact]
+    public async Task ReadAsync_NoPolicyForcingTelemetry_NamesNobodyHoldingIt()
+    {
+        // Arrange
+        var store = Holding(Chosen);
+
+        // Act
+        var result = await ClientPreferencesEndpoint.ReadAsync(
+            SignedIn(store),
+            Acting(),
+            Serving(Governed(deployment: """{"Users":{"Forced":{"Language":"Polish"}}}""")),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(Assert.IsType<Ok<ClientPreferencesResponse>>(result.Result).Value!.TelemetryHeldBy);
+    }
+
+    /// <summary>A write that would be stored and ignored is refused instead, in a sentence saying which setting and who holds it.</summary>
+    [Theory]
+    [InlineData(ForcingOn, false)]
+    [InlineData(ForcingOff, true)]
+    public async Task SaveAsync_AWriteStatingAnotherAnswerWhileTelemetryIsForced_RefusesNamingTheSwitchAndWhoHoldsIt(
+        string policy,
+        bool stated)
+    {
+        // Arrange
+        var store = Holding(Chosen);
+
+        // Act
+        var result = await ClientPreferencesEndpoint.SaveAsync(
+            SignedIn(store),
+            Acting(),
+            Serving(Governed(organization: policy)),
+            new ClientPreferencesRequest(TelemetryEnabled: stated, Theme: "light"),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(result.Result);
+
+        Assert.Equal(StatusCodes.Status400BadRequest, refusal.StatusCode);
+        Assert.Contains("TelemetryEnabled", refusal.ProblemDetails.Detail!, StringComparison.Ordinal);
+        Assert.Contains("held by the organization", refusal.ProblemDetails.Detail!, StringComparison.Ordinal);
+        Assert.Equal(Chosen, store.Stored);
+    }
+
+    /// <summary>
+    /// A client sends back the whole document it read, so a write under a force states the forced value. It passes,
+    /// commits the other seven, answers the value in force, and leaves the person's own answer where it was.
+    /// </summary>
+    [Fact]
+    public async Task SaveAsync_AWriteStatingTheForcedAnswer_CommitsTheRestAndLeavesThePersonsOwnAnswerAsItWas()
+    {
+        // Arrange
+        var store = Holding(Chosen with { TelemetryEnabled = false });
+
+        // Act
+        var result = await ClientPreferencesEndpoint.SaveAsync(
+            SignedIn(store),
+            Acting(),
+            Serving(Governed(deployment: ForcingOn)),
+            new ClientPreferencesRequest(true, "light", true, false, true, "cleaned", false, 12),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var preferences = Assert.IsType<Ok<ClientPreferencesResponse>>(result.Result).Value!;
+
+        Assert.True(preferences.TelemetryEnabled);
+        Assert.Equal("Deployment", preferences.TelemetryHeldBy);
+        Assert.Equal(Chosen with { TelemetryEnabled = false, Theme = ClientThemeChoice.Light }, store.Stored);
+    }
+
+    /// <summary>A body omitting the switch states no answer to refuse, and under a force its unset answer is not written over the person's own either.</summary>
+    [Fact]
+    public async Task SaveAsync_AWriteOmittingTheSwitchWhileTelemetryIsForced_PassesAndLeavesThePersonsOwnAnswerAsItWas()
+    {
+        // Arrange
+        var store = Holding(Chosen with { TelemetryEnabled = false });
+
+        // Act
+        var result = await ClientPreferencesEndpoint.SaveAsync(
+            SignedIn(store),
+            Acting(),
+            Serving(Governed(organization: ForcingOff)),
+            new ClientPreferencesRequest(Theme: "light"),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.IsType<Ok<ClientPreferencesResponse>>(result.Result);
+        Assert.False(store.Stored!.TelemetryEnabled);
+    }
+
+    /// <summary>A row that is not a document of preferences holds no answer to keep, so a write under a force replaces it with the unset one rather than failing.</summary>
+    [Fact]
+    public async Task SaveAsync_AWriteUnderAForceOverARowThatIsNotADocumentOfPreferences_StoresTheUnsetAnswer()
+    {
+        // Arrange
+        var store = Substitute.For<IClientPreferencesStore>();
+        store.ReadAsync(Arg.Any<UserId>(), Arg.Any<CancellationToken>())
+            .Returns<ClientPreferences?>(_ => throw new JsonException("not a document"));
+        store.SaveAsync(Arg.Any<UserId>(), Arg.Any<ClientPreferences>(), Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        // Act
+        await ClientPreferencesEndpoint.SaveAsync(
+            SignedIn(store),
+            Acting(),
+            Serving(Governed(organization: ForcingOff)),
+            new ClientPreferencesRequest(TelemetryEnabled: false),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        await store.Received(1).SaveAsync(SyntheticUser.Deployment, ClientPreferences.Unset, Arg.Any<CancellationToken>());
+    }
+
     /// <summary>How the transport reads a body, so the binding these assert is the one a request actually meets.</summary>
     private static JsonSerializerOptions WebFormat => new(JsonSerializerDefaults.Web);
 
-    private static OwnClientPreferences SignedIn(IClientPreferencesStore store) => new(
-        AccessAuthorizations.ForUserGranted(SyntheticUser.Deployment, MailFathomPermission.MailRead),
-        store);
+    private static AccessAuthorization Acting() =>
+        AccessAuthorizations.ForUserGranted(SyntheticUser.Deployment, MailFathomPermission.MailRead);
+
+    private static OwnClientPreferences SignedIn(IClientPreferencesStore store) => new(Acting(), store);
+
+    /// <summary>Reads what the policies a test states force the acting person's switch to, through the reading a served user is composed with.</summary>
+    private static ForcedClientTelemetry? Governed(string deployment = "{}", string? organization = null) =>
+        ForcedClientTelemetry.Read(StatedPolicies.Governing(deployment, organization));
+
+    /// <summary>Builds the cache of a replica serving the acting person under the force given, or under none.</summary>
+    private static ServedUsers Serving(ForcedClientTelemetry? forced = null) => ResolvedServedUsers.Serving(
+        new ServedUser(SyntheticUser.Deployment, "alex", []) { ForcedClientTelemetry = forced });
+
+    private static RememberedPreferences Holding(ClientPreferences stored) => new() { Stored = stored };
+
+    /// <summary>One person's preferences held in memory, so a test can read back what a write left.</summary>
+    private sealed class RememberedPreferences : IClientPreferencesStore
+    {
+        public ClientPreferences? Stored { get; set; }
+
+        public Task<ClientPreferences?> ReadAsync(UserId user, CancellationToken cancellationToken) =>
+            Task.FromResult(this.Stored);
+
+        public Task<bool> SaveAsync(UserId user, ClientPreferences preferences, CancellationToken cancellationToken)
+        {
+            this.Stored = preferences;
+
+            return Task.FromResult(true);
+        }
+    }
 }

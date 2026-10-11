@@ -5,6 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Mail;
+using MailFathom.Host.Configuration.Policies;
 using MailFathom.Host.Configuration.Records;
 using MailFathom.Infrastructure.Persistence.Policies;
 using MailFathom.Infrastructure.Persistence.Users;
@@ -87,6 +88,7 @@ internal sealed partial class ServedUserResolution(
         {
             TimeZone = bound.ReadingTimeZone,
             ClientTelemetryLevel = bound.ReadingClientTelemetryLevel,
+            ForcedClientTelemetry = ForcedClientTelemetry.Read(document.Policies),
         };
 
         return (served, document.Version, document.Policies);
