@@ -55,6 +55,10 @@ internal sealed class UserAccountConfiguration : IEntityTypeConfiguration<UserAc
         entity.Property(user => user.McpEndpointEnabled).HasDefaultValue(true).HasSentinel(true);
         entity.Property(user => user.ClientEndpointEnabled).HasDefaultValue(true).HasSentinel(true);
 
+        // No record version is zero, so a row a build older than the stamp inserts reads as one whose switches
+        // nothing has derived yet.
+        entity.Property(user => user.EndpointSwitchesVersion).HasDefaultValue(0L);
+
         // The version is the document's own rather than PostgreSQL's row version, because a writer has to be able to
         // state which version it read, be refused by number, and report the version it was refused against.
         entity.Property(user => user.Version).IsConcurrencyToken();

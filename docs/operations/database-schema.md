@@ -402,6 +402,21 @@ what an account is scanned for. The migration's own reading of each document is 
 and is replaced the same way: every row it fills is read again, so a deployment of N accounts runs on it for about
 N / 100 intervals after the new build starts.
 
+**`StampEndpointSwitchesOnUserRecords` puts back what an older build's write undoes.** It adds two columns to
+`settings_accounts` — `EndpointSwitchesVersion`, defaulting to zero, and `EndpointSwitchesOrganizationId`, nullable —
+and fills both from the row's own `Version` and `OrganizationId`, so it rewrites every user's row once and reads no
+document. Together they say which version of a user's record, under which organization, the two endpoint switches on
+the row were derived from. A build older than the release carrying it writes neither: where a
+[settings policy](configuration-sources.md#how-a-settings-policy-resolves-a-users-record) forces a switch or supplies
+one, a record such a build saves, or a user it moves between organizations, has the record's own switches on its row
+and a stamp that no longer matches it. Every replica of this release reads such rows a hundred per convergence
+interval, in identifier order, derives the switches again from the record as the policies resolve it, and stamps the
+row — so a force an older replica undid is back within an interval while no more than a hundred rows trail, and a
+larger backlog drains at that rate whatever the replica count. An older replica can undo it again with its next write
+for as long as it runs, so state a policy that closes an endpoint once the rollout has finished. The migration stamps
+every row as current rather than leaving it to be derived: it arrives in the release that introduces settings
+policies, so no policy is stored when it runs and what each row holds is what its record resolves to.
+
 **`KeyMailAccountByUserAndIdentifier` also asks one thing of you after the rollout: authorize every OAuth mailbox
 again.** A sealed refresh token is bound to the account it was stored for, and the account was then the user and the
 identifier together rather than the identifier alone — so a token sealed by an earlier release **does not open**. The

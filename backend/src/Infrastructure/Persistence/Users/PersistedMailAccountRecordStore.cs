@@ -368,8 +368,9 @@ internal sealed class PersistedMailAccountRecordStore(
                     return new MailAccountUnassignment(Unassigned: false, AccountErased: false);
                 }
 
+                // The stamp on the user's endpoint switches moves with the version, as StepUserVersionAsync says.
                 await context.Database.ExecuteSqlAsync(
-                    $"""UPDATE settings_accounts SET "Version" = "Version" + 1, "UpdatedAt" = {now} WHERE "Id" = {userId}""",
+                    $"""UPDATE settings_accounts SET "Version" = "Version" + 1, "EndpointSwitchesVersion" = "EndpointSwitchesVersion" + 1, "UpdatedAt" = {now} WHERE "Id" = {userId}""",
                     token);
 
                 var nobodyElse = !await context.MailAccountAssignments
@@ -530,6 +531,12 @@ internal sealed class PersistedMailAccountRecordStore(
             .ToListAsync(cancellationToken);
 
     /// <summary>Moves one user's record version where it still stands at the version a write was judged against.</summary>
+    /// <remarks>
+    /// A write of an account leaves the endpoint switches of its users as they are, so the stamp on them moves with
+    /// the version: a row whose stamp matched still matches, and one a build that does not know settings policies
+    /// wrote still trails by as much. Stepping the version alone would have every such write read as a row written
+    /// past the policy, and the reconciliation derive again what nothing had moved.
+    /// </remarks>
     private static async Task<bool> StepUserVersionAsync(
         MailFathomDbContext context,
         Guid userId,
@@ -538,12 +545,13 @@ internal sealed class PersistedMailAccountRecordStore(
         CancellationToken cancellationToken) =>
         await context.Database.ExecuteSqlAsync(
             $"""
-             UPDATE settings_accounts SET "Version" = "Version" + 1, "UpdatedAt" = {now}
+             UPDATE settings_accounts SET "Version" = "Version" + 1, "EndpointSwitchesVersion" = "EndpointSwitchesVersion" + 1, "UpdatedAt" = {now}
              WHERE "Id" = {userId} AND "Version" = {expectedVersion}
              """,
             cancellationToken) > 0;
 
     /// <summary>Moves the record version of every user an account is assigned to, so every replica composes them again.</summary>
+    /// <remarks>The stamp on their endpoint switches moves with it, for the reason <see cref="StepUserVersionAsync" /> gives.</remarks>
     private static Task<int> StepAssignedUsersAsync(
         MailFathomDbContext context,
         Guid accountId,
@@ -551,7 +559,7 @@ internal sealed class PersistedMailAccountRecordStore(
         CancellationToken cancellationToken) =>
         context.Database.ExecuteSqlAsync(
             $"""
-             UPDATE settings_accounts SET "Version" = "Version" + 1, "UpdatedAt" = {now}
+             UPDATE settings_accounts SET "Version" = "Version" + 1, "EndpointSwitchesVersion" = "EndpointSwitchesVersion" + 1, "UpdatedAt" = {now}
              WHERE "Id" IN (SELECT "UserId" FROM mail_account_assignments WHERE "MailAccountId" = {accountId})
              """,
             cancellationToken);

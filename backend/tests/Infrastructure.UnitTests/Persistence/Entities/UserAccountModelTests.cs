@@ -171,6 +171,47 @@ public sealed class UserAccountModelTests
     }
 
     /// <summary>
+    /// No record version is zero, so the default is what makes a row inserted by a statement naming no stamp — a
+    /// build older than the stamp's, above all — read as one whose switches nothing has derived.
+    /// </summary>
+    [Fact]
+    public void UserAccountModel_EndpointSwitchesVersion_DefaultsToAVersionNoRecordStandsAt()
+    {
+        // Arrange
+        using var context = CreateContext();
+
+        // Act
+        var stampedVersion = EntityTypeOf<UserAccountEntity>(context).FindProperty(nameof(UserAccountEntity.EndpointSwitchesVersion));
+
+        // Assert
+        Assert.NotNull(stampedVersion);
+        Assert.False(stampedVersion.IsNullable);
+        Assert.Equal(0L, stampedVersion.GetDefaultValue());
+    }
+
+    /// <summary>
+    /// The organization the switches were derived under is compared and never followed. A foreign key on it would
+    /// either refuse removing an organization a moved user was once stamped under, or clear the stamp and have a row
+    /// derived under that organization read as one derived under none.
+    /// </summary>
+    [Fact]
+    public void UserAccountModel_EndpointSwitchesOrganization_IsAStampThatReferencesNothing()
+    {
+        // Arrange
+        using var context = CreateContext();
+        var entityType = EntityTypeOf<UserAccountEntity>(context);
+
+        // Act
+        var stampedOrganization = entityType.FindProperty(nameof(UserAccountEntity.EndpointSwitchesOrganizationId));
+
+        // Assert
+        Assert.NotNull(stampedOrganization);
+        Assert.True(stampedOrganization.IsNullable);
+        Assert.Empty(stampedOrganization.GetContainingForeignKeys());
+        Assert.Empty(stampedOrganization.GetContainingIndexes());
+    }
+
+    /// <summary>
     /// Reads the design-time model rather than <c>DbContext.Model</c>, because the runtime model is trimmed to what a
     /// query needs and throws for the index configuration a schema is generated from.
     /// </summary>

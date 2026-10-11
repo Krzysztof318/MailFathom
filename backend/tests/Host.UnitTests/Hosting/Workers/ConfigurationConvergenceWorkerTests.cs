@@ -9,8 +9,10 @@ using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.Hosting.Workers;
 using MailFathom.Host.Signals;
 using MailFathom.Host.UnitTests.TestDoubles;
+using MailFathom.Infrastructure.Persistence.Policies;
 using MailFathom.Infrastructure.Persistence.Settings;
 using MailFathom.Infrastructure.Persistence.Users;
+using MailFathom.Infrastructure.Persistence.Users.EndpointSwitches;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
@@ -175,6 +177,44 @@ public sealed class ConfigurationConvergenceWorkerTests
         Assert.False(grants.TryRecall(SyntheticUser.Deployment, out _));
     }
 
+    /// <summary>
+    /// The users whose endpoint switches trail their stamp are read on the interval like every other reading, and a
+    /// reading of them that fails is reported under its own sentence and made again on the next one.
+    /// </summary>
+    [Fact]
+    public async Task ExecuteAsync_TheReadingOfTrailingEndpointSwitchesFails_ReportsItAndReadsAgainOnTheNextInterval()
+    {
+        // Arrange
+        var clock = new FakeTimeProvider();
+        var secondReading = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var readings = 0;
+        var endpointSwitches = Substitute.For<IUserEndpointSwitchStore>();
+        var logger = new RecordingLogger<ConfigurationConvergenceWorker>();
+
+        endpointSwitches.ReadTrailingAsync(Arg.Any<Guid?>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                if (Interlocked.Increment(ref readings) == 1)
+                {
+                    throw new InvalidOperationException("The database did not answer.");
+                }
+
+                secondReading.TrySetResult();
+
+                return Task.FromResult<IReadOnlyList<UserId>>([]);
+            });
+
+        using var worker = Worker(connect: null, rootSettings: null, NoUsers(), clock, logger, endpointSwitches: endpointSwitches);
+
+        // Act
+        await worker.StartAsync(CancellationToken.None);
+        await SynchronizationTestHost.AdvanceUntilAsync(clock, secondReading.Task, ConfigurationConvergenceWorker.Interval, DeadlockGuard);
+
+        // Assert
+        await worker.StopAsync(CancellationToken.None);
+        Assert.Contains(logger.Messages, message => message.Contains("endpoint switches trail their stamp", StringComparison.Ordinal));
+    }
+
     private static RootSettingsConfigurationProvider LoadedFrom(InMemoryRootSettingsRow row)
     {
         var provider = new RootSettingsConfigurationProvider(new RootSettingsDocument(row.Json, row.Version));
@@ -242,7 +282,8 @@ public sealed class ConfigurationConvergenceWorkerTests
         IUserSettingsDocumentReader documents,
         TimeProvider clock,
         RecordingLogger<ConfigurationConvergenceWorker>? logger = null,
-        UserGrantCache? grants = null)
+        UserGrantCache? grants = null,
+        IUserEndpointSwitchStore? endpointSwitches = null)
     {
         return new ConfigurationConvergenceWorker(
             new ConfigurationChangeAnnouncements(connect, new RecordingLogger<ConfigurationChangeAnnouncements>()),
@@ -251,6 +292,10 @@ public sealed class ConfigurationConvergenceWorkerTests
                 ServedMailAccountReaders.HoldingNothing(),
                 MailAccountRecordScopes.Resolving(new InMemoryMailAccountRecordStore()),
                 new RecordingLogger<MailAccountSettingsReconciliation>()),
+            new UserEndpointSwitchReconciliation(
+                endpointSwitches ?? new InMemoryUserEndpointSwitchRows(),
+                Substitute.For<IUserRecordPolicyJudge>(),
+                new RecordingLogger<UserEndpointSwitchReconciliation>()),
             grants ?? new UserGrantCache(),
             () => rootSettings,
             clock,

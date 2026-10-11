@@ -3986,6 +3986,14 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("jsonb");
 
+                    b.Property<Guid?>("EndpointSwitchesOrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("EndpointSwitchesVersion")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L);
+
                     b.Property<bool>("McpEndpointEnabled")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
