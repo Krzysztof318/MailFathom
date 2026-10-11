@@ -646,7 +646,7 @@ internal sealed class MailAccountAdministration(
             return [];
         }
 
-        if (MailAccountPolicyResolution.ResolveUnderItsPolicies(account)?.Find(FoldersProperty) is not { IsThePersonsToChange: true })
+        if (!FoldersAreThePersonsToState(account))
         {
             return [];
         }
@@ -659,6 +659,31 @@ internal sealed class MailAccountAdministration(
         {
             return [];
         }
+    }
+
+    /// <summary>Answers whether the list of folders of one of the signed-in user's accounts is theirs to state afresh.</summary>
+    /// <param name="accountId">The account's identifier.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>Whether it is, or <see langword="null" /> where the user's record names no such account.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="accountId" /> is <see langword="null" />, empty, or white space.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
+    /// <remarks>
+    /// Asked before a folder is made on the mail server, which is the one folder act with no declared folder to be
+    /// refused over. The answer is the one <see cref="AliasesOwnAccountDeclaresAsync" /> rests on: folders a policy
+    /// forces, folders the editing restriction withholds, and those of an account a policy this build does not read
+    /// governs are not the user's to add to.
+    /// </remarks>
+    internal async Task<bool?> OwnAccountFoldersAreTheUsersToStateAsync(
+        string accountId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(accountId);
+        authorization.RequirePermission(MailFathomPermission.MailRead);
+
+        return await documents.ReadAsync(authorization.RequireUser(), cancellationToken) is { } record
+            && AssignedAccount(record, accountId) is { } account
+                ? FoldersAreThePersonsToState(account)
+                : null;
     }
 
     /// <summary>Writes one folder declaration of the signed-in user's, for an act the mail server has already carried out.</summary>
@@ -731,6 +756,9 @@ internal sealed class MailAccountAdministration(
             [.. properties.Where(isTheReadersToChange).Select(property => property.Property.Path)],
             Unresolved: null);
     }
+
+    private static bool FoldersAreThePersonsToState(MailAccountRecord account) =>
+        MailAccountPolicyResolution.ResolveUnderItsPolicies(account)?.Find(FoldersProperty) is { IsThePersonsToChange: true };
 
     /// <summary>Composes the settings a folder change is made over: the account's own, with the folders it is served standing where it states none.</summary>
     /// <remarks>

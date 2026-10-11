@@ -38,6 +38,21 @@ public interface IMailFolderDeclarationWriter
         MailAccountId accountId,
         CancellationToken cancellationToken);
 
+    /// <summary>Says why the account's own record takes no new folder from this caller, before the mail server is asked to make one.</summary>
+    /// <param name="accountId">The account.</param>
+    /// <param name="cancellationToken">Propagates caller cancellation.</param>
+    /// <returns>The refusal, or <see langword="null" /> where the record takes one.</returns>
+    /// <remarks>
+    /// A creation names no folder the account declares, so nothing <see cref="AliasesTheAccountDeclaresAsync" /> answers
+    /// refuses it, and its declaration is written only after the server has acted. This is therefore asked first: a
+    /// list of folders a settings policy holds against the caller is <see cref="MailFolderActRefusal.FoldersHeldByPolicy" />
+    /// while nothing has been made yet, rather than <see cref="MailFolderActRefusal.NotRecorded" /> over a folder the
+    /// account may never declare.
+    /// </remarks>
+    Task<MailFolderActRefusal?> FindDeclarationRefusalAsync(
+        MailAccountId accountId,
+        CancellationToken cancellationToken);
+
     /// <summary>Declares one more folder of the account, at a path the mail server now advertises.</summary>
     /// <param name="accountId">The account.</param>
     /// <param name="folderAlias">The alias to declare it under, which nothing afterwards changes.</param>

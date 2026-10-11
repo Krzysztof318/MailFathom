@@ -636,10 +636,10 @@ name:
 
 **A client draws its menus from that report rather than from a rule it holds a copy of.** `allowedActs` on the account
 is `Create` or nothing, `allowedActs` on a folder is `Rename`, `Move`, and `Delete` together or nothing at all, and
-`creatableRoles` names the roles a creation may ask for. A folder is named by `id` everywhere, whose shape is not part
-of this contract — a client can only have got one from this route — so a rename or a move never invalidates a reference
-a client holds, and a client builds the tree from `parentId`. An account the caller does not hold is answered `404`,
-and one the request does not name `400`.
+`creatableRoles` names the roles a creation may ask for, which is none where the account offers no `Create`. A folder
+is named by `id` everywhere, whose shape is not part of this contract — a client can only have got one from this
+route — so a rename or a move never invalidates a reference a client holds, and a client builds the tree from
+`parentId`. An account the caller does not hold is answered `404`, and one the request does not name `400`.
 
 Each write takes a strict JSON body — a key nothing binds is refused — of at most 4096 bytes, and a body past that is
 answered `413` before the write is reached. It answers with the change made and the folder as it left it:
@@ -719,7 +719,7 @@ A refusal is a problem response whose `refusal` member names it, so a client bra
 | --- | --- |
 | `404` | `AccountMissing`, `FolderMissing`, `ParentMissing` |
 | `400` | `NameInvalid`, `InboxNameAtTopLevel` |
-| `409` | `AccountNotHeld`, `ProtectedRole`, `NameTaken`, `NestedInItself`, `TooDeep`, `TooManyFolders`, `RoleAlreadyPlayed`, `NotDeclaredByTheAccount` |
+| `409` | `AccountNotHeld`, `ProtectedRole`, `NameTaken`, `NestedInItself`, `TooDeep`, `TooManyFolders`, `RoleAlreadyPlayed`, `NotDeclaredByTheAccount`, `FoldersHeldByPolicy` |
 | `502` | `ServerRefused` |
 | `503` | `ServerUnavailable` |
 | `500` | `NotRecorded` |
@@ -735,10 +735,12 @@ act on is what the person may state afresh, so where a policy forces the account
 restriction withholds it — [how a settings policy resolves a mail
 account](configuration-mail.md#how-a-settings-policy-resolves-a-mail-account) — no folder of the account is
 answered as one it declares, and renaming, moving, or deleting one answers `NotDeclaredByTheAccount` before any mail
-server is reached. Creating a folder is the exception this surface does not yet close: on a mirrored account the
-server is asked first and the declaration is refused afterwards, so the act answers `NotRecorded` and leaves a folder
-on the server that the account does not declare. A folder of a default's list is one the account is served rather
-than one it states, and is acted on like any other; the first act writes the resulting list onto the account.
+server is reached. Creating a folder names none the account declares, so on a mirrored account it is refused under a
+name of its own and just as early: it answers `FoldersHeldByPolicy`, no mail server is asked for anything, and no
+folder is made there that the account could not declare. The read says so before anybody asks — such an account's
+`allowedActs` carries no `Create` and its `creatableRoles` is empty — and the same holds for an account governed by a
+policy this build does not read. A folder of a default's list is one the account is served rather than one it
+states, and is acted on like any other; the first act writes the resulting list onto the account.
 
 The read takes `mailfathom.mail.read` and the writes take
 [`mailfathom.mail.folders.write`](permissions.md#the-published-set) as well as `mailfathom.mail.read`, because an act

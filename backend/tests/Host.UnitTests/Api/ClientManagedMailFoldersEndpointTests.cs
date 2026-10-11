@@ -56,6 +56,7 @@ public sealed class ClientManagedMailFoldersEndpointTests
     [InlineData(MailFolderActRefusal.TooManyFolders, StatusCodes.Status409Conflict)]
     [InlineData(MailFolderActRefusal.RoleAlreadyPlayed, StatusCodes.Status409Conflict)]
     [InlineData(MailFolderActRefusal.NotDeclaredByTheAccount, StatusCodes.Status409Conflict)]
+    [InlineData(MailFolderActRefusal.FoldersHeldByPolicy, StatusCodes.Status409Conflict)]
     [InlineData(MailFolderActRefusal.ServerRefused, StatusCodes.Status502BadGateway)]
     [InlineData(MailFolderActRefusal.ServerUnavailable, StatusCodes.Status503ServiceUnavailable)]
     [InlineData(MailFolderActRefusal.NotRecorded, StatusCodes.Status500InternalServerError)]

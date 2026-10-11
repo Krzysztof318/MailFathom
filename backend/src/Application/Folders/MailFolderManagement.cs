@@ -13,14 +13,15 @@ namespace MailFathom.Application.Folders;
 /// <remarks>
 /// <para>
 /// An account permits creating a folder or it does not, and the reasons it may not are its own rather than any
-/// folder's: its mailbox may be being restored to its source, or the hierarchy may already hold as many folders as it
-/// takes. Everything else is per folder, which is why the two are reported at the levels they belong to instead of one
-/// flag for the account.
+/// folder's: its mailbox may be being restored to its source, the hierarchy may already hold as many folders as it
+/// takes, or a settings policy may hold its list of folders against the caller. Everything else is per folder, which
+/// is why the two are reported at the levels they belong to instead of one flag for the account.
 /// </para>
 /// <para>
 /// The creatable roles are how a missing special folder is made: a person chooses the role and the service supplies
 /// the name, so a client never asks anybody to name their own trash folder. A role the account already has a folder for
-/// is absent from the list, because one account has at most one folder per role.
+/// is absent from the list, because one account has at most one folder per role, and the list is empty wherever the
+/// account permits no creation at all.
 /// </para>
 /// </remarks>
 public sealed record MailFolderManagement(

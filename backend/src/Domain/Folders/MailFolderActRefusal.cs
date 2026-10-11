@@ -68,4 +68,12 @@ public enum MailFolderActRefusal
     /// knew until the act is asked for again.
     /// </remarks>
     NotRecorded = 15,
+
+    /// <summary>A settings policy holds the account's list of folders against the caller, so no folder is theirs to add to it.</summary>
+    /// <remarks>
+    /// Answered before the account's mail server is asked for anything, because a folder made there could not be
+    /// declared afterwards and would stand on the server as one the policy never allowed. A person this refuses asks
+    /// whoever administers the organization or the deployment.
+    /// </remarks>
+    FoldersHeldByPolicy = 16,
 }

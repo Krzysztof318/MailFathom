@@ -29,6 +29,12 @@ namespace MailFathom.Application.Folders;
 /// axes L, M, and N.
 /// </para>
 /// <para>
+/// A creation names no folder the record declares, so it is the one act that rule cannot refuse. It is asked about
+/// separately and first: where the account's record takes no new folder from the caller — a settings policy holding
+/// its list of folders — the creation is refused before the server is reached, because the declaration follows the
+/// server's act and a refusal there would leave a folder standing that the account may never declare.
+/// </para>
+/// <para>
 /// A folder is named here by the alias it is declared under, and the alias never moves. A rename and a move change
 /// where the folder is and never what MailFathom calls it, because the stored mail, the checkpoints, and the bindings
 /// are all keyed by the alias — moving it would separate a folder from its own mail so that a tree reads more tidily.
@@ -100,11 +106,12 @@ public sealed class MirroredMailFolderEditor
         this.authorization.RequirePermission(MailFathomPermission.MailRead);
 
         var declared = await this.declarations.AliasesTheAccountDeclaresAsync(account, cancellationToken);
+        var takesAFolder = await this.declarations.FindDeclarationRefusalAsync(account, cancellationToken) is null;
         var folders = this.mappings.FoldersOf(account);
 
         return new MailFolderManagement(
-            [MailFolderAct.Create],
-            [.. MailFolderRoleNaming.Creatable.Where(role => IsCreatable(folders, role))],
+            takesAFolder ? [MailFolderAct.Create] : [],
+            takesAFolder ? [.. MailFolderRoleNaming.Creatable.Where(role => IsCreatable(folders, role))] : [],
             [
                 .. folders
                     .Select(folder => Describe(folder, folders, declared))
@@ -127,6 +134,11 @@ public sealed class MirroredMailFolderEditor
         CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.MailFoldersWrite);
+
+        if (await this.declarations.FindDeclarationRefusalAsync(account, cancellationToken) is { } undeclarable)
+        {
+            return MailFolderActOutcome.Refused(undeclarable);
+        }
 
         var folders = this.mappings.FoldersOf(account);
 

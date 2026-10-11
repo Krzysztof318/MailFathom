@@ -50,6 +50,17 @@ internal sealed class ConfiguredMailFolderDeclarationWriter(MailAccountAdministr
     }
 
     /// <inheritdoc />
+    public async Task<MailFolderActRefusal?> FindDeclarationRefusalAsync(
+        MailAccountId accountId,
+        CancellationToken cancellationToken) =>
+        await accounts.OwnAccountFoldersAreTheUsersToStateAsync(accountId.Value, cancellationToken) switch
+        {
+            null => MailFolderActRefusal.AccountMissing,
+            false => MailFolderActRefusal.FoldersHeldByPolicy,
+            true => null,
+        };
+
+    /// <inheritdoc />
     public Task<MailFolderDeclarationOutcome> DeclareAsync(
         MailAccountId accountId,
         MailFolderAlias folderAlias,
