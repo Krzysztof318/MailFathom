@@ -281,6 +281,7 @@ The files that carry the licensing decision itself are not merely off limits by 
 | [`frontend/AGENTS.md`](frontend/AGENTS.md) | The client stack's whole contract: what the toolchain enforces and what to do when it blocks you, package pinning and the lock file, and driving the running client in a browser |
 | [`frontend/src/AGENTS.md`](frontend/src/AGENTS.md) | What holds for the client's application source alone: the package boundary, the state model, component and module design, and the UX, UI, accessibility, and performance obligations every screen meets |
 | [`frontend/tests/AGENTS.md`](frontend/tests/AGENTS.md) | The client suite's own policy: where a test file sits and why, what it may assert, and what belongs in the browser harness instead |
+| [`design/AGENTS.md`](design/AGENTS.md) | How the design under `design/` is authored: the skills a screen is drawn with, and the bar an artboard's own code is held to |
 | [`docs/AGENTS.md`](docs/AGENTS.md) | Documentation rules and the `describes:` marker every page carries |
 | [`docs/operations/issue-tracking.md`](docs/operations/issue-tracking.md) | Which work needs an issue, what its body carries, and how a maintainer triages one that arrives from outside the project |
 | [`docs/operations/agent-workflow.md`](docs/operations/agent-workflow.md) | The verification scripts and the skills at length, and how the automated review behaves |

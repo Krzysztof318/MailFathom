@@ -112,7 +112,9 @@ rule is a wrong finding, and so is one these files already reject.
   and the UX, UI, accessibility, and performance obligations; and `frontend/tests/AGENTS.md` for the
   client suite, which is reached from the root table rather than from the directory a test sits in,
   because a client test sits beside the source it covers rather than under `frontend/tests/`.
-  `docs/AGENTS.md` for a page under `docs/`.
+  `design/AGENTS.md` for a file under `design/`, which states what an artboard's own code does not
+  owe — the two stacks' rules for structure, logic, and tests stop at their own directories — and
+  what a finding there is. `docs/AGENTS.md` for a page under `docs/`.
 - `.agents/skills/check-docs-licenses/SKILL.md` for MailFathom's own AGPL-3.0-only record
   and the third-party licensing rules, and `docs/operations/issue-tracking.md` for what
   an issue and its board placement have to carry.

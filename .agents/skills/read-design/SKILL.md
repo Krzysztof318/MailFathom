@@ -86,7 +86,9 @@ closed in `design/` first, in a change whose issue asks for it.
 ## When the task is the design itself
 
 A change to the design is a decision about the product, made in a change whose issue asks for it — never as a side
-effect of a client task making the design agree with what it built. In the same change it updates:
+effect of a client task making the design agree with what it built. `design/AGENTS.md` holds how it is authored: the
+vendored design skills a screen is drawn with, and the bar an artboard's own code is held to. In the same change it
+updates:
 
 - `design/state-inventory.md`, for every state it adds, removes, or gates differently;
 - `design/parity.json`, when a paired screen moves to another artboard or is reached by different presses.

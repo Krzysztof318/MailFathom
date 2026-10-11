@@ -81,7 +81,9 @@ has stated a different rule is a wrong candidate, and so is one these files alre
   state model, module and component design, and the UX, UI, accessibility, and performance
   obligations; and `frontend/tests/AGENTS.md` for the client suite, which is reached from the root
   table rather than from the directory a test sits in, because a client test sits beside the source
-  it covers. `docs/AGENTS.md` for a page under `docs/`.
+  it covers. `design/AGENTS.md` for a file under `design/`, which states what an artboard's own code
+  does not owe — the two stacks' rules for structure, logic, and tests stop at their own directories —
+  and what a finding there is. `docs/AGENTS.md` for a page under `docs/`.
 - The ADRs under `docs/decisions/` that govern the area your files change.
 
 ## How to work through your group
