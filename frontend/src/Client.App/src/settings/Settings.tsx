@@ -336,9 +336,11 @@ function Application({
     );
 }
 
-// A group of rows the deployment keeps, spaced exactly as the panel around it spaces its own rows so that grouping
-// them moves nothing. A fieldset because disabling one is the platform's own way of withdrawing every control in it.
-const followingThePerson = 'flex min-w-0 flex-col gap-2.75 disabled:opacity-60 workspace:gap-2.25';
+// A group of rows the deployment keeps. A fieldset because disabling one is the platform's own way of withdrawing
+// every control in it, and one that generates no box of its own, so that grouping the rows moves none of them: they
+// stay the panel's own children for layout, which is what the panel's spacing and its scrolling are written against.
+// The dimming is on the rows for the same reason — an element without a box has nothing to dim.
+const followingThePerson = 'contents [&:disabled>*]:opacity-60';
 
 // Whether this machine raises a notification of its own while nobody is looking at the window.
 //
