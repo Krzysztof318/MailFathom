@@ -39,10 +39,6 @@ on:
         description: 'The digest this release published. The chart is verified to deploy this exact artifact.'
         required: true
         type: string
-    secrets:
-      GHCR_PUBLISH_TOKEN:
-        description: 'Optional. A token of the published namespace with `write:packages`, for a repository that does not own the package it publishes to. The workflow token logs in to GHCR when it is absent.'
-        required: false
     outputs:
       chart:
         description: 'The OCI repository the chart was published to.'
@@ -83,24 +79,22 @@ jobs:
       - name: Set up ORAS
         uses: oras-project/setup-oras@v2
 
-      # `charts/` is what keeps the chart out of the image's repository: both are OCI artifacts in one registry, and
-      # two artifacts sharing a repository would share its tags.
+      # An OCI repository name is lowercase and this owner's login is not, so the reference is folded here for the same
+      # reason the image's is. `charts/` is what keeps the chart out of the image's repository: both are OCI artifacts
+      # in one registry, and two artifacts sharing a repository would share its tags.
       - name: Resolve the chart reference
         id: reference
         env:
-          IMAGE: ${{ inputs.image }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
         run: |
           set -euo pipefail
 
-          # The chart is published beside the image it deploys, so its namespace is read off the image this release
-          # was handed rather than off the repository running the workflow. One statement of where the artifacts live
-          # then decides both, and the chart cannot come to sit under a different account than the image it renders.
-          namespace="${IMAGE%/*}/charts"
+          owner="$(printf '%s' "$REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')"
 
           {
-            printf 'registry=%s\n' "${IMAGE%%/*}"
-            printf 'namespace=%s\n' "$namespace"
-            printf 'chart=%s/%s\n' "$namespace" "${IMAGE##*/}"
+            printf 'registry=ghcr.io\n'
+            printf 'namespace=ghcr.io/%s/charts\n' "$owner"
+            printf 'chart=ghcr.io/%s/charts/mailfathom\n' "$owner"
           } >> "$GITHUB_OUTPUT"
 
       # The verification the deployment assets already have, run again here as a release gate. `CI`'s `Helm chart` job
@@ -195,7 +189,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GHCR_PUBLISH_TOKEN || secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       # Helm keeps its own registry credentials rather than reading Docker's, so a job that pushes with both tools logs
       # in with both. ORAS reads the file `docker/login-action` wrote.
@@ -203,7 +197,7 @@ jobs:
         env:
           REGISTRY: ${{ steps.reference.outputs.registry }}
           REGISTRY_USERNAME: ${{ github.actor }}
-          REGISTRY_PASSWORD: ${{ secrets.GHCR_PUBLISH_TOKEN || secrets.GITHUB_TOKEN }}
+          REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
 

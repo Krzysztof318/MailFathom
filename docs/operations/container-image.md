@@ -245,10 +245,11 @@ than assuming it, and a run that reached only one registry is a failed publicati
 GHCR is the canonical reference to quote, because it is where the repository, the package page, and the chart all sit.
 Docker Hub is the convenience mirror.
 
-Both references are stated rather than derived. `publish-container-image.yml` names the repository the image is
-published under, `nightly.yml` names the same one to read and prune it, and the chart is published beside the image it
-was handed — so none of the three follows the GitHub repository the workflows run in. Where an installation pulls from
-is a published identity, and it moves when that statement is changed rather than whenever the source moves.
+The two references come from different places, because they belong to different things. A GHCR package belongs to the
+GitHub repository that publishes it, so the publishing run composes that reference — and the chart's beside it — from
+the repository's own name. A Docker Hub repository belongs to a Docker Hub account, which is no part of GitHub, so the
+mirror is stated in the workflows instead: `publish-container-image.yml` names it, and `nightly.yml` names the same
+one to prune it.
 
 **The package is public**, so a pull needs no authentication and no GitHub account:
 

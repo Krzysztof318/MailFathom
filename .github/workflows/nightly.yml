@@ -34,10 +34,10 @@ permissions:
   contents: read
 
 env:
-  # The repository `publish-container-image.yml` publishes the image under, on both registries. This workflow reads
-  # it to decide whether `main` has moved and prunes it afterwards, so it names the same value rather than deriving
-  # one from the repository running it; the contract suite fails when the two disagree.
-  PUBLISHED_REPOSITORY: krzysztof318/mailfathom
+  # The Docker Hub repository `publish-container-image.yml` mirrors the image to. This workflow prunes it afterwards,
+  # so it names the same value; a Docker Hub account is no part of GitHub, which is why neither workflow reads it off
+  # the repository running it, and the contract suite fails when the two disagree.
+  DOCKER_HUB_REPOSITORY: krzysztof318/mailfathom
 
 jobs:
   decide:
@@ -103,6 +103,7 @@ jobs:
       - name: Decide whether main has moved
         id: decide
         env:
+          REPOSITORY: ${{ github.repository }}
           REVISION: ${{ steps.resolve.outputs.revision }}
           IS_DISPATCH: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
@@ -121,7 +122,7 @@ jobs:
           # One registry answers this, because both carry the same digest under the same tag and a run that reached only
           # one of them is a failed publication rather than a state to reason about here. Asking the second would add a
           # login to a decision that has nothing to do with credentials.
-          image="ghcr.io/${PUBLISHED_REPOSITORY}"
+          image="ghcr.io/$(printf '%s' "$REPOSITORY" | tr '[:upper:]' '[:lower:]')"
 
           # Any failure to read the published nightly — an absent tag, a registry hiccup, a manifest shape that changed
           # — resolves to publishing. The cost of a wrong answer is one duplicate nightly; the cost of the opposite
@@ -332,7 +333,6 @@ jobs:
       block-on-vulnerabilities: false
     secrets:
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-      GHCR_PUBLISH_TOKEN: ${{ secrets.GHCR_PUBLISH_TOKEN }}
 
   prune:
     name: Prune superseded nightlies
@@ -357,13 +357,17 @@ jobs:
       - name: Delete nightly versions beyond the retained window on GHCR
         env:
           GH_TOKEN: ${{ secrets.GHCR_RETENTION_TOKEN || secrets.GITHUB_TOKEN }}
+          PACKAGE_OWNER: ${{ github.repository_owner }}
+          # An organization's packages answer under `/orgs/` and a personal account's under `/users/`, and asking the
+          # wrong one is a 404 this step would report as a token that cannot list.
+          PACKAGE_OWNER_PATH: ${{ github.event.repository.owner.type == 'Organization' && 'orgs' || 'users' }}
+          PACKAGE_NAME: ${{ github.event.repository.name }}
           RETAINED_NIGHTLY_COUNT: '30'
         run: |
           set -euo pipefail
 
-          # `/users/` because the namespace is a personal account's; an organization's packages answer under
-          # `/orgs/` instead, and this path is the one line that would have to follow the namespace there.
-          package_path="/users/${PUBLISHED_REPOSITORY%%/*}/packages/container/${PUBLISHED_REPOSITORY##*/}"
+          package_name="$(printf '%s' "$PACKAGE_NAME" | tr '[:upper:]' '[:lower:]')"
+          package_path="/${PACKAGE_OWNER_PATH}/${PACKAGE_OWNER}/packages/container/${package_name}"
 
           if ! versions="$(gh api --paginate "${package_path}/versions" 2>/dev/null)"; then
             echo "::warning::The package's versions could not be listed with this token, so nothing was pruned. Supply a GHCR_RETENTION_TOKEN with read:packages and delete:packages to enable retention."
@@ -404,8 +408,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          namespace="${PUBLISHED_REPOSITORY%%/*}"
-          name="${PUBLISHED_REPOSITORY##*/}"
+          namespace="${DOCKER_HUB_REPOSITORY%%/*}"
+          name="${DOCKER_HUB_REPOSITORY##*/}"
           tags_path="https://hub.docker.com/v2/namespaces/${namespace}/repositories/${name}/tags"
 
           access_token="$(curl --silent --fail --show-error \

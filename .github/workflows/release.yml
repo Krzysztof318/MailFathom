@@ -261,7 +261,6 @@ jobs:
       block-on-vulnerabilities: true
     secrets:
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-      GHCR_PUBLISH_TOKEN: ${{ secrets.GHCR_PUBLISH_TOKEN }}
 
   # The chart is published after the image and against the digest that publication produced, because a chart names the
   # image it deploys and a chart pointing at an artifact no release produced is worse than no chart at all. A failure
@@ -283,8 +282,6 @@ jobs:
       version: ${{ needs.assert.outputs.version }}
       image: ${{ needs.publish.outputs.image }}
       image-digest: ${{ needs.publish.outputs.digest }}
-    secrets:
-      GHCR_PUBLISH_TOKEN: ${{ secrets.GHCR_PUBLISH_TOKEN }}
 
   announce:
     name: Publish the GitHub release
