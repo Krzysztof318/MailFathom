@@ -32,10 +32,10 @@ name: CodeQL
 # build. The restore below is the one `build-test-format-and-migrations.yml` runs and the build is
 # that workflow's own, in the same configuration, over the projects under `backend/src/` — so the
 # analysis sees the graph the compiler saw and the one a release is built from. The cost of that
-# choice is a Release build under extraction, which is the most expensive check in this repository;
-# Actions minutes are free for a public repository on standard GitHub-hosted runners, so what it
-# spends is wall-clock rather than money. The build step spends no more of it than the analysis
-# needs, and says what it leaves out and why.
+# choice is a Release build under extraction on every run. Actions minutes are free for a public
+# repository on standard GitHub-hosted runners, so what it spends is wall-clock rather than money,
+# and the build step spends no more of it than the analysis needs: it says what it leaves out and
+# why.
 #
 # **The SDK is verified rather than assumed.** CodeQL support for a language is not support for a
 # runtime: 2.24.0 added basic .NET 10 extraction and left the C# 14 language features unsupported,
@@ -91,8 +91,8 @@ jobs:
   analyze:
     name: Analyze C#
     # The same draft exemption `Typo check` carries, for the same reason and with more at stake: this
-    # is the one check here that occupies a runner for minutes, and a draft is a change still being
-    # written. `ready_for_review` opts every later push back in.
+    # check occupies a runner for minutes where that one takes seconds, and a draft is a change
+    # still being written. `ready_for_review` opts every later push back in.
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     permissions:
