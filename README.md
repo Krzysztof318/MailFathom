@@ -47,7 +47,7 @@ If an AI assistant is helping you install, configure, or use MailFathom, give it
 Read https://fathomise.github.io/MailFathom/docs/llms.txt and follow it to the pages that answer my question.
 ```
 
-That address is the current release's map: every published page, what it answers, and a link to its source, so the agent fetches the one page that owns your question instead of fragments of several. MailFathom also resolves in [Context7](https://context7.com/krzysztof318/mailfathom) as `/krzysztof318/mailfathom`, which mirrors the default branch rather than a release.
+That address is the current release's map: every published page, what it answers, and a link to its source, so the agent fetches the one page that owns your question instead of fragments of several. MailFathom also resolves in [Context7](https://context7.com/fathomise/mailfathom) as `/fathomise/mailfathom`, which mirrors the default branch rather than a release.
 
 → [Handing this guide to your own agent](https://fathomise.github.io/MailFathom/docs/users/README.html#handing-this-guide-to-your-own-agent)
 

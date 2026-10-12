@@ -1,6 +1,6 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.Krzysztof318/mailfathom",
+  "name": "io.github.fathomise/mailfathom",
   "title": "MailFathom",
   "description": "Security-first, self-hosted email archive with search, cited answers, and sending for AI agents.",
   "repository": {

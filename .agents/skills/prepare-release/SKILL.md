@@ -245,7 +245,7 @@ cut, and stated in the `CHANGELOG.md` section the release pull request writes; t
   moved onto that digest in both; the packaged chart states `appVersion: x.y.z`; the GitHub release carries
   `mailfathom-schema-x.y.z.sql` with its checksum and the `mfctl` binaries with theirs; the release notes are the
   changelog section rather than a list of pull-request titles.
-- The official MCP Registry carries `io.github.Krzysztof318/mailfathom` at version `x.y.z`, published from the
+- The official MCP Registry carries `io.github.fathomise/mailfathom` at version `x.y.z`, published from the
   `server.json` in the tagged tree after the release workflow succeeds.
 - `SECURITY.md` names `x.y` as the supported line, and the line it replaces moves down a row.
 - The version-bump pull request `[#<issue>] Bump main version to <next>` merges after the tag and closes this issue.
@@ -589,7 +589,7 @@ Release x.y.z is prepared. Merge in this order — the tag has to land between t
        mcp-publisher validate
        mcp-publisher publish
        curl --fail --silent --show-error \
-         'https://registry.modelcontextprotocol.io/v0.1/servers/io.github.Krzysztof318%2Fmailfathom/versions/x.y.z'
+         'https://registry.modelcontextprotocol.io/v0.1/servers/io.github.fathomise%2Fmailfathom/versions/x.y.z'
 
 3. Merge the version-bump pull request (#B).
    After the tag, so main returns to naming the next release rather than the one just published. This is what
