@@ -751,7 +751,7 @@ describe('ReadingPane against a deployment that says what changed', () => {
         const signalling = deploymentSaying();
         drawing(deploymentDescribing(), messageId, true, deliversNothing, nothingMarkedRead, signalling.changes);
         await screen.findByText('Quarterly invoice');
-        await screen.findByRole('button', { name: /^Flag —/ });
+        await screen.findByRole('button', { name: /^Flag -/ });
         const before = asked.length;
 
         // Act
@@ -765,7 +765,7 @@ describe('ReadingPane against a deployment that says what changed', () => {
         });
 
         // Assert
-        await screen.findByRole('button', { name: /^Unflag —/ });
+        await screen.findByRole('button', { name: /^Unflag -/ });
         expect(asked.length).toBe(before);
     });
 

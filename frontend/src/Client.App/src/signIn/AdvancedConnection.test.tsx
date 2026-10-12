@@ -51,7 +51,7 @@ describe('AdvancedConnection', () => {
         drawing({ secure: false, authority: 'mail.example.test', port: null }, true);
 
         expect(screen.getByText('HTTP, unencrypted')).toBeDefined();
-        expect(screen.getByText('None — nothing is encrypted')).toBeDefined();
+        expect(screen.getByText('None - nothing is encrypted')).toBeDefined();
     });
 
     it('names the host and the port the client will reach', () => {

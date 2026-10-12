@@ -72,13 +72,13 @@ export function SpaceOverflow({
                 type="button"
                 popoverTarget={sheet}
                 aria-current={holdsCurrent ? 'true' : undefined}
-                className={`flex flex-1 cursor-pointer flex-col items-center gap-0.75 rounded-2xl px-0.5 py-1.75 text-2xs font-medium transition ${
+                className={`flex flex-1 cursor-pointer flex-col items-center gap-0.75 rounded-xl px-0.5 py-1.75 text-sm transition ${
                     holdsCurrent
                         ? 'bg-accent-soft font-semibold text-accent-deep'
                         : 'text-muted hover:bg-hover hover:text-text'
                 }`}
             >
-                <Icon name="more_horiz" className="size-6" />
+                <Icon name="more_horiz" className="size-icon-2xl" />
                 <span className="max-w-full truncate">{translate('shell.more')}</span>
             </button>
 
@@ -95,7 +95,7 @@ export function SpaceOverflow({
                 // Dimmed behind, which the design draws and which is what says the sheet is the whole of what
                 // is being answered right now. The platform paints it: a popover has a `::backdrop` of its own exactly
                 // as the notification panel's dialog does, and this is the same token that one uses.
-                className="inset-x-0 top-auto bottom-0 m-0 w-full max-w-full rounded-t-2xl border-t border-line bg-panel px-3 pt-3 pb-safe-bottom text-base text-text shadow-overlay backdrop:bg-scrim open:block"
+                className="inset-x-0 top-auto bottom-0 m-0 w-full max-w-full rounded-t-xl border-t border-line bg-panel px-3 pt-3 pb-safe-bottom text-base text-text shadow-overlay backdrop:bg-scrim open:block"
             >
                 <div className="flex flex-col gap-0.5 pb-3">
                     {/* The bar the design draws across the top of the sheet, which says a sheet is what this
@@ -129,13 +129,13 @@ function OverflowLink({ space, current }: { readonly space: Space; readonly curr
             // A placeholder says what it is in its own name here too, for the reason the bar's links do: the sentence
             // is read on the one link it is true of rather than beside every other item.
             aria-label={built ? undefined : translate('space.notBuiltYet', { space: name })}
-            className={`flex min-h-13 items-center gap-4 rounded-xl px-3.5 transition ${
+            className={`flex min-h-13 items-center gap-4 rounded-md px-3.5 transition ${
                 current
                     ? 'bg-accent-soft font-semibold text-accent-deep'
                     : `hover:bg-hover ${built ? 'text-text' : 'text-muted'}`
             }`}
         >
-            <Icon name={spaceIcons[space]} className="size-5.5" />
+            <Icon name={spaceIcons[space]} className="size-icon-xl" />
             <span className="truncate">{name}</span>
         </a>
     );

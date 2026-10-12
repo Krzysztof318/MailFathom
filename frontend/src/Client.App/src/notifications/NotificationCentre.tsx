@@ -180,7 +180,7 @@ export function NotificationCentre({
             // The panel is in the platform's top layer, where the frame's safe-area padding is not around it: the top
             // inset is padded away inside it, and the bottom one is a margin because what the sheet stops above is the
             // bottom navigation, which the frame has already lifted clear of the gesture bar.
-            className={`fixed inset-x-0 top-0 bottom-navigation m-0 mb-safe-bottom hidden h-auto max-h-none w-auto max-w-none open:flex flex-col overflow-visible rounded-t-4xl border-line bg-panel pt-safe-top text-text shadow-dialog backdrop:bg-scrim workspace:end-auto workspace:bottom-0 workspace:start-rail workspace:w-notifications workspace:rounded-none workspace:border-e ${
+            className={`fixed inset-x-0 top-0 bottom-navigation m-0 mb-safe-bottom hidden h-auto max-h-none w-auto max-w-none open:flex flex-col overflow-visible rounded-t-xl border-line bg-panel pt-safe-top text-text shadow-dialog backdrop:bg-scrim workspace:end-auto workspace:bottom-0 workspace:start-rail workspace:w-notifications workspace:rounded-none workspace:border-e ${
                 swipe.dragging
                     ? 'transition-none'
                     : swipe.springing
@@ -211,12 +211,12 @@ export function NotificationCentre({
             </span>
 
             <div className="flex shrink-0 items-center gap-2.5 border-b border-line ps-4.5 pe-3 pt-3.5 pb-3.25">
-                <Icon name="notifications" className="size-5.25 text-muted" />
+                <Icon name="notifications" className="size-icon-xl text-muted" />
 
                 <h2 className="min-w-0 flex-1 text-xl font-semibold">{translate('notifications.title')}</h2>
 
                 {centre.unreadCount > 0 ? (
-                    <span className="shrink-0 rounded-xl bg-error-soft px-2.25 py-0.75 text-xs font-semibold text-error-text">
+                    <span className="shrink-0 rounded-lg bg-error-soft px-2.25 py-0.75 text-xs font-semibold text-error-text">
                         {translate(newCounted[new Intl.PluralRules(locale).select(centre.unreadCount)], {
                             count: new Intl.NumberFormat(locale).format(centre.unreadCount),
                         })}
@@ -266,11 +266,7 @@ export function NotificationCentre({
                 <span className="min-w-1 flex-1" />
 
                 {centre.unreadCount > 0 ? (
-                    <Control
-                        label={translate('notifications.markAll')}
-                        className="text-accent-deep"
-                        onPress={centre.markAllRead}
-                    />
+                    <Control label={translate('notifications.markAll')} shape="selected" onPress={centre.markAllRead} />
                 ) : null}
             </fieldset>
 
@@ -452,7 +448,7 @@ function Nothing({ reading, failure }: { readonly reading: boolean; readonly fai
 
     return (
         <div className="flex flex-1 flex-col items-center justify-center gap-2.25 px-6 py-13 text-center">
-            <Icon name="notifications_off" className="size-8.5 text-faint" />
+            <Icon name="notifications_off" className="size-icon-3xl text-faint" />
             <p className="text-base text-pretty text-muted">{translate('notifications.empty')}</p>
         </div>
     );

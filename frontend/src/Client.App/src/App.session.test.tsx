@@ -209,20 +209,20 @@ describe('App session', () => {
         vi.useFakeTimers({ shouldAdvanceTime: true });
 
         renderApp(servedFrom, heldSession, deploymentRefusing({ status: 503, body: '' }));
-        await screen.findByText(/Trying again — attempt 1 of/);
+        await screen.findByText(/Trying again - attempt 1 of/);
 
         await act(async () => {
             await vi.advanceTimersByTimeAsync(10_000);
         });
 
-        expect(screen.getByText(/Trying again — attempt 2 of/)).toBeDefined();
+        expect(screen.getByText(/Trying again - attempt 2 of/)).toBeDefined();
     });
 
     it('stops reaching once the budget is spent, and hands the way out to the person', async () => {
         vi.useFakeTimers({ shouldAdvanceTime: true });
 
         renderApp(servedFrom, heldSession, deploymentRefusing({ status: 503, body: '' }));
-        await screen.findByText(/Trying again — attempt 1 of/);
+        await screen.findByText(/Trying again - attempt 1 of/);
 
         // One pass per wait in the budget, because each attempt is only scheduled once the one before it has answered:
         // a single long advance would find no timer to fire past the first.

@@ -160,10 +160,10 @@ const nothingKeptMessages: Readonly<Record<KeptBeyondTheTab, MessageKey>> = {
 // is the direction a mobile-first breakpoint reads in. It is the same width the workspace stops taking a phone's shape
 // at, which is why this screen names that breakpoint rather than one of its own.
 const fieldBox =
-    'flex items-center gap-2.5 rounded-xl border border-line-strong bg-panel px-3.25 transition focus-within:border-accent focus-within:ring-3 focus-within:ring-accent-soft';
+    'flex items-center gap-2.5 rounded-lg border border-line-strong bg-panel px-3.25 transition focus-within:border-accent focus-within:ring-3 focus-within:ring-accent-soft';
 
 const fieldInput =
-    'min-h-13 min-w-0 flex-1 bg-transparent text-xl text-text outline-none workspace:min-h-11 workspace:text-md';
+    'min-h-12.5 min-w-0 flex-1 bg-transparent text-xl text-text outline-none workspace:min-h-10.5 workspace:text-md';
 
 const fieldLabel = 'text-sm font-medium text-text-soft';
 
@@ -754,7 +754,9 @@ export function SignIn({
     return (
         <section className="flex flex-col gap-4.5 workspace:gap-5">
             <div className="flex flex-col gap-1.25">
-                <h2 className="text-4xl font-semibold tracking-tight text-text">{translate('signIn.title')}</h2>
+                <h2 className="text-5xl font-semibold tracking-tight text-text workspace:text-4xl">
+                    {translate('signIn.title')}
+                </h2>
 
                 {/* Where the password is about to go, under the title: the lock says whether it goes over TLS and the
                     address says where. Only where the address arrived with the deployment — while one is being typed,
@@ -763,11 +765,11 @@ export function SignIn({
                     <p className="flex flex-wrap items-center gap-1.75 text-sm text-muted">
                         <Icon
                             name={connection.secure ? 'lock' : 'lock_open'}
-                            className={`size-3.75 ${connection.secure ? 'text-healthy-text' : 'text-warning-text'}`}
+                            className={`size-icon-sm ${connection.secure ? 'text-healthy-text' : 'text-warning-text'}`}
                         />
                         <span className="text-text-soft">{connection.authority}</span>
                         {connection.secure ? null : (
-                            <span className="rounded-sm bg-warning-soft px-1.75 py-0.5 text-2xs font-medium text-warning-text">
+                            <span className="rounded-sm bg-warning-soft px-1.75 py-0.5 text-xs font-medium text-warning-text">
                                 {translate('connect.withoutTls')}
                             </span>
                         )}
@@ -782,7 +784,7 @@ export function SignIn({
                 so there is no provider control standing to carry a spinner of its own. */}
             {handing?.stage === 'returning' ? (
                 <p
-                    className="flex items-center gap-2.25 rounded-lg border border-line bg-panel px-3.25 py-2.75 text-sm text-text-soft"
+                    className="flex items-center gap-2.25 rounded-md border border-line bg-panel px-3.25 py-2.75 text-sm text-text-soft"
                     role="status"
                 >
                     <Spinner />
@@ -797,7 +799,7 @@ export function SignIn({
             {own === null ? null : (
                 <div className="flex flex-col gap-2">
                     <button
-                        className="flex min-h-13 items-center justify-center gap-2 rounded-full border border-accent bg-accent px-4 text-lg font-semibold text-on-accent transition hover:brightness-107 disabled:opacity-85 workspace:min-h-11 workspace:rounded-xl workspace:text-md"
+                        className="flex min-h-13 items-center justify-center gap-2 rounded-full border border-accent bg-accent px-4 text-lg font-semibold text-on-accent transition hover:brightness-107 disabled:opacity-85 workspace:min-h-11 workspace:rounded-md workspace:text-md"
                         disabled={handing !== null}
                         type="button"
                         onClick={() => {
@@ -807,16 +809,16 @@ export function SignIn({
                         {/* The wait is this control's only where this control is what is being waited for, which is
                             what the grid rows already compare: a person who pressed a row would otherwise be told by
                             this control's own accessible name that it is opening a provider it is not opening. */}
-                        {opening(own) ? <Spinner /> : <Icon name="key" className="size-4.5" />}
+                        {opening(own) ? <Spinner /> : <Icon name="key" className="size-icon-md" />}
                         <span className="min-w-0 truncate">
                             {opening(own)
                                 ? translate('signIn.openingProvider', { provider: own.displayName })
                                 : translate('signIn.signInWithProvider')}
                         </span>
-                        {handing === null ? <Icon name="open_in_new" className="size-4.25 opacity-75" /> : null}
+                        {handing === null ? <Icon name="open_in_new" className="size-icon-md opacity-75" /> : null}
                     </button>
 
-                    <p className="text-xs leading-normal text-faint text-pretty">
+                    <p className="text-sm leading-normal text-faint text-pretty">
                         {opening(own)
                             ? translate('signIn.finishInBrowser')
                             : translate('signIn.providerOpensInBrowser', { provider: own.displayName })}
@@ -843,7 +845,7 @@ export function SignIn({
 
             {providers.length === 0 ? null : (
                 <div className="flex flex-col gap-2.25">
-                    <p className="text-xs font-medium tracking-wide text-faint">{translate('signIn.viaProvider')}</p>
+                    <p className="text-sm font-medium text-faint">{translate('signIn.viaProvider')}</p>
                     <div className="grid grid-cols-3 gap-2">
                         {providers.map((provider) => (
                             <ProviderButton
@@ -998,7 +1000,7 @@ export function SignIn({
                                     aria-label={translate(
                                         revealed ? 'signIn.hidePasswordControl' : 'signIn.revealPasswordControl',
                                     )}
-                                    className="-me-1.75 flex min-h-12 shrink-0 items-center rounded-xl px-3 text-base text-muted transition hover:bg-hover hover:text-text workspace:min-h-8 workspace:px-1.5 workspace:text-sm"
+                                    className="-me-1.75 flex min-h-12 shrink-0 items-center rounded-lg px-3 text-base text-muted transition hover:bg-hover hover:text-text workspace:min-h-8 workspace:px-1.5 workspace:text-sm"
                                     type="button"
                                     onClick={() => {
                                         setRevealed(!revealed);
@@ -1032,7 +1034,7 @@ export function SignIn({
                                 />
 
                                 <span className="flex min-w-0 flex-col gap-0.5">
-                                    <span className="text-sm text-text-soft" id="sign-in-keep-label">
+                                    <span className="text-base text-text-soft" id="sign-in-keep-label">
                                         {translate('signIn.keepMeSignedIn')}
                                     </span>
 
@@ -1054,7 +1056,7 @@ export function SignIn({
 
                 {shown === null || presenting ? null : (
                     <p
-                        className="rounded-lg bg-warning-soft px-3 py-2.25 text-sm text-warning-text"
+                        className="rounded-md bg-warning-soft px-3 py-2.25 text-sm text-warning-text"
                         id="sign-in-refusal"
                         role="alert"
                     >
@@ -1065,7 +1067,7 @@ export function SignIn({
                 {passwordOffered ? (
                     <div className="flex items-center gap-3">
                         <button
-                            className="flex min-h-13 flex-1 items-center justify-center gap-2.25 rounded-full bg-accent px-4.5 text-lg font-semibold text-on-accent transition hover:bg-accent-strong disabled:opacity-70 workspace:min-h-11.5 workspace:rounded-xl workspace:text-md"
+                            className="flex min-h-13 flex-1 items-center justify-center gap-2.25 rounded-full bg-accent px-4.5 text-lg font-semibold text-on-accent transition hover:bg-accent-strong disabled:opacity-70 workspace:min-h-11.5 workspace:rounded-md workspace:text-md"
                             disabled={presenting}
                             ref={submit}
                             type="submit"
@@ -1136,10 +1138,10 @@ export function SignIn({
 function StatedNotice({ children, message }: { readonly children?: ReactNode; readonly message: string }) {
     return (
         <p
-            className="flex flex-wrap items-start gap-2.25 rounded-lg border border-warning bg-warning-soft px-3.25 py-2.75 text-xs leading-normal text-warning-text text-pretty"
+            className="flex flex-wrap items-start gap-2.25 rounded-md border border-warning bg-warning-soft px-3.25 py-2.75 text-sm leading-normal text-warning-text text-pretty"
             role="alert"
         >
-            <Icon name="report" className="mt-0.25 size-4 text-warning-text" />
+            <Icon name="report" className="mt-0.25 size-icon-sm text-warning-text" />
             {message}
             {children}
         </p>
@@ -1181,7 +1183,7 @@ function ProviderButton({
     return (
         <button
             aria-label={label}
-            className={`flex min-h-13 items-center justify-center gap-1.75 overflow-hidden rounded-xl border bg-panel px-2.5 text-text-soft transition hover:border-line-strong hover:bg-hover disabled:opacity-70 workspace:min-h-11 ${busy ? 'border-accent' : 'border-line'}`}
+            className={`flex min-h-13 items-center justify-center gap-1.75 overflow-hidden rounded-lg border bg-panel px-2.5 text-text-soft transition hover:border-line-strong hover:bg-hover disabled:opacity-70 workspace:min-h-11 ${busy ? 'border-accent' : 'border-line'}`}
             disabled={disabled}
             type="button"
             onClick={onActivate}

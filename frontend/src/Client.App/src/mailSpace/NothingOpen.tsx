@@ -53,7 +53,7 @@ export function NothingOpen({
             <BrandMark className="size-11.5" />
 
             <div className="flex max-w-md flex-col gap-1.75">
-                <p id={heading} className="text-3xl font-semibold tracking-tight">
+                <p id={heading} className="text-3xl font-semibold tracking-tighter">
                     {translate('tabs.nothingOpen')}
                 </p>
                 <p className="text-md text-pretty text-muted">{translate('tabs.nothingOpenExplanation')}</p>
@@ -63,7 +63,7 @@ export function NothingOpen({
                 {composing?.offered !== true ? null : (
                     <button
                         type="button"
-                        className="rounded-lg bg-accent px-4 py-2.25 text-base font-semibold text-on-accent transition hover:opacity-90"
+                        className="rounded-md bg-accent px-4 py-2.25 text-base font-semibold text-on-accent transition hover:opacity-90"
                         onClick={() => {
                             composing.compose({ kind: 'new' });
                         }}
@@ -75,7 +75,7 @@ export function NothingOpen({
                 {onReopenLastRead === null ? null : (
                     <button
                         type="button"
-                        className="rounded-lg border border-line bg-panel px-4 py-2.25 text-base text-text-soft transition hover:bg-hover"
+                        className="rounded-md border border-line bg-panel px-4 py-2.25 text-base text-text-soft transition hover:bg-hover"
                         onClick={onReopenLastRead}
                     >
                         {translate('tabs.reopenLastRead')}
@@ -84,7 +84,7 @@ export function NothingOpen({
 
                 <button
                     type="button"
-                    className="rounded-lg border border-line bg-panel px-4 py-2.25 text-base text-text-soft transition hover:bg-hover"
+                    className="rounded-md border border-line bg-panel px-4 py-2.25 text-base text-text-soft transition hover:bg-hover"
                     onClick={() => {
                         goToSpace('discover');
                     }}

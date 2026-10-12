@@ -145,7 +145,7 @@ export function Confirmation({
             ref={asked}
             aria-labelledby={asks}
             aria-describedby={explains}
-            className="m-auto w-dialog max-w-dialog-narrow rounded-2xl border border-line bg-panel p-5 text-text shadow-dialog backdrop:bg-scrim"
+            className="m-auto w-dialog max-w-dialog-narrow rounded-lg border border-line bg-panel p-5 text-text shadow-dialog backdrop:bg-scrim"
             onToggle={(event) => {
                 setStanding(event.newState === 'open');
             }}
@@ -162,7 +162,10 @@ export function Confirmation({
         >
             <div className="flex flex-col gap-3.5">
                 <h2 id={asks} className="flex items-center gap-2.5 text-lg font-semibold">
-                    <Icon name={mark} className={`size-5 shrink-0 ${destroys ? 'text-error' : 'text-accent-strong'}`} />
+                    <Icon
+                        name={mark}
+                        className={`size-icon-lg shrink-0 ${destroys ? 'text-error' : 'text-accent-strong'}`}
+                    />
                     {question}
                 </h2>
 
@@ -179,10 +182,10 @@ export function Confirmation({
                 </div>
 
                 {cautions.length === 0 ? null : (
-                    <ul className="flex flex-col gap-1.75 rounded-2xl border border-warning bg-warning-soft px-3.25 py-2.75">
+                    <ul className="flex flex-col gap-1.75 rounded-lg border border-warning bg-warning-soft px-3.25 py-2.75">
                         {cautions.map((caution) => (
                             <li key={caution} className="flex items-start gap-2 text-base text-warning-text">
-                                <Icon name="warning" className="mt-0.5 size-4 shrink-0" />
+                                <Icon name="warning" className="mt-0.5 size-icon-sm shrink-0" />
                                 {caution}
                             </li>
                         ))}

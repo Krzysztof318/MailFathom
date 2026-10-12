@@ -175,7 +175,7 @@ export function ConversationHistory({
             }}
         >
             <div className="flex items-center gap-2.25 px-0.5 pb-1">
-                <h2 className="text-xs tracking-widest text-muted uppercase">{translate('agent.history')}</h2>
+                <h2 className="text-xs font-semibold text-muted">{translate('agent.history')}</h2>
 
                 <span className="ms-auto">
                     <Control label={translate('agent.new')} shape="link" onPress={onNew} />
@@ -214,8 +214,8 @@ export function ConversationHistory({
                             setArchiveOpen((before) => !before);
                         }}
                     >
-                        <Icon name={archiveOpen ? 'expand_more' : 'chevron_right'} className="size-4 shrink-0" />
-                        <span className="text-xs tracking-widest uppercase">
+                        <Icon name={archiveOpen ? 'expand_more' : 'chevron_right'} className="size-icon-sm shrink-0" />
+                        <span className="text-xs font-semibold">
                             {translate('agent.archived', {
                                 count: new Intl.NumberFormat(locale).format(archived.length),
                             })}

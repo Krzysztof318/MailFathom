@@ -385,7 +385,7 @@ export function MessageRow({
                         swipe.commits === null ? 'opacity-55' : 'opacity-100'
                     }`}
                 >
-                    <Icon name={carrying.icon} className="me-2 size-5.25" />
+                    <Icon name={carrying.icon} className="me-2 size-icon-xl" />
 
                     <span className="text-base font-semibold">{translate(carrying.said)}</span>
                 </span>
@@ -395,7 +395,7 @@ export function MessageRow({
                 // The row that is open, and the rows picked out for a question, are marked at the edge rather than by
                 // a ring around them, which is the design's mark and keeps the row's own lines where they
                 // were.
-                className={`flex h-full cursor-pointer flex-col justify-center gap-0.75 overflow-hidden border-s-4 ps-2.5 pe-3.5 ${
+                className={`flex h-full cursor-pointer flex-col justify-center gap-1.5 overflow-hidden border-s-4 ps-3 pe-4 workspace:gap-1.25 workspace:ps-2.5 workspace:pe-3.5 ${
                     wash ?? ''
                 } ${swipe.carried === 0 ? 'transition' : ''} ${
                     selected
@@ -414,7 +414,7 @@ export function MessageRow({
                     {/* Who wrote is read before where they wrote from, so the name keeps up to half the line and the
                         host is what gives way. Half rather than more because the marks and the time hold their own
                         width: a name allowed past it would push the time out of a row that clips rather than wraps. */}
-                    <span className="max-w-1/2 shrink-0 truncate text-md font-semibold">
+                    <span className="max-w-1/2 shrink-0 truncate text-lg font-semibold workspace:text-md">
                         {correspondent(email) ?? translate('list.senderUnknown')}
                     </span>
 
@@ -443,7 +443,7 @@ export function MessageRow({
                         cut — and the words beside it are for a reader who is not looking at it, which the design has
                         no way to draw. */}
                     {email.threadMessageCount !== null && email.threadMessageCount > 1 ? (
-                        <span className="shrink-0 rounded-full border border-line-soft bg-rail px-1.5 py-px text-2xs text-text-soft">
+                        <span className="shrink-0 rounded-md border border-line-soft bg-rail px-1.5 py-px text-xs text-text-soft">
                             <span aria-hidden="true">{email.threadMessageCount}</span>
 
                             <span className="sr-only">
@@ -465,7 +465,7 @@ export function MessageRow({
                         <span
                             aria-hidden="true"
                             title={translate('list.readings')}
-                            className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted hover:bg-accent-soft hover:text-accent-deep pointer-coarse:size-8"
+                            className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted hover:bg-accent-soft hover:text-accent-deep pointer-coarse:size-8"
                             onPointerDown={(event) => {
                                 event.stopPropagation();
                             }}
@@ -477,20 +477,22 @@ export function MessageRow({
                                 onReadings();
                             }}
                         >
-                            <Icon name="auto_awesome" className="size-4 pointer-coarse:size-4.75" />
+                            <Icon name="auto_awesome" className="size-icon-sm pointer-coarse:size-icon-lg" />
                         </span>
                     )}
 
                     <ReceivedAt at={email.receivedAt} />
                 </div>
 
-                <div className="truncate text-md">{email.subject ?? translate('list.noSubject')}</div>
+                <div className="truncate text-md text-text-soft workspace:text-text">
+                    {email.subject ?? translate('list.noSubject')}
+                </div>
 
                 {/* The reserved line. Hidden from the accessibility tree where it holds nothing, so a row with nothing
                     to say about itself is not announced as one with an empty line in it. */}
                 <div
                     aria-hidden={said === undefined ? 'true' : undefined}
-                    className="h-4 overflow-hidden text-xs text-muted"
+                    className="h-4.5 overflow-hidden text-base leading-4.5 text-muted workspace:text-sm"
                 >
                     {said}
                 </div>

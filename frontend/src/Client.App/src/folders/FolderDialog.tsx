@@ -115,7 +115,7 @@ export function FolderDialog({
         <dialog
             ref={asked}
             aria-labelledby={asks}
-            className="m-auto w-dialog max-w-dialog-narrow rounded-2xl border border-line bg-panel p-0 text-text shadow-dialog backdrop:bg-scrim"
+            className="m-auto w-dialog max-w-dialog-narrow rounded-lg border border-line bg-panel p-0 text-text shadow-dialog backdrop:bg-scrim"
             onClose={(closing) => {
                 const dialog = closing.currentTarget;
                 const answer = dialog.returnValue;
@@ -144,7 +144,10 @@ export function FolderDialog({
                     }}
                 >
                     <div className="flex items-center gap-3 border-b border-line bg-sunken px-4.5 py-3.5">
-                        <Icon name={editing ? 'edit' : 'create_new_folder'} className="size-5 shrink-0 text-muted" />
+                        <Icon
+                            name={editing ? 'edit' : 'create_new_folder'}
+                            className="size-icon-lg shrink-0 text-muted"
+                        />
 
                         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                             <h2 id={asks} className="text-lg font-semibold">

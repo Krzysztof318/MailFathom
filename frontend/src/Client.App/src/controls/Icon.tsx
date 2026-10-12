@@ -18,7 +18,7 @@ export function Icon({ name, className }: { readonly name: IconName; readonly cl
     }
 
     return (
-        <svg viewBox={glyph.box} aria-hidden="true" className={`shrink-0 fill-current ${className ?? 'size-5'}`}>
+        <svg viewBox={glyph.box} aria-hidden="true" className={`shrink-0 fill-current ${className ?? 'size-icon-lg'}`}>
             <path d={glyph.outline} />
         </svg>
     );

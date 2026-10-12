@@ -123,10 +123,10 @@ export function Settings({
             // The insets are the screen's here rather than the frame's: a modal dialog stands in the platform's own top
             // layer, so the padding the frame carries is not around it and a full-bleed settings screen would run under
             // a cutout and under the gesture bar. The card composition has the frame around it again and takes none.
-            className="m-0 h-full max-h-full w-full max-w-full rounded-none border-0 bg-panel p-0 pt-safe-top pr-safe-right pb-safe-bottom pl-safe-left text-base text-text backdrop:bg-scrim open:flex open:flex-col workspace:m-auto workspace:h-settings-card workspace:w-settings workspace:rounded-3xl workspace:border workspace:border-line workspace:p-0 workspace:shadow-dialog"
+            className="m-0 h-full max-h-full w-full max-w-full rounded-none border-0 bg-panel p-0 pt-safe-top pr-safe-right pb-safe-bottom pl-safe-left text-md text-text backdrop:bg-scrim open:flex open:flex-col workspace:m-auto workspace:h-settings-card workspace:w-settings workspace:rounded-lg workspace:border workspace:border-line workspace:p-0 workspace:shadow-dialog"
         >
             <div className="flex items-center gap-3 border-b border-line bg-sunken px-3.5 pt-3.5 pb-3 workspace:pt-2.5 workspace:pb-2.5">
-                <h2 id={named} className="text-2xl font-semibold workspace:text-md">
+                <h2 id={named} className="text-2xl font-semibold workspace:text-lg">
                     {translate('settings.title')}
                 </h2>
 
@@ -140,7 +140,7 @@ export function Settings({
                         panel.current?.close();
                     }}
                 >
-                    <Icon name="close" className="size-4.25" />
+                    <Icon name="close" className="size-icon-md" />
                 </button>
             </div>
 
@@ -150,7 +150,7 @@ export function Settings({
                 role="tabpanel"
                 id={`${tabId}-panel`}
                 aria-labelledby={`${tabId}-${open}`}
-                className="flex min-h-0 flex-1 flex-col gap-2.75 overflow-y-auto px-4 pt-3.5 pb-7 workspace:gap-2.25 workspace:pb-5"
+                className="flex min-h-0 flex-1 flex-col gap-2.75 overflow-y-auto px-4 pt-3.5 pb-7 workspace:px-5.5 workspace:pt-4.5 workspace:pb-6"
             >
                 {open === 'profile' ? (
                     <Profile profile={profile} writable={writesProfile} />
@@ -168,7 +168,7 @@ export function Settings({
                 scrolled away with the profile would be one somebody has to go looking for. */}
             <VersionLine
                 deploymentVersion={deploymentVersion}
-                className="border-t border-line bg-sunken px-4 py-2.5 text-center text-2xs text-faint"
+                className="border-t border-line bg-sunken px-4 py-2.5 text-center text-sm text-faint"
             />
         </dialog>
     );
@@ -232,7 +232,7 @@ function SettingsTabs({
                     aria-selected={offered === open}
                     aria-controls={`${id}-panel`}
                     tabIndex={offered === open ? 0 : -1}
-                    className={`border-b-2 px-px pt-2.5 pb-2 text-sm whitespace-nowrap transition ${
+                    className={`border-b-2 px-px pt-2.5 pb-2 text-md whitespace-nowrap transition pointer-coarse:text-xl ${
                         offered === open
                             ? 'border-accent font-semibold text-text'
                             : 'border-transparent text-muted hover:text-text'
@@ -273,7 +273,7 @@ function Divider() {
 }
 
 function SectionName({ children }: { readonly children: string }) {
-    return <p className="text-2xs tracking-widest text-faint uppercase">{children}</p>;
+    return <p className="text-sm font-semibold text-faint">{children}</p>;
 }
 
 // What the client is read in and how it draws a conversation, in the design's own order: the language, then
@@ -305,7 +305,7 @@ function Application({
 
             <Divider />
 
-            {writable ? null : <p className="text-2xs text-muted">{translate('settings.preferencesNotYours')}</p>}
+            {writable ? null : <p className="text-base text-muted">{translate('settings.preferencesNotYours')}</p>}
 
             <fieldset disabled={!writable} className={followingThePerson}>
                 <SectionName>{translate('settings.messageView')}</SectionName>
@@ -388,10 +388,10 @@ function NotificationDuration({ preferences }: { readonly preferences: ClientPre
 
     return (
         <>
-            <div className="flex items-start gap-2.75 rounded-xl border border-line bg-sunken px-2.5 py-2.25">
+            <div className="flex items-start gap-2.75 rounded-md px-2.5 py-2.25">
                 <label htmlFor={named} className="flex min-w-0 flex-1 flex-col gap-0.75">
                     {translate('settings.notificationSeconds')}
-                    <span className="text-xs text-muted">
+                    <span className="text-base text-muted">
                         {translate('settings.notificationSecondsExplanation', bounds)}
                     </span>
                 </label>
@@ -408,7 +408,7 @@ function NotificationDuration({ preferences }: { readonly preferences: ClientPre
                     max={longestNotificationSeconds}
                     step={1}
                     defaultValue={preferences.notificationSeconds}
-                    className="w-16 shrink-0 rounded-lg border border-line-strong bg-sunken px-2.5 py-1.5 text-base text-text outline-none focus:border-accent"
+                    className="w-16 shrink-0 rounded-md border border-line-strong bg-sunken px-2.5 py-1.5 text-base text-text outline-none focus:border-accent"
                     onBlur={(event) => {
                         choose(event.target.valueAsNumber);
                     }}
@@ -421,7 +421,7 @@ function NotificationDuration({ preferences }: { readonly preferences: ClientPre
             </div>
 
             {refused ? (
-                <p className="text-2xs text-warning">{translate('settings.notificationSecondsRefused', bounds)}</p>
+                <p className="text-sm text-warning">{translate('settings.notificationSecondsRefused', bounds)}</p>
             ) : null}
         </>
     );
@@ -493,10 +493,10 @@ function SystemNotifications() {
 
             <SectionName>{translate('settings.systemNotifications')}</SectionName>
 
-            <label className="flex cursor-pointer items-start gap-2.75 rounded-xl border border-line bg-sunken px-2.5 py-2.25 transition hover:bg-hover">
+            <label className="flex cursor-pointer items-start gap-2.75 rounded-md px-2.5 py-2.25 transition hover:bg-hover">
                 <span className="flex min-w-0 flex-1 flex-col gap-0.75">
                     {translate('settings.raiseSystemNotifications')}
-                    <span className="text-xs text-muted">
+                    <span className="text-base text-muted">
                         {translate(
                             standing === 'refused'
                                 ? 'settings.systemNotificationsRefused'
@@ -518,10 +518,10 @@ function ThreadExpansion({ preferences }: { readonly preferences: ClientPreferen
     const { translate } = useLocalization();
 
     return (
-        <label className="flex cursor-pointer items-start gap-2.75 rounded-xl border border-line bg-sunken px-2.5 py-2.25 transition hover:bg-hover">
+        <label className="flex cursor-pointer items-start gap-2.75 rounded-md px-2.5 py-2.25 transition hover:bg-hover">
             <span className="flex min-w-0 flex-1 flex-col gap-0.75">
                 {translate('settings.expandWholeThread')}
-                <span className="text-xs text-muted">{translate('settings.expandWholeThreadExplanation')}</span>
+                <span className="text-base text-muted">{translate('settings.expandWholeThreadExplanation')}</span>
             </span>
 
             <Switch on={preferences.expandWholeThread} onChange={preferences.chooseThreadExpansion} />
@@ -536,10 +536,10 @@ function AiFiltersSection({ preferences }: { readonly preferences: ClientPrefere
     const { translate } = useLocalization();
 
     return (
-        <label className="flex cursor-pointer items-start gap-2.75 rounded-xl border border-line bg-sunken px-2.5 py-2.25 transition hover:bg-hover">
+        <label className="flex cursor-pointer items-start gap-2.75 rounded-md px-2.5 py-2.25 transition hover:bg-hover">
             <span className="flex min-w-0 flex-1 flex-col gap-0.75">
                 {translate('settings.aiFilters')}
-                <span className="text-xs text-muted">{translate('settings.aiFiltersExplanation')}</span>
+                <span className="text-base text-muted">{translate('settings.aiFiltersExplanation')}</span>
             </span>
 
             <Switch on={preferences.aiFiltersShown} onChange={preferences.chooseAiFilters} />
@@ -593,7 +593,7 @@ function Profile({ profile, writable }: { readonly profile: OwnProfileInForce; r
                         defaultValue={profile.displayName ?? ''}
                         readOnly={!profile.changeable}
                         placeholder={translate('settings.name')}
-                        className="w-full rounded-lg border border-line-strong bg-sunken px-2.5 py-1.5 text-base text-text outline-none read-only:text-muted focus:border-accent"
+                        className="w-full max-w-110 rounded-md border border-line-strong bg-sunken px-2.5 py-1.75 text-md text-text outline-none read-only:text-muted focus:border-accent"
                         onBlur={(event) => {
                             correct(profile, event.target.value);
                         }}
@@ -610,8 +610,8 @@ function Profile({ profile, writable }: { readonly profile: OwnProfileInForce; r
                         offered. */}
                     {!writable ? null : (
                         <div className="flex flex-wrap items-center gap-1.25">
-                            <label className="flex cursor-pointer items-center gap-1.25 rounded-md border border-line-strong px-2.25 py-1 text-xs text-text-soft transition hover:bg-hover has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent">
-                                <Icon name="add_a_photo" className="size-3.5" />
+                            <label className="flex cursor-pointer items-center gap-1.25 rounded-md border border-line-strong px-2.25 py-1 text-base text-text-soft transition hover:bg-hover has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent">
+                                <Icon name="add_a_photo" className="size-icon-sm" />
                                 {translate('settings.choosePicture')}
 
                                 {/* The file input carries the label rather than being clicked by a handler: a hidden input
@@ -634,18 +634,18 @@ function Profile({ profile, writable }: { readonly profile: OwnProfileInForce; r
                             {profile.picture === null ? null : (
                                 <button
                                     type="button"
-                                    className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted transition hover:bg-hover hover:text-text"
+                                    className="flex items-center gap-1 rounded-md px-2 py-1 text-base text-muted transition hover:bg-hover hover:text-text"
                                     onClick={() => {
                                         setRefused(null);
                                         profile.removePicture();
                                     }}
                                 >
-                                    <Icon name="delete" className="size-3.5" />
+                                    <Icon name="delete" className="size-icon-sm" />
                                     {translate('settings.removePicture')}
                                 </button>
                             )}
 
-                            <span className="text-2xs text-faint">{translate('settings.pictureBounds')}</span>
+                            <span className="text-sm text-faint">{translate('settings.pictureBounds')}</span>
                         </div>
                     )}
 
@@ -655,22 +655,22 @@ function Profile({ profile, writable }: { readonly profile: OwnProfileInForce; r
 
             <TimeZone profile={profile} writable={writable} />
 
-            <p className="text-2xs text-muted">{translate('settings.profileHeld')}</p>
+            <p className="text-base text-muted">{translate('settings.profileHeld')}</p>
 
             {/* Two reasons a name is shown rather than offered, and each has its own sentence: the credential may
                 change nothing here, or it may and somebody else keeps the name. */}
             {!writable ? (
-                <p className="text-2xs text-muted">{translate('settings.profileNotYours')}</p>
+                <p className="text-base text-muted">{translate('settings.profileNotYours')}</p>
             ) : profile.changeable ? null : (
-                <p className="text-2xs text-muted">{translate('settings.nameNotYours')}</p>
+                <p className="text-base text-muted">{translate('settings.nameNotYours')}</p>
             )}
 
             {profile.nameNotAcceptable ? (
-                <p className="text-2xs text-warning">{translate('settings.nameNotAcceptable')}</p>
+                <p className="text-sm text-warning">{translate('settings.nameNotAcceptable')}</p>
             ) : null}
 
             {profile.nameNotStated ? (
-                <p className="text-2xs text-warning">{translate('settings.nameNotStored')}</p>
+                <p className="text-sm text-warning">{translate('settings.nameNotStored')}</p>
             ) : null}
         </>
     );
@@ -703,10 +703,10 @@ function TimeZone({ profile, writable }: { readonly profile: OwnProfileInForce; 
 
     return (
         <>
-            <div className="flex items-start gap-2.75 rounded-xl border border-line bg-sunken px-2.5 py-2.25">
+            <div className="flex items-start gap-2.75 rounded-md px-2.5 py-2.25">
                 <label htmlFor={named} className="flex min-w-0 flex-1 flex-col gap-0.75">
                     {translate('settings.timeZone')}
-                    <span className="text-xs text-muted">{translate('settings.timeZoneExplanation')}</span>
+                    <span className="text-base text-muted">{translate('settings.timeZoneExplanation')}</span>
                 </label>
 
                 {/* Uncontrolled, and remounted by the zone the deployment holds, for the reason the name field
@@ -717,7 +717,7 @@ function TimeZone({ profile, writable }: { readonly profile: OwnProfileInForce; 
                     id={named}
                     defaultValue={inForce}
                     disabled={!writable}
-                    className="w-44 shrink-0 rounded-lg border border-line-strong bg-sunken px-2.5 py-1.5 text-base text-text outline-none focus:border-accent"
+                    className="w-44 shrink-0 rounded-md border border-line-strong bg-sunken px-2.5 py-1.5 text-base text-text outline-none focus:border-accent"
                     onChange={(event) => {
                         profile.chooseTimeZone(event.target.value);
                     }}
@@ -731,11 +731,11 @@ function TimeZone({ profile, writable }: { readonly profile: OwnProfileInForce; 
             </div>
 
             {profile.timeZoneNotAcceptable ? (
-                <p className="text-2xs text-warning">{translate('settings.timeZoneNotAcceptable')}</p>
+                <p className="text-sm text-warning">{translate('settings.timeZoneNotAcceptable')}</p>
             ) : null}
 
             {profile.timeZoneNotStated ? (
-                <p className="text-2xs text-warning">{translate('settings.timeZoneNotStored')}</p>
+                <p className="text-sm text-warning">{translate('settings.timeZoneNotStored')}</p>
             ) : null}
         </>
     );
@@ -762,7 +762,7 @@ function PictureNotice({
 
     if (refused !== null && refused.outcome !== 'admissible') {
         return (
-            <p className="text-2xs text-warning">
+            <p className="text-sm text-warning">
                 {translate(
                     refused.outcome === 'notAnImageKind'
                         ? 'settings.pictureNotAnImageKind'
@@ -773,7 +773,7 @@ function PictureNotice({
     }
 
     return profile.pictureNotStated ? (
-        <p className="text-2xs text-warning">{translate('settings.pictureNotStored')}</p>
+        <p className="text-sm text-warning">{translate('settings.pictureNotStored')}</p>
     ) : null;
 }
 
@@ -802,7 +802,7 @@ function Telemetry({
 
     if (!forwarding.answered) {
         return (
-            <p className="rounded-xl border border-line bg-sunken px-2.5 py-2.25 text-xs text-muted">
+            <p className="rounded-md px-2.5 py-2.25 text-base text-muted">
                 {translate('settings.telemetryUnanswered')}
             </p>
         );
@@ -812,7 +812,7 @@ function Telemetry({
 
     if (destination === null) {
         return (
-            <p className="rounded-xl border border-line bg-sunken px-2.5 py-2.25 text-xs text-muted">
+            <p className="rounded-md px-2.5 py-2.25 text-base text-muted">
                 {translate('settings.telemetryNotForwarded')}
             </p>
         );
@@ -820,10 +820,10 @@ function Telemetry({
 
     return (
         <>
-            <label className="flex cursor-pointer items-start gap-2.75 rounded-xl border border-line bg-sunken px-2.5 py-2.25 transition hover:bg-hover">
+            <label className="flex cursor-pointer items-start gap-2.75 rounded-md px-2.5 py-2.25 transition hover:bg-hover">
                 <span className="flex min-w-0 flex-1 flex-col gap-0.75">
                     {translate('settings.telemetryWithheld')}
-                    <span className="text-xs text-muted">{translate('settings.telemetryExplanation')}</span>
+                    <span className="text-base text-muted">{translate('settings.telemetryExplanation')}</span>
                 </span>
 
                 <Switch
@@ -834,13 +834,11 @@ function Telemetry({
                 />
             </label>
 
-            <p className="text-2xs text-faint">
-                {translate('settings.telemetryDestination', { address: destination })}
-            </p>
+            <p className="text-sm text-faint">{translate('settings.telemetryDestination', { address: destination })}</p>
 
             {withheld ? (
-                <p className="flex items-start gap-2 rounded-xl border border-warning bg-warning-soft px-2.5 py-2.25 text-xs text-warning-text">
-                    <Icon name="info" className="size-4" />
+                <p className="flex items-start gap-2 rounded-md border border-warning bg-warning-soft px-2.5 py-2.25 text-base text-warning-text">
+                    <Icon name="info" className="size-icon-sm" />
                     {translate('settings.telemetryWithheldWarning')}
                 </p>
             ) : null}

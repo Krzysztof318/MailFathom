@@ -124,8 +124,8 @@ export function EvidenceInspector({
                             <h2 className="text-md font-semibold">{source.label}</h2>
 
                             {source.target === null ? null : (
-                                <span className="flex items-center gap-1 rounded-full bg-rail px-2.25 py-0.5 text-2xs text-muted">
-                                    <Icon className="size-3.25" name={sourceKinds[source.target.kind].icon} />
+                                <span className="flex items-center gap-1 rounded-full bg-rail px-2.25 py-0.5 text-xs text-muted">
+                                    <Icon className="size-icon-xs" name={sourceKinds[source.target.kind].icon} />
                                     {translate(sourceKinds[source.target.kind].label)}
                                 </span>
                             )}
@@ -147,7 +147,7 @@ export function EvidenceInspector({
     // panel are different elements rather than one element laid out two ways: focus, the back gesture, and whether
     // the result behind it can be reached at all are decided by which of them it is.
     if (desktop || source === null) {
-        return <div className="rounded-lg border border-line bg-rail desktop:sticky desktop:top-4">{held}</div>;
+        return <div className="rounded-md border border-line bg-rail desktop:sticky desktop:top-4">{held}</div>;
     }
 
     return (
@@ -163,7 +163,7 @@ function RestingPanel() {
 
     return (
         <div className="flex flex-col gap-1.5">
-            <h2 className="text-2xs tracking-widest text-muted uppercase">{translate('evidence.panel')}</h2>
+            <h2 className="text-xs font-semibold text-muted">{translate('evidence.panel')}</h2>
             <p className="text-sm text-muted text-pretty">{translate('evidence.resting')}</p>
         </div>
     );
@@ -198,7 +198,7 @@ function FollowedSource({
     if (evidence.state === 'failed') {
         return (
             <p className="flex items-start gap-1.75 rounded-md bg-warning-soft px-2.75 py-2 text-sm text-warning-text">
-                <Icon className="mt-0.25 size-3.75" name="error" />
+                <Icon className="mt-0.25 size-icon-sm" name="error" />
                 {translate(readFailures[evidence.reason])}
             </p>
         );
@@ -223,8 +223,8 @@ function CitedSource({
     if (citation.outcome === 'PrivateSource') {
         return (
             <div className="flex flex-col gap-2">
-                <span className="flex w-fit items-center gap-1 rounded-full bg-rail px-2.25 py-0.5 text-2xs text-muted">
-                    <Icon className="size-3.25" name="lock" />
+                <span className="flex w-fit items-center gap-1 rounded-full bg-rail px-2.25 py-0.5 text-xs text-muted">
+                    <Icon className="size-icon-xs" name="lock" />
                     {translate('answer.sourcePrivate')}
                 </span>
 
@@ -248,7 +248,7 @@ function CitedSource({
 
             {citation.outcome === 'Unresolvable' ? (
                 <p className="flex items-start gap-1.75 rounded-md bg-warning-soft px-2.75 py-2 text-sm text-warning-text">
-                    <Icon className="mt-0.25 size-3.75" name="history" />
+                    <Icon className="mt-0.25 size-icon-sm" name="history" />
                     {translate('evidence.unresolvable')}
                 </p>
             ) : null}

@@ -81,14 +81,14 @@ describe('AnswerBlockCard', () => {
     it('tells an unreachable deployment apart from an empty answer', () => {
         renderCard('offline');
 
-        expect(screen.getByText('No connection to the server — this block cannot be loaded.')).toBeDefined();
+        expect(screen.getByText('No connection to the server - this block cannot be loaded.')).toBeDefined();
     });
 
     it('says what the caller knows about the failure in place of the sentence the state carries', () => {
         renderCard('offline', undefined, 'The session ended while this answer was being read.');
 
         expect(screen.getByText('The session ended while this answer was being read.')).toBeDefined();
-        expect(screen.queryByText('No connection to the server — this block cannot be loaded.')).toBeNull();
+        expect(screen.queryByText('No connection to the server - this block cannot be loaded.')).toBeNull();
     });
 
     it('offers the way out of a failure', () => {
@@ -153,7 +153,7 @@ describe('UnrecognisedAnswerBlock', () => {
 
         expect(
             screen.getByText(
-                'This client does not recognise the block type “RiskScore”. The block was skipped — the rest of the result rendered normally.',
+                'This client does not recognise the block type “RiskScore”. The block was skipped - the rest of the result rendered normally.',
             ),
         ).toBeDefined();
     });

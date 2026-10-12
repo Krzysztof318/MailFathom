@@ -123,7 +123,7 @@ export function AttachmentView({
     return (
         <section ref={region} tabIndex={-1} aria-label={named} className="flex min-h-full min-w-0 flex-col bg-sunken">
             <div className="flex shrink-0 flex-wrap items-center gap-2.5 border-b border-line bg-panel px-4 py-2.75">
-                <span className="shrink-0 rounded-xs bg-accent px-1.75 py-0.75 text-xs font-semibold tracking-wide text-on-accent uppercase">
+                <span className="shrink-0 rounded-xs bg-accent px-1.75 py-0.75 text-xs font-semibold text-on-accent uppercase">
                     {kindOf(attachment.fileName, attachment.mediaType)}
                 </span>
 

@@ -49,19 +49,19 @@ export type ControlShape =
     | 'outlinedSymbol';
 
 export const controlShapes: Readonly<Record<ControlShape, string>> = {
-    labelled: 'gap-1.75 rounded-lg px-2.75 py-1.75 text-base text-text-soft hover:bg-hover',
+    labelled: 'gap-1.75 rounded-md px-2.75 py-1.75 text-base text-text-soft hover:bg-hover',
     named: 'rounded-md px-2 py-1.25 text-base text-muted hover:bg-hover hover:text-text',
-    symbol: 'size-9.5 justify-center rounded-lg text-text-soft hover:bg-hover',
-    primary: 'gap-1.75 rounded-lg bg-accent px-3.25 py-2 text-base font-semibold text-on-accent shadow-raised',
-    primarySymbol: 'size-9.5 justify-center rounded-lg bg-accent text-on-accent shadow-raised',
-    floating: 'size-13.5 justify-center rounded-4xl bg-accent text-on-accent shadow-overlay',
-    selected: 'gap-1.75 rounded-lg px-2.75 py-1.75 text-base text-accent-deep hover:bg-accent-line',
-    selectedSymbol: 'size-9.5 justify-center rounded-lg text-accent-deep hover:bg-accent-line',
+    symbol: 'size-9.5 justify-center rounded-md text-text-soft hover:bg-hover',
+    primary: 'gap-1.75 rounded-md bg-accent px-3.25 py-2 text-base font-semibold text-on-accent shadow-raised',
+    primarySymbol: 'size-9.5 justify-center rounded-md bg-accent text-on-accent shadow-raised',
+    floating: 'size-13.5 justify-center rounded-xl bg-accent text-on-accent shadow-overlay',
+    selected: 'gap-1.75 rounded-md px-2.75 py-1.75 text-base text-accent-deep hover:bg-accent-line',
+    selectedSymbol: 'size-9.5 justify-center rounded-md text-accent-deep hover:bg-accent-line',
     link: 'rounded-sm text-accent hover:text-accent-strong',
     accentPill:
-        'min-h-8.5 justify-center gap-1.75 rounded-4xl bg-accent px-3.25 text-base font-semibold text-on-accent',
-    outlined: 'gap-2 rounded-lg border border-line-strong px-3 py-1.75 text-base text-text-soft hover:bg-rail',
-    outlinedSymbol: 'size-9.5 justify-center rounded-lg border border-line-strong text-text-soft hover:bg-rail',
+        'min-h-8.5 justify-center gap-1.75 rounded-2xl bg-accent px-3.25 text-base font-semibold text-on-accent',
+    outlined: 'gap-2 rounded-md border border-line-strong px-3 py-1.75 text-base text-text-soft hover:bg-rail',
+    outlinedSymbol: 'size-9.5 justify-center rounded-md border border-line-strong text-text-soft hover:bg-rail',
 };
 
 /** Whether a control of that shape carries its name as words, or as the name of the symbol alone. */

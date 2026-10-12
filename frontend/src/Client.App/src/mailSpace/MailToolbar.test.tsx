@@ -107,7 +107,7 @@ describe('MailToolbar', () => {
     it('draws answering as what it will be while nothing is open, rather than moving under the cursor', () => {
         const { composed } = drawToolbar(true);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Reply — not built yet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reply - not built yet' }));
 
         expect(composed).not.toHaveBeenCalled();
     });
@@ -115,7 +115,7 @@ describe('MailToolbar', () => {
     it('offers no writing at all to a credential that may not file a draft', () => {
         const { composed } = drawToolbar(false, messageId);
 
-        fireEvent.click(screen.getByRole('button', { name: 'New message — not built yet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'New message - not built yet' }));
 
         expect(composed).not.toHaveBeenCalled();
     });
@@ -126,7 +126,7 @@ describe('MailToolbar', () => {
         for (const action of ['Archive', 'Delete', 'Flag', 'Mark unread', 'Move']) {
             expect(
                 screen.getByRole('button', {
-                    name: `${action} — this credential may not change mail on your mail server.`,
+                    name: `${action} - this credential may not change mail on your mail server.`,
                 }),
             ).toBeDefined();
         }
@@ -178,7 +178,7 @@ describe('MailToolbar', () => {
         drawToolbar(true, messageId, actsOffering(vi.fn()), 'labelled');
 
         const hiding = screen.getByRole('button', {
-            name: 'Hide the panels — the correspondence alone',
+            name: 'Hide the panels - the correspondence alone',
         });
 
         expect(hiding.textContent).toBe('');
@@ -189,7 +189,7 @@ describe('MailToolbar', () => {
         theCompositionHasTwoPanes();
         drawToolbar(true, messageId, actsOffering(vi.fn()), 'labelled');
 
-        const hiding = screen.getByRole('button', { name: 'Hide the panels — the correspondence alone' });
+        const hiding = screen.getByRole('button', { name: 'Hide the panels - the correspondence alone' });
         expect(hiding.getAttribute('aria-pressed')).toBe('false');
 
         fireEvent.click(hiding);
@@ -201,7 +201,7 @@ describe('MailToolbar', () => {
     it('leaves the panel control out of a single-pane composition, which the design gives it nothing to do in', () => {
         drawToolbar(true, messageId, actsOffering(vi.fn()), 'labelled');
 
-        expect(screen.queryByRole('button', { name: 'Hide the panels — the correspondence alone' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Hide the panels - the correspondence alone' })).toBeNull();
     });
 
     it('gives composing up to the floating control first, keeping the other names in words', () => {

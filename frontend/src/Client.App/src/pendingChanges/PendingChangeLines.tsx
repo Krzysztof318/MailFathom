@@ -51,7 +51,7 @@ export function PendingChangeLines() {
             )}
 
             {stoppedFollowing && waiting.length > 0 ? (
-                <div className="flex flex-col gap-1.5 rounded-lg bg-sunken px-3 py-2 text-sm">
+                <div className="flex flex-col gap-1.5 rounded-md bg-sunken px-3 py-2 text-sm">
                     <p className="text-muted">{translate('pendingChange.stoppedFollowing')}</p>
 
                     <div className="flex flex-wrap gap-2 pt-0.5">
@@ -107,7 +107,7 @@ function UndecidedLine({
     const { translate } = useLocalization();
 
     return (
-        <div className="flex flex-col gap-1.5 rounded-lg bg-sunken px-3 py-2 text-sm">
+        <div className="flex flex-col gap-1.5 rounded-md bg-sunken px-3 py-2 text-sm">
             <p className="font-medium">{translate(actNames[change.act])}</p>
             <p className="text-muted">{translate(standingReasons[change.standing])}</p>
 

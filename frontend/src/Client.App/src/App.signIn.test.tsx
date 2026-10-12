@@ -239,7 +239,7 @@ describe('App sign-in', () => {
         expect(screen.getByRole('checkbox', { name: 'Keep me signed in' })).toBeDefined();
         expect(
             screen.getByText(
-                'This sign-in is kept until you close this tab. Applies to password sign-in only — provider sessions follow their own rules.',
+                'This sign-in is kept until you close this tab. Applies to password sign-in only - provider sessions follow their own rules.',
             ),
         ).toBeDefined();
     });
@@ -252,7 +252,7 @@ describe('App sign-in', () => {
         expect(screen.queryByRole('checkbox', { name: 'Keep me signed in' })).toBeNull();
         expect(
             screen.getByText(
-                'Your password is not stored anywhere. This sign-in is kept until you close MailFathom, and you will be asked for your password again — this machine offers no keychain to keep it in safely.',
+                'Your password is not stored anywhere. This sign-in is kept until you close MailFathom, and you will be asked for your password again - this machine offers no keychain to keep it in safely.',
             ),
         ).toBeDefined();
     });

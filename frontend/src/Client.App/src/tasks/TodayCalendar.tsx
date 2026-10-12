@@ -38,7 +38,7 @@ export function TodayCalendar({ day }: { readonly day: TodayCalendarInForce }) {
     return (
         <section aria-labelledby="tasks-today-calendar" className="flex flex-col gap-2.5">
             <div className="flex items-baseline justify-between gap-2">
-                <h2 id="tasks-today-calendar" className="text-xs tracking-widest text-muted uppercase">
+                <h2 id="tasks-today-calendar" className="text-xs font-semibold text-muted">
                     {translate('tasks.todaysCalendar')}
                 </h2>
 
@@ -75,7 +75,7 @@ export function TodayCalendar({ day }: { readonly day: TodayCalendarInForce }) {
                     {day.events.map((event) => (
                         <li
                             key={event.id}
-                            className="flex items-baseline gap-2.5 rounded-lg border border-line bg-panel px-2.75 py-2.25"
+                            className="flex items-baseline gap-2.5 rounded-md border border-line bg-panel px-2.75 py-2.25"
                         >
                             <time dateTime={event.start} className="w-13 shrink-0 text-xs text-muted">
                                 {clock.format(new Date(event.start))}

@@ -187,10 +187,10 @@ export function TaskList({
                     className="flex flex-col gap-2.25"
                 >
                     <div className="flex items-center gap-2.25">
-                        <h2 id={`${headings}-${group.name}`} className="text-xs tracking-widest text-muted uppercase">
+                        <h2 id={`${headings}-${group.name}`} className="text-xs font-semibold text-muted">
                             {translate(groupLabels[group.name])}
                         </h2>
-                        <span className="rounded-4xl border border-line bg-rail px-1.75 text-xs text-muted">
+                        <span className="rounded-md border border-line bg-rail px-1.75 text-xs text-muted">
                             {counted.format(group.tasks.length)}
                         </span>
                     </div>

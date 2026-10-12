@@ -409,7 +409,7 @@ describe('MailSpace, wide', () => {
         expect(toolbar.textContent).toBeDefined();
 
         for (const name of ['New message', 'Reply', 'Reply all', 'Forward']) {
-            expect(screen.getByRole('button', { name: `${name} — not built yet` }).getAttribute('aria-disabled')).toBe(
+            expect(screen.getByRole('button', { name: `${name} - not built yet` }).getAttribute('aria-disabled')).toBe(
                 'true',
             );
         }
@@ -420,7 +420,7 @@ describe('MailSpace, wide', () => {
             expect(
                 screen
                     .getByRole('button', {
-                        name: `${name} — this credential may not change mail on your mail server.`,
+                        name: `${name} - this credential may not change mail on your mail server.`,
                     })
                     .getAttribute('aria-disabled'),
             ).toBe('true');
@@ -470,14 +470,14 @@ describe('MailSpace, narrow', () => {
         expect(screen.queryByText(handedToMail)).toBeNull();
         expect(screen.queryByRole('toolbar')).toBeNull();
         expect(screen.getByRole('button', { name: 'Folders and filters' })).toBeDefined();
-        expect(screen.getByRole('button', { name: 'New message — not built yet' })).toBeDefined();
+        expect(screen.getByRole('button', { name: 'New message - not built yet' })).toBeDefined();
     });
 
     it('draws a corner control that works where writing a message is on offer', () => {
         renderSpace(phone, {}, 'reader', writingIsOffered);
 
         expect(screen.getByRole('button', { name: 'New message' })).toBeDefined();
-        expect(screen.queryByRole('button', { name: 'New message — not built yet' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'New message - not built yet' })).toBeNull();
     });
 
     it('brings the reading column in front of the list for a message being written, as it does for one being read', () => {
@@ -692,7 +692,7 @@ describe('MailSpace, in the four compositions', () => {
     it('takes the list away from the toolbar control itself, and puts focus where the list stood', () => {
         renderSpace(tablet, { selection: 'stored-1' });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Hide the panels — the correspondence alone' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Hide the panels - the correspondence alone' }));
 
         expect(listStandsAside()).toBe(true);
         expect(document.activeElement).toBe(screen.getByRole('region', { name: 'What is open' }));

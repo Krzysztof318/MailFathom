@@ -173,7 +173,7 @@ export function EmbeddedMessageMarkup({ markup }: { readonly markup: string }) {
     }
 
     return (
-        <div className="flex flex-col overflow-hidden rounded-xl border border-line bg-sender-markup">
+        <div className="flex flex-col overflow-hidden rounded-md border border-line bg-sender-markup">
             {/* The one case this surface scrolls inside itself is a frame that never reported: the conversation is
                 what scrolls otherwise, and a message drawn at a guessed height would be cut off or leave a gap. */}
             <div
@@ -191,7 +191,7 @@ export function EmbeddedMessageMarkup({ markup }: { readonly markup: string }) {
             </div>
 
             <p className="flex items-center gap-2 border-t border-line bg-sunken px-3 py-1.5 text-xs text-muted">
-                <Icon name="lock" className="size-3.5" />
+                <Icon name="lock" className="size-icon-xs" />
                 {translate(fittingNotes[fitted.fitting])}
                 {refused ? <span className="text-warning">{translate('link.couldNotOpen')}</span> : null}
             </p>

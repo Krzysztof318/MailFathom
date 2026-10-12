@@ -22,10 +22,16 @@ async function pickOut(page: Page, ...subjects: readonly string[]): Promise<void
     }
 }
 
+// A window tall enough to draw the first fifteen rows without scrolling. The list is windowed, so a row scrolled past
+// its overscan is out of the document, and a test that picks out rows nine apart and then reads each of them back
+// would otherwise be asserting how far a click scrolled the list rather than what the act did to the rows.
+const tallWindow = { width: 1280, height: 1800 };
+
 test('marks, flags, and archives every selected message, and the list, the counts, and a reload agree', async ({
     page,
     deployment,
 }) => {
+    await page.setViewportSize(tallWindow);
     await openTheInbox(page, deployment);
     await expect(folder(page, 'Inbox 12 unread')).toBeVisible();
 

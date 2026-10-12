@@ -119,7 +119,7 @@ export function ContactRow({
                     aria-hidden="true"
                     className="flex size-4.5 shrink-0 items-center justify-center rounded-full bg-accent text-on-accent"
                 >
-                    <Icon name="check" className="size-3.5" />
+                    <Icon name="check" className="size-icon-xs" />
                 </span>
             ) : null}
 

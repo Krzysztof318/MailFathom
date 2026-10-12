@@ -47,7 +47,7 @@ export function SurfaceControl({
             }`}
             onClick={onActivate}
         >
-            <Icon name={icon} className="size-5" />
+            <Icon name={icon} className="size-icon-lg" />
         </button>
     );
 }

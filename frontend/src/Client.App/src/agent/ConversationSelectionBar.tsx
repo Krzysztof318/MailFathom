@@ -38,7 +38,7 @@ export function ConversationSelectionBar({
         <div
             role="toolbar"
             aria-label={translate('agent.selectionBar')}
-            className="flex shrink-0 items-center gap-0.5 overflow-x-auto rounded-lg border border-accent-line bg-accent-soft px-2 py-1.5"
+            className="flex shrink-0 items-center gap-0.5 overflow-x-auto rounded-md border border-accent-line bg-accent-soft px-2 py-1.5"
         >
             <Control label={translate('agent.clearSelection')} icon="close" shape="selectedSymbol" onPress={onClear} />
 

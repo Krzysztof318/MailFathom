@@ -112,7 +112,7 @@ export function OpenedMessage({
 
                     {message.attachments.length === 0 ? null : (
                         <span className="flex shrink-0 items-center gap-0.75 text-xs text-faint">
-                            <Icon name="attach_file" className="size-3.5" />
+                            <Icon name="attach_file" className="size-icon-xs" />
                             {numbers.format(message.attachments.length)}
                         </span>
                     )}

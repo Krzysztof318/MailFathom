@@ -123,7 +123,7 @@ describe('HeadActs', () => {
         drawHead({ acts: { ...nothingActed, perform: performed } });
 
         const refused = screen.getByRole('button', {
-            name: 'Flag — this credential may not change mail on your mail server.',
+            name: 'Flag - this credential may not change mail on your mail server.',
         });
 
         fireEvent.click(refused);
@@ -155,8 +155,8 @@ describe('HeadActs', () => {
     it('draws the three as what they are where the deployment refuses writing at all', () => {
         const { composed } = drawHead({ offered: false, acts: nothingActed });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Reply — not built yet' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Forward — not built yet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reply - not built yet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Forward - not built yet' }));
 
         expect(composed).not.toHaveBeenCalled();
     });
@@ -165,10 +165,10 @@ describe('HeadActs', () => {
         const performed = vi.fn();
         const { composed } = drawHead({ acting: null, acts: actsOffering(performed) });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Reply — not built yet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reply - not built yet' }));
         fireEvent.click(
             screen.getByRole('button', {
-                name: 'Flag — nothing is open or selected for this to be about.',
+                name: 'Flag - nothing is open or selected for this to be about.',
             }),
         );
 

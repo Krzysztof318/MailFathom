@@ -60,7 +60,7 @@ function rowShape({
     const across = folded ? 'justify-center' : `gap-2 pe-2 ${indent}`;
 
     if (group) {
-        const marked = folded ? 'py-2' : 'py-1.25 ps-2.25 text-xs tracking-wide';
+        const marked = folded ? 'py-2' : 'py-1.25 ps-2.25 text-xs font-semibold';
 
         return `${across} mt-3 rounded-sm first:mt-0 ${marked} ${
             selected ? 'font-semibold text-accent-deep' : 'text-muted hover:text-text'
@@ -74,7 +74,7 @@ function rowShape({
             ? 'bg-accent-soft text-accent-deep inset-ring-2 inset-ring-accent'
             : selected
               ? 'bg-accent-soft font-semibold text-accent-deep'
-              : 'text-text-soft hover:bg-hover'
+              : 'text-text hover:bg-hover'
     }`;
 }
 
@@ -194,7 +194,7 @@ export function FolderRow({
             ) : (
                 <Icon
                     name={row.role === null ? 'folder' : folderRoleIcons[row.role]}
-                    className={`${folded ? 'size-6' : 'size-4.5'} shrink-0 ${selected ? 'text-accent-deep' : 'text-muted'}`}
+                    className={`${folded ? 'size-icon-2xl' : 'size-icon-md'} shrink-0 ${selected ? 'text-accent-deep' : 'text-muted'}`}
                 />
             )}
 
@@ -243,13 +243,13 @@ function Twist({
         <span
             aria-hidden="true"
             title={said}
-            className="shrink-0 rounded p-0.5 hover:bg-hover"
+            className="shrink-0 rounded-xs p-0.5 hover:bg-hover"
             onClick={(event) => {
                 event.stopPropagation();
                 onToggle();
             }}
         >
-            <Icon name="chevron_right" className={`size-3.5 transition ${expanded ? 'rotate-90' : ''}`} />
+            <Icon name="chevron_right" className={`size-icon-sm transition ${expanded ? 'rotate-90' : ''}`} />
         </span>
     );
 }
@@ -272,7 +272,7 @@ function Unread({ count }: { readonly count: number | null }) {
     const shown = new Intl.NumberFormat(locale).format(count);
 
     return (
-        <span className="shrink-0 text-sm tabular-nums text-faint">
+        <span className="shrink-0 text-base tabular-nums text-faint">
             <span aria-hidden="true">{shown}</span>
             <span className="sr-only">{translate('folders.unread', { count: shown })}</span>
         </span>

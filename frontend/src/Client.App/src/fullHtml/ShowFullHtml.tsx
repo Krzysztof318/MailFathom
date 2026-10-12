@@ -44,7 +44,7 @@ export function ShowFullHtml({ onShow }: { readonly onShow: () => void }) {
             <dialog
                 ref={asked}
                 aria-labelledby="show-full-html"
-                className="m-auto w-dialog max-w-dialog-narrow rounded-3xl border border-line bg-panel p-5 text-text shadow-dialog backdrop:bg-scrim"
+                className="m-auto w-dialog max-w-dialog-narrow rounded-lg border border-line bg-panel p-5 text-text shadow-dialog backdrop:bg-scrim"
                 onClose={() => {
                     if (asked.current?.returnValue === markupShows) {
                         onShow();
@@ -53,7 +53,7 @@ export function ShowFullHtml({ onShow }: { readonly onShow: () => void }) {
             >
                 <div className="flex flex-col gap-3.5">
                     <div className="flex items-start gap-2.5">
-                        <Icon name="gpp_maybe" className="mt-0.5 size-5 shrink-0 text-warning" />
+                        <Icon name="gpp_maybe" className="mt-0.5 size-icon-lg shrink-0 text-warning" />
 
                         <div className="flex min-w-0 flex-col gap-1.5">
                             <h2 id="show-full-html" className="text-lg font-semibold">
@@ -67,7 +67,7 @@ export function ShowFullHtml({ onShow }: { readonly onShow: () => void }) {
                     <div className="flex flex-wrap justify-end gap-2">
                         <button
                             type="button"
-                            className="rounded-lg px-3.75 py-2 text-base text-muted transition hover:bg-hover hover:text-text"
+                            className="rounded-md px-3.75 py-2 text-base text-muted transition hover:bg-hover hover:text-text"
                             onClick={() => {
                                 asked.current?.close();
                             }}
@@ -77,7 +77,7 @@ export function ShowFullHtml({ onShow }: { readonly onShow: () => void }) {
 
                         <button
                             type="button"
-                            className="rounded-lg bg-accent px-4 py-2 text-base font-semibold text-on-accent transition hover:opacity-90"
+                            className="rounded-md bg-accent px-4 py-2 text-base font-semibold text-on-accent transition hover:opacity-90"
                             onClick={() => {
                                 asked.current?.close(markupShows);
                             }}

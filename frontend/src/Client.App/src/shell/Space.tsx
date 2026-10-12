@@ -181,7 +181,7 @@ export function Space({
                             />
                         ) : ownColumns === null ? (
                             <div className="flex max-w-3xl flex-col gap-3">
-                                <h1 className="text-4xl font-semibold tracking-tight">
+                                <h1 className="text-4xl font-semibold tracking-tighter">
                                     {translate(spaceLabels[name])}
                                 </h1>
 

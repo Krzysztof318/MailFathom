@@ -23,8 +23,8 @@ export type Manner = 'back' | 'aside' | 'act' | 'destroy';
 // Exhaustive by its own type, so a manner added to the union fails to compile until it has been decided what it looks
 // like.
 export const mannerDrawn: Readonly<Record<Manner, string>> = {
-    back: 'rounded-lg border border-line bg-sunken px-3.75 py-2 text-base text-text-soft transition hover:bg-hover',
-    aside: 'rounded-lg border border-warning px-3.75 py-2 text-base text-warning-text transition hover:bg-warning-soft',
-    act: 'rounded-lg bg-accent px-4 py-2 text-base font-semibold text-on-accent transition hover:opacity-90',
-    destroy: 'rounded-lg bg-error px-4 py-2 text-base font-semibold text-on-accent transition hover:opacity-90',
+    back: 'rounded-md border border-line bg-sunken px-3.75 py-2 text-base text-text-soft transition hover:bg-hover',
+    aside: 'rounded-md border border-warning px-3.75 py-2 text-base text-warning-text transition hover:bg-warning-soft',
+    act: 'rounded-md bg-accent px-4 py-2 text-base font-semibold text-on-accent transition hover:opacity-90',
+    destroy: 'rounded-md bg-error px-4 py-2 text-base font-semibold text-on-accent transition hover:opacity-90',
 };

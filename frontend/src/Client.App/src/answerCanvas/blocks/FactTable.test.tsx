@@ -116,7 +116,7 @@ describe('FactTable', () => {
     ])('says a table with %s found nothing, rather than drawing a heading over nothing', (_, block) => {
         renderTable(block);
 
-        expect(screen.getByText('No column had coverage in the sources — the table stays empty.')).toBeDefined();
+        expect(screen.getByText('No column had coverage in the sources - the table stays empty.')).toBeDefined();
     });
 
     it('names a block it is not the renderer for rather than drawing somebody else’s data as a comparison', () => {

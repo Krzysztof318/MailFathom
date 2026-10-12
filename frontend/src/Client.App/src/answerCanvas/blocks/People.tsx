@@ -56,8 +56,8 @@ export function People({ block }: { readonly block: AnswerBlock }) {
             note={entries.length === 0 ? translate('answer.peopleEmpty') : undefined}
             state={entries.length === 0 ? 'empty' : 'ready'}
         >
-            <span className={`flex w-fit items-center gap-1 rounded-full px-2.25 py-0.5 text-2xs ${verdict.tint}`}>
-                <Icon className="size-3.25" name={verdict.icon} />
+            <span className={`flex w-fit items-center gap-1 rounded-full px-2.25 py-0.5 text-xs ${verdict.tint}`}>
+                <Icon className="size-icon-xs" name={verdict.icon} />
                 {translate(verdict.label)}
             </span>
 

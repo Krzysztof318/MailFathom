@@ -28,7 +28,7 @@ export const chip = 'rounded-full border border-line bg-rail text-base text-text
  * calendar — and the first two had already written the same nine utilities out twice before the third arrived.
  */
 export const dialogField =
-    'w-full rounded-lg border border-line-strong bg-sunken px-2.75 py-2 text-base text-text outline-none focus:border-accent';
+    'w-full rounded-md border border-line-strong bg-sunken px-2.75 py-2 text-base text-text outline-none focus:border-accent';
 
 /**
  * What the label over such a field is drawn with, which travels with the field rather than beside it.
@@ -36,4 +36,4 @@ export const dialogField =
  * The same three dialogs draw one, and a label that drifted from the field under it would be the half of a form that
  * looks like a second form.
  */
-export const dialogFieldLabel = 'text-2xs tracking-widest text-muted uppercase';
+export const dialogFieldLabel = 'text-xs font-semibold text-muted';

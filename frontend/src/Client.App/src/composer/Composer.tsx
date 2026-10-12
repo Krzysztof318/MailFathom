@@ -666,7 +666,7 @@ export function Composer({
 
                             <p className="flex items-start gap-2.25 border-b border-line-soft bg-sunken px-3.75 py-2.25">
                                 <span className="w-22 shrink-0">
-                                    <Icon name="visibility" className="size-4.25 text-warning-text" />
+                                    <Icon name="visibility" className="size-icon-md text-warning-text" />
                                 </span>
                                 <span className="min-w-0 flex-1 text-sm text-text-soft text-pretty">
                                     {translate('compose.copiesVisible')}
@@ -783,12 +783,12 @@ export function Composer({
                         <button
                             type="button"
                             disabled={!stillBeingWritten}
-                            className="flex items-center gap-1.75 rounded-lg border border-line-strong px-3 py-2 text-sm text-text-soft transition hover:bg-hover disabled:opacity-60"
+                            className="flex items-center gap-1.75 rounded-md border border-line-strong px-3 py-2 text-sm text-text-soft transition hover:bg-hover disabled:opacity-60"
                             onClick={() => {
                                 files.current?.click();
                             }}
                         >
-                            <Icon name="attach_file" className="size-4.5" />
+                            <Icon name="attach_file" className="size-icon-md" />
                             {translate('compose.attach')}
                         </button>
 
@@ -815,7 +815,7 @@ export function Composer({
                         <button
                             type="button"
                             disabled={!sendable}
-                            className="rounded-lg px-2 py-2 text-sm text-muted transition hover:bg-hover hover:text-text disabled:opacity-60"
+                            className="rounded-md px-2 py-2 text-sm text-muted transition hover:bg-hover hover:text-text disabled:opacity-60"
                             onClick={() => {
                                 void draft.save(sentAs(composition, copiesShown));
                             }}
@@ -949,9 +949,9 @@ function AttachedFiles({
             {attached.map((file) => (
                 <li
                     key={file.attachmentId}
-                    className="flex items-center gap-2 rounded-xl border border-line bg-rail px-2.5 py-1.25 text-base"
+                    className="flex items-center gap-2 rounded-md border border-line bg-rail px-2.5 py-1.25 text-base"
                 >
-                    <Icon name="attach_file" className="size-4 text-muted" />
+                    <Icon name="attach_file" className="size-icon-sm text-muted" />
                     <span className="max-w-60 truncate">{file.fileName}</span>
                     <span className="text-sm text-faint">{sizeOf(file.sizeOctets, locale)}</span>
 
@@ -963,7 +963,7 @@ function AttachedFiles({
                             onDetach(file.attachmentId);
                         }}
                     >
-                        <Icon name="close" className="size-3.5" />
+                        <Icon name="close" className="size-icon-xs" />
                     </button>
                 </li>
             ))}

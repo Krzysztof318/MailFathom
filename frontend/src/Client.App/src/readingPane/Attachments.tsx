@@ -82,7 +82,7 @@ export function Attachments({
                             }
                         }}
                     >
-                        <Icon name="download" className="size-4" />
+                        <Icon name="download" className="size-icon-sm" />
                         {translate('attachments.downloadAll')}
                     </button>
                 </li>

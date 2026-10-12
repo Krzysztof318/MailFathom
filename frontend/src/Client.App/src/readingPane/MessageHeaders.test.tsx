@@ -407,11 +407,11 @@ describe('MessageHeaders at the width its column has', () => {
 
         // Drawn with neither a composer nor a mailbox act above them, which is what this harness is: each says why it
         // cannot act rather than going nameless. What each does when it can is `mailSpace/HeadActs.test.tsx`'s.
-        expect(screen.getByRole('button', { name: 'Reply — not built yet' })).toBeDefined();
-        expect(screen.getByRole('button', { name: 'Forward — not built yet' })).toBeDefined();
+        expect(screen.getByRole('button', { name: 'Reply - not built yet' })).toBeDefined();
+        expect(screen.getByRole('button', { name: 'Forward - not built yet' })).toBeDefined();
         expect(
             screen.getByRole('button', {
-                name: 'Flag — this credential may not change mail on your mail server.',
+                name: 'Flag - this credential may not change mail on your mail server.',
             }),
         ).toBeDefined();
     });

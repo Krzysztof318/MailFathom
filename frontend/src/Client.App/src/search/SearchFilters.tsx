@@ -317,7 +317,7 @@ function FilterInForce({ label, onRemove }: { readonly label: string; readonly o
             >
                 {/* Drawn rather than written, for the reason the list's own marks are drawn: a glyph is a string
                     somebody reads in one language, and what names this control is the label above. */}
-                <Icon name="close" className="size-3.5" />
+                <Icon name="close" className="size-icon-xs" />
             </button>
         </li>
     );
@@ -339,7 +339,7 @@ function CriterionInForce({ criterion, onRemove }: { readonly criterion: string;
                 className="rounded-sm px-1 leading-none transition hover:bg-hover"
                 onClick={onRemove}
             >
-                <Icon name="close" className="size-3.5" />
+                <Icon name="close" className="size-icon-xs" />
             </button>
         </li>
     );

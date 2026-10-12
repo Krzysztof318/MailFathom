@@ -40,7 +40,7 @@ export function StopConfirmation({
         <>
             <button
                 type="button"
-                className="mt-1.25 flex h-9.5 items-center justify-center rounded-xl border border-line-strong px-5 text-base font-semibold text-text-soft transition hover:bg-hover hover:text-text"
+                className="mt-1.25 flex h-9.5 items-center justify-center rounded-md border border-line-strong px-5 text-base font-semibold text-text-soft transition hover:bg-hover hover:text-text"
                 onClick={() => {
                     if (asked.current !== null) {
                         // A `close()` given no answer leaves the previous one in place, and the close Escape performs
@@ -57,7 +57,7 @@ export function StopConfirmation({
             <dialog
                 ref={asked}
                 aria-labelledby={question}
-                className="m-auto w-95 max-w-full rounded-3xl border border-line bg-panel px-5.5 py-5 text-text shadow-dialog backdrop:bg-scrim"
+                className="m-auto w-95 max-w-full rounded-lg border border-line bg-panel px-5.5 py-5 text-text shadow-dialog backdrop:bg-scrim"
                 onClose={() => {
                     if (asked.current?.returnValue === operationStops) {
                         onStop();
@@ -74,7 +74,7 @@ export function StopConfirmation({
                     <div className="flex flex-wrap justify-end gap-2.25">
                         <button
                             type="button"
-                            className="rounded-lg border border-line-strong px-3.75 py-2 text-base text-text-soft transition hover:bg-hover"
+                            className="rounded-md border border-line-strong px-3.75 py-2 text-base text-text-soft transition hover:bg-hover"
                             onClick={() => {
                                 asked.current?.close();
                             }}

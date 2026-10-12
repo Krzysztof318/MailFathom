@@ -745,11 +745,16 @@ agreeing and it happening — and it performs nothing on being drawn, there bein
 
 ## Styling, and the two themes
 
-Tailwind is wired CSS-first through `@tailwindcss/vite`. The palette, the type scale, the radii, the shadow steps, the
-breakpoints the composition changes at, the safe-area insets, and the motion defaults are `@theme` tokens in
-`src/Client.App/src/styles.css`, and there is no JavaScript configuration file.
+Tailwind is wired CSS-first through `@tailwindcss/vite`. The palette, the type scale, the radii, the sizes a symbol is
+drawn at, the shadow steps, the breakpoints the composition changes at, the safe-area insets, and the motion defaults
+are `@theme` tokens in `src/Client.App/src/styles.css`, and there is no JavaScript configuration file.
 
-Every value there is the design's, declared in OKLCH under two themes. What a
+Every value there is the design's, read out of `design/styles/base.css` and declared in OKLCH under two themes. Three of
+those scales are closed, as the design's are: text is one of twelve sizes, a corner one of six radii beside the full
+round, and a symbol one of nine sizes. The type and radius namespaces are emptied before the design's steps are
+declared, so a step Tailwind ships and the design does not have is not there to be reached for, and a symbol composes
+against `size-icon-*` rather than against a number off the spacing grid. Every neutral — a surface, a line, the text on
+them — is one hue in both themes, and each of the four text weights reads at 4.5:1 or better on every surface. What a
 screen composes against is never a hue but a **semantic** name — a page, a panel, a rail, a sunken region, three line
 weights, four text weights, an accent, a healthy state, a warning. A name means the same thing under both themes, which
 is what lets the light and the dark client be one set of utilities rather than a `dark:` variant on every one of them —
@@ -757,8 +762,8 @@ the dark block redeclares the names whose value differs and leaves alone the two
 of its artboards, the surface a sender's markup is drawn on and the mailbox-mark ramp past its first hue.
 
 The typeface and the symbols are in the bundle for the same reason the credential never leaves it: **no screen reaches
-an external origin.** Instrument Sans is committed under `src/Client.App/src/assets/fonts/` and declared by
-`@font-face` rules pointing at those files, and the Material Symbols Rounded outlines under
+an external origin.** Geist, and Geist Mono for a literal, are committed under `src/Client.App/src/assets/fonts/` and
+declared by `@font-face` rules pointing at those files, and the Material Symbols Rounded outlines under
 `src/Client.App/src/assets/icons/` are inlined at build time by `src/Client.App/src/controls/icons.ts`, which is the
 only place the client draws a symbol from. A deployment on a private network therefore renders the way it was designed,
 a reader hands no font CDN a request per screen, and the browser suite asserts that the built bundle asks for nothing
@@ -784,7 +789,7 @@ what a deployment gains is files and a setting rather than a second service.
 
 `src/Client.App/public/` is copied into that directory verbatim, and it holds one file:
 `THIRD-PARTY-NOTICES.txt`, the notices of everything the bundle actually redistributes — the MIT text of the seven
-packages, the SIL Open Font License the typeface is under, and the Apache-2.0 grant the icon outlines are under. The
+packages, the SIL Open Font License the two typefaces are under, and the Apache-2.0 grant the icon outlines are under. The
 build minifies every module into one chunk and none of the seven carries a banner of its own, and a `woff2` file and an
 inlined path carry nothing at all, so the notices travel as text beside the code rather than inside it. [The third-party register](../THIRD_PARTY_LICENSES.md) is where the review behind it
 lives, and it is what says which packages that file has to name.

@@ -93,8 +93,8 @@ export function AgentComposer({
     return (
         <div className="flex shrink-0 flex-col gap-2.25 border-t border-line bg-panel px-3.5 py-3 workspace:gap-2.5 workspace:px-6.5 workspace:pt-3.5 workspace:pb-4">
             {context === null ? null : (
-                <p className="flex max-w-full items-center gap-2.25 self-start rounded-xl border border-accent-line bg-accent-soft py-2 ps-3 pe-2.5 text-accent-deep">
-                    <Icon name="attach_file" className="size-4.25 shrink-0" />
+                <p className="flex max-w-full items-center gap-2.25 self-start rounded-lg border border-accent-line bg-accent-soft py-2 ps-3 pe-2.5 text-accent-deep">
+                    <Icon name="attach_file" className="size-icon-md shrink-0" />
                     <span className="min-w-0 flex-1 truncate text-base">{context}</span>
                     <button
                         type="button"
@@ -106,7 +106,7 @@ export function AgentComposer({
                             input.current?.focus();
                         }}
                     >
-                        <Icon name="close" className="size-4.25" />
+                        <Icon name="close" className="size-icon-md" />
                     </button>
                 </p>
             )}
@@ -118,7 +118,7 @@ export function AgentComposer({
                             <button
                                 type="button"
                                 aria-label={translate('agent.askStarter', { question: translate(starter) })}
-                                className="rounded-4xl border border-line-strong bg-panel px-3.25 py-1.75 text-base text-text-soft transition hover:border-accent hover:text-accent-deep"
+                                className="rounded-xl border border-line-strong bg-panel px-3.25 py-1.75 text-base text-text-soft transition hover:border-accent hover:text-accent-deep"
                                 onClick={() => {
                                     void send(translate(starter));
                                 }}
@@ -131,7 +131,7 @@ export function AgentComposer({
             ) : null}
 
             <form
-                className="flex w-full max-w-agent-thread items-center gap-3 rounded-xl border-2 border-accent bg-panel px-3.25 py-2.5 transition focus-within:ring-3 focus-within:ring-accent-soft"
+                className="flex w-full max-w-agent-thread items-center gap-3 rounded-lg border-2 border-accent bg-panel px-3.25 py-2.5 transition focus-within:ring-3 focus-within:ring-accent-soft"
                 onSubmit={(event) => {
                     event.preventDefault();
                     void send(text);
@@ -183,7 +183,7 @@ export function AgentComposer({
 
             {notSent === null ? null : (
                 <p role="alert" className="flex items-start gap-1.75 text-sm text-warning-text text-pretty">
-                    <Icon name="error" className="mt-0.25 size-3.75 shrink-0" />
+                    <Icon name="error" className="mt-0.25 size-icon-sm shrink-0" />
                     {notSent}
                 </p>
             )}

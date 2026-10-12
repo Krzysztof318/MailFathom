@@ -99,14 +99,14 @@ export function RunStatus({
 
     return (
         <div className="flex flex-col gap-2" ref={region} tabIndex={-1}>
-            <div className={`flex items-start gap-3 rounded-xl px-4.5 py-3.5 ${toneShells[tone]}`}>
+            <div className={`flex items-start gap-3 rounded-lg px-4.5 py-3.5 ${toneShells[tone]}`}>
                 {ended === null ? (
                     /* A pulse rather than a spinner: what a reader is owed is the sentence beside it, and the mark is
                        there to say the sentence is still being made true. It carries no name, the sentence being the
                        whole of what it means, and `prefers-reduced-motion` stops it moving at all. */
                     <span aria-hidden className="mt-1.5 size-2 shrink-0 animate-working rounded-full bg-accent" />
                 ) : (
-                    <Icon className="mt-0.5 size-4.5 shrink-0" name={ended.icon} />
+                    <Icon className="mt-0.5 size-icon-md shrink-0" name={ended.icon} />
                 )}
 
                 {/* The live region is the whole of what the run says rather than its first sentence, so the instant a

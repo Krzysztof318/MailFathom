@@ -1160,7 +1160,7 @@ function ListWaiting() {
                     key={length}
                     className="h-message-row-narrow shrink-0 border-b border-b-sunken workspace:h-message-row"
                 >
-                    <div className="flex h-full flex-col justify-center gap-0.75 border-s-4 border-s-transparent ps-2.5 pe-3.5">
+                    <div className="flex h-full flex-col justify-center gap-1.5 border-s-4 border-s-transparent ps-3 pe-4 workspace:gap-1.25 workspace:ps-2.5 workspace:pe-3.5">
                         <div className="flex items-center gap-2">
                             <Skeleton className="size-8.5 shrink-0 rounded-full workspace:size-5.5" />
                             <Skeleton className="h-2.25" fills={Math.max(28, length - 26)} />
@@ -1170,7 +1170,7 @@ function ListWaiting() {
 
                         {/* The line every row reserves whether it says anything or not, kept empty here for the same
                             reason it is reserved there: the row is this tall either way. */}
-                        <div aria-hidden="true" className="h-4" />
+                        <div aria-hidden="true" className="h-4.5" />
                     </div>
                 </div>
             ))}

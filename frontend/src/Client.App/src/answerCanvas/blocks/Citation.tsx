@@ -77,7 +77,7 @@ export function Citation({ source, position }: { readonly source: string; readon
         <button
             aria-disabled={unfollowable ? true : undefined}
             aria-label={why}
-            className={`rounded px-1.75 py-0.5 align-baseline text-2xs tabular-nums transition ${
+            className={`rounded-xs px-1.75 py-0.5 align-baseline text-xs tabular-nums transition ${
                 unfollowable
                     ? 'cursor-not-allowed bg-rail text-muted'
                     : 'bg-accent-soft text-accent-deep hover:bg-accent hover:text-on-accent'

@@ -107,10 +107,10 @@ export function IntentField({
                 *inside* the first and the bar reads as two nested borders instead of one field that lit up. The field
                 therefore gives its own outline up and the box widens instead — which is also what somebody putting a
                 cursor in it is looking for. */}
-            <div className="flex items-center gap-3 rounded-xl border-2 border-accent px-3.25 py-2 transition focus-within:ring-3 focus-within:ring-accent-soft">
+            <div className="flex items-center gap-3 rounded-lg border-2 border-accent px-3.25 py-2 transition focus-within:ring-3 focus-within:ring-accent-soft">
                 <span
                     aria-hidden="true"
-                    className="shrink-0 rounded-sm bg-accent px-1.75 py-0.75 text-2xs font-semibold tracking-widest text-on-accent"
+                    className="shrink-0 rounded-sm bg-accent px-1.75 py-0.75 text-xs font-semibold text-on-accent"
                 >
                     {translate('ai.badge')}
                 </span>
@@ -130,7 +130,7 @@ export function IntentField({
 
                 <button
                     type="submit"
-                    className="shrink-0 rounded-lg bg-accent px-3 py-1.75 text-base font-semibold text-on-accent shadow-raised transition hover:bg-accent-strong"
+                    className="shrink-0 rounded-md bg-accent px-3 py-1.75 text-base font-semibold text-on-accent shadow-raised transition hover:bg-accent-strong"
                 >
                     {translate('intent.ask')}
                 </button>

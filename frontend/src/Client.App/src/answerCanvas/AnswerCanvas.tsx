@@ -95,7 +95,7 @@ export function AnswerCanvas({
                             className="flex items-start gap-1.75 rounded-md bg-warning-soft px-2.75 py-2 text-sm text-warning-text"
                             role="status"
                         >
-                            <Icon className="mt-0.25 size-3.75" name="hourglass_top" />
+                            <Icon className="mt-0.25 size-icon-sm" name="hourglass_top" />
 
                             {translate('answerCanvas.planAhead', {
                                 plan: String(planSchemaVersion),

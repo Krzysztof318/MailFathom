@@ -34,17 +34,21 @@ const accented = 'bg-accent font-semibold text-on-accent';
 const quiet = 'text-muted hover:bg-hover';
 
 export const segmentShapes: Readonly<Record<SegmentShape, SegmentLook>> = {
-    row: { shape: 'flex-1 rounded-lg py-1 text-center text-sm', chosen: accented, unchosen: quiet },
-    section: { shape: 'flex-1 rounded-md py-1.5 text-center text-sm', chosen: accented, unchosen: quiet },
-    compact: { shape: 'min-w-6.5 rounded-md px-1.75 py-1 text-center text-xs', chosen: accented, unchosen: quiet },
+    row: { shape: 'flex-1 rounded-md py-1 text-center text-sm', chosen: accented, unchosen: quiet },
+    section: { shape: 'flex-1 rounded-md px-2 py-1.5 text-center text-base', chosen: accented, unchosen: quiet },
+    compact: {
+        shape: 'min-w-6.5 rounded-sm px-1.75 py-1 text-center text-sm font-semibold',
+        chosen: accented,
+        unchosen: quiet,
+    },
     chip: {
-        shape: 'rounded-lg px-3.25 py-1.5 text-sm',
+        shape: 'rounded-md px-3.25 py-1.5 text-sm',
         chosen: accented,
         unchosen: 'border border-line bg-sunken text-text-soft hover:bg-hover',
     },
     filter: {
-        shape: 'rounded-lg border px-3.25 py-1.5 text-sm whitespace-nowrap',
-        chosen: 'border-accent-line bg-accent-soft font-semibold text-accent-deep',
-        unchosen: 'border-line bg-sunken text-text-soft hover:bg-hover',
+        shape: 'rounded-md border px-3 py-1.25 text-base whitespace-nowrap',
+        chosen: 'border-accent bg-accent-soft font-semibold text-accent-deep',
+        unchosen: 'border-line-strong bg-panel text-text-soft hover:bg-hover',
     },
 };

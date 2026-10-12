@@ -145,7 +145,7 @@ export function ThreadState({
         >
             <ul
                 className={`${paired ? 'grid grid-cols-2' : 'flex flex-wrap'} ${
-                    desktop ? 'gap-2' : 'gap-1.75 rounded-lg border border-line bg-sunken p-2'
+                    desktop ? 'gap-x-5 gap-y-3' : 'gap-1.75 rounded-md border border-line bg-sunken p-2'
                 }`}
             >
                 {entries.map((entry, place) => (
@@ -156,11 +156,11 @@ export function ThreadState({
                         key={`${entry.aspect}-${String(place)}`}
                         className={
                             desktop
-                                ? 'flex min-w-0 flex-1 basis-37.5 flex-col gap-0.5 rounded-md border border-line bg-panel px-2.5 py-1.75'
+                                ? 'flex min-w-0 flex-1 basis-37.5 flex-col gap-0.75 border-s-2 border-accent-line px-3 py-0.5'
                                 : 'flex min-w-0 flex-1 basis-47.5 flex-col gap-px rounded-md border border-line bg-panel px-2.25 py-1.5'
                         }
                     >
-                        <span className="text-2xs tracking-wider text-muted uppercase">
+                        <span className="text-xs font-semibold text-muted">
                             {translate(aspectLabels[entry.aspect])}
                         </span>
 
@@ -211,7 +211,7 @@ function StateLine({
     return (
         <>
             <div className="flex items-center gap-2.25 border-b border-line bg-sunken px-3 py-2.25">
-                <span className="shrink-0 rounded-xs border border-line-strong px-1.5 py-0.5 text-2xs text-muted">
+                <span className="shrink-0 rounded-xs border border-line-strong px-1.5 py-0.5 text-xs text-muted">
                     {translate('ai.badge')}
                 </span>
 
@@ -228,7 +228,7 @@ function StateLine({
                         setShown(true);
                     }}
                 >
-                    <Icon name="insights" className="size-4.5" />
+                    <Icon name="insights" className="size-icon-md" />
                 </button>
 
                 <AskAboutThread thread={thread} />
@@ -294,7 +294,7 @@ function StateSheet({
         <dialog
             ref={sheet}
             aria-label={translate('threadState.label')}
-            className="fixed inset-x-0 top-auto bottom-0 m-0 hidden h-auto max-h-4/5 w-auto max-w-none flex-col gap-3 overflow-y-auto rounded-t-4xl border-0 bg-panel px-4 pt-2.5 pb-safe-bottom text-text shadow-dialog backdrop:bg-scrim open:flex"
+            className="fixed inset-x-0 top-auto bottom-0 m-0 hidden h-auto max-h-4/5 w-auto max-w-none flex-col gap-3 overflow-y-auto rounded-t-xl border-0 bg-panel px-4 pt-2.5 pb-safe-bottom text-text shadow-dialog backdrop:bg-scrim open:flex"
             onCancel={(event) => {
                 event.preventDefault();
                 onClose();
@@ -310,15 +310,15 @@ function StateSheet({
                 <span className="h-1 w-9.5 rounded-xs bg-line-strong" />
             </span>
 
-            <h2 className="text-xs tracking-widest text-muted uppercase">{translate('threadState.label')}</h2>
+            <h2 className="text-xs font-semibold text-muted">{translate('threadState.label')}</h2>
 
             <ul className="flex flex-col gap-2">
                 {entries.map((entry, place) => (
                     <li
                         key={`${entry.aspect}-${String(place)}`}
-                        className="flex flex-col gap-0.75 rounded-lg border border-line bg-sunken px-3.25 py-2.75"
+                        className="flex flex-col gap-0.75 border-s-2 border-accent-line px-3.5 py-1"
                     >
-                        <span className="text-2xs tracking-wider text-muted uppercase">
+                        <span className="text-xs font-semibold text-muted">
                             {translate(aspectLabels[entry.aspect])}
                         </span>
 
@@ -342,20 +342,20 @@ function StateSheet({
             {handToAgent === null ? null : (
                 <button
                     type="button"
-                    className="flex min-h-12.5 items-center justify-center gap-2.25 rounded-2xl border border-accent-line bg-accent-soft px-3.5 text-md font-semibold text-accent-deep transition hover:border-accent hover:bg-accent hover:text-on-accent"
+                    className="flex min-h-12.5 items-center justify-center gap-2.25 rounded-lg border border-accent-line bg-accent-soft px-3.5 text-md font-semibold text-accent-deep transition hover:border-accent hover:bg-accent hover:text-on-accent"
                     onClick={() => {
                         onClose();
                         handToAgent(thread);
                     }}
                 >
-                    <Icon name="forum" className="size-4.75" />
+                    <Icon name="forum" className="size-icon-lg" />
                     {translate('agent.goWithThread')}
                 </button>
             )}
 
             <button
                 type="button"
-                className="self-end rounded-lg px-3 py-2 text-base text-text-soft transition hover:bg-hover"
+                className="self-end rounded-md px-3 py-2 text-base text-text-soft transition hover:bg-hover"
                 onClick={onClose}
             >
                 {translate('threadState.close')}
@@ -438,7 +438,7 @@ function SourceLink({
                 onFollow(source.storedEmailId);
             }}
         >
-            <Icon name="open_in_new" className="size-3.5" />
+            <Icon name="open_in_new" className="size-icon-xs" />
 
             {translate('threadState.source', {
                 position: new Intl.NumberFormat(locale).format(source.position),

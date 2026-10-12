@@ -329,7 +329,7 @@ describe('AgentSpace', () => {
     it('offers Cancel only while an answer is being composed', async () => {
         screenOf(deploymentAnswering().transport);
 
-        expect(screen.getByRole('button', { name: 'Cancel — nothing is running' }).getAttribute('aria-disabled')).toBe(
+        expect(screen.getByRole('button', { name: 'Cancel - nothing is running' }).getAttribute('aria-disabled')).toBe(
             'true',
         );
 
@@ -743,8 +743,8 @@ describe('AgentSpace', () => {
             const event = await screen.findByRole('article', { name: 'Event proposal' });
             const task = screen.getByRole('article', { name: 'Task proposal' });
 
-            fireEvent.click(within(event).getByRole('button', { name: /^Open the calendar —/ }));
-            fireEvent.click(within(task).getByRole('button', { name: /^Open the thread —/ }));
+            fireEvent.click(within(event).getByRole('button', { name: /^Open the calendar -/ }));
+            fireEvent.click(within(task).getByRole('button', { name: /^Open the thread -/ }));
 
             expect(onLook.mock.calls).toEqual([[{ kind: 'calendar' }], [{ kind: 'thread', email: newsletterId }]]);
         });

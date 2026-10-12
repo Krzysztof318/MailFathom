@@ -163,7 +163,7 @@ export function ToastCard({
             // An error is the one thing said here that cannot wait for a gap in what a screen reader is already
             // reading, so it announces where it stands rather than politely with the rest of the surface.
             role={!running && toast.stands.kind === 'error' ? 'alert' : undefined}
-            className={`pointer-events-auto relative flex touch-none items-start gap-3 overflow-hidden rounded-3xl border border-line bg-panel ps-3.25 pe-3 pt-3.25 pb-3.75 opacity-80 shadow-overlay transition hover:opacity-100 ${
+            className={`pointer-events-auto relative flex touch-none items-start gap-3 overflow-hidden rounded-lg border border-line bg-panel ps-3.25 pe-3 pt-3.25 pb-3.75 opacity-80 shadow-overlay transition hover:opacity-100 ${
                 toast.leaving ? 'animate-toast-leaving' : 'animate-toast-arriving'
             }`}
             // How long leaving takes is how long the surface waits before the card is gone, which is one number in
@@ -175,9 +175,9 @@ export function ToastCard({
             onPointerCancel={endSwipe}
         >
             <span
-                className={`flex size-8 shrink-0 items-center justify-center rounded-lg border border-line ${mark.tint}`}
+                className={`flex size-8 shrink-0 items-center justify-center rounded-md border border-line ${mark.tint}`}
             >
-                <Icon name={mark.icon} className={`size-5.25 ${running ? 'animate-spin' : ''}`} />
+                <Icon name={mark.icon} className={`size-icon-xl ${running ? 'animate-spin' : ''}`} />
             </span>
 
             <div className="flex min-w-0 flex-1 flex-col gap-1 pt-0.5">
@@ -192,7 +192,7 @@ export function ToastCard({
                 {action === undefined ? null : (
                     <button
                         type="button"
-                        className="mt-1.25 self-start rounded-lg border border-line-strong px-3.25 py-1.5 text-base font-semibold text-text transition hover:bg-hover"
+                        className="mt-1.25 self-start rounded-md border border-line-strong px-3.25 py-1.5 text-base font-semibold text-text transition hover:bg-hover"
                         onClick={() => {
                             // The card goes as the action is taken, which is the design's own behaviour and
                             // the honest one: a toast still offering to undo something already undone is a control
@@ -209,10 +209,10 @@ export function ToastCard({
                 type="button"
                 aria-label={closing}
                 title={closing}
-                className="flex size-7.5 shrink-0 items-center justify-center rounded-lg text-muted transition hover:bg-hover hover:text-text"
+                className="flex size-7.5 shrink-0 items-center justify-center rounded-md text-muted transition hover:bg-hover hover:text-text"
                 onClick={close}
             >
-                <Icon name="close" className="size-4.75" />
+                <Icon name="close" className="size-icon-lg" />
             </button>
 
             {running ? null : (

@@ -61,7 +61,7 @@ export function NewContact({
         <dialog
             ref={asked}
             aria-labelledby={asks}
-            className="m-auto w-dialog max-w-dialog-narrow rounded-2xl border border-line bg-panel p-0 text-text shadow-dialog backdrop:bg-scrim"
+            className="m-auto w-dialog max-w-dialog-narrow rounded-lg border border-line bg-panel p-0 text-text shadow-dialog backdrop:bg-scrim"
             onClose={(closing) => {
                 const dialog = closing.currentTarget;
                 const answer = dialog.returnValue;
@@ -93,7 +93,7 @@ export function NewContact({
                 }}
             >
                 <div className="flex items-center gap-3 border-b border-line bg-sunken px-4.5 py-3.5">
-                    <Icon name="person" className="size-5 shrink-0 text-muted" />
+                    <Icon name="person" className="size-icon-lg shrink-0 text-muted" />
 
                     <h2 id={asks} className="min-w-0 flex-1 truncate text-lg font-semibold">
                         {translate('people.newContact')}
@@ -151,7 +151,7 @@ export function NewContact({
                         </p>
                     )}
 
-                    <p className="rounded-lg bg-accent-soft px-3 py-2.5 text-sm text-accent-deep text-pretty">
+                    <p className="rounded-md bg-accent-soft px-3 py-2.5 text-sm text-accent-deep text-pretty">
                         {translate('people.newContactHint')}
                     </p>
                 </div>

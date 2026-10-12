@@ -95,14 +95,14 @@ export function ReminderPanel({
             ref={panel}
             aria-labelledby={names}
             aria-describedby={describes}
-            className="m-auto w-dialog max-w-dialog-narrow rounded-2xl border border-line bg-panel p-5 text-text shadow-dialog backdrop:bg-scrim"
+            className="m-auto w-dialog max-w-dialog-narrow rounded-lg border border-line bg-panel p-5 text-text shadow-dialog backdrop:bg-scrim"
             onToggle={(event) => {
                 setStanding(event.newState === 'open');
             }}
         >
             <div className="flex flex-col gap-3.5">
                 <div className="flex items-start gap-2.5">
-                    <Icon name="notifications_active" className="mt-0.5 size-5 shrink-0 text-muted" />
+                    <Icon name="notifications_active" className="mt-0.5 size-icon-lg shrink-0 text-muted" />
 
                     <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                         <h2 id={names} className="text-lg font-semibold">
@@ -131,7 +131,7 @@ export function ReminderPanel({
                                 <button
                                     type="button"
                                     aria-pressed={set}
-                                    className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-base ${
+                                    className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-base ${
                                         set
                                             ? 'border-accent bg-accent-soft font-semibold text-accent-strong'
                                             : 'border-line bg-panel text-text-soft'
@@ -140,7 +140,7 @@ export function ReminderPanel({
                                         toggle(preset);
                                     }}
                                 >
-                                    <Icon name={set ? 'check' : 'add'} className="size-4 shrink-0" />
+                                    <Icon name={set ? 'check' : 'add'} className="size-icon-sm shrink-0" />
                                     {wordReminderLead(preset, anchor, locale, translate)}
                                 </button>
                             </li>
@@ -156,7 +156,7 @@ export function ReminderPanel({
                         aria-label={translate('reminders.custom.count')}
                         placeholder={translate('reminders.custom.hint')}
                         value={typed}
-                        className="w-20 rounded-lg border border-line bg-panel px-2.5 py-1.5 text-base text-text"
+                        className="w-20 rounded-md border border-line bg-panel px-2.5 py-1.5 text-base text-text"
                         onChange={(event) => {
                             setTyped(event.currentTarget.value);
                         }}
@@ -165,14 +165,14 @@ export function ReminderPanel({
                     <div
                         role="group"
                         aria-label={translate('reminders.custom.unit')}
-                        className="flex gap-0.5 rounded-xl border border-line bg-panel p-0.5"
+                        className="flex gap-0.5 rounded-md border border-line bg-panel p-0.5"
                     >
                         {reminderUnits.map((offered) => (
                             <button
                                 key={offered}
                                 type="button"
                                 aria-pressed={unit === offered}
-                                className={`rounded-lg px-2.5 py-1 text-base ${
+                                className={`rounded-md px-2.5 py-1 text-base ${
                                     unit === offered ? 'bg-accent font-semibold text-on-accent' : 'text-text-soft'
                                 }`}
                                 onClick={() => {
@@ -186,7 +186,7 @@ export function ReminderPanel({
 
                     <button
                         type="button"
-                        className="rounded-xl border border-accent-line bg-accent-soft px-3 py-1.5 text-base font-semibold text-accent-strong"
+                        className="rounded-md border border-accent-line bg-accent-soft px-3 py-1.5 text-base font-semibold text-accent-strong"
                         onClick={addTyped}
                     >
                         {translate('reminders.custom.add')}
@@ -217,7 +217,7 @@ export function ReminderPanel({
                                             onRemindersChanged(withoutReminderLead(reminders, lead));
                                         }}
                                     >
-                                        <Icon name="close" className="size-4" />
+                                        <Icon name="close" className="size-icon-sm" />
                                     </button>
                                 </li>
                             );
@@ -226,7 +226,7 @@ export function ReminderPanel({
                 )}
 
                 <p id={describes} className="flex items-start gap-2 text-base text-muted text-pretty">
-                    <Icon name="info" className="mt-0.5 size-4 shrink-0 text-faint" />
+                    <Icon name="info" className="mt-0.5 size-icon-sm shrink-0 text-faint" />
                     {translate('reminders.raises')}
                 </p>
 
@@ -243,7 +243,7 @@ export function ReminderPanel({
 
                     <button
                         type="button"
-                        className="rounded-lg bg-accent px-4 py-2 text-base font-semibold text-on-accent"
+                        className="rounded-md bg-accent px-4 py-2 text-base font-semibold text-on-accent"
                         onClick={() => {
                             panel.current?.close();
                         }}

@@ -99,13 +99,13 @@ export function EventDialog({
         <dialog
             ref={asked}
             aria-label={event.title}
-            className="m-auto w-dialog max-w-dialog-narrow rounded-2xl border border-line bg-panel p-0 text-text shadow-dialog backdrop:bg-scrim"
+            className="m-auto w-dialog max-w-dialog-narrow rounded-lg border border-line bg-panel p-0 text-text shadow-dialog backdrop:bg-scrim"
             // The screen lets go of the event as the dialog is left, which takes this component down with it — so
             // nothing half-typed outlives the question it was typed into and there is nothing here to put back.
             onClose={onLeft}
         >
             <div className="flex items-center gap-3 border-b border-line bg-sunken px-4.5 py-3.5">
-                <span className="rounded-full border border-line px-2.25 py-0.5 text-2xs tracking-widest text-muted uppercase">
+                <span className="rounded-full border border-line px-2.25 py-0.5 text-xs font-semibold text-muted">
                     {translate(event.sourceMessage === null ? 'calendar.kindOwn' : 'calendar.kindFromMail')}
                 </span>
 
@@ -135,19 +135,19 @@ export function EventDialog({
 
                         <button
                             type="button"
-                            className="flex items-center gap-1.75 self-start rounded-lg px-2.75 py-1.5 text-sm text-text-soft hover:underline"
+                            className="flex items-center gap-1.75 self-start rounded-md px-2.75 py-1.5 text-sm text-text-soft hover:underline"
                             onClick={() => {
                                 panel.current?.showModal();
                             }}
                         >
-                            <Icon name="notifications" className="size-4" />
+                            <Icon name="notifications" className="size-icon-sm" />
                             {wordReminderCount(draft.reminders.length, locale, translate)}
                         </button>
 
                         {event.sourceMessage === null || onOpenSource === undefined ? null : (
                             <button
                                 type="button"
-                                className="flex items-center gap-1.75 self-start rounded-lg bg-accent-soft px-2.75 py-1.5 text-sm text-accent-deep hover:underline"
+                                className="flex items-center gap-1.75 self-start rounded-md bg-accent-soft px-2.75 py-1.5 text-sm text-accent-deep hover:underline"
                                 onClick={() => {
                                     const message = event.sourceMessage;
 
@@ -157,7 +157,7 @@ export function EventDialog({
                                     }
                                 }}
                             >
-                                <Icon name="open_in_new" className="size-4" />
+                                <Icon name="open_in_new" className="size-icon-sm" />
                                 {translate('calendar.openSource')}
                             </button>
                         )}

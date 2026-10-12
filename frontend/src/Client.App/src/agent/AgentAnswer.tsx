@@ -28,8 +28,8 @@ export function AnswerScope({ scope }: { readonly scope: MessageKey }) {
     const { translate } = useLocalization();
 
     return (
-        <p className="flex items-center gap-1.75 text-2xs text-muted">
-            <span className="tracking-wider text-accent-deep">{translate('ai.badge')}</span>
+        <p className="flex items-center gap-1.75 text-xs text-muted">
+            <span className="font-semibold text-accent-deep">{translate('ai.badge')}</span>
             <span>{translate('agent.scopeLine', { scope: translate(scope) })}</span>
         </p>
     );
@@ -62,7 +62,7 @@ export function AgentAnswer({ answer, settledThrough }: { readonly answer: Answe
 
             {answer.blocks.length === 0 && answer.ending === null ? (
                 <p className="flex items-center gap-2 text-md text-muted">
-                    <Icon name="autorenew" className="size-4 animate-spin text-accent-deep" />
+                    <Icon name="autorenew" className="size-icon-sm animate-spin text-accent-deep" />
                     {translate('agent.working')}
                 </p>
             ) : null}
@@ -88,7 +88,7 @@ export function AgentAnswer({ answer, settledThrough }: { readonly answer: Answe
 
             {answer.ending === 'failed' ? (
                 <p role="status" className="flex items-start gap-1.75 text-md text-warning-text">
-                    <Icon name="error" className="mt-0.5 size-4 shrink-0" />
+                    <Icon name="error" className="mt-0.5 size-icon-sm shrink-0" />
                     {translate('agent.failed')}
                 </p>
             ) : null}

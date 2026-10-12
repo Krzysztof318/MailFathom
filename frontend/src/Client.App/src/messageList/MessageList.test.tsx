@@ -698,7 +698,7 @@ describe('MessageList', () => {
 
         expect(
             await screen.findByText(
-                'Nothing has been taken into this deployment from this mailbox yet, so there is nothing to show. The folder is not empty — it has not been read.',
+                'Nothing has been taken into this deployment from this mailbox yet, so there is nothing to show. The folder is not empty - it has not been read.',
             ),
         ).toBeDefined();
     });

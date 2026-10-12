@@ -77,7 +77,7 @@ export function ConversationThread({
                     turn.kind === 'question' ? (
                         <p
                             key={turn.sequence}
-                            className={`max-w-agent-question-narrow self-end rounded-lg bg-accent-soft px-3.5 py-2.75 text-lg text-text text-pretty whitespace-pre-wrap workspace:max-w-agent-question ${
+                            className={`max-w-agent-question-narrow self-end rounded-md bg-accent-soft px-3.5 py-2.75 text-lg text-text text-pretty whitespace-pre-wrap workspace:max-w-agent-question ${
                                 turn.sequence > settledThrough ? 'animate-arrival' : ''
                             }`}
                         >
@@ -112,7 +112,7 @@ export function ConversationThread({
 
                 {status === undefined ? null : (
                     <p className="flex animate-arrival items-center gap-2.25 self-start">
-                        <Icon name="progress_activity" className="size-4.25 animate-spin text-accent-deep" />
+                        <Icon name="progress_activity" className="size-icon-md animate-spin text-accent-deep" />
                         <span role="status" aria-live="polite" className="min-w-0 text-md text-muted">
                             {status ?? translate('agent.statusFallback')}
                         </span>

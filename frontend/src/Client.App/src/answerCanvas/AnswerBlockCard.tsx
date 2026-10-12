@@ -132,7 +132,7 @@ export function AnswerBlockCard({
 
             {state === 'partial' ? (
                 <p className="flex items-start gap-1.75 rounded-md bg-warning-soft px-2.75 py-2 text-sm text-warning-text">
-                    <Icon className="mt-0.25 size-3.75" name="hourglass_top" />
+                    <Icon className="mt-0.25 size-icon-sm" name="hourglass_top" />
                     {translate('answerBlock.partial')}
                 </p>
             ) : null}
@@ -140,7 +140,7 @@ export function AnswerBlockCard({
             {nothingDrawn(state) ? (
                 <div className="flex flex-col items-center gap-1.75 px-2.5 py-5.5 text-center">
                     <Icon
-                        className={`size-6.5 ${state === 'error' ? 'text-warning' : 'text-faint'}`}
+                        className={`size-icon-2xl ${state === 'error' ? 'text-warning' : 'text-faint'}`}
                         name={state === 'empty' && emptyIcon !== undefined ? emptyIcon : stateIcons[state]}
                     />
 
@@ -182,7 +182,7 @@ export function UnrecognisedAnswerBlock({ named }: { readonly named: string }) {
             meta={translate('answerBlock.unrecognisedType', { named })}
         >
             <div className="flex items-start gap-2.75">
-                <Icon className="mt-0.5 size-6.5 shrink-0 text-faint" name="extension_off" />
+                <Icon className="mt-0.5 size-icon-2xl shrink-0 text-faint" name="extension_off" />
 
                 <div className="flex flex-col gap-1.25">
                     <p className="text-sm text-text-soft text-pretty">
@@ -217,12 +217,12 @@ function BlockCard({
     return (
         <article
             aria-labelledby={labelId}
-            className={`flex flex-col gap-3 rounded-xl border px-4.5 py-4 ${tones[tone]}`}
+            className={`flex flex-col gap-3 rounded-md border px-4.5 py-4 ${tones[tone]}`}
             ref={ref}
             tabIndex={0}
         >
             <div className="flex flex-wrap items-center gap-2.5">
-                <h3 className="text-2xs tracking-widest text-muted uppercase" id={labelId}>
+                <h3 className="text-xs font-semibold text-muted" id={labelId}>
                     {label}
                 </h3>
 

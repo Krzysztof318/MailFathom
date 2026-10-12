@@ -98,7 +98,7 @@ export function PersonCorrespondence({
                                 onOpenDocument({ messageId: document.messageId, position: document.position });
                             }}
                         >
-                            <span className="shrink-0 text-xs tracking-wide text-muted uppercase">
+                            <span className="shrink-0 text-xs font-semibold text-muted">
                                 {kindOf(document.fileName, document.mediaType)}
                             </span>
                             <span className="min-w-0 flex-1 truncate text-base">
@@ -130,9 +130,9 @@ function CorrespondenceColumn({
     return (
         <section
             aria-label={heading}
-            className="flex min-w-0 flex-1 flex-col gap-2.5 rounded-xl border border-line bg-panel px-4.25 py-3.75"
+            className="flex min-w-0 flex-1 flex-col gap-2.5 rounded-lg border border-line bg-panel px-4.25 py-3.75"
         >
-            <h3 className="text-xs tracking-widest text-muted uppercase">{heading}</h3>
+            <h3 className="text-xs font-semibold text-muted">{heading}</h3>
 
             {reading.reading ? (
                 <p role="status" className="text-sm text-muted">

@@ -202,8 +202,8 @@ export function DiscoverSpace({
                         />
 
                         {handRunOver !== null && answered ? (
-                            <div className="flex flex-wrap items-center gap-3 rounded-lg border border-accent-line bg-accent-soft px-4 py-3.25">
-                                <span className="rounded-xs bg-accent px-1.75 py-0.75 text-2xs tracking-wide text-on-accent">
+                            <div className="flex flex-wrap items-center gap-3 rounded-md border border-accent-line bg-accent-soft px-4 py-3.25">
+                                <span className="rounded-xs bg-accent px-1.75 py-0.75 text-xs font-semibold text-on-accent">
                                     {translate('ai.badge')}
                                 </span>
 

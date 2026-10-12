@@ -130,7 +130,7 @@ describe('EvidenceList', () => {
         expect(screen.getByText('private source')).toBeDefined();
         expect(
             screen.getByText(
-                'Content not available for review — the conclusion drawn from this source is kept in the result.',
+                'Content not available for review - the conclusion drawn from this source is kept in the result.',
             ),
         ).toBeDefined();
         expect(screen.getByText('relevance 94%')).toBeDefined();

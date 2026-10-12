@@ -106,17 +106,17 @@ export function EventEntry({
             }}
         >
             {timeShown(shape) && !event.isAllDay && when !== null ? (
-                <span className="text-2xs text-muted">{when}</span>
+                <span className="text-xs text-muted">{when}</span>
             ) : null}
 
-            <span className={`truncate ${shape === 'cell' ? 'text-2xs' : 'text-sm'} text-pretty`}>{event.title}</span>
+            <span className={`truncate ${shape === 'cell' ? 'text-xs' : 'text-sm'} text-pretty`}>{event.title}</span>
 
             {/* The message the event was read out of, said as a mark rather than as a second line: which message it was
                 is the event's own surface to say, and a title beside a title would compete with the one the reader is
                 scanning for. */}
             {event.sourceMessage === null || shape === 'cell' ? null : (
-                <span className="flex items-center gap-1 text-2xs text-accent-deep">
-                    <Icon name="open_in_new" className="size-3.5" />
+                <span className="flex items-center gap-1 text-xs text-accent-deep">
+                    <Icon name="open_in_new" className="size-icon-xs" />
                     {translate('calendar.fromMail')}
                 </span>
             )}

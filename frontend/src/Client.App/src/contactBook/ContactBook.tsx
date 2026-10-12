@@ -236,7 +236,7 @@ export function ContactBook({
     return (
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             <div className="flex shrink-0 flex-col gap-2.25 border-b border-line px-3 py-2.75">
-                <fieldset className="flex items-center gap-1 rounded-xl border border-line bg-rail p-0.75">
+                <fieldset className="flex items-center gap-1 rounded-md border border-line bg-rail p-0.75">
                     <legend className="sr-only">{translate('people.books')}</legend>
 
                     {books.map((name) => (

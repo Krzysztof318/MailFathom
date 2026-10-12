@@ -312,7 +312,7 @@ test('fits the embedded original to the height its document reports, and opens i
     const frame = message.locator(`iframe[title="${markupFrame}"]`);
 
     await expect(
-        message.getByText("The sender's HTML in isolation — scripts and remote resources blocked"),
+        message.getByText("The sender's HTML in isolation - scripts and remote resources blocked"),
     ).toBeVisible();
 
     // Read together on every attempt, because the script reports again as the document settles and each report moves

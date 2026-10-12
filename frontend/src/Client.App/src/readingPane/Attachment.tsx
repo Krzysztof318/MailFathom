@@ -72,7 +72,7 @@ export function Attachment({
                         }
                     }}
                 >
-                    <Icon name="download" className="size-4.25" />
+                    <Icon name="download" className="size-icon-md" />
                 </button>
             </div>
 

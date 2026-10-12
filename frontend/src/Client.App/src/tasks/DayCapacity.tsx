@@ -118,13 +118,13 @@ export function DayCapacity({
     return (
         <section
             aria-labelledby="tasks-day-capacity"
-            className="flex flex-col gap-2.25 rounded-xl bg-accent-soft p-3.25"
+            className="flex flex-col gap-2.25 rounded-lg bg-accent-soft p-3.25"
         >
             <div className="flex items-center gap-2.25">
-                <span className="rounded-sm bg-accent px-1.5 py-0.5 text-2xs font-semibold text-on-accent">
+                <span className="rounded-sm bg-accent px-1.5 py-0.5 text-xs font-semibold text-on-accent">
                     {translate('tasks.authored')}
                 </span>
-                <h2 id="tasks-day-capacity" className="text-xs tracking-widest text-accent-deep uppercase">
+                <h2 id="tasks-day-capacity" className="text-xs font-semibold text-accent-deep">
                     {translate('tasks.dayCapacity')}
                 </h2>
             </div>
@@ -154,7 +154,7 @@ export function DayCapacity({
                         {layout.placements.map((placement) => (
                             <li
                                 key={placement.taskId}
-                                className="flex items-baseline gap-2.5 rounded-lg bg-panel px-2.75 py-2"
+                                className="flex items-baseline gap-2.5 rounded-md bg-panel px-2.75 py-2"
                             >
                                 <time dateTime={placement.startAt} className="w-13 shrink-0 text-xs text-muted">
                                     {clock.format(new Date(placement.startAt))}

@@ -46,9 +46,7 @@ export function WeekView({
                         } ${standing ? 'bg-accent-soft' : ''}`}
                     >
                         <p className="flex items-baseline gap-1.75 border-b border-line-soft pb-1.5">
-                            <span className="text-2xs tracking-widest text-muted uppercase">
-                                {wordWeekday(day, locale)}
-                            </span>
+                            <span className="text-xs font-semibold text-muted">{wordWeekday(day, locale)}</span>
                             <span
                                 className={`text-base font-semibold ${
                                     standing

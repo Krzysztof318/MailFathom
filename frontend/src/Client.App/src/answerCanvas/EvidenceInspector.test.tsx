@@ -377,7 +377,7 @@ describe('EvidenceInspector', () => {
     it.each([
         [401, '', 'The session ended while this source was being opened. Sign in again to see it.'],
         [403, '', 'This account is not allowed to read this source.'],
-        [500, '', 'No connection to the server — this source cannot be opened.'],
+        [500, '', 'No connection to the server - this source cannot be opened.'],
         [
             200,
             'not a resolution',

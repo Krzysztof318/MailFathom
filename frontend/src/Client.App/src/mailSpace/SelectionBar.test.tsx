@@ -157,7 +157,7 @@ describe('SelectionBar', () => {
 
         expect(
             screen.getByRole('button', {
-                name: 'Move — messages from several accounts cannot be filed into one folder.',
+                name: 'Move - messages from several accounts cannot be filed into one folder.',
             }),
         ).toBeDefined();
     });

@@ -86,10 +86,10 @@ export function ReadingsAsked({
             // a strip of scrim down either side and a body too narrow for the passages the surface exists to show.
             // So the narrow shape is the screen — full size, no border, no radius, no shadow, its own safe-area
             // insets, since a dialog stands in the platform's top layer and the frame's padding is not around it.
-            className="m-0 h-full max-h-full w-full max-w-full rounded-none border-0 bg-panel p-0 pt-safe-top pr-safe-right pb-safe-bottom pl-safe-left text-text open:flex open:flex-col backdrop:bg-scrim workspace:m-auto workspace:h-auto workspace:max-h-readings-tall workspace:w-readings workspace:max-w-full workspace:rounded-2xl workspace:border workspace:border-line workspace:shadow-dialog"
+            className="m-0 h-full max-h-full w-full max-w-full rounded-none border-0 bg-panel p-0 pt-safe-top pr-safe-right pb-safe-bottom pl-safe-left text-text open:flex open:flex-col backdrop:bg-scrim workspace:m-auto workspace:h-auto workspace:max-h-readings-tall workspace:w-readings workspace:max-w-full workspace:rounded-lg workspace:border workspace:border-line workspace:shadow-dialog"
         >
             <div className="flex shrink-0 items-center gap-2.5 border-b border-line px-4 py-3">
-                <Icon name="auto_awesome" className="size-5 shrink-0 text-accent-strong" />
+                <Icon name="auto_awesome" className="size-icon-lg shrink-0 text-accent-strong" />
 
                 <h2 id={names} className="flex-1 truncate text-base font-semibold">
                     {translate('reading.title')}
@@ -142,12 +142,10 @@ function AskedMessage({
                 return (
                     <section
                         key={mark.aspect}
-                        className="flex flex-col gap-2 rounded-xl border border-line bg-sunken px-3.75 py-3.25"
+                        className="flex flex-col gap-2 rounded-lg border border-line bg-sunken px-3.75 py-3.25"
                     >
                         <div className="flex flex-wrap items-center gap-1.5">
-                            <h3 className="text-2xs font-semibold tracking-widest text-muted uppercase">
-                                {translate(readingNames[mark.aspect])}
-                            </h3>
+                            <h3 className="text-xs font-semibold text-muted">{translate(readingNames[mark.aspect])}</h3>
 
                             {/* What produced the reading, drawn apart from the reading itself and drawn differently
                                 for each producer: a deterministic rule re-run over the same message says the same
@@ -155,7 +153,7 @@ function AskedMessage({
                                 they read the sentence. The words carry the distinction as well as the tint, because
                                 one only a colour makes is one a reader who cannot see it does not get. */}
                             <span
-                                className={`ms-auto rounded-full px-2 py-px text-2xs ${
+                                className={`ms-auto rounded-full px-2 py-px text-xs ${
                                     mark.source === 'Model'
                                         ? 'bg-accent-soft text-accent-deep'
                                         : 'bg-healthy-soft text-healthy-text'
@@ -169,7 +167,7 @@ function AskedMessage({
 
                         {due === null ? null : (
                             <p className="flex items-center gap-1.5 text-sm text-muted">
-                                <Icon name="schedule" className="size-4 shrink-0" />
+                                <Icon name="schedule" className="size-icon-sm shrink-0" />
 
                                 {translate('reading.dueAt', { when: due })}
                             </p>
@@ -234,7 +232,7 @@ function MarkEvidence({ mark, evidence }: { readonly mark: MailEnrichmentMark; r
                 return (
                     <li
                         key={passage}
-                        className="max-h-37.5 overflow-y-auto rounded-e-lg border-s-2 border-s-line-strong bg-panel px-3 py-2.5 text-sm text-text-soft text-pretty"
+                        className="max-h-37.5 overflow-y-auto rounded-e-md border-s-2 border-s-line-strong bg-panel px-3 py-2.5 text-sm text-text-soft text-pretty"
                     >
                         {words ?? <span className="text-faint">{translate(insteadOf(cited))}</span>}
                     </li>

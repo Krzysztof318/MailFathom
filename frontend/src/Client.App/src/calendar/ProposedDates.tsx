@@ -43,9 +43,9 @@ export function ProposedDates({
             aria-label={translate('calendar.proposedHeading')}
             className="flex shrink-0 flex-col gap-2.75 border-line bg-sunken px-4 py-3.5 panes:w-calendar-side panes:overflow-y-auto panes:border-s"
         >
-            <h3 className="flex items-center gap-2.25 text-2xs tracking-widest text-muted uppercase">
+            <h3 className="flex items-center gap-2.25 text-xs font-semibold text-muted">
                 {translate('calendar.proposedHeading')}
-                <span className="rounded-sm bg-accent px-1.5 py-0.5 text-2xs tracking-normal text-on-accent normal-case">
+                <span className="rounded-sm bg-accent px-1.5 py-0.5 text-xs text-on-accent">
                     {translate('calendar.authored')}
                 </span>
             </h3>
@@ -59,7 +59,7 @@ export function ProposedDates({
                     {inTimeOrder(proposals).map((proposal) => (
                         <li
                             key={proposal.id}
-                            className="flex flex-col gap-1.5 rounded-xl border border-dashed border-accent-line bg-panel px-3 py-2.75"
+                            className="flex flex-col gap-1.5 rounded-md border border-dashed border-accent-line bg-panel px-3 py-2.75"
                         >
                             <p className="flex items-baseline gap-2.25">
                                 <span className="min-w-0 flex-1 text-sm text-pretty">{proposal.title}</span>
@@ -69,8 +69,8 @@ export function ProposedDates({
                             </p>
 
                             {proposal.sourceMessage === null ? null : (
-                                <p className="flex items-center gap-1 text-2xs text-muted">
-                                    <Icon name="open_in_new" className="size-3.5" />
+                                <p className="flex items-center gap-1 text-xs text-muted">
+                                    <Icon name="open_in_new" className="size-icon-xs" />
                                     {translate('calendar.fromMail')}
                                 </p>
                             )}

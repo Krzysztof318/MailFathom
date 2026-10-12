@@ -24,7 +24,7 @@ const longestWaitBefore = [1_250, 2_500, 5_000, 10_000, 20_000] as const;
 
 /** The frame's line saying which of the automatic attempts it is on. */
 function attempting(page: Page, attempt: number) {
-    return page.getByText(`Your deployment did not answer. Trying again — attempt ${String(attempt)} of 5.`);
+    return page.getByText(`Your deployment did not answer. Trying again - attempt ${String(attempt)} of 5.`);
 }
 
 function sessionReads(deployment: FakeDeployment): number {

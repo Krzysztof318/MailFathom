@@ -20,7 +20,7 @@ export type PersonAvatarPlace = 'menu' | 'profile';
 
 const places: Readonly<Record<PersonAvatarPlace, string>> = {
     menu: 'size-8.5 text-xs',
-    profile: 'size-11 text-md',
+    profile: 'size-11.5 text-2xl',
 };
 
 export function PersonAvatar({
@@ -44,7 +44,7 @@ export function PersonAvatar({
             className={`flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-line-strong font-medium tracking-wide text-text-soft ${places[place]}`}
         >
             {picture === null ? (
-                (initials ?? <Icon name="person" className="size-5" />)
+                (initials ?? <Icon name="person" className="size-icon-lg" />)
             ) : (
                 // The empty alternative text is the markup saying this picture says nothing, rather than a sentence
                 // somebody reads: the circle around it is already hidden, and the name it stands for is beside it.

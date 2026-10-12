@@ -224,13 +224,13 @@ describe('FolderMaintenanceProvider', () => {
             held().declare(work, { id: 'PROJECTS', name: 'Projects' });
         });
 
-        expect(screen.getByText('Work — inside “Projects”')).toBeDefined();
+        expect(screen.getByText('Work - inside “Projects”')).toBeDefined();
 
         chose(/Kind of folder/, 'Trash');
 
         // The folder goes where the service puts such a folder rather than inside the row the dialog was opened on,
         // so the dialog stops naming that row the moment the role is chosen.
-        expect(screen.queryByText('Work — inside “Projects”')).toBeNull();
+        expect(screen.queryByText('Work - inside “Projects”')).toBeNull();
         expect(screen.getByText('Work')).toBeDefined();
 
         fireEvent.click(screen.getByRole('button', { name: 'Create folder' }));
