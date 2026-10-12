@@ -26,7 +26,7 @@ After=network-online.target
 # fork of the open-source MinIO server, keeping one release line alive after upstream ended community distribution. It
 # is AGPL-3.0-or-later; this file names an image your host pulls from PGSTY's own registry and carries no part of it,
 # which is the reading THIRD_PARTY_LICENSES.md records.
-Image=docker.io/pgsty/silo:RELEASE.2026-08-06T00-00-00Z
+Image=docker.io/pgsty/silo:RELEASE.2026-09-16T00-00-00Z
 ContainerName=mailfathom-silo
 
 # Only the internal network, and no PublishPort= for the S3 API at all. What answers there is the raw MIME of every

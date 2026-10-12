@@ -428,7 +428,7 @@ podman run --rm --interactive \
   --network mailfathom-backend \
   --volume "$PWD/mailfathom-content-backup:/backup:Z" \
   --entrypoint sh \
-  docker.io/pgsty/silo:RELEASE.2026-08-06T00-00-00Z -s "$access_key_id" "$secret_access_key" <<'BACKUP'
+  docker.io/pgsty/silo:RELEASE.2026-09-16T00-00-00Z -s "$access_key_id" "$secret_access_key" <<'BACKUP'
 set -eu
 mcli --insecure alias set store https://mailfathom-silo:9000 "$1" "$2"
 mcli --insecure mirror --remove store/mailfathom-content /backup

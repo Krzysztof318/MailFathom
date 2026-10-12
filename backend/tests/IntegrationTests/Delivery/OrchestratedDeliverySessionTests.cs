@@ -32,7 +32,7 @@ namespace MailFathom.IntegrationTests.Delivery;
 public sealed class OrchestratedDeliverySessionTests(MailFathomOrchestrationFixture orchestration)
 {
     /// <summary>
-    /// GreenMail 2.1.11 answers <c>EHLO</c> with <c>AUTH PLAIN LOGIN XOAUTH2</c> and <c>SMTPUTF8</c>, and with neither
+    /// GreenMail 2.1.14 answers <c>EHLO</c> with <c>AUTH PLAIN LOGIN XOAUTH2</c> and <c>SMTPUTF8</c>, and with neither
     /// <c>SIZE</c> nor <c>8BITMIME</c>. That is what the three facts are asserted against, and the assertion holds
     /// because the app model pins the image tag; a failure here is the pin having moved, and what it costs is stated
     /// rather than assumed — an unbounded message size and eight-bit content are the two facts this server cannot

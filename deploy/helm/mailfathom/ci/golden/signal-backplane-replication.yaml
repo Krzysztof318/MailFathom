@@ -71,7 +71,7 @@ metadata:
     helm.sh/chart: mailfathom-0.0.0
     app.kubernetes.io/name: mailfathom-postgres
     app.kubernetes.io/instance: mailfathom
-    app.kubernetes.io/version: "0.8.6-pg18"
+    app.kubernetes.io/version: "0.8.7-pg18"
     app.kubernetes.io/component: database
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/part-of: mailfathom
@@ -133,7 +133,7 @@ metadata:
     helm.sh/chart: mailfathom-0.0.0
     app.kubernetes.io/name: mailfathom-postgres
     app.kubernetes.io/instance: mailfathom
-    app.kubernetes.io/version: "0.8.6-pg18"
+    app.kubernetes.io/version: "0.8.7-pg18"
     app.kubernetes.io/component: database
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/part-of: mailfathom
@@ -180,7 +180,7 @@ metadata:
     helm.sh/chart: mailfathom-0.0.0
     app.kubernetes.io/name: mailfathom-valkey
     app.kubernetes.io/instance: mailfathom
-    app.kubernetes.io/version: "c123e3715db63d06d4ad6964884037aa0d5d4d703939b9929954112889708e1"
+    app.kubernetes.io/version: "418652cfb58ef879d4978c33553735d7147016032d5aefaa14c828e611eb9df"
     app.kubernetes.io/component: signal-backplane
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/part-of: mailfathom
@@ -205,7 +205,7 @@ metadata:
     helm.sh/chart: mailfathom-0.0.0
     app.kubernetes.io/name: mailfathom-valkey
     app.kubernetes.io/instance: mailfathom
-    app.kubernetes.io/version: "c123e3715db63d06d4ad6964884037aa0d5d4d703939b9929954112889708e1"
+    app.kubernetes.io/version: "418652cfb58ef879d4978c33553735d7147016032d5aefaa14c828e611eb9df"
     app.kubernetes.io/component: signal-backplane
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/part-of: mailfathom
@@ -367,7 +367,7 @@ metadata:
     helm.sh/chart: mailfathom-0.0.0
     app.kubernetes.io/name: mailfathom-postgres
     app.kubernetes.io/instance: mailfathom
-    app.kubernetes.io/version: "0.8.6-pg18"
+    app.kubernetes.io/version: "0.8.7-pg18"
     app.kubernetes.io/component: database
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/part-of: mailfathom
@@ -388,7 +388,7 @@ spec:
           helm.sh/chart: mailfathom-0.0.0
           app.kubernetes.io/name: mailfathom-postgres
           app.kubernetes.io/instance: mailfathom
-          app.kubernetes.io/version: "0.8.6-pg18"
+          app.kubernetes.io/version: "0.8.7-pg18"
           app.kubernetes.io/component: database
           app.kubernetes.io/managed-by: Helm
           app.kubernetes.io/part-of: mailfathom
@@ -415,7 +415,7 @@ spec:
       terminationGracePeriodSeconds: 120
       containers:
         - name: postgres
-          image: "docker.io/pgvector/pgvector:0.8.6-pg18"
+          image: "docker.io/pgvector/pgvector:0.8.7-pg18"
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false
@@ -519,7 +519,7 @@ metadata:
     helm.sh/chart: mailfathom-0.0.0
     app.kubernetes.io/name: mailfathom-valkey
     app.kubernetes.io/instance: mailfathom
-    app.kubernetes.io/version: "c123e3715db63d06d4ad6964884037aa0d5d4d703939b9929954112889708e1"
+    app.kubernetes.io/version: "418652cfb58ef879d4978c33553735d7147016032d5aefaa14c828e611eb9df"
     app.kubernetes.io/component: signal-backplane
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/part-of: mailfathom
@@ -545,7 +545,7 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: valkey
-          image: "docker.io/valkey/valkey@sha256:c123e3715db63d06d4ad6964884037aa0d5d4d703939b9929954112889708e1d"
+          image: "docker.io/valkey/valkey@sha256:418652cfb58ef879d4978c33553735d7147016032d5aefaa14c828e611eb9dfd"
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false

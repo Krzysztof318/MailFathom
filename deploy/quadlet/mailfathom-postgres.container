@@ -31,7 +31,7 @@ AssertFileIsExecutable=%h/.config/mailfathom/postgres-init/10-create-mailfathom-
 # pgvector rather than plain postgres: the schema declares the `vector` extension and the stock image cannot create it.
 # This is the same pin the Compose deployment and the local Aspire orchestration use, so a schema reviewed against one
 # is reviewed against all three.
-Image=docker.io/pgvector/pgvector:0.8.6-pg18
+Image=docker.io/pgvector/pgvector:0.8.7-pg18
 ContainerName=mailfathom-postgres
 
 # Only the internal network. PostgreSQL needs no route out of the host and publishes no port, so it is reachable from

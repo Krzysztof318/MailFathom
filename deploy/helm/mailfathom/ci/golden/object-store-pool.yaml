@@ -62,7 +62,7 @@ metadata:
     helm.sh/chart: mailfathom-0.0.0
     app.kubernetes.io/name: mailfathom-postgres
     app.kubernetes.io/instance: mailfathom
-    app.kubernetes.io/version: "0.8.6-pg18"
+    app.kubernetes.io/version: "0.8.7-pg18"
     app.kubernetes.io/component: database
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/part-of: mailfathom
@@ -124,7 +124,7 @@ metadata:
     helm.sh/chart: mailfathom-0.0.0
     app.kubernetes.io/name: mailfathom-postgres
     app.kubernetes.io/instance: mailfathom
-    app.kubernetes.io/version: "0.8.6-pg18"
+    app.kubernetes.io/version: "0.8.7-pg18"
     app.kubernetes.io/component: database
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/part-of: mailfathom
@@ -171,7 +171,7 @@ metadata:
     helm.sh/chart: mailfathom-0.0.0
     app.kubernetes.io/name: mailfathom-silo
     app.kubernetes.io/instance: mailfathom
-    app.kubernetes.io/version: "RELEASE.2026-08-06T00-00-00Z"
+    app.kubernetes.io/version: "RELEASE.2026-09-16T00-00-00Z"
     app.kubernetes.io/component: object-store
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/part-of: mailfathom
@@ -196,7 +196,7 @@ metadata:
     helm.sh/chart: mailfathom-0.0.0
     app.kubernetes.io/name: mailfathom-silo
     app.kubernetes.io/instance: mailfathom
-    app.kubernetes.io/version: "RELEASE.2026-08-06T00-00-00Z"
+    app.kubernetes.io/version: "RELEASE.2026-09-16T00-00-00Z"
     app.kubernetes.io/component: object-store
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/part-of: mailfathom
@@ -371,7 +371,7 @@ metadata:
     helm.sh/chart: mailfathom-0.0.0
     app.kubernetes.io/name: mailfathom-postgres
     app.kubernetes.io/instance: mailfathom
-    app.kubernetes.io/version: "0.8.6-pg18"
+    app.kubernetes.io/version: "0.8.7-pg18"
     app.kubernetes.io/component: database
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/part-of: mailfathom
@@ -392,7 +392,7 @@ spec:
           helm.sh/chart: mailfathom-0.0.0
           app.kubernetes.io/name: mailfathom-postgres
           app.kubernetes.io/instance: mailfathom
-          app.kubernetes.io/version: "0.8.6-pg18"
+          app.kubernetes.io/version: "0.8.7-pg18"
           app.kubernetes.io/component: database
           app.kubernetes.io/managed-by: Helm
           app.kubernetes.io/part-of: mailfathom
@@ -419,7 +419,7 @@ spec:
       terminationGracePeriodSeconds: 120
       containers:
         - name: postgres
-          image: "docker.io/pgvector/pgvector:0.8.6-pg18"
+          image: "docker.io/pgvector/pgvector:0.8.7-pg18"
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false
@@ -523,7 +523,7 @@ metadata:
     helm.sh/chart: mailfathom-0.0.0
     app.kubernetes.io/name: mailfathom-silo
     app.kubernetes.io/instance: mailfathom
-    app.kubernetes.io/version: "RELEASE.2026-08-06T00-00-00Z"
+    app.kubernetes.io/version: "RELEASE.2026-09-16T00-00-00Z"
     app.kubernetes.io/component: object-store
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/part-of: mailfathom
@@ -545,7 +545,7 @@ spec:
           helm.sh/chart: mailfathom-0.0.0
           app.kubernetes.io/name: mailfathom-silo
           app.kubernetes.io/instance: mailfathom
-          app.kubernetes.io/version: "RELEASE.2026-08-06T00-00-00Z"
+          app.kubernetes.io/version: "RELEASE.2026-09-16T00-00-00Z"
           app.kubernetes.io/component: object-store
           app.kubernetes.io/managed-by: Helm
           app.kubernetes.io/part-of: mailfathom
@@ -572,7 +572,7 @@ spec:
       terminationGracePeriodSeconds: 60
       containers:
         - name: silo
-          image: "docker.io/pgsty/silo:RELEASE.2026-08-06T00-00-00Z"
+          image: "docker.io/pgsty/silo:RELEASE.2026-09-16T00-00-00Z"
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false
