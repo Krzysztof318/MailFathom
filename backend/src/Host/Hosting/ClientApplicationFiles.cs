@@ -43,6 +43,24 @@ internal static class ClientApplicationFiles
         (".dat", "application/octet-stream"),
     ];
 
+    /// <summary>Where the client's build writes the files it names by a hash of their content, and nothing else.</summary>
+    /// <remarks>
+    /// The directory rather than the shape of a name is what is read, because the build decides which files it hashes
+    /// and a name only resembles one: a file that merely ends the way a hash does would be kept for a year under a
+    /// name the next build reuses.
+    /// </remarks>
+    private static readonly PathString ContentHashedFilesPath = $"{ClientApplicationOptions.RequestPath}/assets";
+
+    /// <summary>What a file is served with when its name answers for whatever the next build puts there.</summary>
+    /// <remarks>
+    /// <c>no-cache</c> permits storing and forbids reuse without asking, which is what keeps the question cheap: an
+    /// unchanged file is answered <c>304</c> from the validator the static-file middleware already writes.
+    /// </remarks>
+    private const string RevalidatedBeforeEveryReuse = "no-cache";
+
+    /// <summary>What a file is served with when its name changes whenever its content does.</summary>
+    private const string KeptWithoutRevalidating = "public, max-age=31536000, immutable";
+
     /// <summary>Reports whether this deployment's files actually carry a client to serve.</summary>
     /// <param name="environment">The hosting environment, whose web root is where the image copies the bundle.</param>
     /// <returns><see langword="true" /> when the bundle's entry document and its content security policy are both there.</returns>
@@ -102,6 +120,14 @@ internal static class ClientApplicationFiles
     /// and which servers those are is an operator's configuration rather than anything a build could know. It is added
     /// here, on the client listeners, rather than written into the bundle, so one build serves both.
     /// </para>
+    /// <para>
+    /// Every file also says how long a browser may go on using its copy, because a file that says nothing is reused on
+    /// a heuristic drawn from its age — and the files in an image are as old as the image. The entry document is the
+    /// only file naming the rest of the bundle by content hash, so a browser reusing it without asking goes on running
+    /// the previous build's scripts against an upgraded service. It is therefore revalidated before every reuse, and
+    /// so is every other file whose name survives a build; a file the build named by its content hash can never answer
+    /// for different content and is kept without asking.
+    /// </para>
     /// </remarks>
     internal static IApplicationBuilder UseClientApplication(
         this IApplicationBuilder app,
@@ -137,7 +163,14 @@ internal static class ClientApplicationFiles
                     RequestPath = ClientApplicationOptions.RequestPath,
                     ContentTypeProvider = contentTypes,
                     OnPrepareResponse = served =>
-                        served.Context.Response.Headers.ContentSecurityPolicy = contentSecurityPolicy,
+                    {
+                        var headers = served.Context.Response.Headers;
+
+                        headers.ContentSecurityPolicy = contentSecurityPolicy;
+                        headers.CacheControl = served.Context.Request.Path.StartsWithSegments(ContentHashedFilesPath)
+                            ? KeptWithoutRevalidating
+                            : RevalidatedBeforeEveryReuse;
+                    },
                 }));
     }
 

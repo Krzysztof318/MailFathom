@@ -17,7 +17,7 @@ using Xunit;
 
 namespace MailFathom.Host.UnitTests.Hosting;
 
-/// <summary>Covers how a deployment is recognized as carrying a client to serve, and where it serves it.</summary>
+/// <summary>Covers how a deployment is recognized as carrying a client to serve, where it serves it, and under which headers.</summary>
 /// <remarks>
 /// The bundle is copied into the container image at build time and by nothing at run time, so a host started from
 /// anything else has the directory and none of the files. Recognizing that by the entry document is what turns an
@@ -31,6 +31,14 @@ public sealed class ClientApplicationFilesTests
     private const int AnotherListenerPort = 8444;
 
     private const string EntryDocumentContent = "<!doctype html>";
+
+    /// <summary>A file the client's build named by a hash of its content, in the directory it writes only such files to.</summary>
+    private const string ContentHashedFile = "/assets/index-CPHY7X55.js";
+
+    /// <summary>A file the bundle carries under the same name in every build.</summary>
+    private const string StablyNamedFile = "/THIRD-PARTY-NOTICES.txt";
+
+    private const string RevalidatedBeforeEveryReuse = "no-cache";
 
     private const string ContentSecurityPolicy = "default-src 'self'; frame-ancestors 'none'";
 
@@ -157,6 +165,97 @@ public sealed class ClientApplicationFilesTests
         Assert.False(context.Response.Headers.ContainsKey("Content-Security-Policy"));
     }
 
+    /// <summary>
+    /// The entry document is the only file naming the bundle by its content hashes, so a browser reusing a stored copy
+    /// on a heuristic goes on running the previous build against an upgraded service.
+    /// </summary>
+    [Theory]
+    [InlineData("/app/")]
+    [InlineData("/app/index.html")]
+    public async Task UseClientApplication_TheEntryDocumentOnAClientListener_IsRevalidatedBeforeEveryReuse(string path)
+    {
+        // Arrange
+        var context = RequestOnTheClientListener(path);
+
+        // Act
+        await ServeAsync(context);
+
+        // Assert
+        Assert.Equal(StatusCodes.Status200OK, context.Response.StatusCode);
+        Assert.Equal(RevalidatedBeforeEveryReuse, context.Response.Headers.CacheControl.ToString());
+    }
+
+    /// <summary>A name that changes with the content never answers for different content, so nothing is gained by asking again.</summary>
+    [Fact]
+    public async Task UseClientApplication_AFileNamedByItsContentHash_IsKeptWithoutRevalidating()
+    {
+        // Arrange
+        var context = RequestOnTheClientListener($"{ClientApplicationOptions.RequestPath}{ContentHashedFile}");
+
+        // Act
+        await ServeAsync(context);
+
+        // Assert
+        Assert.Equal(StatusCodes.Status200OK, context.Response.StatusCode);
+        Assert.Equal("public, max-age=31536000, immutable", context.Response.Headers.CacheControl.ToString());
+    }
+
+    /// <summary>A name that survives a build answers for whatever the next build put there, exactly as the entry document's does.</summary>
+    [Fact]
+    public async Task UseClientApplication_AFileWhoseNameCarriesNoContentHash_IsRevalidatedBeforeEveryReuse()
+    {
+        // Arrange
+        var context = RequestOnTheClientListener($"{ClientApplicationOptions.RequestPath}{StablyNamedFile}");
+
+        // Act
+        await ServeAsync(context);
+
+        // Assert
+        Assert.Equal(StatusCodes.Status200OK, context.Response.StatusCode);
+        Assert.Equal(RevalidatedBeforeEveryReuse, context.Response.Headers.CacheControl.ToString());
+    }
+
+    /// <summary>
+    /// Revalidating is what the entry document is asked for on every visit, so its answer has to stay the cheap one
+    /// and carry what the full answer carries.
+    /// </summary>
+    [Fact]
+    public async Task UseClientApplication_AConditionalRequestForTheUnchangedEntryDocument_AnswersNotModifiedUnderTheSameHeaders()
+    {
+        // Arrange
+        var stored = RequestOnTheClientListener("/app/");
+
+        await ServeAsync(stored);
+
+        var context = RequestOnTheClientListener("/app/");
+
+        context.Request.Headers.IfNoneMatch = stored.Response.Headers.ETag;
+
+        // Act
+        await ServeAsync(context);
+
+        // Assert
+        Assert.Equal(StatusCodes.Status304NotModified, context.Response.StatusCode);
+        Assert.Equal(0, context.Response.Body.Length);
+        Assert.Equal(RevalidatedBeforeEveryReuse, context.Response.Headers.CacheControl.ToString());
+        Assert.Equal(ContentSecurityPolicy, context.Response.Headers.ContentSecurityPolicy.ToString());
+    }
+
+    /// <summary>What the service says about caching travels with the bundle, as the policy does.</summary>
+    [Fact]
+    public async Task UseClientApplication_TheApplicationPathOnAnotherListener_StatesNothingAboutCaching()
+    {
+        // Arrange
+        var context = RequestOn(AnotherListenerPort, "/app/");
+
+        // Act
+        await ServeAsync(context);
+
+        // Assert
+        Assert.Equal(StatusCodes.Status404NotFound, context.Response.StatusCode);
+        Assert.False(context.Response.Headers.ContainsKey("Cache-Control"));
+    }
+
     /// <summary>The ordinary deployment's page stays under exactly the policy its build proved.</summary>
     [Fact]
     public async Task UseClientApplication_ADeploymentPublishingNoSignInMethod_ServesTheBundlesPolicyByteForByte()
@@ -278,18 +377,15 @@ public sealed class ClientApplicationFilesTests
         await application.Build()(context);
     }
 
-    /// <summary>A web root holding the entry document and a policy document at its root, which is where the image copies the bundle.</summary>
+    /// <summary>
+    /// A web root holding the entry document and a policy document at its root, which is where the image copies the
+    /// bundle, beside one file the build named by its content hash and one it did not.
+    /// </summary>
     private static IWebHostEnvironment WebRootCarryingTheBundle(string policyDocumentContent)
     {
-        var content = Encoding.UTF8.GetBytes(EntryDocumentContent);
-
-        var entryDocument = Substitute.For<IFileInfo>();
-
-        entryDocument.Exists.Returns(true);
-        entryDocument.Name.Returns(ClientApplicationOptions.EntryDocument);
-        entryDocument.Length.Returns(content.Length);
-        entryDocument.LastModified.Returns(DateTimeOffset.UnixEpoch);
-        entryDocument.CreateReadStream().Returns(_ => new MemoryStream(content));
+        var entryDocument = ServedFile(ClientApplicationOptions.EntryDocument, EntryDocumentContent);
+        var contentHashedFile = ServedFile("index-CPHY7X55.js", "export {};");
+        var stablyNamedFile = ServedFile("THIRD-PARTY-NOTICES.txt", "Notices.");
 
         var policy = Encoding.UTF8.GetBytes(policyDocumentContent);
 
@@ -314,6 +410,8 @@ public sealed class ClientApplicationFilesTests
 
         files.GetFileInfo(Arg.Any<string>()).Returns(absent);
         files.GetFileInfo($"/{ClientApplicationOptions.EntryDocument}").Returns(entryDocument);
+        files.GetFileInfo(ContentHashedFile).Returns(contentHashedFile);
+        files.GetFileInfo(StablyNamedFile).Returns(stablyNamedFile);
         files.GetFileInfo(ClientApplicationOptions.ContentSecurityPolicyDocument).Returns(policyDocument);
         files.GetDirectoryContents(Arg.Any<string>()).Returns(absentDirectory);
         files.GetDirectoryContents("/").Returns(root);
@@ -323,6 +421,21 @@ public sealed class ClientApplicationFilesTests
         environment.WebRootFileProvider.Returns(files);
 
         return environment;
+    }
+
+    private static IFileInfo ServedFile(string name, string text)
+    {
+        var content = Encoding.UTF8.GetBytes(text);
+
+        var file = Substitute.For<IFileInfo>();
+
+        file.Exists.Returns(true);
+        file.Name.Returns(name);
+        file.Length.Returns(content.Length);
+        file.LastModified.Returns(DateTimeOffset.UnixEpoch);
+        file.CreateReadStream().Returns(_ => new MemoryStream(content));
+
+        return file;
     }
 
     private static IWebHostEnvironment EnvironmentServing(bool entryDocumentPresent, bool contentSecurityPolicyPresent)
