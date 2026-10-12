@@ -88,7 +88,7 @@ Every replica of a deployment reads the same configuration and the same account 
 start a supervisor — and its read sessions and its push watch — for every account, against a provider's per-account
 connection limit. So a coordinator starts a supervisor only for an account whose lease it took, under the scope
 `mail-synchronization/<user>/<account>` in the lease table
-[ADR 0031](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md)
+[ADR 0031](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md)
 decides; an account identifier too long for a scope, or holding a control character, is named there by its SHA-256
 digest instead. A replica configured with an account another one holds starts nothing for it: no run, no mailbox session, no
 push watch. It asks for the account again on each supervision pass — every `Interval`, and whenever a change or a
@@ -423,7 +423,7 @@ as the instance ceiling defers everybody's — `ContentAvailability = AwaitingSt
 advancing, the refill pass fetching what was left as soon as there is room — and leaves every other user's run storing
 content whole.
 
-**A mailbox several people are assigned counts in full against every one of them.** Its mail is wholly each of their mail, so nothing is divided between them: work on the account proceeds only while every assigned user is under the ceiling, and the one closest to theirs is what decides. So a user whose own mailboxes have reached their share holds a shared mailbox back for everybody assigned to it, which is the trade-off [ADR 0014](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md) states rather than an oversight. Dividing the figure between them was declined, because a person's allowance would then move whenever an administrator assigned somebody else to a mailbox they share.
+**A mailbox several people are assigned counts in full against every one of them.** Its mail is wholly each of their mail, so nothing is divided between them: work on the account proceeds only while every assigned user is under the ceiling, and the one closest to theirs is what decides. So a user whose own mailboxes have reached their share holds a shared mailbox back for everybody assigned to it, which is the trade-off [ADR 0014](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md) states rather than an oversight. Dividing the figure between them was declined, because a person's allowance would then move whenever an administrator assigned somebody else to a mailbox they share.
 
 The deferral is counted apart from the instance one and reported apart from it, because the two ask an operator for
 different things: one for more disk or a higher instance ceiling, the other for a larger share for one person or for
@@ -618,7 +618,7 @@ handshake, and an authentication. Setting it higher does the opposite. It is rea
 A write connection is pinned to the folder it selected, the way any IMAP selection is, so changing a message in a second
 folder replaces the connection rather than adding one. Nothing on the read side can open, borrow, or reach it — the
 guarantee that synchronization and content retrieval never mark mail read is a property of the types they hold, which
-[ADR 0007](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md)
+[ADR 0007](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md)
 records in full — and the push session is never taken out of `IDLE` to carry a change.
 
 A rule's action, a spam verdict's action, the `set_mail_flags` MCP tool, and somebody opening a message in MailFathom's
@@ -798,7 +798,7 @@ effect of the read: the client submits it to the same route `set_mail_flags` wri
 type either, and the account's own run is what tells the mail server. What decides whether it happens is the reader's
 own setting, on unless they turn it off, and the grant their credential signed in under — a client whose credential may
 not write a flag says so and marks nothing.
-[ADR 0026](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0026-marking-a-message-read-when-a-person-opens-it-in-the-client.md)
+[ADR 0026](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0026-marking-a-message-read-when-a-person-opens-it-in-the-client.md)
 is the decision, including why it is the body having been drawn rather than the selection having moved.
 
 Both directions are one mutation and one authored act, because both are the same statement about the same flag. Setting
@@ -809,7 +809,7 @@ clearing it is what lets automation put something back in front of them.
 the write session, recorded before it is issued, and never a side effect of reading anything. `\Answered` and `\Draft`
 stay unwritten on every message the mailbox already holds, because each states that an act was performed rather than
 describing the message, and permitting one of them is a decision to reopen
-[ADR 0007](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md)
+[ADR 0007](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md)
 rather than a gap to read as permission. The one `\Draft` MailFathom writes is on a message it composed itself and put
 in a folder — [the copy of a waiting message](mail-delivery.md#the-copy-in-the-accounts-own-folders) — where the flag
 states exactly what happened.
@@ -877,7 +877,7 @@ synchronization has seen that source occurrence leave its folder the server has 
 completed from that observation. A copy and a relocation on a server without `MOVE` both leave the source where it was,
 so nothing about it distinguishes a command that landed from one that never arrived — and finding out by searching the
 destination folder for a message that looks right would replace a fact with a guess, which
-[ADR 0007](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md)
+[ADR 0007](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md)
 refuses. Those wait `UnknownMutationOutcomeGrace` for an observation that may still settle them, and are then given up
 on so they stand as dead-lettered rather than as changes still apparently happening.
 
@@ -1182,7 +1182,7 @@ by remote path or by special-use role, so the folder stays a **destination**: a 
 into it over the account's existing write session, through the same commands and the same
 [recorded change](#every-change-is-written-down-before-it-is-issued) any other destination takes. Nothing new is opened,
 no capability is added, and what
-[ADR 0007](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md)
+[ADR 0007](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md)
 refuses is untouched — the destination is still never searched for the message afterwards.
 
 **A mapped folder resolves when it is needed rather than when a run reaches it.** No run schedules a folder nothing
@@ -1513,7 +1513,7 @@ Each batch commits its extractions together with the position it reached, so a c
 
 The walk reaches no mail server — every byte it reads was fetched and stored by an earlier synchronization run — so it cannot touch a remote `\Seen` flag however long it runs. A run is bounded by `BatchSize` and `MaxBatchesPerRun` and then yields; the worker ends itself once a run finds nothing left, because every message synchronized from then on is extracted as it is written. A failed run keeps the worker alive: the database being briefly unavailable says nothing about whether work remains, and the committed position means the next interval resumes.
 
-Every replica of a deployment runs this worker, and the walk is one walk over one position, so a run takes the lease `stored-email-extraction` — the position row's own name — before it reads the position, and gives it back when the run ends, as [ADR 0031](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md) decides. A replica refused it reads nothing and asks again on its next `MailExtractionBackfill:Interval`. A run renews the lease every `MailExtractionBackfill:LeaseRenewalInterval` and stops on the first renewal it cannot complete, leaving every batch it committed durable for the next holder to resume past; a holder that crashed keeps the walk from the others for `MailExtractionBackfill:LeaseDuration` at most. A replica whose own run finds nothing left ends its worker exactly as a single replica does, having given the lease back first, so every other replica stays free to reach the same answer on its next interval and end itself too.
+Every replica of a deployment runs this worker, and the walk is one walk over one position, so a run takes the lease `stored-email-extraction` — the position row's own name — before it reads the position, and gives it back when the run ends, as [ADR 0031](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md) decides. A replica refused it reads nothing and asks again on its next `MailExtractionBackfill:Interval`. A run renews the lease every `MailExtractionBackfill:LeaseRenewalInterval` and stops on the first renewal it cannot complete, leaving every batch it committed durable for the next holder to resume past; a holder that crashed keeps the walk from the others for `MailExtractionBackfill:LeaseDuration` at most. A replica whose own run finds nothing left ends its worker exactly as a single replica does, having given the lease back first, so every other replica stays free to reach the same answer on its next interval and end itself too.
 
 ### Offering a stored message for embedding
 
@@ -1640,7 +1640,7 @@ messages on the server too, and both come back through an ordinary run looking l
 appears in one folder and vanishes from another. Left alone that is a new message and a deleted one, the history forks,
 and the mailbox holds a duplicate as far as MailFathom is concerned.
 
-The [durable mutation record](https://github.com/Krzysztof318/MailFathom/blob/main/docs/architecture/stored-email-schema.md#recorded-mailbox-mutations)
+The [durable mutation record](https://github.com/fathomise/MailFathom/blob/main/docs/architecture/stored-email-schema.md#recorded-mailbox-mutations)
 is what tells the two apart, and both halves are joined to it by a recorded fact rather than by a guess at a header:
 
 - **A discovered occurrence** is matched against relocations and copies that named this folder as their destination and
@@ -1737,7 +1737,7 @@ sets this beside the two settings for deletes MailFathom performs.
 **Changing the setting governs what is observed from then on, and touches nothing already recorded.** A message already
 tombstoned under `RetainTombstone` is outside every later window — the server has nothing left to say about it — so
 switching an account to `EraseLocalCopy` erases the disappearances observed after the change and leaves the existing
-tombstones exactly as they are. Cleaning those up is deliberately not automatic; [#170](https://github.com/Krzysztof318/MailFathom/issues/170)
+tombstones exactly as they are. Cleaning those up is deliberately not automatic; [#170](https://github.com/fathomise/MailFathom/issues/170)
 tracks the retention grace period and the bounded garbage collection that will own it, and that is also where a delay
 between observing a disappearance and erasing the local copy will come from.
 
@@ -1829,7 +1829,7 @@ carried across, the source row keeps its occurrence and everything derived from 
 whose act the arrival was.
 
 That is a decision rather than the absence of one, and
-[ADR 0008](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0008-copied-message-local-identity.md)
+[ADR 0008](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0008-copied-message-local-identity.md)
 records why. The short of it: a stored row is one stored email in one folder, `UID COPY` really does create a second
 message with its own UID, and a model that made the two one local email could only do so for the copies MailFathom
 itself performed — a copy the user made in their own mail client is joined to no record, and identifying it by
@@ -1904,7 +1904,7 @@ so it cannot touch a remote `\Seen` flag however long it runs, and it rewrites n
 **The request records the run and returns; the deployment carries it.** The command writes one row in
 `mail_rederivation_runs` — one per scope, holding the run's identity, when it was asked for, how much it has re-read,
 and when it ended — and enqueues a `rederive-stored-mail` job against the account. The walk is therefore durable
-background work under the [job store](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0009-durable-job-store-and-execution-identity.md), which is what
+background work under the [job store](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0009-durable-job-store-and-execution-identity.md), which is what
 lets it outlive the operator's terminal and survive a restart of the deployment.
 
 **One attempt of that job is several bounded passes with its lease renewed between them.** A pass is fifty messages a
@@ -1981,7 +1981,7 @@ was the write that won.
 **Neither command touches embeddings, and neither re-runs classification.** Passages and vectors are derived from text
 that the same bytes read by the same reader produce unchanged, so re-deriving them would spend a re-cut and a provider
 bill to arrive back where they already are — [ADR
-0006](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md)
+0006](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md)
 makes that a deliberately confirmed act rather than something a metadata refresh performs. A message re-read after a
 rewind is chunked, classified, and evaluated only where it carries no passages, no verdict, and no rule stamp already,
 which is the same gate every arriving message passes. Text written under a sensitive-content configuration this
@@ -2327,7 +2327,7 @@ A rejected reload is logged with the configuration path and the failure identity
 - Explicit EF Core migrations after schema review.
 - A retention grace period for a message the server no longer holds, and the bounded garbage collection that would act
   on it. Erasing a local copy happens as the disappearance is observed, and a tombstone keeps its content
-  indefinitely; [#170](https://github.com/Krzysztof318/MailFathom/issues/170) owns both, together with clearing the
+  indefinitely; [#170](https://github.com/fathomise/MailFathom/issues/170) owns both, together with clearing the
   tombstones an account accumulated before it switched to erasing.
 - Chaos-tested resilience pipelines. The composition has unit coverage; what is missing is proof that an adapter survives a
   dependency misbehaving, which belongs with the adapters now that they are under integration coverage.

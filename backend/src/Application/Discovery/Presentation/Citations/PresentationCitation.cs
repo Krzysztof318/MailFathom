@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 namespace MailFathom.Application.Discovery.Presentation.Citations;
 
@@ -19,7 +19,7 @@ namespace MailFathom.Application.Discovery.Presentation.Citations;
 /// Two of its members are about the source rather than about the reference to it, which is why they sit here and not on
 /// the blocks that cite it. <see cref="Medium" /> says whether somebody wrote the source or this deployment described a
 /// picture of it, which is the ranking
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md">ADR 0030</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md">ADR 0030</see>
 /// fixes. <see cref="Unreadable" /> says that the source exists and yielded nothing, and why — a state a plan declares
 /// so that an encrypted contract nobody could open is never presented as a mailbox that held nothing on the subject.
 /// </para>

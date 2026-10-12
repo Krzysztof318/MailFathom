@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -31,7 +31,7 @@ namespace MailFathom.Application.Synchronization.Restore;
 /// <para>
 /// It names a message by its identity and a folder by its alias and generation, which are MailFathom's own words for
 /// things. No subject, address, or content is here, for the reason the drain's own figures carry none. See
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
 /// </para>
 /// </remarks>
 public sealed record MailboxRestoreAppend(

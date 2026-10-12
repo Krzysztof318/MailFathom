@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Domain.Access;
 using MailFathom.Infrastructure.Persistence.Policies;
@@ -14,7 +14,7 @@ namespace MailFathom.Infrastructure.Persistence.Users.EndpointSwitches;
 /// which organization they were derived from. Every write of this build that derives them writes the stamp with them.
 /// A build that does not know settings policies writes neither half of the stamp, so the record it wrote, or the user
 /// it moved, is a row whose stamp no longer matches it: that is the whole of what tells such a row apart, and
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0037-a-settings-policy-at-the-deployment-and-at-each-organization.md">ADR 0037</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0037-a-settings-policy-at-the-deployment-and-at-each-organization.md">ADR 0037</see>
 /// § <em>How a value resolves</em> is where it is decided.
 /// </para>
 /// <para>

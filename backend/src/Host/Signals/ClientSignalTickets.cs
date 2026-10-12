@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Buffers.Text;
 using System.Security.Cryptography;
@@ -38,7 +38,7 @@ namespace MailFathom.Host.Signals;
 /// skips negotiation precisely so that nothing has to route them together — so a ticket held in the process that
 /// minted it would be redeemable about one time in the replica count, silently. It does not live in the optional
 /// signal backplane either, because an authentication path must not depend on a component a deployment may not run.
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0032-reaching-a-client-from-any-replica-over-websockets-and-a-resp-backplane.md">ADR 0032</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0032-reaching-a-client-from-any-replica-over-websockets-and-a-resp-backplane.md">ADR 0032</see>
 /// records both halves of that.
 /// </para>
 /// <para>

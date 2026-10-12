@@ -468,5 +468,5 @@ in the U.S. and other countries and regions. Yahoo and Yahoo Mail are trademarks
 companies. Proton and Proton Mail are trademarks of Proton AG. Fastmail is a trademark and service mark of Fastmail Pty
 Ltd. Zoho and Zoho Mail are
 trademarks of Zoho Corporation Private Limited and/or its affiliates.
-[`THIRD_PARTY_LICENSES.md`](https://github.com/Krzysztof318/MailFathom/blob/main/THIRD_PARTY_LICENSES.md#trademark-and-brand-use)
+[`THIRD_PARTY_LICENSES.md`](https://github.com/fathomise/MailFathom/blob/main/THIRD_PARTY_LICENSES.md#trademark-and-brand-use)
 records the per-user review this statement comes out of, and why it sits here rather than in `NOTICE`.

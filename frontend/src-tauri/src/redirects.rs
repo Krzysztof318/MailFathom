@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 // Where an OAuth sign-in comes back to on this head, which is the second thing the web head has an answer for and this
 // one does not. A page signs in by leaving its own origin and being redirected back to it; a WebView has no origin an

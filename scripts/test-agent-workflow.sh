@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Copyright © 2026 Krzysztof Kasprowicz
 # Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-# Project repository: https://github.com/Krzysztof318/MailFathom
+# Project repository: https://github.com/fathomise/MailFathom
 
 set -euo pipefail
 
@@ -45,7 +45,7 @@ repository_root="$test_directory/repository"
 # remote by where it points rather than by its name. A fixture remote called anything else would
 # be a fork as far as they are concerned, which is what
 # `verify_full_refuses_a_checkout_with_no_upstream_remote` asserts deliberately.
-remote_repository_root="$test_directory/upstream/Krzysztof318/MailFathom"
+remote_repository_root="$test_directory/upstream/fathomise/MailFathom"
 fake_bin_directory="$test_directory/bin"
 protected_paths_bin_directory="$test_directory/protected-paths-bin"
 typo_check_bin_directory="$test_directory/typo-check-bin"
@@ -481,7 +481,7 @@ verify_fast_stops_when_the_remote_is_unreachable() {
   local script_status=0
 
   : > "$invocation_log"
-  git -C "$repository_root" remote set-url origin "$test_directory/missing-remote/Krzysztof318/MailFathom"
+  git -C "$repository_root" remote set-url origin "$test_directory/missing-remote/fathomise/MailFathom"
 
   (
     cd "$repository_root"
@@ -1136,7 +1136,7 @@ verify_full_stops_when_the_remote_is_unreachable() {
 
   : > "$invocation_log"
   : > "$workflow_invocation_log"
-  git -C "$repository_root" remote set-url origin "$test_directory/missing-remote/Krzysztof318/MailFathom"
+  git -C "$repository_root" remote set-url origin "$test_directory/missing-remote/fathomise/MailFathom"
 
   (
     cd "$repository_root"
@@ -1407,13 +1407,13 @@ fork_workspace_reports_an_unresolved_base_without_an_upstream_remote() {
 }
 
 # An owner whose name merely ends with the canonical one. The base remote is identified by the
-# repository a remote points at, and a suffix match has no left-hand boundary: `notkrzysztof318` and
-# `some-krzysztof318` both end in `krzysztof318`, so a raw suffix would accept either as MailFathom
+# repository a remote points at, and a suffix match has no left-hand boundary: `notfathomise` and
+# `some-fathomise` both end in `fathomise`, so a raw suffix would accept either as MailFathom
 # and the gate would fetch and compare against a stranger's `main`. That is the silent wrong base the
 # resolver exists to prevent, and it is the one case the exact-match fixtures above cannot reach.
 fork_workspace_refuses_an_owner_whose_name_merely_ends_with_the_canonical_one() {
   local fork_root="$test_directory/fork-lookalike-owner"
-  local lookalike_remote_root="$test_directory/lookalike/notKrzysztof318/MailFathom"
+  local lookalike_remote_root="$test_directory/lookalike/notFathomise/MailFathom"
   local output_file="$test_directory/fork-lookalike-output"
   local refusal_output="$test_directory/fork-lookalike-refusal"
   local script_status=0
@@ -1444,7 +1444,7 @@ fork_workspace_refuses_an_owner_whose_name_merely_ends_with_the_canonical_one() 
     return 1
   fi
 
-  assert_contains 'No remote points at Krzysztof318/MailFathom' "$refusal_output"
+  assert_contains 'No remote points at fathomise/MailFathom' "$refusal_output"
   assert_file_content '' "$invocation_log"
 }
 
@@ -1522,8 +1522,8 @@ verify_full_refuses_a_checkout_with_no_upstream_remote() {
     return 1
   fi
 
-  assert_contains 'No remote points at Krzysztof318/MailFathom' "$refusal_output"
-  assert_contains 'git remote add upstream https://github.com/Krzysztof318/MailFathom.git' "$refusal_output"
+  assert_contains 'No remote points at fathomise/MailFathom' "$refusal_output"
+  assert_contains 'git remote add upstream https://github.com/fathomise/MailFathom.git' "$refusal_output"
   assert_file_content '' "$invocation_log"
   assert_file_content '' "$workflow_invocation_log"
 }
@@ -1582,7 +1582,7 @@ run_protected_paths_step() {
   (
     export PATH="$protected_paths_bin_directory:$PATH"
     export GH_TOKEN='fake-token'
-    export REPOSITORY='Krzysztof318/MailFathom'
+    export REPOSITORY='fathomise/MailFathom'
     export PULL_REQUEST_NUMBER='1'
     export PULL_REQUEST_AUTHOR="$pull_request_author"
     export CHANGED_FILE_COUNT="$changed_file_count"
@@ -1900,7 +1900,7 @@ run_typo_check_step() {
   (
     export PATH="$typo_check_bin_directory:$PATH"
     export GH_TOKEN='fake-token'
-    export REPOSITORY='Krzysztof318/MailFathom'
+    export REPOSITORY='fathomise/MailFathom'
     export PULL_REQUEST_NUMBER='1'
     export CHANGED_FILE_COUNT="$changed_file_count"
     export FAKE_CHANGED_PATHS="$changed_paths"
@@ -2177,11 +2177,11 @@ run_fathom_review_gate() {
     # is the malformed payload the dispatch branch refuses.
     export EVENT_NAME="${GATE_EVENT_NAME:-pull_request_target}"
     export EVENT_ACTION="$event_action"
-    export REPOSITORY='Krzysztof318/MailFathom'
+    export REPOSITORY='fathomise/MailFathom'
     export PULL_REQUEST_NUMBER="${GATE_PULL_REQUEST_NUMBER-1}"
     export PULL_REQUEST_DRAFT='false'
     export PULL_REQUEST_AUTHOR="$pull_request_author"
-    export HEAD_REPOSITORY='Krzysztof318/MailFathom'
+    export HEAD_REPOSITORY='fathomise/MailFathom'
     export ADDED_LABEL="$added_label"
     export IS_PULL_REQUEST_COMMENT="${GATE_IS_PULL_REQUEST_COMMENT:-false}"
     export COMMENT_BODY="${GATE_COMMENT_BODY:-}"
@@ -2540,7 +2540,7 @@ run_fathom_review_settle() {
     export PATH="$settle_bin_directory:$PATH"
     export FAKE_NEWEST_COMMENT="$newest_comment"
     export GH_TOKEN='fake-token'
-    export REPOSITORY='Krzysztof318/MailFathom'
+    export REPOSITORY='fathomise/MailFathom'
     export PULL_REQUEST_NUMBER='1'
     export SETTLE_MINIMUM_SECONDS='2'
     # Three rather than one, because the fake `gh` reports whole seconds. A conversation it answers
@@ -2675,8 +2675,8 @@ case "$endpoint" in
     # a list rather than a body for something else to parse.
     if [[ "$*" == *closingIssuesReferences* ]]; then
       response='{"data":{"repository":{"pullRequest":{"closingIssuesReferences":{"nodes":[
-        {"number":11,"repository":{"nameWithOwner":"Krzysztof318/MailFathom"}},
-        {"number":12,"repository":{"nameWithOwner":"Krzysztof318/MailFathom"}}]}}}}}'
+        {"number":11,"repository":{"nameWithOwner":"fathomise/MailFathom"}},
+        {"number":12,"repository":{"nameWithOwner":"fathomise/MailFathom"}}]}}}}}'
     else
       response='{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[]}}}}}'
     fi
@@ -2913,7 +2913,7 @@ run_fathom_review_collect() {
   (
     export PATH="$collect_bin_directory:$PATH"
     export GH_TOKEN='fake-token'
-    export REPOSITORY='Krzysztof318/MailFathom'
+    export REPOSITORY='fathomise/MailFathom'
     export PULL_REQUEST_NUMBER='1'
     export REVIEW_DIRECTORY="$collect_review_directory"
     # The step runs the real `collect-closing-issues.sh` out of the workspace, which on the runner
@@ -3159,7 +3159,7 @@ run_fathom_review_model() {
   (
     export PATH="$collect_bin_directory:$PATH"
     export GH_TOKEN='fake-token'
-    export REPOSITORY='Krzysztof318/MailFathom'
+    export REPOSITORY='fathomise/MailFathom'
     export PULL_REQUEST_NUMBER='1'
     export MODEL='claude-sonnet-5-5'
     export SECURITY_MODEL='claude-opus-5-5'
@@ -3253,7 +3253,7 @@ run_select_labels() {
     export FAKE_UNFETCHABLE_ISSUES="$unfetchable_issues"
     export FAKE_SECURITY_ISSUES="$security_issues"
     bash "$source_repository_root/.github/pull-request/select-labels.sh" \
-      'Krzysztof318/MailFathom' '1' \
+      'fathomise/MailFathom' '1' \
       "$source_repository_root/.github/pull-request/collect-referenced-issues.sh" '10'
     # Standard output is the label list and standard error is what the client and the ceiling had to
     # say, so the two are kept apart here exactly as the caller keeps them apart. Folding them
@@ -3322,7 +3322,7 @@ run_apply_pull_request_labels() {
   (
     export PATH="$collect_bin_directory:$PATH"
     export GH_TOKEN='fake-token'
-    export REPOSITORY='Krzysztof318/MailFathom'
+    export REPOSITORY='fathomise/MailFathom'
     export PULL_REQUEST_NUMBER='1'
     export SELECT_LABELS_SCRIPT="$source_repository_root/.github/pull-request/select-labels.sh"
     export REFERENCED_ISSUES_SCRIPT="$source_repository_root/.github/pull-request/collect-referenced-issues.sh"
@@ -3442,7 +3442,7 @@ run_fathom_review_submit() {
   (
     export PATH="$submit_bin_directory:$PATH"
     export GH_TOKEN='ghs_reviewerapptokenthatisnotreal'
-    export REPOSITORY='Krzysztof318/MailFathom'
+    export REPOSITORY='fathomise/MailFathom'
     export PULL_REQUEST_NUMBER='1'
     export HEAD_SHA='0123456789abcdef0123456789abcdef01234567'
     export WORKFLOW_TOKEN='ghs_workflowtokenthatisnotreal'
@@ -3949,11 +3949,11 @@ prepare_fathom_review_board_state() {
        | split(",")
        | map(select(. != ""))
        | map({number: (. | tonumber),
-              repository: {nameWithOwner: "Krzysztof318/MailFathom"}})
+              repository: {nameWithOwner: "fathomise/MailFathom"}})
      )}}}}}' > "$board_directory/closing-issues.json"
 
   cat > "$board_directory/field.json" <<'BOARD_FIELD'
-{"data":{"user":{"projectV2":{"id":"PVT_board","field":{"id":"PVTSSF_status","options":[
+{"data":{"organization":{"projectV2":{"id":"PVT_board","field":{"id":"PVTSSF_status","options":[
   {"id":"option-todo","name":"Todo"},
   {"id":"option-review","name":"In review"},
   {"id":"option-changes","name":"Changes requested"},
@@ -3978,10 +3978,10 @@ export_fathom_review_board_environment() {
   export PATH="$board_bin_directory:$PATH"
   export GH_TOKEN='ghs_workflowtokenthatisnotreal'
   export BOARD_TOKEN="$board_token"
-  export REPOSITORY='Krzysztof318/MailFathom'
+  export REPOSITORY='fathomise/MailFathom'
   export PULL_REQUEST_NUMBER='1'
-  export BOARD_OWNER='Krzysztof318'
-  export BOARD_NUMBER='4'
+  export BOARD_OWNER='fathomise'
+  export BOARD_NUMBER='1'
   export STATUS_FIELD='Status'
   export CLOSING_ISSUES_SCRIPT="$source_repository_root/.github/pull-request/collect-closing-issues.sh"
   export CLOSING_ISSUE_LIMIT='5'
@@ -4608,9 +4608,9 @@ run_pull_request_rules_board() {
     export PATH="$rules_board_bin_directory:$PATH"
     export GH_TOKEN='ghs_workflowtokenthatisnotreal'
     export BOARD_TOKEN='classic-token-that-is-not-real'
-    export REPOSITORY='Krzysztof318/MailFathom'
-    export BOARD_OWNER='Krzysztof318'
-    export BOARD_NUMBER='4'
+    export REPOSITORY='fathomise/MailFathom'
+    export BOARD_OWNER='fathomise'
+    export BOARD_NUMBER='1'
     export STATUS_FIELD='Status'
     export BASE_BRANCH='main'
     export WORKFLOW_RUN_HEAD_SHA="${workflow_run_head_sha:-}"
@@ -4985,8 +4985,8 @@ every_published_documentation_page_is_in_a_table_of_contents() {
 # repository. Each half fails in a way nobody would notice from the file — a site address that names no page is a 404
 # only a reader meets, and a repository link to a published page silently sends somebody to a Markdown file in a tree
 # instead of to the readable form.
-documentation_site_address='https://krzysztof318.github.io/MailFathom/docs/'
-repository_blob_address='https://github.com/Krzysztof318/MailFathom/blob/main/'
+documentation_site_address='https://fathomise.github.io/MailFathom/docs/'
+repository_blob_address='https://github.com/fathomise/MailFathom/blob/main/'
 
 # The root README is the page a reader deciding whether to adopt the project meets; `deploy/docker/README.md` is the
 # Docker Hub repository overview; `deploy/helm/mailfathom/README.md` is packaged into the chart and is what Artifact Hub
@@ -5743,7 +5743,7 @@ run_github_api_call() {
     export API_RETRY_DELAY_SECONDS="$retry_delay_seconds"
 
     bash "$source_repository_root/.github/pull-request/call-github-api.sh" \
-      'repos/Krzysztof318/MailFathom/pulls/1' --jq '.head.sha'
+      'repos/fathomise/MailFathom/pulls/1' --jq '.head.sha'
   ) > "$output_file" 2> "$error_file"
   api_call_status=$?
   set -e
@@ -5926,7 +5926,7 @@ run_closing_issues() {
     export_api_retry_environment
 
     bash "$source_repository_root/.github/pull-request/collect-closing-issues.sh" \
-      'Krzysztof318/MailFathom' '1' "$limit"
+      'fathomise/MailFathom' '1' "$limit"
   ) > "$output_file" 2> "$note_file"
 }
 
@@ -5940,7 +5940,7 @@ run_referenced_issues() {
   printf '%s\n' "$body" > "$test_directory/referenced-body.md"
 
   bash "$source_repository_root/.github/pull-request/collect-referenced-issues.sh" \
-    "$test_directory/referenced-body.md" 'Krzysztof318/MailFathom' "$limit" > "$output_file" 2>&1
+    "$test_directory/referenced-body.md" 'fathomise/MailFathom' "$limit" > "$output_file" 2>&1
 }
 
 referenced_issues_collect_a_mention_as_well_as_a_closing_reference() {
@@ -5957,7 +5957,7 @@ referenced_issues_collect_a_link_to_an_issue_in_this_repository() {
   local output_file="$test_directory/referenced-issues-url"
 
   run_referenced_issues \
-    'Related to https://github.com/Krzysztof318/MailFathom/issues/271.' \
+    'Related to https://github.com/fathomise/MailFathom/issues/271.' \
     "$output_file"
 
   assert_file_content '271' "$output_file"
@@ -5996,7 +5996,7 @@ referenced_issues_report_what_the_ceiling_cut() {
   # The two streams are kept apart here for the reason the caller keeps them apart: the list is what
   # decides the labels, and the note is what a reader is told about the part that did not fit.
   bash "$source_repository_root/.github/pull-request/collect-referenced-issues.sh" \
-    "$test_directory/referenced-body.md" 'Krzysztof318/MailFathom' 2 \
+    "$test_directory/referenced-body.md" 'fathomise/MailFathom' 2 \
     > "$output_file" 2> "$note_file"
 
   assert_file_content $'1\n2' "$output_file"
@@ -6007,9 +6007,9 @@ closing_issues_collect_every_issue_the_merge_will_close() {
   local output_file="$test_directory/closing-issues-all"
 
   run_closing_issues \
-    '[{"number": 265, "repository": {"nameWithOwner": "Krzysztof318/MailFathom"}},
-      {"number": 266, "repository": {"nameWithOwner": "Krzysztof318/MailFathom"}},
-      {"number": 270, "repository": {"nameWithOwner": "Krzysztof318/MailFathom"}}]' \
+    '[{"number": 265, "repository": {"nameWithOwner": "fathomise/MailFathom"}},
+      {"number": 266, "repository": {"nameWithOwner": "fathomise/MailFathom"}},
+      {"number": 270, "repository": {"nameWithOwner": "fathomise/MailFathom"}}]' \
     "$output_file"
 
   assert_file_content $'265\n266\n270' "$output_file"
@@ -6034,7 +6034,7 @@ closing_issues_ignore_another_repository() {
 
   run_closing_issues \
     '[{"number": 999, "repository": {"nameWithOwner": "SomebodyElse/Other"}},
-      {"number": 271, "repository": {"nameWithOwner": "Krzysztof318/MailFathom"}}]' \
+      {"number": 271, "repository": {"nameWithOwner": "fathomise/MailFathom"}}]' \
     "$output_file"
 
   assert_file_content '271' "$output_file"
@@ -6049,13 +6049,13 @@ closing_issues_report_what_the_ceiling_cut() {
   local note_file="$test_directory/closing-issues-ceiling-note"
 
   run_closing_issues \
-    '[{"number": 1, "repository": {"nameWithOwner": "Krzysztof318/MailFathom"}},
-      {"number": 2, "repository": {"nameWithOwner": "Krzysztof318/MailFathom"}},
-      {"number": 3, "repository": {"nameWithOwner": "Krzysztof318/MailFathom"}},
-      {"number": 4, "repository": {"nameWithOwner": "Krzysztof318/MailFathom"}},
-      {"number": 5, "repository": {"nameWithOwner": "Krzysztof318/MailFathom"}},
-      {"number": 6, "repository": {"nameWithOwner": "Krzysztof318/MailFathom"}},
-      {"number": 7, "repository": {"nameWithOwner": "Krzysztof318/MailFathom"}}]' \
+    '[{"number": 1, "repository": {"nameWithOwner": "fathomise/MailFathom"}},
+      {"number": 2, "repository": {"nameWithOwner": "fathomise/MailFathom"}},
+      {"number": 3, "repository": {"nameWithOwner": "fathomise/MailFathom"}},
+      {"number": 4, "repository": {"nameWithOwner": "fathomise/MailFathom"}},
+      {"number": 5, "repository": {"nameWithOwner": "fathomise/MailFathom"}},
+      {"number": 6, "repository": {"nameWithOwner": "fathomise/MailFathom"}},
+      {"number": 7, "repository": {"nameWithOwner": "fathomise/MailFathom"}}]' \
     "$output_file" "$note_file" 5
 
   assert_file_content $'1\n2\n3\n4\n5' "$output_file"
@@ -6070,8 +6070,8 @@ closing_issues_report_nothing_when_the_ceiling_is_not_reached() {
   local note_file="$test_directory/closing-issues-under-ceiling-note"
 
   run_closing_issues \
-    '[{"number": 1, "repository": {"nameWithOwner": "Krzysztof318/MailFathom"}},
-      {"number": 2, "repository": {"nameWithOwner": "Krzysztof318/MailFathom"}}]' \
+    '[{"number": 1, "repository": {"nameWithOwner": "fathomise/MailFathom"}},
+      {"number": 2, "repository": {"nameWithOwner": "fathomise/MailFathom"}}]' \
     "$output_file" "$note_file" 5
 
   assert_file_content $'1\n2' "$output_file"
@@ -6088,7 +6088,7 @@ closing_issues_keep_a_recovered_retry_off_standard_error() {
   local note_file="$test_directory/closing-issues-recovered-note"
 
   run_closing_issues \
-    '[{"number": 265, "repository": {"nameWithOwner": "Krzysztof318/MailFathom"}}]' \
+    '[{"number": 265, "repository": {"nameWithOwner": "fathomise/MailFathom"}}]' \
     "$output_file" "$note_file" 0 1
 
   assert_file_content '265' "$output_file"
@@ -6099,8 +6099,8 @@ closing_issues_report_each_issue_once() {
   local output_file="$test_directory/closing-issues-duplicates"
 
   run_closing_issues \
-    '[{"number": 265, "repository": {"nameWithOwner": "Krzysztof318/MailFathom"}},
-      {"number": 265, "repository": {"nameWithOwner": "Krzysztof318/MailFathom"}}]' \
+    '[{"number": 265, "repository": {"nameWithOwner": "fathomise/MailFathom"}},
+      {"number": 265, "repository": {"nameWithOwner": "fathomise/MailFathom"}}]' \
     "$output_file"
 
   assert_file_content '265' "$output_file"
@@ -6369,7 +6369,7 @@ fathom_review_composes_a_reader_prompt_naming_only_its_group() {
 
   set +e
   (
-    export REPOSITORY='Krzysztof318/MailFathom'
+    export REPOSITORY='fathomise/MailFathom'
     export PULL_REQUEST_NUMBER='930'
     export HEAD_SHA='0123456789abcdef'
     export SNAPSHOT_TAKEN='2026-08-18T09:00:00Z'
@@ -6423,7 +6423,7 @@ fathom_review_refuses_a_reader_group_that_holds_no_files() {
 
   set +e
   (
-    export REPOSITORY='Krzysztof318/MailFathom'
+    export REPOSITORY='fathomise/MailFathom'
     export PULL_REQUEST_NUMBER='930'
     export HEAD_SHA='0123456789abcdef'
     export SNAPSHOT_TAKEN='2026-08-18T09:00:00Z'
@@ -6564,7 +6564,7 @@ run_publish_reference_step() {
   : > "$step_output_file"
 
   (
-    export REPOSITORY="${PUBLISHING_REPOSITORY:-Krzysztof318/MailFathom}"
+    export REPOSITORY="${PUBLISHING_REPOSITORY:-fathomise/MailFathom}"
     DOCKER_HUB_REPOSITORY="$(read_docker_hub_repository publish-container-image.yml)"
     export DOCKER_HUB_REPOSITORY
     export IMAGE_TAGS="$image_tags"
@@ -6598,12 +6598,12 @@ publish_qualifies_every_nightly_tag_with_the_repository_it_resolves() {
 
   read_published_references "$step_output_file" > "$references_file"
 
-  assert_contains 'image=ghcr.io/krzysztof318/mailfathom' "$step_output_file"
+  assert_contains 'image=ghcr.io/fathomise/mailfathom' "$step_output_file"
   assert_contains 'docker-hub-image=docker.io/krzysztof318/mailfathom' "$step_output_file"
-  assert_contains 'primary-reference=ghcr.io/krzysztof318/mailfathom:0.1.0-nightly.12-616d0a6' "$step_output_file"
+  assert_contains 'primary-reference=ghcr.io/fathomise/mailfathom:0.1.0-nightly.12-616d0a6' "$step_output_file"
   assert_contains 'docker-hub-primary-reference=docker.io/krzysztof318/mailfathom:0.1.0-nightly.12-616d0a6' "$step_output_file"
   assert_file_content \
-    $'ghcr.io/krzysztof318/mailfathom:0.1.0-nightly.12-616d0a6\nghcr.io/krzysztof318/mailfathom:nightly\ndocker.io/krzysztof318/mailfathom:0.1.0-nightly.12-616d0a6\ndocker.io/krzysztof318/mailfathom:nightly' \
+    $'ghcr.io/fathomise/mailfathom:0.1.0-nightly.12-616d0a6\nghcr.io/fathomise/mailfathom:nightly\ndocker.io/krzysztof318/mailfathom:0.1.0-nightly.12-616d0a6\ndocker.io/krzysztof318/mailfathom:nightly' \
     "$references_file"
 }
 
@@ -6669,7 +6669,7 @@ publish_qualifies_the_release_tags_and_ignores_a_blank_line() {
   read_published_references "$step_output_file" > "$references_file"
 
   assert_file_content \
-    $'ghcr.io/krzysztof318/mailfathom:0.1.0\nghcr.io/krzysztof318/mailfathom:latest\ndocker.io/krzysztof318/mailfathom:0.1.0\ndocker.io/krzysztof318/mailfathom:latest' \
+    $'ghcr.io/fathomise/mailfathom:0.1.0\nghcr.io/fathomise/mailfathom:latest\ndocker.io/krzysztof318/mailfathom:0.1.0\ndocker.io/krzysztof318/mailfathom:latest' \
     "$references_file"
 }
 
@@ -7132,7 +7132,7 @@ winget_manifests_name_the_release_assets_they_hash() {
   assert_contains 'Architecture: arm64' "$installer_manifest"
   assert_contains "InstallerSha256: $expected_checksum" "$installer_manifest"
   assert_contains \
-    'InstallerUrl: https://github.com/Krzysztof318/MailFathom/releases/download/v9.9.9/mfctl-9.9.9-win-x64.exe' \
+    'InstallerUrl: https://github.com/fathomise/MailFathom/releases/download/v9.9.9/mfctl-9.9.9-win-x64.exe' \
     "$installer_manifest"
 
   # Three files and no more. The community repository takes one package version per pull request as a multi-file set,

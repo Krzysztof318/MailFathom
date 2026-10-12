@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Mail;
 using MailFathom.Domain.Accounts;
@@ -40,7 +40,7 @@ internal sealed class ConfiguredSenderTrustPolicyReader : ISenderTrustPolicyRead
 
     /// <summary>Builds every account's verification policy once, keyed by the account identifier the lookups arrive with.</summary>
     /// <remarks>
-    /// The stored half of each list is empty here and is what <see href="https://github.com/Krzysztof318/MailFathom/issues/760">#760</see>
+    /// The stored half of each list is empty here and is what <see href="https://github.com/fathomise/MailFathom/issues/760">#760</see>
     /// fills in: the matcher already takes both halves, so the store arrives as a second list rather than as a second
     /// rule. An entry whose text is unusable is skipped rather than raised over, and two accounts configured under one
     /// identifier keep the first, both for the reason the folder mappings do — startup validation refuses each of

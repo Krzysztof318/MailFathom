@@ -124,7 +124,7 @@ The notification plugin is also the one pin this crate states **per target**, an
 the phone. A Tauri plugin with an Android side is a Gradle subproject the CLI adds to the generated settings file at
 build time, so linking it would change what `gen/android/app/gradle.lockfile` fixes — and no pull request runs the build
 that verifies that file. The phone's own notification is
-[#1616](https://github.com/Krzysztof318/MailFathom/issues/1616), which grants the capability, declares the runtime
+[#1616](https://github.com/fathomise/MailFathom/issues/1616), which grants the capability, declares the runtime
 permission, and rewrites the lock file together; until then the Android head meets an operation that reports itself
 unoffered.
 

@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Domain.Accounts;
 
@@ -23,7 +23,7 @@ namespace MailFathom.Application.EmailContent.Storage;
 /// Every claim expires. A claim covers one message's fetch and store, so a holder that stopped answering leaves bytes
 /// reserved for at most that long rather than until an operator notices — which is what makes an expiry the release of
 /// last resort beside <see cref="ReleaseAsync" />, exactly as
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md">ADR 0031</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md">ADR 0031</see>
 /// makes it for a leased scope.
 /// </para>
 /// </remarks>
@@ -33,7 +33,7 @@ public interface IStoredContentClaimStore
     /// <remarks>
     /// The per-user ceiling is answered from the accounts assigned to the users the claiming account is assigned to,
     /// which is what
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md">ADR 0014</see>
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md">ADR 0014</see>
     /// means by counting a shared mailbox in full against each of them: the payload is admitted only while every one
     /// of those users is under the ceiling.
     /// </remarks>

@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Accounts.Custody;
@@ -38,7 +38,7 @@ namespace MailFathom.Application.Synchronization.Drain;
 /// occurrence is cleared only once the source has answered — so a process that died in between leaves the occurrence
 /// standing, the next pass issues the commands again, and synchronization meeting that UID recognizes the row it
 /// already has rather than storing the message twice. See
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
 /// </para>
 /// </remarks>
 public sealed class MailboxDrainPass

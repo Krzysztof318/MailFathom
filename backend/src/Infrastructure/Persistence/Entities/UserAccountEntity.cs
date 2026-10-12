@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Access;
@@ -83,7 +83,7 @@ internal sealed class UserAccountEntity
     /// <remarks>
     /// <para>
     /// Half of the stamp
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0037-a-settings-policy-at-the-deployment-and-at-each-organization.md">ADR 0037</see>
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0037-a-settings-policy-at-the-deployment-and-at-each-organization.md">ADR 0037</see>
     /// § <em>How a value resolves</em> decides, and <see cref="EndpointSwitchesOrganizationId" /> is the other. A
     /// write that derives the switches from the effective record sets both to what the row then holds, and a write
     /// that moves the version and leaves the switches as they are moves this with it. A build that does not know

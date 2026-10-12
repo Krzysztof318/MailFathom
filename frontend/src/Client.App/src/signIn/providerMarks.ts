@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 // The marks the provider grid draws, which are the one family in this client that is neither Material Symbols nor
 // MailFathom's own. They are committed under `assets/providers/` and registered in `THIRD_PARTY_LICENSES.md` like every

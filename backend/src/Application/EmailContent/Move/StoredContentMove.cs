@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Security.Cryptography;
 using MailFathom.Application.Access;
@@ -24,7 +24,7 @@ namespace MailFathom.Application.EmailContent.Move;
 /// object — which <b>copies rather than moves</b>: the payload the database was holding stays where it is as a retained
 /// duplicate, and freeing it is an operator's separate act. So <b>no database transaction is ever open across a call to
 /// the endpoint</b>, which is what
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0001-application-owned-repositories-for-persistence-ports.md">ADR 0001</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0001-application-owned-repositories-for-persistence-ports.md">ADR 0001</see>
 /// requires and what makes the copy safe to run against a live deployment.
 /// </para>
 /// <para>

@@ -1,6 +1,6 @@
 # Copyright © 2026 Krzysztof Kasprowicz
 # Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-# Project repository: https://github.com/Krzysztof318/MailFathom
+# Project repository: https://github.com/fathomise/MailFathom
 
 name: Submit the winget manifest
 
@@ -198,7 +198,7 @@ jobs:
             printf -- '- One package version, as three manifest files at schema 1.12.0.\n'
             printf -- '- A portable installer per released Windows architecture, from version-specific release assets.\n'
             printf -- '- Each `InstallerSha256` is computed from the bytes the release attaches, not from a re-download.\n\n'
-            printf 'Release: https://github.com/Krzysztof318/MailFathom/releases/tag/v%s\n' "$VERSION"
+            printf 'Release: https://github.com/fathomise/MailFathom/releases/tag/v%s\n' "$VERSION"
           )"
 
           gh pr create \

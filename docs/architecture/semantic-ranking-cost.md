@@ -10,7 +10,7 @@ mailbox the size a user is expected to reach, measured rather than reasoned, and
 ## What was measured, and against what
 
 A corpus was built on this repository's own schema — every migration applied whole — and populated to the scale
-[ADR 0014](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md)
+[ADR 0014](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md)
 names as the one where an account predicate stops being selective on its own:
 
 | | |
@@ -68,7 +68,7 @@ request that narrows nothing.
 
 ### One hybrid search runs this query twice
 
-[ADR 0030](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md)
+[ADR 0030](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md)
 partitions the semantic half into a written ranking and a depicted one, and `EmailVectorSearchIndexReader` reads them as
 two statements of the shape measured above rather than as one — the two differ only in the value of the correlated
 predicate that asks what kind of passage each vector belongs to, so a hybrid search issues the table's query twice,
@@ -115,7 +115,7 @@ reads each vector once:
 **4.7 times the speed for an identical answer**, and near enough the floor above. That is a defect in the query rather
 than in exactness, and it is not fixed here: the flat form is the projection
 `EmailVectorSearchIndexReader`'s own remarks record the provider refusing to translate, so reaching it means writing the
-statement by hand. [Issue #1252](https://github.com/Krzysztof318/MailFathom/issues/1252) carries it.
+statement by hand. [Issue #1252](https://github.com/fathomise/MailFathom/issues/1252) carries it.
 
 ## What an approximate path would buy, and what it would cost
 
@@ -173,7 +173,7 @@ need not agree.
 
 The last row is the one that decides it. Every vector a backfill writes pays it, and a reindex writes one per passage:
 on this corpus the 389 396 inserts move from 68 seconds of database time to two and a quarter hours — on the path
-[ADR 0006](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md)
+[ADR 0006](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md)
 already names as the expensive act of changing model.
 
 ## Several users searching at once
@@ -224,7 +224,7 @@ One thing pulls the other way and is recorded rather than argued away. The exact
 exact ranking needs to be: the same answer, read in one pass instead of as a correlated minimum per message, is 4.7
 times faster and needs no index. An approximate path should therefore be judged against 1.7 s rather than against
 7.9 s, which makes its remaining win narrower still. That rewrite is a change of its own, carried by
-[issue #1252](https://github.com/Krzysztof318/MailFathom/issues/1252).
+[issue #1252](https://github.com/fathomise/MailFathom/issues/1252).
 
 What would reopen this: a mailbox whose embedding table no longer fits the deployment's page cache, a pgvector release
 in which a filtered index scan keeps a total order rather than a relaxed one, or a decision that the semantic half of
@@ -232,7 +232,7 @@ the fusion may be non-deterministic. None of those is true today.
 
 ## What the removal costs the profile lifecycle
 
-[ADR 0006](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md)
+[ADR 0006](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md)
 makes activation the act that materializes a declared profile and pays for it, and building the profile's index was part
 of that act: activation created it, cancelling a reindex dropped the abandoned generation's, and upkeep dropped a
 superseded one's. Four things follow from taking it out, and the last is not settled here.
@@ -249,11 +249,11 @@ superseded one's. Four things follow from taking it out, and the last is not set
   the deployment accepts a narrowed vector, because 2000 is what an HNSW index covers; a `vector` column stores 16 000.
   With no index built, a 3072-dimension model is stored and searched exactly as a 1536-dimension one is, and the refusal
   now declines a model the deployment could run in exchange for nothing. Deciding what replaces it amends ADR 0006,
-  which this change does not do; [issue #1253](https://github.com/Krzysztof318/MailFathom/issues/1253) carries it.
+  which this change does not do; [issue #1253](https://github.com/fathomise/MailFathom/issues/1253) carries it.
 
 ## Partitioning `email_embeddings` by user stays deferred
 
-[ADR 0014](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md)
+[ADR 0014](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md)
 deferred partitioning by user against a measurement that did not exist, and named what deferring costs: under the
 append-only migration rule, partitioning afterwards is a table rewrite rather than a migration. The measurement is here
 now, and it says the deferral holds.

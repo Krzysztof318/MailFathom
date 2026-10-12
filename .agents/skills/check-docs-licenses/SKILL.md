@@ -4,7 +4,7 @@ description: Use when a change is nearing completion or affects behavior, config
 license: AGPL-3.0-only
 metadata:
   author: Krzysztof Kasprowicz
-  repository: https://github.com/Krzysztof318/MailFathom
+  repository: https://github.com/fathomise/MailFathom
 ---
 
 # Check Documentation And Licenses

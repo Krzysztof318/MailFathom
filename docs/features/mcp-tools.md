@@ -269,7 +269,7 @@ be undone at all.** Sending is literally additive — it creates a message where
 first ground alone would give `false`, which would place them in the same class as `create_contact`, a call one
 further call reverses. The protocol offers no `irreversibleHint`, and this annotation is the input to a client's
 decision about whether a call needs a person rather than a taxonomy entry, so it answers that question instead.
-[ADR 0013](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0013-what-a-caller-must-do-before-mail-leaves.md)
+[ADR 0013](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0013-what-a-caller-must-do-before-mail-leaves.md)
 records the reading and why it widens the rule above rather than contradicting it.
 
 The three are `idempotentHint` `true` for a reason no other tool on this surface has: each *requires* an idempotency
@@ -1151,7 +1151,7 @@ server expunged — so recording a change against it would open records converge
 
 Only these three values can be written. `\Answered` and `\Draft` each assert that an act was performed rather than
 describing the message, nothing here deletes mail, and nothing here sends any;
-[ADR 0007](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md)
+[ADR 0007](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md)
 records what that boundary admits and why.
 
 A keyword a folder will not keep permanently is a failure the record reports rather than a command the server accepts
@@ -1171,7 +1171,7 @@ record in one transaction and answers with that record; the account's delivery p
 server afterwards, against the bounds and the bounded retry [mail delivery](mail-delivery.md) already states. That is
 fixed rather than configured, and it is structural as well as intended: the `Mcp` project can reach no delivery session
 at all, which `Boundaries.UnitTests` asserts against the compiled intermediate language.
-[ADR 0013](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0013-what-a-caller-must-do-before-mail-leaves.md)
+[ADR 0013](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0013-what-a-caller-must-do-before-mail-leaves.md)
 is the decision, and it is what fixes the wording the result uses: `queued`, never `sent`.
 
 **The sending address is not an argument and never becomes one.** A message is sent as the account the call names, from
@@ -1707,7 +1707,7 @@ a deleted draft is.
 Sends the message one draft holds, exactly as it stands. It is a send in every sense the three sending tools are: it
 reaches a submission server this deployment does not own and a recipient nobody here controls, it cannot be recalled,
 and it carries `send_email`'s four annotations for
-[ADR 0013](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0013-what-a-caller-must-do-before-mail-leaves.md)'s
+[ADR 0013](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0013-what-a-caller-must-do-before-mail-leaves.md)'s
 reasons.
 
 **The call transmits nothing.** The promotion writes an ordinary outgoing record carrying the bytes the draft already

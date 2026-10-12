@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Persistence;
@@ -308,7 +308,7 @@ internal static class UserAccountErasure
     /// deliberately absent, because a submitted message belongs to the mailbox like the sent mail it becomes and
     /// erasing whoever asked for it may not withdraw it from everybody else assigned that mailbox. A rule reading
     /// "every table with both columns" would take it, which is why this list is two names a reader can check against
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md">ADR 0014</see>.
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md">ADR 0014</see>.
     /// </remarks>
     internal static IReadOnlyList<IEntityType> TablesNamingTheirAuthor(IModel model)
     {

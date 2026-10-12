@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
@@ -24,7 +24,7 @@ namespace MailFathom.Application.Mail.Delivery.Submission;
 /// <b>Nothing here transmits, and no configuration makes it.</b> What comes back is the record the message was written
 /// down as, at the stage a delivery pass reads and continues from, which is why a caller is told the message is queued
 /// rather than sent. That is
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0013-what-a-caller-must-do-before-mail-leaves.md">ADR 0013</see>'s
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0013-what-a-caller-must-do-before-mail-leaves.md">ADR 0013</see>'s
 /// fixed part, and it is structural rather than enforced: this use case holds no delivery session and no factory for
 /// one, so there is nothing here that could open a submission channel.
 /// </para>

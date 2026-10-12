@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 // Where this shell keeps the credential the client signed in with, which is the one operation the web head has no
 // equivalent of at all. ADR 0023 decided the question for a desktop keychain and a browser page, and ADR 0027 amended

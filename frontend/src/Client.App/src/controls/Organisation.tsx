@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 // The host the message came from, which is what the reader recognises when the display name is somebody's first name
 // and the address is not shown. Absent where the sender wrote no address, rather than drawn as an empty parenthesis.

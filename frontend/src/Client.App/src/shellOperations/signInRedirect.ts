@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 // Where an OAuth sign-in comes back to, which is the third shell operation and the one whose two implementations differ
 // most. A page is served from an origin an authorization server can redirect to, so it hands the browser over and is

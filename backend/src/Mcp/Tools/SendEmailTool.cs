@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
@@ -24,7 +24,7 @@ namespace MailFathom.Mcp.Tools;
 /// <c>set_mail_flags</c> is a star the user takes off again; a wrong send is in a stranger's mailbox and cannot be
 /// recalled. So <c>destructiveHint</c> is <see langword="true" /> for irreversibility rather than for destruction, and
 /// <c>openWorldHint</c> points for the first time at a server this deployment does not own — both as
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0013-what-a-caller-must-do-before-mail-leaves.md">ADR 0013</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0013-what-a-caller-must-do-before-mail-leaves.md">ADR 0013</see>
 /// settles them.
 /// </para>
 /// <para>

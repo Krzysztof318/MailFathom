@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 import type { DeploymentAddress } from '@mailfathom/client-backend';
 
@@ -260,7 +260,7 @@ function grantEntryFor(deployment: DeploymentAddress): string {
 /**
  * The device half on a head with no shell behind it, which is the page's own `localStorage`.
  *
- * ADR 0023 refused this outright until [#1844](https://github.com/Krzysztof318/MailFathom/issues/1844), and the
+ * ADR 0023 refused this outright until [#1844](https://github.com/fathomise/MailFathom/issues/1844), and the
  * reasoning it was refused under is unchanged rather than overturned: `localStorage` is readable by any script that
  * reaches the origin and it outlives the tab and the browser, so a script injected next month reads a session stored
  * today. What changed is who decides to take that: it is written only where somebody ticked *Keep me signed in*, and a

@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 namespace MailFathom.Application.Signals;
 
@@ -55,7 +55,7 @@ public readonly record struct ClientSignalKind
     /// no part of the answer — no block, citation, count, spend figure, model name, or anything a person wrote. The
     /// answer is read back over the run's or the conversation's own route from the cursor the client holds, which is
     /// what keeps mail-derived content off the backplane an operator may point at a service somebody else runs;
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0035-delivering-a-running-ai-answer-from-a-persisted-run-by-cursor-signal-and-re-read.md">ADR 0035</see>
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0035-delivering-a-running-ai-answer-from-a-persisted-run-by-cursor-signal-and-re-read.md">ADR 0035</see>
     /// decides that and Amendment 3 to ADR 0032 admits this one kind for both surfaces.
     /// </remarks>
     public static ClientSignalKind RunAdvanced { get; } = new("run.advanced");

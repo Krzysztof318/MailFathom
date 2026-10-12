@@ -1,6 +1,6 @@
 # Copyright © 2026 Krzysztof Kasprowicz
 # Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-# Project repository: https://github.com/Krzysztof318/MailFathom
+# Project repository: https://github.com/fathomise/MailFathom
 
 apiVersion: v2
 name: mailfathom
@@ -36,15 +36,15 @@ version: 0.0.0
 # the repository states none — which is honest, because an unpackaged chart directory is not a release of anything. The
 # image/appVersion drift check in `_helpers.tpl` binds on a packaged chart and stands down without one.
 
-home: https://github.com/Krzysztof318/MailFathom
+home: https://github.com/fathomise/MailFathom
 sources:
-  - https://github.com/Krzysztof318/MailFathom
+  - https://github.com/fathomise/MailFathom
 
 # The project icon, absolute because a chart is consumed as a packaged archive with no repository beside it to resolve a
 # relative path against. A chart listing is the only place this field is read, and the container image states the same
 # asset as `io.artifacthub.package.logo-url`, so the chart and the image it deploys cannot come to show different
 # projects.
-icon: https://raw.githubusercontent.com/Krzysztof318/MailFathom/main/assets/icon-1254.png
+icon: https://raw.githubusercontent.com/fathomise/MailFathom/main/assets/icon-1254.png
 
 # What a chart search matches on. These are the repository's own topics, narrowed twice. The implementation topics are
 # left out — `csharp`, `dotnet`, `aspnet-core`, `dotnet-aspire`, `clean-architecture` describe the source, and nobody
@@ -94,11 +94,11 @@ annotations:
   artifacthub.io/license: AGPL-3.0-only
   artifacthub.io/links: |
     - name: Documentation
-      url: https://github.com/Krzysztof318/MailFathom/tree/main/docs
+      url: https://github.com/fathomise/MailFathom/tree/main/docs
     - name: Deploying to Kubernetes
-      url: https://github.com/Krzysztof318/MailFathom/blob/main/docs/operations/deployment-kubernetes.md
+      url: https://github.com/fathomise/MailFathom/blob/main/docs/operations/deployment-kubernetes.md
     - name: support
-      url: https://github.com/Krzysztof318/MailFathom/issues
+      url: https://github.com/fathomise/MailFathom/issues
 
 # No dependencies, deliberately, which is not the same as no database. The chart deploys PostgreSQL itself — a
 # single-replica StatefulSet on a retained claim, from templates in this directory — so that an install needs nothing

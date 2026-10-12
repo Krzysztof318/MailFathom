@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.Emails.Extraction.Attachments;
@@ -160,7 +160,7 @@ internal sealed class BoundedAttachmentTextExtractor(
     /// <c>.doc</c> is a compound file too and is reported here as <c>Encrypted</c>. Both answers already mean the text
     /// was not read, so the cost is the reason a user is given rather than the outcome, and separating them needs
     /// the compound file's own directory walked for the stream an encrypted package stores its payload in. That is
-    /// <see href="https://github.com/Krzysztof318/MailFathom/issues/1685">issue #1685</see>. Answering
+    /// <see href="https://github.com/fathomise/MailFathom/issues/1685">issue #1685</see>. Answering
     /// <c>Malformed</c> instead is the worse trade, because it would take the locked document — the case this check
     /// exists for — back to the wrong answer it had.
     /// </para>

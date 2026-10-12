@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Persistence;
@@ -57,7 +57,7 @@ public interface IStoredMailRederivationStore
     /// The row's own columns and nothing else. The search document, the passages, and the vectors are derived from the
     /// message's text, which the same immutable bytes read by the same reader produce unchanged, so rewriting them
     /// would spend a re-cut and a provider bill to arrive back where they already are —
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
     /// makes that a deliberately confirmed act rather than something a metadata refresh performs. Text written under a
     /// sensitive-content configuration this deployment no longer runs is the one case where it does change, and the
     /// extraction backfill's rebuild already owns it.

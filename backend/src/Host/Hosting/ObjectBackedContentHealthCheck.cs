@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.EmailContent.Storage;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -23,7 +23,7 @@ namespace MailFathom.Host.Hosting;
 /// </para>
 /// <para>
 /// <b>The question is asked of the database and therefore not at startup.</b>
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md">ADR 0017</see> § 1
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md">ADR 0017</see> § 1
 /// makes an endpoint that has been taken away a readiness condition for exactly this reason: whether such rows exist
 /// is a fact about stored mail, and a host that queried for it while composing would refuse to start against a
 /// database no migration had reached yet. A read that fails is reported as this check failing rather than answered as

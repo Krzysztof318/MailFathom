@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Resilience;
@@ -25,7 +25,7 @@ namespace MailFathom.Application.Persistence;
 /// </para>
 /// <para>
 /// This is the one layer around a local write, which is what keeps the single layer of retry
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/architecture/outbound-resilience.md">outbound resilience</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/architecture/outbound-resilience.md">outbound resilience</see>
 /// requires checkable: no database call runs under a resilience pipeline, and EF Core's own retrying execution
 /// strategy stays off.
 /// </para>

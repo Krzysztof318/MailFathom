@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 import { useId, useState, type RefObject } from 'react';
 import { longestTaskTitle } from '@mailfathom/client-backend';
@@ -16,7 +16,7 @@ import { useLocalization } from '../localization/useLocalization';
 //
 // **Two fields rather than the five the design draws.** A line and a day are what a task record holds on this
 // deployment. A duration is not a field of one, so the estimate beside the day is absent; the reminders block is
-// [#1572](https://github.com/Krzysztof318/MailFathom/issues/1572)'s, the panel that edits them being built already and
+// [#1572](https://github.com/fathomise/MailFathom/issues/1572)'s, the panel that edits them being built already and
 // waiting on a route to write them with; and the block that would read a task out of a typed sentence has no route on
 // this surface — the calendar has one for an event and the task list has none, which is a correction owed to the design
 // rather than a field to invent here.

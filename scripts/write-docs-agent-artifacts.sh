@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Copyright © 2026 Krzysztof Kasprowicz
 # Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-# Project repository: https://github.com/Krzysztof318/MailFathom
+# Project repository: https://github.com/fathomise/MailFathom
 #
 ### Writes the artifacts an AI agent reads into a built version of the documentation site.
 #
@@ -287,7 +287,7 @@ write_licensing_footer() {
     printf '\n---\n\n'
     printf 'Copyright © 2026 Krzysztof Kasprowicz\n'
     printf 'Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.\n'
-    printf 'Project repository: https://github.com/Krzysztof318/MailFathom\n'
+    printf 'Project repository: https://github.com/fathomise/MailFathom\n'
   } >> "$version_directory/$1"
 }
 

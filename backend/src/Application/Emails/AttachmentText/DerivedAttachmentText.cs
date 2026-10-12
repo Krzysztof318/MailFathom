@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Text;
 using MailFathom.Application.Emails.Extraction.Attachments;
@@ -109,7 +109,7 @@ public sealed record DerivedAttachmentText
 
     /// <summary>Gets whether these words belong in the lexical index as well as in the vector one.</summary>
     /// <remarks>
-    /// The one place <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md">ADR 0030</see>'s
+    /// The one place <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md">ADR 0030</see>'s
     /// exclusion is decided, so no writer has to remember it.
     /// </remarks>
     public bool BelongsInLexicalIndex => this.HasText && this.Kind == AttachmentTextKind.Document;
@@ -159,7 +159,7 @@ public sealed record DerivedAttachmentText
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="declaredMediaType" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// Written rather than omitted, because
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.md">ADR 0029</see>
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.md">ADR 0029</see>
     /// records an attachment past a ceiling as having yielded none rather than leaving it absent: a user asking why
     /// their contract was not searched is owed the ceiling as an answer. <see cref="Kind" /> is
     /// <see cref="AttachmentTextKind.Document" /> because nothing here opened the file far enough to know what it is,

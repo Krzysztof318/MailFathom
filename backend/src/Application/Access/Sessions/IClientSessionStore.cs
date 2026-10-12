@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 namespace MailFathom.Application.Access.Sessions;
 
@@ -11,7 +11,7 @@ namespace MailFathom.Application.Access.Sessions;
 /// replica that minted it is a session roughly <c>(N−1)/N</c> of a client's requests are refused by, which the client
 /// meets as being signed out; and an operator ending somebody's access would end it on the one replica their
 /// administrative request happened to reach.
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0033-where-a-signed-in-session-lives-so-every-replica-accepts-it.md">ADR 0033</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0033-where-a-signed-in-session-lives-so-every-replica-accepts-it.md">ADR 0033</see>
 /// records both halves of that, and why nothing caches what this answers.
 /// </para>
 /// <para>

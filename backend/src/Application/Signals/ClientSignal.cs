@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Agent.Conversations;
 using MailFathom.Application.Discovery.Streaming;
@@ -19,7 +19,7 @@ namespace MailFathom.Application.Signals;
 /// client re-reads over the authenticated routes it already has — the one exception being
 /// <see cref="ClientSignalKind.MailFlagsChanged" />, which states where two flags stand because they are the only
 /// change a client can apply without deciding whether a row still belongs where it is drawn. That keeps
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0028-no-mail-on-the-device-and-an-honest-client-with-no-route-to-its-deployment.md">ADR 0028</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0028-no-mail-on-the-device-and-an-honest-client-with-no-route-to-its-deployment.md">ADR 0028</see>
 /// intact: nothing new is stored on a device, and a client whose channel is down behaves exactly as one that never had
 /// it.
 /// </para>
@@ -321,7 +321,7 @@ public sealed class ClientSignal
     /// count, no spend figure, no model name, and no alias. An answer quotes mail by construction, and this is the one
     /// kind whose subject is mail-derived — so what crosses is a run identifier and a number, and the answer is read
     /// back over the run's own route. Widening it is what
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0035-delivering-a-running-ai-answer-from-a-persisted-run-by-cursor-signal-and-re-read.md">ADR 0035</see>
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0035-delivering-a-running-ai-answer-from-a-persisted-run-by-cursor-signal-and-re-read.md">ADR 0035</see>
     /// refuses, because the backplane this crosses may be a service the deployment does not run.
     /// </remarks>
     public static ClientSignal DiscoveryRunAdvanced(UserId user, DiscoveryRunId run, long sequence)
@@ -340,7 +340,7 @@ public sealed class ClientSignal
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="sequence" /> is not positive, a conversation having reached nothing being no advance.</exception>
     /// <remarks>
     /// The same kind a Discover run raises rather than one of its own, because
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0032-reaching-a-client-from-any-replica-over-websockets-and-a-resp-backplane.md">ADR 0032</see>
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0032-reaching-a-client-from-any-replica-over-websockets-and-a-resp-backplane.md">ADR 0032</see>
     /// admitted exactly one kind for a running answer on either surface. It carries identifiers and a number, and no
     /// part of what was written: no question, no block, no status line, no title.
     /// </remarks>

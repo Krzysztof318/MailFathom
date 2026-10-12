@@ -1,7 +1,7 @@
 {{- /*
 Copyright © 2026 Krzysztof Kasprowicz
 Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-Project repository: https://github.com/Krzysztof318/MailFathom
+Project repository: https://github.com/fathomise/MailFathom
 */ -}}
 {{/*
 Shared naming, labels, and the two derivations that would otherwise be written differently in each template: the image
@@ -60,9 +60,9 @@ the notes then say nothing about documentation instead of offering an address as
 */}}
 {{- define "mailfathom.documentationAddress" -}}
 {{- if eq .Values.image.channel "nightly" -}}
-https://krzysztof318.github.io/MailFathom/docs/latest/
+https://fathomise.github.io/MailFathom/docs/latest/
 {{- else if .Chart.AppVersion -}}
-{{- printf "https://krzysztof318.github.io/MailFathom/docs/v%s/" .Chart.AppVersion -}}
+{{- printf "https://fathomise.github.io/MailFathom/docs/v%s/" .Chart.AppVersion -}}
 {{- end -}}
 {{- end -}}
 

@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 namespace MailFathom.Application.Emails.AttachmentText.Administration;
 
@@ -24,7 +24,7 @@ namespace MailFathom.Application.Emails.AttachmentText.Administration;
 /// extraction consumed rather than inside a ceiling that prices a call. It grows when a document's words are written to
 /// the lexical index and it is what an operator watches to see the database growing; a description contributes none of
 /// it, because
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md">ADR 0030</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md">ADR 0030</see>
 /// keeps a model's account of a picture out of the lexical index.
 /// </para>
 /// <para>

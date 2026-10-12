@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Linq.Expressions;
 using System.Runtime.InteropServices;
@@ -35,7 +35,7 @@ namespace MailFathom.Infrastructure.Persistence.Emails;
 /// A row the move has carried and an operator has not yet released is held in both stores at once, and the object is the
 /// authoritative one. Where the object cannot be answered for, this serves the copy the database still holds and says so
 /// on the way out —
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md">ADR 0017</see> § 6,
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md">ADR 0017</see> § 6,
 /// because refusing over bytes the deployment has would be a self-inflicted outage. Once the copy is released the same
 /// situation is answered with nothing, exactly as a missing database payload always was.
 /// </para>

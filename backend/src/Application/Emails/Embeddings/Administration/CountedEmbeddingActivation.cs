@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Access;
 using MailFathom.Application.Emails.AttachmentText.Administration;
@@ -16,7 +16,7 @@ namespace MailFathom.Application.Emails.Embeddings.Administration;
 /// <see cref="EmbeddingProfileActivation" /> is the writer and deliberately knows nothing about money: by the time it
 /// is called the decision has been made. This is the step in front of it that makes the decision an informed one — the
 /// counting, the ceiling, and the refusal that
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
 /// puts between an operator and the first thing MailFathom does that costs money per unit of mail.
 /// </para>
 /// <para>

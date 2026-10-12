@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Emails.AttachmentText.Administration;
 using MailFathom.Application.Emails.AttachmentText.Limits;
@@ -13,7 +13,7 @@ namespace MailFathom.Application.Emails.Embeddings.Administration;
 /// The whole of what an operator is shown before they agree to spend, in one value, because the three parts are only
 /// meaningful together: a number of passages says nothing without the ceiling it is weighed against, and a ceiling says
 /// nothing without what the run would send.
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
 /// makes seeing this the condition of activating at all.
 /// </remarks>
 /// <param name="Declared">The geometry configuration declares, which is what would be activated.</param>

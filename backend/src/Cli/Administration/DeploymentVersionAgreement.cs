@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Cli.Commands;
 
@@ -14,7 +14,7 @@ namespace MailFathom.Cli.Administration;
 /// <c>major.minor</c> line the whole of the compatibility statement. A command from another line is therefore refused
 /// rather than sent, and one from the same line carrying a different patch or prerelease identifier is a build
 /// difference worth naming and nothing more. See
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md">ADR 0004</see>.
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md">ADR 0004</see>.
 /// </para>
 /// <para>
 /// A version that cannot be read warns instead of refusing. The refusal reports an incompatibility that was observed,

@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Globalization;
 using MailFathom.Application.Emails.AttachmentText;
@@ -19,7 +19,7 @@ namespace MailFathom.Infrastructure.Persistence.Emails.Configurations;
 /// no code path, no migration, no ad-hoc update — can leave a row whose vector describes words the row no longer holds.
 /// What is new here is the condition in front of it. A row holding a model's description of a picture generates no
 /// vector at all, which is
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md">ADR 0030</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md">ADR 0030</see>
 /// enforced by the database rather than remembered by a writer: a lexical search must never return a picture because a
 /// model guessed a word into it.
 /// </para>

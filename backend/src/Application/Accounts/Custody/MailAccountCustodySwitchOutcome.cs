@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Domain.Accounts;
 
@@ -12,7 +12,7 @@ namespace MailFathom.Application.Accounts.Custody;
 /// <remarks>
 /// A refusal is a result rather than an exception, because every one of them names something an operator corrects and
 /// asks again: a mapping to stop synchronizing, a path to write, or an older replica to finish going away. See
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
 /// </remarks>
 public sealed record MailAccountCustodySwitchOutcome(
     MailAccountCustodyState State,

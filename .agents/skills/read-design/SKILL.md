@@ -4,7 +4,7 @@ description: Use before building, changing, or reviewing any client screen, or t
 license: AGPL-3.0-only
 metadata:
   author: Krzysztof Kasprowicz
-  repository: https://github.com/Krzysztof318/MailFathom
+  repository: https://github.com/fathomise/MailFathom
 ---
 
 # Read Design

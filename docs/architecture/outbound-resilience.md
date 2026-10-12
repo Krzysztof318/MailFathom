@@ -304,7 +304,7 @@ is the layer rather than something MailFathom re-implements:
   opens it, through `EfCorePersistenceSessionAccessor.JoinAsync`. A session's transaction therefore covers the writes
   that joined it and nothing before them, so work a caller has to finish outside a transaction — handing an object to
   a content endpoint and computing its digest, which [ADR
-  0017](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md)
+  0017](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md)
   requires to happen with none open — runs before the first join rather than needing the transaction removed.
 - **An outgoing message being transmitted.** The submission is reached under no pipeline at all, and that is the
   point rather than an omission. A retry there would offer a body a server may already have taken, which is the one
@@ -387,7 +387,7 @@ to outlive its operation, or a backoff ceiling longer than the total timeout, de
 reached. `MaxAttempts` counts the first call, so `1` disables retry and leaves the other strategies in place.
 
 The settings are classified **restart-required** under
-[ADR 0002](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0002-configuration-reading-mapping-and-reload-boundary.md), which is that ADR's default for a
+[ADR 0002](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0002-configuration-reading-mapping-and-reload-boundary.md), which is that ADR's default for a
 group without a validated-snapshot layer. The registration binds a frozen copy of the section rather than the live
 configuration, so the classification holds by construction: a reloaded budget is not adopted, and a malformed one
 cannot disturb a pipeline that is already serving.

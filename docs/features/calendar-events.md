@@ -147,7 +147,7 @@ untrusted input, and the client is the wrong place to decide what it may become.
 **The parser is chosen rather than written.** RFC 5545 folds lines at 75 octets, escapes values, carries parameters on
 every property, and states a date in three different ways, and hand-rolling that is how an imported date lands
 silently wrong. The base class library carries no iCalendar reader, so one is pinned and recorded in
-[`THIRD_PARTY_LICENSES.md`](https://github.com/Krzysztof318/MailFathom/blob/main/THIRD_PARTY_LICENSES.md); it stays
+[`THIRD_PARTY_LICENSES.md`](https://github.com/fathomise/MailFathom/blob/main/THIRD_PARTY_LICENSES.md); it stays
 inside the adapter that owns parsing, and what crosses into the application is five facts per entry.
 
 **Nothing creates an event until the person has seen what it would create.** The summary and the import read the same

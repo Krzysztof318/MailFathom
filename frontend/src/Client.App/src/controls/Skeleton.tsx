@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 // One block standing in the space something that has not arrived will occupy. It is the whole of what a skeleton is
 // made of in this client: the four the design draws — a folder's list, a message, the full HTML surface, and

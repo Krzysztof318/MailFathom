@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Access;
 using MailFathom.Application.Contacts;
@@ -678,7 +678,7 @@ public sealed class MailboxSynchronizerTests
     /// <remarks>
     /// A copy leaves the email where it was, so nothing is carried across and the second live occurrence is a second
     /// local email, which is what
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0008-copied-message-local-identity.md">ADR 0008</see>
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0008-copied-message-local-identity.md">ADR 0008</see>
     /// decided. What it must not do is set a rule off or be reported to the person as mail that arrived, both of which
     /// are questions about provenance rather than about rows: an IMAP copy carries the source's flags, so a copy of an
     /// unread message is itself unread and would otherwise announce the message it was copied from.
@@ -755,10 +755,10 @@ public sealed class MailboxSynchronizerTests
     /// A destination folder that answers without a <c>COPYUID</c> leaves nothing to join the discovery to the record
     /// that caused it, so the new occurrence is resolved by observing the folder rather than by assuming which message
     /// it is. Storing it costs nothing extra under
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0008-copied-message-local-identity.md">ADR 0008</see>,
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0008-copied-message-local-identity.md">ADR 0008</see>,
     /// because a copy is a second local email whether or not the record reaches it. What is lost is the provenance:
     /// the arrival reaches rule evaluation as an ordinary one, which is the price
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md">ADR 0007</see>
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md">ADR 0007</see>
     /// accepted for refusing to search the destination folder, and it is asserted here so it stays a decision rather
     /// than becoming a surprise.
     /// </remarks>

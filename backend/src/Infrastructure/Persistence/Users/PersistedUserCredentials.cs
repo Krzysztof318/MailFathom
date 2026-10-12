@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Net;
 using MailFathom.Application.Access.Credentials;
@@ -405,7 +405,7 @@ internal sealed class PersistedUserCredentials(MailFathomDbContext dbContext, Ti
     /// </para>
     /// <para>
     /// The order is this row and then the sessions beneath it, which is the order every other path takes:
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0033-where-a-signed-in-session-lives-so-every-replica-accepts-it.md">ADR 0033</see>
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0033-where-a-signed-in-session-lives-so-every-replica-accepts-it.md">ADR 0033</see>
     /// requires the user row, then the credential row, then the session row over all four of them, and what an
     /// inversion costs is a deadlock PostgreSQL breaks by aborting a renewal, a disable, or an erasure outright.
     /// </para>

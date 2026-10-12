@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 import type {
     AnswerConfidence,
@@ -105,7 +105,7 @@ export const sourceKinds: Readonly<Record<CitedSourceKind, { readonly label: Mes
  *
  * A written source is the ordinary case and says nothing of itself. A depicted one is this deployment's own account of
  * what a picture shows rather than words anybody typed, and
- * [ADR 0030](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md)
+ * [ADR 0030](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md)
  * is what makes saying so an obligation rather than a nicety: presented as a quotation, a machine's reading of an
  * image is a guess promoted to evidence.
  */

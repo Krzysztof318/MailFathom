@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Access.Credentials;
 using MailFathom.Application.Paging;
@@ -26,7 +26,7 @@ namespace MailFathom.Application.Access.Grants;
 /// there widens nobody and is not asked about. Revoking an assignment and ending a membership need only the coverage,
 /// because taking a grant away widens nobody — and the store refuses the one that would leave the deployment with no
 /// root. See
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0012-authorization-model-named-permissions-and-where-they-are-enforced.md">ADR 0012</see>.
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0012-authorization-model-named-permissions-and-where-they-are-enforced.md">ADR 0012</see>.
 /// </para>
 /// <para>
 /// A role listing a pattern holds whatever a later release publishes in the pattern's reach, so no check of what its

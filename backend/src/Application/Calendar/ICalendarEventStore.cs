@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Access;
@@ -19,7 +19,7 @@ namespace MailFathom.Application.Calendar;
 /// </para>
 /// <para>
 /// The three writes stage through the caller's session and commit nothing, as
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0001-application-owned-repositories-for-persistence-ports.md">ADR 0001</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0001-application-owned-repositories-for-persistence-ports.md">ADR 0001</see>
 /// requires of a write port: the caller decides the transaction, and the retry policy above it decides what a lost race
 /// means. The two reads join none, so they take no session.
 /// </para>

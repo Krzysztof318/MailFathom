@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
@@ -15,7 +15,7 @@ namespace MailFathom.Host.Configuration.Embeddings;
 /// <remarks>
 /// <para>
 /// Declaring is free and activating is not, which is the split
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
 /// makes: this section is where a reviewer, a chart, and a <c>git diff</c> can see which model an instance uses, and
 /// editing it starts no spending. What turns a declaration into the profile stored vectors are attributed to is a
 /// separate, explicit activation.

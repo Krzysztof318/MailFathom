@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 // The ramp a mailbox mark is drawn from, which `styles.css` declares as `--color-mailbox-mark-1` and the numbers after
 // it. Only the rule for reading it lives here; the hues themselves are the token layer's, as every colour in this

@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using ArchUnitNET.Fluent;
 using ArchUnitNET.xUnitV3;
@@ -12,7 +12,7 @@ namespace MailFathom.Boundaries.UnitTests;
 
 /// <summary>Covers which boundaries can obtain the one capability able to change a remote mailbox.</summary>
 /// <remarks>
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md" />
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md" />
 /// draws the mutation boundary around the write session: the use case that performs a mutation obtains one, and
 /// nothing else does. <c>McpDependencyBoundaryTests</c> asserts the same claim for the protocol boundary through
 /// reflection, which reaches a member's signature and the fields of a compiler-generated closure, and therefore

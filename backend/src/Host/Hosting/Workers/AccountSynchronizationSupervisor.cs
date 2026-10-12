@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
@@ -1061,7 +1061,7 @@ internal sealed partial class AccountSynchronizationSupervisor
     /// <remarks>
     /// <para>
     /// Behind the cut rather than beside it, which is the ordering
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.md">ADR 0029</see>
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.md">ADR 0029</see>
     /// asks for: this is the one stage that hands octets a stranger composed to a document parser and the one that may
     /// call a provider about a picture, so a message reaches retrieval on its own words first and gains its
     /// attachments' words when they arrive. The body's passages are untouched by it — their digests and vectors stay

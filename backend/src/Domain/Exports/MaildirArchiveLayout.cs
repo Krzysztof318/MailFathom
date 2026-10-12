@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Globalization;
 using System.Text;
@@ -17,7 +17,7 @@ namespace MailFathom.Domain.Exports;
 /// <c>.</c> or <c>..</c> is therefore <c>%2E</c> or <c>%2E%2E</c>, no folder directory can be named <c>cur</c>,
 /// <c>new</c>, or <c>tmp</c> because every one of them begins with <c>.</c>, and a delimiter of any extractor's — a
 /// slash, a backslash, a control character — cannot appear literally.
-/// See <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
+/// See <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
 /// </para>
 /// <para>
 /// A message's file name is minted here and takes nothing from the message or from its folder, which is the other half

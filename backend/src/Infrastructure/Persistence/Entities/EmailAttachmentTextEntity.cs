@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Emails.AttachmentText;
 using MailFathom.CodeCoverage;
@@ -19,7 +19,7 @@ namespace MailFathom.Infrastructure.Persistence.Entities;
 /// </para>
 /// <para>
 /// <b>The lexical index lives on this row rather than on the message's own search document</b>, which is the shape
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.md">ADR 0029</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.md">ADR 0029</see>
 /// was amended to. Appending a file's words to the message's document would make them match as though the message had
 /// contained them, and <c>ts_headline</c> would quote a contract inside the snippet shown for the covering note. A
 /// document of its own also carries what a hit has to name: which attachment matched, and — through the passages cut
@@ -28,7 +28,7 @@ namespace MailFathom.Infrastructure.Persistence.Entities;
 /// <para>
 /// <b>A description is embedded and never indexed lexically.</b> The generated vector is built only for a row whose
 /// kind is a document, which is
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md">ADR 0030</see>'s
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md">ADR 0030</see>'s
 /// ruling expressed where no writer can forget it: searching for a word by the letters it is written in must not return
 /// a picture in which a model guessed it.
 /// </para>

@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 namespace MailFathom.Application.Emails.Embeddings;
 
@@ -15,7 +15,7 @@ namespace MailFathom.Application.Emails.Embeddings;
 /// <para>
 /// This is not the input ceiling an instance configures to bound what it spends on one message. The two are easy to
 /// confuse because both are a limit on text, and the distinction is what
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
 /// draws: preparation decides what a vector means, a ceiling decides how many vectors exist.
 /// </para>
 /// <para>

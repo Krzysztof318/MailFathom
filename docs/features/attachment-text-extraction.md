@@ -289,7 +289,7 @@ to `0`, which declares no ceiling and still counts, so an operator sees the figu
 **A per-user share is charged in full to every user a mailbox is assigned to.** An attachment belongs to the mailbox
 rather than to a person, so reading one on a mailbox several people hold is admitted only while every one of them is
 under their share and is then charged to each of them, which is what
-[ADR 0014](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md)
+[ADR 0014](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md)
 decided rather than dividing the window between them.
 
 **An attachment a parser never saw is charged no octets.** Extraction counts what was handed to a parser rather than
@@ -308,14 +308,14 @@ because the request was made and a provider bills for having been asked.
 **Embedding attachment text has no ceiling of its own**, and that is a decision rather than an omission:
 `Embeddings:MaxInputCharactersPerPeriod` counts an attachment's characters exactly as it counts a message's own, so a
 second ceiling on the same send would be two keys answering for one behaviour. [ADR
-0029](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.md)
+0029](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.md)
 records it. **Concurrency has no ceiling of its own here either**: how many account runs read at once is
 `Mail:MaxConcurrentAccounts`, and how many provider calls are in flight is
 `Resilience:AiProviderInvocation:ConcurrencyLimit`. What this section adds is a *rate* for the description workload —
 `Embeddings:ImageDescription:MaxRequestsPerMinute`, paced separately from the embedding provider's, because the two are
 different endpoints with different published quotas. That rate is the *deployment's* — its slot marker is a row every
 replica moves — while the concurrency limit beside it stays each process's, which is the split
-[ADR 0031](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md)
+[ADR 0031](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md)
 records: a rate names a quota the provider counts across the deployment, and an in-flight count names what one process
 has open.
 

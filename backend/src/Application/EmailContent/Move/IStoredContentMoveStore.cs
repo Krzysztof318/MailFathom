@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.EmailContent.Storage;
 
@@ -17,7 +17,7 @@ namespace MailFathom.Application.EmailContent.Move;
 /// <b>No operation here takes a persistence session, and that is the design rather than an omission.</b> The move puts
 /// an object between reading a payload and repointing its row, so a session spanning the two would hold a database
 /// transaction open across a network call — which
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0001-application-owned-repositories-for-persistence-ports.md">ADR 0001</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0001-application-owned-repositories-for-persistence-ports.md">ADR 0001</see>
 /// forbids. Each operation is therefore its own unit of work, and the repoint is one statement whose own condition is
 /// what makes it safe to issue alone.
 /// </para>
@@ -73,7 +73,7 @@ public interface IStoredContentMoveStore
     /// <b>The payload column is deliberately left as it is.</b> The row is now read from its object and the bytes beside
     /// it are a retained duplicate, held so that a read still works while a deployment is trusting its bucket for the
     /// first time —
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md">ADR 0017</see> § 6.
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md">ADR 0017</see> § 6.
     /// Freeing it is an operator's own act through <c>IRetainedContentReleaseStore</c>, because it is the one
     /// irreversible step in the whole move and must not be a consequence of a background pass.
     /// </para>

@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Persistence;
@@ -12,7 +12,7 @@ namespace MailFathom.Application.Emails.Embeddings.Generations;
 /// <para>
 /// This is the one writer of a profile row, and the only thing in MailFathom that starts spending against a provider on
 /// purpose. Editing configuration declares a model and costs nothing;
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
 /// makes this separate act the one that materializes the declaration and pays for it.
 /// </para>
 /// <para>

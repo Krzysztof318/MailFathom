@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Access;
 using MailFathom.Application.Agent.Conversations;
@@ -18,7 +18,7 @@ namespace MailFathom.Application.Agent.Answering;
 /// <strong>Every part is written where it is produced.</strong> A status line, a declared source, a block, and a
 /// proposal each reach the conversation the moment the composition has them, so what a person sees survives the
 /// connection that asked, a second screen, and the replica composing it going away — the condition
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0035-delivering-a-running-ai-answer-from-a-persisted-run-by-cursor-signal-and-re-read.md">ADR 0035</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0035-delivering-a-running-ai-answer-from-a-persisted-run-by-cursor-signal-and-re-read.md">ADR 0035</see>
 /// rests on. Nothing here buffers.
 /// </para>
 /// <para>

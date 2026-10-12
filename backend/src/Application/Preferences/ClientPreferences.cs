@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 namespace MailFathom.Application.Preferences;
 
@@ -21,7 +21,7 @@ namespace MailFathom.Application.Preferences;
 /// </para>
 /// <para>
 /// Marking read is here rather than on the mail account for the reason
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0026-marking-a-message-read-when-a-person-opens-it-in-the-client.md">ADR 0026</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0026-marking-a-message-read-when-a-person-opens-it-in-the-client.md">ADR 0026</see>
 /// gives: read state is what must not fragment between the machines one person reads on, so it covers every account
 /// that user reads and is not an operator's key.
 /// </para>
@@ -40,7 +40,7 @@ namespace MailFathom.Application.Preferences;
 /// organization they belong to, may force <see cref="TelemetryEnabled" /> on or off, and while one does the value
 /// held here is their own answer rather than the one applied: it is kept as they gave it, it decides nothing, and it
 /// applies again when no policy forces the switch. The other seven are never governed.
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0037-a-settings-policy-at-the-deployment-and-at-each-organization.md">ADR 0037</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0037-a-settings-policy-at-the-deployment-and-at-each-organization.md">ADR 0037</see>
 /// records the exception and what forcing the switch on owes the person it is about.
 /// </para>
 /// </remarks>

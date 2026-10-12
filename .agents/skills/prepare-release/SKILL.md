@@ -5,7 +5,7 @@ disable-model-invocation: true
 license: AGPL-3.0-only
 metadata:
   author: Krzysztof Kasprowicz
-  repository: https://github.com/Krzysztof318/MailFathom
+  repository: https://github.com/fathomise/MailFathom
 ---
 
 # Prepare Release
@@ -123,7 +123,7 @@ only GraphQL exposes it:
 
 ```bash
 for issue in <the numbers closingIssuesReferences returned above>; do
-  gh api graphql -f query="{ repository(owner: \"Krzysztof318\", name: \"MailFathom\") {
+  gh api graphql -f query="{ repository(owner: \"fathomise\", name: \"MailFathom\") {
     issue(number: $issue) { number parent { number title state subIssuesSummary { total completed } } } } }" \
     --jq '.data.repository.issue | select(.parent != null)
           | "#\(.number)\t#\(.parent.number) \(.parent.state) \(.parent.subIssuesSummary.completed)/\(.parent.subIssuesSummary.total)\t\(.parent.title)"'
@@ -186,23 +186,23 @@ ask before moving anything unless they already said what to do with it.
 4. **Close the milestone being released.**
 
 ```bash
-gh api 'repos/Krzysztof318/MailFathom/milestones?state=all' --jq '.[] | "\(.number) \(.title) \(.state)"'
-gh api -X POST repos/Krzysztof318/MailFathom/milestones -f title='<next>'          # only when it does not exist
+gh api 'repos/fathomise/MailFathom/milestones?state=all' --jq '.[] | "\(.number) \(.title) \(.state)"'
+gh api -X POST repos/fathomise/MailFathom/milestones -f title='<next>'          # only when it does not exist
 
 # The next release's tracking issue. Search the milestone first: an issue opened by a previous run must not be opened
 # a second time, and a second one would be two issues closing one release.
-gh issue list --repo Krzysztof318/MailFathom --milestone '<next>' --state all \
+gh issue list --repo fathomise/MailFathom --milestone '<next>' --state all \
   --search 'Cut and publish in:title' --json number,title
-gh issue create --repo Krzysztof318/MailFathom --title 'Cut and publish the <next> release' \
+gh issue create --repo fathomise/MailFathom --title 'Cut and publish the <next> release' \
   --label type:workflow --milestone '<next>' --body-file <body>    # only when the search found none
 
 # What to move: open issues in the milestone being released, minus the tracking issue. `/issues` returns pull
 # requests as well, so both exclusions are the query's rather than the reader's to remember.
-gh api "repos/Krzysztof318/MailFathom/issues?milestone=<old>&state=open&per_page=100" \
+gh api "repos/fathomise/MailFathom/issues?milestone=<old>&state=open&per_page=100" \
   --jq ".[] | select(.pull_request == null) | select(.number != <tracking issue>) | .number"
 
-gh api -X PATCH "repos/Krzysztof318/MailFathom/issues/<n>" -F milestone=<new-number>
-gh api -X PATCH "repos/Krzysztof318/MailFathom/milestones/<old>" -f state=closed
+gh api -X PATCH "repos/fathomise/MailFathom/issues/<n>" -F milestone=<new-number>
+gh api -X PATCH "repos/fathomise/MailFathom/milestones/<old>" -f state=closed
 ```
 
 The new issue is placed like any other, through the calls `docs/operations/issue-tracking.md` § *Board fields* holds:
@@ -227,7 +227,7 @@ from the work placed in the `x.y.z` milestone. #<the previous release's issue> w
 before it.
 
 The procedure is decided and recorded:
-[ADR 0004](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md)
+[ADR 0004](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md)
 settles what the number means and where it comes from, `docs/operations/release-procedure.md` records the sequence, and
 `$prepare-release` prepares the two pull requests and prints the order they and the tag between them have to land in.
 
@@ -552,8 +552,8 @@ flight that the board's `Now` view cannot see, for exactly the weeks it is being
 five-slot cap, as every write triggered by a pull request does.
 
 ```bash
-gh project field-list 4 --owner Krzysztof318 --format json   # field ids and option ids
-gh project item-list  4 --owner Krzysztof318 --format json   # item id for the tracking issue
+gh project field-list 1 --owner fathomise --format json   # field ids and option ids
+gh project item-list  1 --owner fathomise --format json   # item id for the tracking issue
 gh project item-edit --project-id <project-id> --id <item-id> \
   --field-id <Queue field-id> --single-select-option-id <Next option-id>
 ```

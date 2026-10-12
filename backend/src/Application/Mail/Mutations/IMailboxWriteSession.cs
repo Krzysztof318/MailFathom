@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Domain.Delivery.Filing;
@@ -337,7 +337,7 @@ public interface IMailboxWriteSession : IAsyncDisposable
     /// issued twice is a second message in the user's folder. The durable record the restore writes before calling is
     /// what a resumed attempt reads, and a record whose answer never arrived is reported to an operator rather than
     /// issued again. See
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
     /// </para>
     /// </remarks>
     Task<RemoteEmailPlacement> AppendRestoredAsync(
@@ -390,7 +390,7 @@ public interface IMailboxWriteSession : IAsyncDisposable
     /// Both commands are idempotent against the UIDs they name, so a batch whose answer never arrived is issued again
     /// by the next pass rather than being settled from what the mailbox shows. A UID the folder no longer holds is not
     /// an error: what was asked for is already true. See
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
     /// </para>
     /// </remarks>
     Task ExpungeDrainedAsync(

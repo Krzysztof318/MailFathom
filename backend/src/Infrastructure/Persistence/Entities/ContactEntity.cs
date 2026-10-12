@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Contacts;
@@ -114,7 +114,7 @@ internal sealed class ContactEntity
     /// <remarks>
     /// <para>
     /// A contact is amended in place, so it is exactly the mutable record
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0001-application-owned-repositories-for-persistence-ports.md">ADR 0001</see>
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0001-application-owned-repositories-for-persistence-ports.md">ADR 0001</see>
     /// requires a token on.
     /// </para>
     /// <para>

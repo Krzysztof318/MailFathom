@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Accounts;
@@ -19,7 +19,7 @@ namespace MailFathom.Application.Accounts.Custody;
 /// Every phase write is conditional on the phase it was decided from, because the account's supervision may move across
 /// a lease handover: a replica that read <c>Mirrored</c>, spent a run draining, and then wrote <c>Held</c> would be
 /// writing over whatever the replica that replaced it had since decided. See
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
 /// </para>
 /// </remarks>
 public interface IMailAccountCustodyStore

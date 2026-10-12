@@ -12,7 +12,7 @@ Nothing here is a command anybody runs. Mail that arrives is embedded because it
 
 An active embedding profile, and nothing else. There is no `Enabled` flag: activating a profile is what starts
 generation, and an instance with no active profile stores its passages and produces no vectors —
-[ADR 0006](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md)
+[ADR 0006](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md)
 records why the switch is an operation rather than a setting.
 
 That state is read per message rather than once at startup, so activating a profile takes effect on the next message

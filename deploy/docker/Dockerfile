@@ -205,13 +205,13 @@ ARG IMAGE_DOCUMENTATION_VERSION=v${IMAGE_VERSION}
 LABEL org.opencontainers.image.licenses="AGPL-3.0-only" \
       org.opencontainers.image.title="MailFathom" \
       org.opencontainers.image.description="A brain for your mail: self-hosted and AI-native, IMAP synchronized and served over MCP." \
-      org.opencontainers.image.source="https://github.com/Krzysztof318/MailFathom" \
-      org.opencontainers.image.documentation="https://krzysztof318.github.io/MailFathom/docs/${IMAGE_DOCUMENTATION_VERSION}/" \
+      org.opencontainers.image.source="https://github.com/fathomise/MailFathom" \
+      org.opencontainers.image.documentation="https://fathomise.github.io/MailFathom/docs/${IMAGE_DOCUMENTATION_VERSION}/" \
       org.opencontainers.image.version="${IMAGE_VERSION}" \
       org.opencontainers.image.revision="${IMAGE_REVISION}" \
       org.opencontainers.image.created="${IMAGE_CREATED}" \
       io.mailfathom.release-channel="${IMAGE_RELEASE_CHANNEL}" \
-      io.artifacthub.package.logo-url="https://raw.githubusercontent.com/Krzysztof318/MailFathom/main/assets/icon-1254.png"
+      io.artifacthub.package.logo-url="https://raw.githubusercontent.com/fathomise/MailFathom/main/assets/icon-1254.png"
 
 # The MCP endpoint's own port, stated in the section that owns it. MailFathom refuses ASPNETCORE_HTTP_PORTS and every
 # other URL-shaped address, because each surface states where it is served in its own configuration section. 8080 is

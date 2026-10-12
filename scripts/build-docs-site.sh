@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Copyright © 2026 Krzysztof Kasprowicz
 # Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-# Project repository: https://github.com/Krzysztof318/MailFathom
+# Project repository: https://github.com/fathomise/MailFathom
 
 set -euo pipefail
 
@@ -101,7 +101,7 @@ if unresolved_links="$(
   printf '%s\n' "$unresolved_links" >&2
   printf '\nA link between two published pages stays relative; a link to anything the site does not carry — an\n' >&2
   printf 'architectural decision record, a deployment asset, a source file — is written as an absolute\n' >&2
-  printf 'https://github.com/Krzysztof318/MailFathom URL so that it works in both renderings.\n' >&2
+  printf 'https://github.com/fathomise/MailFathom URL so that it works in both renderings.\n' >&2
   exit 1
 fi
 

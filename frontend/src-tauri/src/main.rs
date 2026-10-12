@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 // The desktop head's entry point, and nothing else. Everything the shell is lives in `lib.rs` beside this, because an
 // Android application is started through a JNI entry point in a shared object rather than by running an executable, and

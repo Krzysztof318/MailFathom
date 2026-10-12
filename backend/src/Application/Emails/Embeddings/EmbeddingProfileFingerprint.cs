@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Security.Cryptography;
 using MailFathom.Application.Digests;
@@ -13,7 +13,7 @@ namespace MailFathom.Application.Emails.Embeddings;
 /// The profile table is unique on this value, which is what makes activation idempotent: a declaration whose geometry is
 /// already registered resolves to the existing profile instead of writing a second row that would be re-embedded from
 /// scratch for nothing. Returning to a previous model is therefore a switch rather than a duplicate. See
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>.
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>.
 /// </para>
 /// <para>
 /// The digest names no mail and no credential. It is computed over a deployment's own configured settings, so unlike a

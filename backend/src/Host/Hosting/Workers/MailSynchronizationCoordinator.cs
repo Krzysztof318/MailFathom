@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Signals;
@@ -37,7 +37,7 @@ namespace MailFathom.Host.Hosting.Workers;
 /// </para>
 /// <para>
 /// Every replica of a deployment reads the same account set, so a supervisor is started only for an account whose
-/// lease this replica took, as <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md">ADR 0031</see>
+/// lease this replica took, as <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md">ADR 0031</see>
 /// decides. An account another replica holds is asked for again on each pass, which is how it moves here once that
 /// replica stops.
 /// </para>

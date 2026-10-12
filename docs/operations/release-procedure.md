@@ -5,7 +5,7 @@
 MailFathom's version number is a compatibility promise over four public surfaces. This page records how a build
 acquires that number, how the official MCP Registry metadata records the released one, where both are observable, and
 the sequence that turns a commit on a release branch into a release.
-[ADR 0004](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md)
+[ADR 0004](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md)
 records why the build and release use their declared version and tag.
 
 ## Where the number comes from

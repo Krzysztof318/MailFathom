@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Access;
 using MailFathom.Application.Emails.Mailboxes;
@@ -18,7 +18,7 @@ namespace MailFathom.Application.Mail.Mutations.Authoring;
 /// This is the join between a caller and a mailbox, and it is deliberately the whole of it. Nothing here issues an IMAP
 /// command or holds a type that could: the account's own convergence pass carries each record to a completed or a
 /// dead-lettered ending exactly as it carries a change a rule authored, which is what keeps
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md">ADR 0007</see>'s
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md">ADR 0007</see>'s
 /// separation a property of the types rather than a rule somebody has to notice. What this adds is the grant, the
 /// visibility rule, the identity, and one record per value asked for.
 /// </para>

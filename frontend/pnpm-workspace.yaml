@@ -1,6 +1,6 @@
 # Copyright © 2026 Krzysztof Kasprowicz
 # Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-# Project repository: https://github.com/Krzysztof318/MailFathom
+# Project repository: https://github.com/fathomise/MailFathom
 
 # The two packages the client is split into, and the split is a reference graph rather than a convention: nothing
 # depends on `Client.App`, and `Client.Backend` declares neither React nor a DOM-typed dependency, so an import of

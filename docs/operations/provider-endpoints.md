@@ -34,7 +34,7 @@ is doing an ordinary thing. What they do not get is this page's word for it.
 
 Neither claim is a review of the service's terms, and this page is not the place one is recorded. MailFathom itself
 calls two of these — the two its own deployment may be pointed at without an operator choosing anything further — and
-[`THIRD_PARTY_LICENSES.md`](https://github.com/Krzysztof318/MailFathom/blob/main/THIRD_PARTY_LICENSES.md) reviews those
+[`THIRD_PARTY_LICENSES.md`](https://github.com/fathomise/MailFathom/blob/main/THIRD_PARTY_LICENSES.md) reviews those
 two under *Hosted services*, with what each one retains and what the operator has to hold to send mail text to it. Every
 other entry below is named rather than adopted, which is exactly why it has no row there.
 
@@ -224,7 +224,7 @@ Vertex's embeddings answer is genuinely open rather than negative, and the disti
 is written about chat completions. Whether a managed embedding model answers at `.../endpoints/openapi/embeddings` is
 therefore something a call would settle and reading has not.
 
-[ADR 0011](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0011-reaching-a-provider-outside-the-openai-wire-protocol.md)
+[ADR 0011](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0011-reaching-a-provider-outside-the-openai-wire-protocol.md)
 records why MailFathom writes neither a Bedrock adapter nor a credential shape that mints Google tokens for itself, and
 what would change either answer.
 
@@ -292,7 +292,7 @@ register, and the dates on the rows exist precisely because nothing renews them 
 **Anything that does not speak this protocol.** A service reachable only through its own SDK or its own wire format is
 out of the mechanism's reach entirely, and pointing a deployment at one is not a configuration entry. Adding a second
 protocol is an architectural decision rather than an addition to this table, and
-[ADR 0011](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0011-reaching-a-provider-outside-the-openai-wire-protocol.md)
+[ADR 0011](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0011-reaching-a-provider-outside-the-openai-wire-protocol.md)
 is where that decision was taken and what would reopen it.
 
 **A verdict on quality.** Which model retrieves or answers better is not what any of this establishes. Every entry says

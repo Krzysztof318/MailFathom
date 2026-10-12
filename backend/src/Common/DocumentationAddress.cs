@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 namespace MailFathom.Common;
 
@@ -29,7 +29,7 @@ namespace MailFathom.Common;
 public static class DocumentationAddress
 {
     /// <summary>Where the site is served, with the version directories directly beneath it.</summary>
-    private const string Site = "https://krzysztof318.github.io/MailFathom/docs/";
+    private const string Site = "https://fathomise.github.io/MailFathom/docs/";
 
     /// <summary>The directory the site publishes the default branch's documentation under.</summary>
     private const string DefaultBranchDirectory = "latest";

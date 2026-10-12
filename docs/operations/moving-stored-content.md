@@ -46,7 +46,7 @@ composed from — and then the files user records link to, such as portraits, an
    exactly as it is**, in one statement. Only an answer that says the row was still database-backed counts as moved.
 
 No database transaction is open across any of that: the endpoint is reached before the row is written, which is
-[ADR 0001](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0001-application-owned-repositories-for-persistence-ports.md)'s
+[ADR 0001](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0001-application-owned-repositories-for-persistence-ports.md)'s
 rule and the same shape an ordinary object-backed write already has.
 
 **A payload that cannot be carried is left in the database, counted, and stepped past.** The position advances past
@@ -58,7 +58,7 @@ it, so the next pass carries it from the beginning rather than stepping past a m
 
 A row the copy has carried names an object and still carries the bytes the database always held. The object is the
 authoritative store for it — that is what the row says — and the payload beside it is a retained duplicate, which
-[ADR 0017](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md) § 6
+[ADR 0017](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md) § 6
 admits as the one duplicated state this system has.
 
 **A read resolves the object first and falls back to that copy when the object cannot be vouched for.** Either the
@@ -116,7 +116,7 @@ A deployment running several replicas carries its move on one of them at a time.
 running once per `ContentStorage:Move:Interval` — a single-row read, which is all a replica pays while no move is
 running — and only the replica that takes the move's lease carries a pass. The lease is the scope `stored-content-move`
 in the table
-[ADR 0031](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md)
+[ADR 0031](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md)
 decides. A replica that finds it held asks again on its next interval, and neither fails nor reports anything: the
 move is being carried, just not there.
 

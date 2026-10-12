@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -48,7 +48,7 @@ namespace MailFathom.Host.Api;
 /// neither applied nor replaced while the switch is held — a write that passes commits the other seven and carries
 /// it forward — so it is in force again the moment no policy forces it. A write for somebody this replica holds no
 /// composition of carries it forward as well, since whether a policy holds their switch cannot be known here.
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0037-a-settings-policy-at-the-deployment-and-at-each-organization.md">ADR 0037</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0037-a-settings-policy-at-the-deployment-and-at-each-organization.md">ADR 0037</see>
 /// holds why this preference and no other.
 /// </para>
 /// </remarks>

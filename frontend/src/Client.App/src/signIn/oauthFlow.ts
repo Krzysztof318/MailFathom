@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 // Signing in with an authorization server, from the moment somebody picks a provider to the moment this client holds a
 // grant. `Client.Backend` composes the addresses and sends the requests, `pkce.ts` generates what one attempt is

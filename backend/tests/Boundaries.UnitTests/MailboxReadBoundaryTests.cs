@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using ArchUnitNET.Domain;
 using ArchUnitNET.Fluent;
@@ -19,7 +19,7 @@ namespace MailFathom.Boundaries.UnitTests;
 /// <summary>Covers where it is decided which mail a caller may read, and that only one place decides it.</summary>
 /// <remarks>
 /// <para>
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md" />
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md" />
 /// settles ownership before a query rather than inside one, so the scope a resolver produces is the whole of what a
 /// caller is entitled to and the query that reads mail has to apply all of it. A read model that narrowed the stored
 /// emails itself would be a second reading of that entitlement — and one nobody would find by reading either copy,

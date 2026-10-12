@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Emails.Embeddings;
 
@@ -17,7 +17,7 @@ namespace MailFathom.AI.Embeddings;
 /// The alias exists because everything else here is either an address or a credential, and neither may be written down.
 /// An address identifies a tenant and a resource, so a failure that named one would put it in every log line; the alias
 /// is a name the operator chose, which is exactly what
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0003-first-party-exception-hierarchy-and-stable-error-codes.md">ADR 0003</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0003-first-party-exception-hierarchy-and-stable-error-codes.md">ADR 0003</see>
 /// permits a message to carry.
 /// </para>
 /// <para>
@@ -29,7 +29,7 @@ namespace MailFathom.AI.Embeddings;
 /// </para>
 /// <para>
 /// <paramref name="SupportsRequestedDimension" /> is declared rather than inferred from the model name, for the reason
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
 /// gives for the model never being a compile-time constant: a table of which models accept the parameter would be a
 /// list of model names in code, and it would be wrong the week after it was written.
 /// </para>

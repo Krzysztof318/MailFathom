@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 namespace MailFathom.Application.Emails.Search;
 
@@ -8,7 +8,7 @@ namespace MailFathom.Application.Emails.Search;
 /// <remarks>
 /// <para>
 /// One eligible set, two rankings, because
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md">ADR 0030</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md">ADR 0030</see>
 /// expresses the floor as a partition of the result rather than as a weight inside it. Only
 /// <see cref="Written" /> enters reciprocal rank fusion, so nothing about fusion changes and no constant is introduced;
 /// <see cref="Depicted" /> is reduced to what the fused result does not already carry and appended after it whole.

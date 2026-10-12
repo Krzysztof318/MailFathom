@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Access;
@@ -24,7 +24,7 @@ namespace MailFathom.Application.Emails.AttachmentText.Limits;
 /// it was incurred for, because a deployment serving several people bounds each of them as well as itself. What the
 /// deployment consumed is counted separately from them rather than summed out of them, for the reason the embedding
 /// ledger's is:
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md">ADR 0014</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md">ADR 0014</see>
 /// counts a shared mailbox in full against each of its users, so the per-user figures add up to more than was read and
 /// a deployment ceiling taken off their sum would stop a shared mailbox at a fraction of what an operator declared.
 /// That same ADR keeps a spend row as a cost record rather than erasing it with the mail it paid to read.

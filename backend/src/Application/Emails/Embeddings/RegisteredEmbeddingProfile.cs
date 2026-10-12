@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 namespace MailFathom.Application.Emails.Embeddings;
 
@@ -11,7 +11,7 @@ namespace MailFathom.Application.Emails.Embeddings;
 /// one retrieval reads and the one being embedded into are the same shape and are told apart by
 /// <see cref="EmbeddingProfileLifecycleState" /> rather than by their type. Its absence is what "this instance does not
 /// embed" means — a profile row exists, or it does not, and
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
 /// records why the switch is an activation rather than a setting.
 /// </para>
 /// <para>

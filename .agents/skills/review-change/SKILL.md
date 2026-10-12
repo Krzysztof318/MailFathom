@@ -4,7 +4,7 @@ description: Use when reviewing a working-tree diff, pull-request patch, or comp
 license: AGPL-3.0-only
 metadata:
   author: Krzysztof Kasprowicz
-  repository: https://github.com/Krzysztof318/MailFathom
+  repository: https://github.com/fathomise/MailFathom
 ---
 
 # Review Change

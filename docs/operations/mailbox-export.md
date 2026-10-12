@@ -8,7 +8,7 @@ standard flags in the file names, and the keywords beside them in a document of 
 account, because what it carries is what this deployment stored rather than what a server still holds.
 
 It matters most for an account whose mailbox MailFathom is the only holder of. A drained account's source is empty by
-design — [ADR 0034](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md)
+design — [ADR 0034](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md)
 is that decision — so there is no server to fall back on, no second copy to reconcile against, and no way to get the mail
 out of this installation except the one on this page. That is the whole reason the export exists, and it is why the
 obligations under [What an operator owes a mailbox nothing else holds](#what-an-operator-owes-a-mailbox-nothing-else-holds)
@@ -127,7 +127,7 @@ A drained account's mail exists in this deployment and nowhere else. Four obliga
 implied by anything MailFathom does on its own:
 
 - **The backup is the database and the content store together**, snapshotted in that order — the database first, the
-  bucket after it. [ADR 0017](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md)
+  bucket after it. [ADR 0017](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md)
   writes an object before the row pointing at it, so a database older than the bucket leaves orphans the reclamation
   removes, while a bucket older than the database leaves rows pointing at mail that is gone. The order alone does not
   cover a deletion committed between the two snapshots, so the bucket keeps a deleted object for at least as long as a
@@ -146,7 +146,7 @@ implied by anything MailFathom does on its own:
 
 ## What the client offers
 
-Nothing. [ADR 0028](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0028-no-mail-on-the-device-and-an-honest-client-with-no-route-to-its-deployment.md)
+Nothing. [ADR 0028](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0028-no-mail-on-the-device-and-an-honest-client-with-no-route-to-its-deployment.md)
 keeps mail off the device, and a whole mailbox written to a person's disk by the client is exactly that. The export is
 an administrative act, reached through `mfctl` and the routes
 [the administrative endpoint](admin-endpoint.md#what-the-endpoint-serves) serves.

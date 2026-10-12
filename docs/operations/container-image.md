@@ -150,7 +150,7 @@ The image carries the OCI labels that let a pulled image be traced back to the c
 `IMAGE_VERSION` has no useful default, and its `0.0.0-unversioned` placeholder says so. The version is declared once,
 as `VersionPrefix` in `Version.props`, and every build reads it with `scripts/read-declared-version.sh` rather
 than restating it — which is what keeps a labelled version from drifting away from the stamped one, because there is no
-second copy to drift. [ADR 0004](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md) records why the number lives in one
+second copy to drift. [ADR 0004](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md) records why the number lives in one
 reviewed line.
 
 `IMAGE_REVISION` is passed to the publish inside the build as `SourceRevisionId`, so the assemblies report the same
@@ -427,7 +427,7 @@ A published image can be verified the same way from outside:
 
 ```bash
 docker buildx imagetools inspect ghcr.io/krzysztof318/mailfathom:latest
-gh attestation verify oci://ghcr.io/krzysztof318/mailfathom:latest --repo Krzysztof318/MailFathom
+gh attestation verify oci://ghcr.io/krzysztof318/mailfathom:latest --repo fathomise/MailFathom
 ```
 
 The first prints the manifest list, its platforms, and the labels above. The second checks the signed provenance
@@ -439,7 +439,7 @@ same and the run attests it under each repository name it published to:
 
 ```bash
 docker buildx imagetools inspect docker.io/krzysztof318/mailfathom:latest
-gh attestation verify oci://docker.io/krzysztof318/mailfathom:latest --repo Krzysztof318/MailFathom
+gh attestation verify oci://docker.io/krzysztof318/mailfathom:latest --repo fathomise/MailFathom
 ```
 
 Comparing the two digests is the check that the mirrors agree, and it needs no credential:

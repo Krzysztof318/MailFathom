@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -20,7 +20,7 @@ namespace MailFathom.Application.Synchronization.Drain;
 /// <para>
 /// It is deleted when its expunge is observed complete, or when a UIDVALIDITY change means its UID names nothing any
 /// more — so a remote path and a UID are kept for exactly as long as they name something to remove, and no longer. See
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
 /// </para>
 /// </remarks>
 public sealed record MailboxSourceRemoval(

@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Mailboxes;
@@ -20,7 +20,7 @@ namespace MailFathom.Application.Emails.Search;
 /// The profile is a parameter rather than something the implementation reads for itself, because a vector means nothing
 /// outside the space it belongs to: the caller has already established that the query vector and the stored vectors were
 /// produced under one profile, and passing it is what carries that established fact into the query. See
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>.
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>.
 /// </para>
 /// <para>
 /// The structured filters narrow the eligible messages before distance is measured, never after. Ranking first and
@@ -47,7 +47,7 @@ public interface IEmailVectorSearchIndexReader
     /// </para>
     /// <para>
     /// Two rankings out of one eligible set rather than one, because
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md">ADR 0030</see>
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md">ADR 0030</see>
     /// separates a message placed by something a person wrote from one placed by a machine's account of a picture, and
     /// requires the separation to be made where the passages are still distinguishable. By the time fusion sees a
     /// ranking, a place in it is just a place; a single ranking labelled afterwards would let a description decide where

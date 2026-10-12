@@ -131,7 +131,7 @@ stands; the whole object name is on the image's `org.opencontainers.image.revisi
 reads `unknown` where the build stamped no revision, which is what a build with no repository beside it produces — an
 image built outside the publishing pipeline is the case that occurs — and is a legitimate state rather than a fault.
 
-[ADR 0004](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md)
+[ADR 0004](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md)
 holds the whole scheme, including which inputs each build shape supplies.
 
 Both values are the assembly's stamp rather than configured ones, so a deployment cannot make its telemetry claim a
@@ -1425,7 +1425,7 @@ about a person away from the person, so
 [the preferences read names who holds the switch](client-endpoint.md#a-settings-policy-may-hold-the-telemetry-switch),
 and whoever holds the policy — an organization for its members, an operator for everybody — is who took the decision
 and who owes whatever basis it needs.
-[ADR 0037](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0037-a-settings-policy-at-the-deployment-and-at-each-organization.md)
+[ADR 0037](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0037-a-settings-policy-at-the-deployment-and-at-each-organization.md)
 records what MailFathom owes that person in return. A force changes nothing else: it raises no level, and a
 deployment that forwards no telemetry receives none whatever a policy forces.
 

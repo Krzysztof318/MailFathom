@@ -1,6 +1,6 @@
 # Copyright © 2026 Krzysztof Kasprowicz
 # Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-# Project repository: https://github.com/Krzysztof318/MailFathom
+# Project repository: https://github.com/fathomise/MailFathom
 
 name: Apply pull request rules
 
@@ -241,11 +241,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           BOARD_TOKEN: ${{ secrets.BOARD_PROJECT_TOKEN }}
           REPOSITORY: ${{ github.repository }}
-          # The board is the owner's rather than an organization's, which is why the credential above
-          # is a classic token carrying the `project` scope. The number belongs to that login's
-          # namespace.
-          BOARD_OWNER: Krzysztof318
-          BOARD_NUMBER: '4'
+          # The board is the organization's, and the workflow token reaches no project at all, which is
+          # why the credential above is a classic token carrying the `project` scope. The number belongs
+          # to that organization's namespace.
+          BOARD_OWNER: fathomise
+          BOARD_NUMBER: '1'
           STATUS_FIELD: Status
           BASE_BRANCH: main
           READ_STATE_SCRIPT: ${{ github.workspace }}/.github/pull-request/read-pull-request-state.sh

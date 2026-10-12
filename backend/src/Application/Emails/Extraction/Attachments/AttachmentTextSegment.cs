@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 namespace MailFathom.Application.Emails.Extraction.Attachments;
 
@@ -16,14 +16,14 @@ namespace MailFathom.Application.Emails.Extraction.Attachments;
 /// Recording the boundaries at extraction rather than re-deriving them later is what keeps re-cutting a mailbox a local
 /// cost. A boundary rule tuned upwards re-reads the stored segments and re-cuts against them; re-deriving would mean
 /// parsing every attachment again, which is the one cost
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.md">ADR 0029</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.md">ADR 0029</see>
 /// separated from the embedding budget precisely because it is the expensive one.
 /// </para>
 /// <para>
 /// A segment carries no characters. <see cref="Label" /> is the one member that would be read out of the document, and
 /// it is a sheet name a sender chose — so it is mail content and would be treated as such wherever it is stored or
 /// shown. No reader records one yet: every reading writes <see langword="null" />, and resolving a workbook's sheet
-/// name is <see href="https://github.com/Krzysztof318/MailFathom/issues/1682">#1682</see>. The member is serialized
+/// name is <see href="https://github.com/fathomise/MailFathom/issues/1682">#1682</see>. The member is serialized
 /// into the stored boundaries regardless, so a reading written before that lands stays readable after it.
 /// </para>
 /// </remarks>

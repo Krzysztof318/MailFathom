@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 namespace MailFathom.Application.Emails.Embeddings.Limits;
 
@@ -18,7 +18,7 @@ namespace MailFathom.Application.Emails.Embeddings.Limits;
 /// </para>
 /// <para>
 /// It is not the input preparation an embedding profile records, although both are limits on text.
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
 /// draws the line: preparation decides what one passage means and belongs to the profile's identity, while this decides
 /// how many passages exist and changes the meaning of none of them. Raising it therefore cuts new passages for the
 /// messages it reaches and leaves every stored vector exactly as comparable as it was.

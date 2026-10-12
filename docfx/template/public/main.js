@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 // What this template adds to the `modern` one it sits on top of: the selector that moves a reader
 // between the documented versions, and a viewer that opens a diagram or an image large enough to
@@ -27,7 +27,7 @@ export default {
   iconLinks: [
     {
       icon: 'github',
-      href: 'https://github.com/Krzysztof318/MailFathom',
+      href: 'https://github.com/fathomise/MailFathom',
       title: 'MailFathom on GitHub'
     }
   ],

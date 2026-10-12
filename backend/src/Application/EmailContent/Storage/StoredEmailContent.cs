@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Security.Cryptography;
 using MailFathom.Application.EmailContent.Repair;
@@ -32,7 +32,7 @@ public sealed record StoredEmailContent(
     /// <remarks>
     /// <para>
     /// False for every ordinary read, including one the object backend answered. It is true only in the state
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md">ADR 0017</see> § 6
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md">ADR 0017</see> § 6
     /// defines: the move has carried this payload into the bucket and an operator has not yet released the copy the
     /// database was holding, so both stores hold it and the object — the authoritative one — could not be read or did
     /// not match what the row records.

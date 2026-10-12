@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 namespace MailFathom.Application.Emails.Embeddings;
 
@@ -13,7 +13,7 @@ namespace MailFathom.Application.Emails.Embeddings;
 /// </para>
 /// <para>
 /// The type owns the two arithmetic operations an adapter needs — shortening and normalizing — so that the rule
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
 /// states about a shortened vector lives in one place and is provable without a provider. Nothing here decides
 /// <em>whether</em> to shorten; that is the declaration's decision and the adapter applies it.
 /// </para>

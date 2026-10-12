@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 namespace MailFathom.Application.AiProviders;
 
@@ -11,7 +11,7 @@ namespace MailFathom.Application.AiProviders;
 /// forward by one interval and being told what the caller reserved. It is durable rather than a field because a rate is
 /// what a provider states about the deployment: three replicas each pacing themselves send three times what their
 /// operator declared, at a provider that answers a per-minute quota with a refusal.
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md">ADR 0031</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md">ADR 0031</see>
 /// records why a rate moves into the database while an in-flight count stays a process's.
 /// </para>
 /// <para>

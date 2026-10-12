@@ -4,7 +4,7 @@ description: Use when an EF Core model change needs a migration, or when a migra
 license: AGPL-3.0-only
 metadata:
   author: Krzysztof Kasprowicz
-  repository: https://github.com/Krzysztof318/MailFathom
+  repository: https://github.com/fathomise/MailFathom
 ---
 
 # Add Migration

@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Discovery.Presentation;
 using MailFathom.Domain.Access;
@@ -12,7 +12,7 @@ namespace MailFathom.Application.Agent.Conversations;
 /// <para>
 /// A conversation's contents are durable and reachable from every replica, which is what makes an answer survive the
 /// replica composing it going away, a second screen the same person opened, and a rolling upgrade.
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0035-delivering-a-running-ai-answer-from-a-persisted-run-by-cursor-signal-and-re-read.md">ADR 0035</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0035-delivering-a-running-ai-answer-from-a-persisted-run-by-cursor-signal-and-re-read.md">ADR 0035</see>
 /// is that decision, and this is the seam it is applied through for this surface.
 /// </para>
 /// <para>

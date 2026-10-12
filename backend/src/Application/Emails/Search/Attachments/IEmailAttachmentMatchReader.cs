@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Domain.Emails;
@@ -18,14 +18,14 @@ namespace MailFathom.Application.Emails.Search.Attachments;
 /// </para>
 /// <para>
 /// It is read-only and joins no transaction, per
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0001-application-owned-repositories-for-persistence-ports.md">ADR 0001</see>.
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0001-application-owned-repositories-for-persistence-ports.md">ADR 0001</see>.
 /// Its filters are re-applied for the reason the window read re-applies them: the statements read different snapshots,
 /// and an attachment of a message that has left the request's scope must be absent rather than published.
 /// </para>
 /// <para>
 /// The two reads are separate because the two kinds of match are found by different means and mean different things. A
 /// document's own words are matched by the query's words, exactly as a body is; a description was never matched
-/// lexically at all — <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md">ADR 0030</see>
+/// lexically at all — <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md">ADR 0030</see>
 /// keeps it out of the lexical index — so what explains a depicted result is the description itself rather than an
 /// extract cut around words it need not contain.
 /// </para>

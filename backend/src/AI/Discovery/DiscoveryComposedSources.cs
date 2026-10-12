@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Discovery.Presentation;
 using MailFathom.Application.Discovery.Presentation.Citations;
@@ -40,7 +40,7 @@ internal sealed record DiscoveryComposedSource(
 /// Every source is <see cref="PresentationSourceMedium.Written" /> here, because every passage this retrieval returns
 /// is text somebody wrote. A description of a picture becomes reachable when retrieval admits one, and the medium is
 /// declared on the citation so that the ranking
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md">ADR 0030</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md">ADR 0030</see>
 /// fixes travels with the source rather than being re-derived per surface.
 /// </para>
 /// </remarks>

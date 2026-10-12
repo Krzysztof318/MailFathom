@@ -496,5 +496,5 @@ this page reproduces no third-party logo, icon, wordmark, or screenshot.
 
 Keycloak is a trademark of the Linux Foundation. Microsoft and Microsoft Entra ID are trademarks of the Microsoft group
 of companies. Auth0 and Okta are trademarks of Okta, Inc.
-[`THIRD_PARTY_LICENSES.md`](https://github.com/Krzysztof318/MailFathom/blob/main/THIRD_PARTY_LICENSES.md#trademark-and-brand-use)
+[`THIRD_PARTY_LICENSES.md`](https://github.com/fathomise/MailFathom/blob/main/THIRD_PARTY_LICENSES.md#trademark-and-brand-use)
 records the per-user review this statement comes out of, and why it sits here rather than in `NOTICE`.

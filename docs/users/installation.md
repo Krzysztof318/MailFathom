@@ -17,7 +17,7 @@ the [install script](../operations/admin-endpoint.md#on-linux-with-the-install-s
 Linux. Both packages are public, so pulling one needs no login.
 
 **`<version>` is the release you are installing**, and
-[the releases page](https://github.com/Krzysztof318/MailFathom/releases) is where the current one is named. Pin it
+[the releases page](https://github.com/fathomise/MailFathom/releases) is where the current one is named. Pin it
 rather than tracking `latest`: an immutable tag is what makes a deployment reproducible and an upgrade a decision,
 which matters here because a new release can require a schema step before it will serve.
 
@@ -34,7 +34,7 @@ deleted once thirty newer ones exist. [What a nightly build risks](../operations
 states the whole of it before you choose one.
 
 ```bash
-git clone https://github.com/Krzysztof318/MailFathom.git
+git clone https://github.com/fathomise/MailFathom.git
 cd MailFathom
 ```
 

@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 // The three shapes a way out of a confirmation takes, stated once for the two components that draw one: the question
 // itself and the proposal card that opens it. They are here rather than in either of those because the card's controls

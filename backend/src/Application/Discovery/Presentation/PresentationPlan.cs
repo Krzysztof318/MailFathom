@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Discovery.Presentation.Citations;
 
@@ -158,7 +158,7 @@ public sealed record PresentationPlan
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="block" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// The corroboration test
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md">ADR 0030</see>
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md">ADR 0030</see>
     /// fixes, answered here rather than stored as a value of its own so that it cannot come to disagree with the
     /// citations it is about. A block this reports true of rests on this deployment's reading of images and on nothing
     /// anybody wrote, which is corroboration rather than evidence and is drawn as such.

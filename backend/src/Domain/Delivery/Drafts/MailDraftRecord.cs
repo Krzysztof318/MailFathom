@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
@@ -48,7 +48,7 @@ public sealed record MailDraftRecord
     /// <remarks>
     /// Authored mail is the one part of this schema that still names a person, because it records an act
     /// somebody took rather than mail a mailbox holds:
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md">ADR 0014</see>
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md">ADR 0014</see>
     /// keeps it on the author for that reason, so a mailbox two people share still shows each of them their
     /// own. It stands beside the account rather than inside it, the account's generated identifier naming one
     /// mailbox across the deployment and saying nothing about who wrote through it.

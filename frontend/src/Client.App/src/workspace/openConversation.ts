@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 // The conversation somebody has open, which stands in front of the message they opened it from rather than replacing
 // it: the workspace still holds that message, so closing the conversation returns to it and nothing had to remember

@@ -507,7 +507,7 @@ What that means in practice:
   names are none of them — the credential and the circuit are looked up by whatever the declaration in force calls a
   model.
 
-[ADR 0002](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0002-configuration-reading-mapping-and-reload-boundary.md)
+[ADR 0002](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0002-configuration-reading-mapping-and-reload-boundary.md)
 classifies this group as reloadable for new operations and states the rules a reloadable group follows;
 [AI configuration § `Chat`](../operations/configuration-ai.md#chat) marks each key.
 

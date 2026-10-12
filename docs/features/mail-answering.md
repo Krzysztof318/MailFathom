@@ -32,7 +32,7 @@ One composition rather than a chat call written beside each feature, because wha
 of that shape rather than of its prose. An instruction cannot be reached from a tool result because of where each is
 placed; the tool set **is** the capability, so an operation that only reads composes no mutating tool; every call goes
 through the client the run wrapped, which is where its spend is counted; and what a run reports about cost,
-cancellation, and the model is what [ADR 0022](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0022-what-an-ai-run-reports-about-cost-cancellation-and-the-model.md)
+cancellation, and the model is what [ADR 0022](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0022-what-an-ai-run-reports-about-cost-cancellation-and-the-model.md)
 says. A feature composing its own call would re-decide all four in silence, once per feature.
 
 ### The instruction envelope, empty in this build
@@ -327,7 +327,7 @@ again at the start of the next has spent twice the ceiling across an interval of
 The ledger is **the deployment's and it is durable**, which is where it agrees with the embedding one rather than
 differing from it: both keep their count in a table, so neither a crash-restart loop nor a second replica begins a
 period again from zero. It was process-local until
-[ADR 0031](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md),
+[ADR 0031](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md),
 on the reasoning that a question opens no write of its own and a durable count would add one to the path of every
 provider call. What that reasoning missed is the replica count: a ceiling worded as the deployment's and counted in
 each process admits as many times what an operator agreed to as there are processes, at a provider that bills for it.

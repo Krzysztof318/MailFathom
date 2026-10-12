@@ -1,6 +1,6 @@
 # Copyright © 2026 Krzysztof Kasprowicz
 # Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-# Project repository: https://github.com/Krzysztof318/MailFathom
+# Project repository: https://github.com/fathomise/MailFathom
 
 # An object store beside MailFathom, for a deployment that has selected the object-storage backend and does not already
 # operate one. It is optional in the way the analyzer and the scanner units are: Quadlet has no equivalent of Compose's

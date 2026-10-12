@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Text.Json.Serialization;
 using MailFathom.Application.Discovery.Presentation;
@@ -20,7 +20,7 @@ namespace MailFathom.Application.Discovery.Streaming;
 /// </para>
 /// <para>
 /// <strong>It also carries the envelope, which is what a run says about cost before it has spent anything.</strong>
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0022-what-an-ai-run-reports-about-cost-cancellation-and-the-model.md">ADR 0022</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0022-what-an-ai-run-reports-about-cost-cancellation-and-the-model.md">ADR 0022</see>
 /// refuses an estimate — a run is a conversation whose length is a model's decision, so anything predicted before it
 /// starts is a guess, and a guess people learn to ignore takes the true figure with it. What is stated instead is known
 /// without asking anything: what one question may spend on this deployment, and which endpoint will answer it.

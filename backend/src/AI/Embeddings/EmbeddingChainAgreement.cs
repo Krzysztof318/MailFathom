@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 namespace MailFathom.AI.Embeddings;
 
@@ -8,7 +8,7 @@ namespace MailFathom.AI.Embeddings;
 /// <remarks>
 /// <para>
 /// A fallback is another route to one vector space and never a second one, which
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
 /// makes a startup refusal rather than a runtime surprise. The refusal is the point: a fallback on a different model
 /// does not produce a degraded vector, it produces a point in a different space, and a distance computed against it is
 /// a number with no meaning. Written under the active profile those vectors would corrupt retrieval in the way that is

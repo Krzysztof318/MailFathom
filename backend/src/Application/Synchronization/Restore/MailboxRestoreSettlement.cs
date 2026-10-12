@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Access;
 using MailFathom.Application.Persistence;
@@ -21,7 +21,7 @@ namespace MailFathom.Application.Synchronization.Restore;
 /// It is a separate use case from the pass rather than a method on it because it has a caller with a principal behind
 /// it. The pass runs under the account's lease with nobody asking, and a permission check there would either have no
 /// principal to read or would be read from whichever request happened to open the scope. See
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
 /// </para>
 /// </remarks>
 public sealed class MailboxRestoreSettlement

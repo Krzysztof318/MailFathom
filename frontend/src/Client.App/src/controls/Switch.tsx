@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 // The one on-or-off control the client draws, in both places the design puts one: the tab mode in the account
 // menu and the telemetry decision on the settings screen. One component rather than two similar arrangements of

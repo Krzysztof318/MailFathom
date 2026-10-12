@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 // The mailbox as rows: one page of a folder, one page of a search, and one conversation. The three are together because
 // they are one shape — the service publishes a search result as a list row with two fields added, and a conversation's

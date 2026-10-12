@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Buffers;
 using System.Buffers.Text;
@@ -33,7 +33,7 @@ namespace MailFathom.Host.Security.Sessions;
 /// by roughly <c>(N−1)/N</c> of them — which a client meets as being signed out — and an operator ending somebody's
 /// access would end it on one replica only. It does not live in the optional signal backplane either, because an
 /// authentication path must not depend on a component a deployment may not run.
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0033-where-a-signed-in-session-lives-so-every-replica-accepts-it.md">ADR 0033</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0033-where-a-signed-in-session-lives-so-every-replica-accepts-it.md">ADR 0033</see>
 /// records all of that, including why nothing caches what the store answers.
 /// </para>
 /// <para>

@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
@@ -58,7 +58,7 @@ public sealed record MailboxMutationRecord
     /// <para>
     /// It is a fact about the sequence rather than a name for the operation. Which protocol path carried a relocation
     /// still reaches no log above <c>Debug</c>, no span, and no metric dimension, exactly as
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md">ADR 0007</see>
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md">ADR 0007</see>
     /// requires.
     /// </para>
     /// </remarks>
@@ -224,7 +224,7 @@ public sealed record MailboxMutationRecord
     /// A copy places an occurrence exactly as a relocation does, and is included for that reason: the discovery is
     /// MailFathom's own act either way. What a copy does not do is carry the local row across, because a second live
     /// occurrence of one message is a second local email — which
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0008-copied-message-local-identity.md">ADR 0008</see>
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0008-copied-message-local-identity.md">ADR 0008</see>
     /// decided and which is why <see cref="IsPlacementOf" /> narrows to a relocation and this does not.
     /// </remarks>
     public bool ExpectsPlacementObservation =>
@@ -378,7 +378,7 @@ public sealed record MailboxMutationRecord
     /// The join is the server's own <c>COPYUID</c> answer and nothing else. A record that carries no reported placement
     /// matches nothing here, because the only way to find the message without one is to search the destination folder
     /// for something that looks like it — which is a guess about identity rather than a fact, and is exactly what
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md">ADR 0007</see>
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md">ADR 0007</see>
     /// refuses. A relocation whose placement was never reported leaves the record awaiting its observation, which is
     /// visible rather than guessed at.
     /// </para>

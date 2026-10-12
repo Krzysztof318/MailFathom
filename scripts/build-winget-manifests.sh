@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Copyright © 2026 Krzysztof Kasprowicz
 # Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-# Project repository: https://github.com/Krzysztof318/MailFathom
+# Project repository: https://github.com/fathomise/MailFathom
 
 set -euo pipefail
 
@@ -26,7 +26,7 @@ set -euo pipefail
 
 readonly package_identifier='MailFathom.mfctl'
 readonly manifest_schema_version='1.12.0'
-readonly release_download_base='https://github.com/Krzysztof318/MailFathom/releases/download'
+readonly release_download_base='https://github.com/fathomise/MailFathom/releases/download'
 
 # The runtime identifiers a release attaches for Windows, each paired with the architecture winget names it by. Written
 # as an ordered list rather than an associative array so the installer entries come out in the same order every time:
@@ -124,15 +124,15 @@ PackageIdentifier: $package_identifier
 PackageVersion: $package_version
 PackageLocale: en-US
 Publisher: MailFathom
-PublisherUrl: https://krzysztof318.github.io/MailFathom/docs/
-PublisherSupportUrl: https://github.com/Krzysztof318/MailFathom/issues
+PublisherUrl: https://fathomise.github.io/MailFathom/docs/
+PublisherSupportUrl: https://github.com/fathomise/MailFathom/issues
 Author: Krzysztof Kasprowicz
 PackageName: MailFathom CLI
-PackageUrl: https://github.com/Krzysztof318/MailFathom
+PackageUrl: https://github.com/fathomise/MailFathom
 License: AGPL-3.0-only
-LicenseUrl: https://github.com/Krzysztof318/MailFathom/blob/main/LICENSE
+LicenseUrl: https://github.com/fathomise/MailFathom/blob/main/LICENSE
 Copyright: Copyright © 2026 Krzysztof Kasprowicz
-CopyrightUrl: https://github.com/Krzysztof318/MailFathom/blob/main/LICENSE
+CopyrightUrl: https://github.com/fathomise/MailFathom/blob/main/LICENSE
 ShortDescription: The administrative command-line client for MailFathom, a self-hosted AI-native mail service.
 Description: |-
   mfctl administers a MailFathom deployment over HTTP. It signs in against the deployment's administrative endpoint,
@@ -156,12 +156,12 @@ Tags:
 - mcp
 - model-context-protocol
 - self-hosted
-ReleaseNotesUrl: https://github.com/Krzysztof318/MailFathom/releases/tag/v$package_version
+ReleaseNotesUrl: https://github.com/fathomise/MailFathom/releases/tag/v$package_version
 Documentations:
 - DocumentLabel: Administering a deployment
-  DocumentUrl: https://krzysztof318.github.io/MailFathom/docs/operations/admin-endpoint.html
+  DocumentUrl: https://fathomise.github.io/MailFathom/docs/operations/admin-endpoint.html
 - DocumentLabel: Installation
-  DocumentUrl: https://krzysztof318.github.io/MailFathom/docs/users/installation.html
+  DocumentUrl: https://fathomise.github.io/MailFathom/docs/users/installation.html
 ManifestType: defaultLocale
 ManifestVersion: $manifest_schema_version
 YAML

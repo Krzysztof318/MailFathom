@@ -42,7 +42,7 @@ The split is what a shared mailbox costs and what it buys. Two people assigned o
 mailbox: the account collects a correspondent **once**, both of them read that one record, and neither of them holds a
 copy the other's edit would have to chase. And when one of them leaves, what goes with them is the book they wrote —
 the mailbox's stays for whoever is still assigned it. [Single-tenant multi-user
-ownership](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md)
+ownership](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md)
 is the decision the second half of that follows from.
 
 **A user reads both, as one book.** Every read a user makes — a listing, a lookup by address, a lookup by name, an MCP
@@ -291,7 +291,7 @@ caller reads at all is a contact they do not hold, and is answered as such.
 Two amendments of one contact are last-writer-wins, which is what stating the whole record means: the later one is the
 record, exactly as it would be a second later. What is not left to that is an amendment racing an **erasure** — the row
 carries PostgreSQL's own version token, as
-[ADR 0001](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0001-application-owned-repositories-for-persistence-ports.md)
+[ADR 0001](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0001-application-owned-repositories-for-persistence-ports.md)
 requires of every record written in place, so an amendment of a contact somebody erased meanwhile writes nothing and is
 answered as a contact the book does not hold rather than putting the person back.
 

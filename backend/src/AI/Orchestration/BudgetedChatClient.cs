@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Chat;
 using MailFathom.Application.Retrieval.AskMail;
@@ -23,7 +23,7 @@ namespace MailFathom.AI.Orchestration;
 /// </para>
 /// <para>
 /// They are written at different moments, and that is what
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md">ADR 0031</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md">ADR 0031</see>
 /// decided. The run's is a field and is charged per call, because the next call is refused against it. The period's is
 /// a row every replica writes, and it is charged once as the run ends, because a write per turn of the tool loop is the
 /// cost that ADR refused — a mailbox backfill turns this loop once per message. What is accumulated meanwhile is the

@@ -1,6 +1,6 @@
 # Copyright © 2026 Krzysztof Kasprowicz
 # Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-# Project repository: https://github.com/Krzysztof318/MailFathom
+# Project repository: https://github.com/fathomise/MailFathom
 
 # No `labels:` key, for the reason `bug_report.yml` records: the `type:*` label is applied during
 # triage, and a form that applied one would make every arrival look already read.
@@ -21,7 +21,7 @@ body:
 
 
         Proposing an idea rather than scope? [Discussions →
-        Ideas](https://github.com/Krzysztof318/MailFathom/discussions) is the cheaper place to
+        Ideas](https://github.com/fathomise/MailFathom/discussions) is the cheaper place to
         start, and a discussion that turns out to be work gets converted into an issue.
 
   - type: textarea

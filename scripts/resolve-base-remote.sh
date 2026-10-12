@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Copyright © 2026 Krzysztof Kasprowicz
 # Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-# Project repository: https://github.com/Krzysztof318/MailFathom
+# Project repository: https://github.com/fathomise/MailFathom
 
 
 # Which remote is MailFathom itself. Sourced by the workspace and verification scripts; it defines
@@ -20,7 +20,7 @@
 
 # Not `readonly`: a second `source` of this file would then abort the caller under `set -e` rather
 # than being the no-op a library re-inclusion should be.
-CANONICAL_REPOSITORY='Krzysztof318/MailFathom'
+CANONICAL_REPOSITORY='fathomise/MailFathom'
 
 # Whether a remote URL names the canonical repository. Handles every form Git accepts — an HTTPS
 # URL, an SCP-style `git@host:owner/name`, and a local path — by comparing only the trailing
@@ -29,8 +29,8 @@ CANONICAL_REPOSITORY='Krzysztof318/MailFathom'
 # which is the whole point.
 #
 # The two segments are split out and compared whole rather than matched as a string suffix, because a
-# suffix has no left-hand boundary: `*krzysztof318/mailfathom` also accepts an owner named
-# `notkrzysztof318` or `some-krzysztof318`, and the caller would then fetch and compare against that
+# suffix has no left-hand boundary: `*fathomise/mailfathom` also accepts an owner named
+# `notfathomise` or `some-fathomise`, and the caller would then fetch and compare against that
 # remote's `main` — the silent wrong base this whole file exists to prevent. The SCP form separates
 # host from path with `:` rather than `/`, so that is normalized first and the split is then one rule
 # for every form.

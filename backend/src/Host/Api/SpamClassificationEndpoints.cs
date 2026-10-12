@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
@@ -24,7 +24,7 @@ namespace MailFathom.Host.Api;
 /// <para>
 /// Asking for a whole mailbox to be classified, and reading back what was concluded and what it asked for. Nothing here
 /// switches classification on, moves a threshold, or names a junk folder: those are configuration, which
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0002-configuration-reading-mapping-and-reload-boundary.md">ADR 0002</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0002-configuration-reading-mapping-and-reload-boundary.md">ADR 0002</see>
 /// keeps read-only so that what an instance will do to a mailbox is reviewable in a diff before it runs.
 /// </para>
 /// <para>

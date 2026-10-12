@@ -317,7 +317,7 @@ anybody. Reaching one user's stops that user's mail alone: the worker carries on
 backfill steps past theirs, so everybody else keeps being embedded and their own passages wait for the roll-over.
 Mail belongs to the mailbox rather than to a person, so the ceiling is read of every user a mailbox is assigned to and
 the strictest of them decides: a mailbox two people share waits as soon as either has spent their share, which is the
-cost [ADR 0014](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md)
+cost [ADR 0014](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md)
 accepts for counting a shared mailbox in full against each of them rather than dividing the window between them.
 
 **A mailbox assigned to nobody is not embedded at all**, and reads as a per-user ceiling reached rather than as an
@@ -388,7 +388,7 @@ now offers pictures to it. **Turning this on sends mail's images to the chat pro
 message the attachment stage reaches, from the moment `Embeddings:AttachmentText:Enabled` is on as well; with that
 second switch off nothing here is reached and this one changes nothing. What a description becomes once it is produced
 — a passage, an embedding, a place in a ranked result — is
-[ADR 0030](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md).
+[ADR 0030](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md).
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
@@ -436,7 +436,7 @@ What a document attachment may cost to read, and which formats are offered to a 
 section rather than beside the synchronization bounds because parsing an attachment is a different cost from embedding
 a passage: it is charged per attachment, over octets a stranger composed, in formats with their own parser
 vulnerabilities, and no character count predicts it. [ADR
-0029](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.md)
+0029](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.md)
 records that split.
 
 The first key decides whether an **account run** reads its mail's attachments; the next three bound what a whole
@@ -504,7 +504,7 @@ it. A document attachment is written to the lexical index as a document of its o
 index exist with no reader yet — `search_emails` still matches a message on its own words alone, so a word occurring
 only inside a PDF returns nothing there — and a message's own snippet quotes only what the message said either way. An
 image attachment's description is embedded and never lexically indexed at all, which [ADR
-0030](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md)
+0030](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md)
 decides and the database enforces. Reading for retrieval happens in the account run, behind the passage cut, and never
 on a read path: no MCP call and no client request ever waits on a parser or a provider *for a passage*.
 
@@ -1108,7 +1108,7 @@ admits against, so a restart resumes the window where the deployment left it and
 allowance rather than each getting the whole of it. A run that would otherwise open no write of its own makes two —
 one when it is admitted and one when it ends, carrying what it consumed — rather than one per provider call, which is
 what [ADR
-0031](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md) settled: a rate and a spend
+0031](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md) settled: a rate and a spend
 become the deployment's, and what it costs to make them so is a write beside a run that is already about to spend a
 provider's tokens.
 

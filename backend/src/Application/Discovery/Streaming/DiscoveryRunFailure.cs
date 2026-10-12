@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Text.Json.Serialization;
 
@@ -19,7 +19,7 @@ namespace MailFathom.Application.Discovery.Streaming;
 /// or one of the two spend ceilings refused it. A ceiling reached is the deployment behaving exactly as its operator
 /// configured it, and rendering that as an error produces somebody retrying three times something that will not become
 /// cheaper — which is what
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0022-what-an-ai-run-reports-about-cost-cancellation-and-the-model.md">ADR 0022</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0022-what-an-ai-run-reports-about-cost-cancellation-and-the-model.md">ADR 0022</see>
 /// makes them states rather than a failure carrying a code.
 /// </para>
 /// </remarks>

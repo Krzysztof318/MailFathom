@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Access;
 using MailFathom.Application.Agent.Answering;
@@ -17,7 +17,7 @@ namespace MailFathom.Application.Agent.Conversations;
 /// Each of these writes into the conversation and then says so over the signal channel, naming the conversation, the
 /// run where the write belongs to one, and the place reached — and nothing of what was written, which is read back over
 /// the conversation's own route.
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0035-delivering-a-running-ai-answer-from-a-persisted-run-by-cursor-signal-and-re-read.md">ADR 0035</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0035-delivering-a-running-ai-answer-from-a-persisted-run-by-cursor-signal-and-re-read.md">ADR 0035</see>
 /// is that shape. The signal is best effort: every write here is durable before it is announced, and a client that
 /// never hears the announcement reads the same rows on its next read.
 /// </para>

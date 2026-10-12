@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Globalization;
 using System.Text.Json;
@@ -14,7 +14,7 @@ namespace MailFathom.Host.Configuration.Policies;
 /// One order, written once, for every kind of record a policy governs. Each property resolves on its own, first hit
 /// winning: the deployment's forced value, the organization's forced value, the record's own value, the
 /// organization's default, the deployment's default, and whatever the build takes for a property nothing states.
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0037-a-settings-policy-at-the-deployment-and-at-each-organization.md">ADR 0037</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0037-a-settings-policy-at-the-deployment-and-at-each-organization.md">ADR 0037</see>
 /// § <em>How a value resolves</em> holds why the two halves of that order run in opposite directions.
 /// </para>
 /// <para>

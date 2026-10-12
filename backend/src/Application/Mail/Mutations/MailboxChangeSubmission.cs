@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Folders.Local;
 using MailFathom.Application.Mail.Mutations.Audit;
@@ -21,7 +21,7 @@ namespace MailFathom.Application.Mail.Mutations;
 /// <para>
 /// This is the one place that choice is made. Every requester — a person through the client, a tool, a rule, and a spam
 /// verdict — reaches a mailbox through a use case that submits here, so none of them branches on where the mail lives:
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>
 /// requires that the executor be chosen once, in the mutation layer, from the account's phase.
 /// </para>
 /// <para>

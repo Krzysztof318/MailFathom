@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 // What several rows at once means, as an operation on identities rather than as something a list draws. It sits beside
 // `rowPress.ts` for that module's own reason: the design puts one selection gesture on seven of its lists, and

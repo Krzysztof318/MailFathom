@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Emails.Embeddings.Vectorization;
@@ -38,7 +38,7 @@ namespace MailFathom.Application.Emails.Embeddings.Backfill;
 /// user's ceiling costs is that user's messages being stepped over for the rest of the period, which the walk above
 /// already does without remembering anything. The embedding profile is deployment-wide for the same kind of reason and
 /// a different one:
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
 /// makes a profile the meaning of a stored vector, and two users' vectors sharing an index have to mean the same
 /// thing. Neither is an omission left for a later change to fill in.
 /// </para>

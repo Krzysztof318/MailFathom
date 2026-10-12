@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Text.Json.Serialization;
 
@@ -20,7 +20,7 @@ namespace MailFathom.Application.Agent.Conversations;
 /// the entry — so a client renders in arrival order without sorting, and one holding a cursor asks for everything after
 /// the last sequence it read. That cursor is why an answer survives a lost connection, a second screen of the same
 /// person, and the replica composing it going away:
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0035-delivering-a-running-ai-answer-from-a-persisted-run-by-cursor-signal-and-re-read.md">ADR 0035</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0035-delivering-a-running-ai-answer-from-a-persisted-run-by-cursor-signal-and-re-read.md">ADR 0035</see>
 /// is that decision, and the recovery is a property of this record rather than of any connection.
 /// </para>
 /// <para>

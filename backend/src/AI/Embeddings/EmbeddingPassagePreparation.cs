@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Emails.Embeddings;
 
@@ -12,7 +12,7 @@ namespace MailFathom.AI.Embeddings;
 /// <see cref="EmbeddingInputPreparation" /> and from nothing else. A second rule able to cut a passage — a batch
 /// setting, a caller's own truncation, a provider default — would put points from two different spaces under one
 /// profile identifier, which is the failure
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
 /// separates preparation from ceilings to prevent.
 /// </remarks>
 internal static class EmbeddingPassagePreparation

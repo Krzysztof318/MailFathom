@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.IO.Compression;
 using System.Text;
@@ -13,7 +13,7 @@ namespace MailFathom.Application.Mail.Export;
 /// <remarks>
 /// <para>
 /// A zip rather than the tar stream
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>
 /// first decided, because the reader is a person leaving the product and every desktop operating system opens a zip
 /// with no tooling at all. What is inside it is unchanged: the Maildir++ layout, the stored bytes exactly, the standard
 /// flags in each file name, the encoded folder names, and the keywords in a document of their own at the root.

@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 namespace MailFathom.Application.Retrieval.AskMail;
 
@@ -10,7 +10,7 @@ namespace MailFathom.Application.Retrieval.AskMail;
 /// <remarks>
 /// <para>
 /// <strong>Both halves are declarations rather than discoveries.</strong>
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0022-what-an-ai-run-reports-about-cost-cancellation-and-the-model.md">ADR 0022</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0022-what-an-ai-run-reports-about-cost-cancellation-and-the-model.md">ADR 0022</see>
 /// settles that the routed model name is never published: for a cloud deployment it is the operator's own resource
 /// name, which can carry a tenant, a project, or an environment in it, so publishing it to every signed-in client would
 /// disclose deployment topology to answer a question about model quality. What may be published is a second name the

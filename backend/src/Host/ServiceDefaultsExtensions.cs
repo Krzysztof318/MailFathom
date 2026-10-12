@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Diagnostics;
 using MailFathom.Application.Coordination;
@@ -199,7 +199,7 @@ internal static class ServiceDefaultsExtensions
     /// The download route carries a signed capability in its path, and whoever holds that capability can fetch the file
     /// it names until it expires. The instrumentation records <c>url.path</c> verbatim, so a deployment exporting traces
     /// would be shipping short-lived bearer credentials over mail to whatever stores them — which is exactly what
-    /// [email content](https://github.com/Krzysztof318/MailFathom/blob/main/docs/features/email-content.md) says a link
+    /// [email content](https://github.com/fathomise/MailFathom/blob/main/docs/features/email-content.md) says a link
     /// must never reach.
     /// </para>
     /// <para>

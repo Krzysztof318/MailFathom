@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 namespace MailFathom.Application.Emails.Chunking;
 
@@ -8,7 +8,7 @@ namespace MailFathom.Application.Emails.Chunking;
 /// <remarks>
 /// <para>
 /// This is the one thing
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.md">ADR 0029</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.md">ADR 0029</see>
 /// adds to a passage: an offset names a span in a text, and an attachment-derived passage indexes a different text
 /// from the body-derived passage beside it, so the row has to say which. The position is the message's own walk order —
 /// the same coordinate the download route is addressed with and the same one a citation resolves — because a file name

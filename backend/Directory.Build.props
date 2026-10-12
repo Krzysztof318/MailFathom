@@ -19,8 +19,8 @@
     <Company>Krzysztof Kasprowicz</Company>
     <Copyright>Copyright © 2026 Krzysztof Kasprowicz</Copyright>
     <PackageLicenseExpression>AGPL-3.0-only</PackageLicenseExpression>
-    <PackageProjectUrl>https://github.com/Krzysztof318/MailFathom</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/Krzysztof318/MailFathom</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/fathomise/MailFathom</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/fathomise/MailFathom</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
   </PropertyGroup>
 

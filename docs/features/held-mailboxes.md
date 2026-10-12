@@ -13,7 +13,7 @@ store. And **no act waits on IMAP** — a delete, a move, or a flag on a held ac
 state commits, and whatever the source still has to do happens in the background.
 
 The whole design, including every option that was refused, is
-[ADR 0034](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md).
+[ADR 0034](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md).
 
 ## What holding a mailbox obliges you to
 

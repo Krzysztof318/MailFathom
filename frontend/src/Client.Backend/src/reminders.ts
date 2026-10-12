@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 // What the deployment will accept as a record's reminders, which is a fact about the contract rather than about a
 // screen — so it is stated here once and the panel asks rather than carrying a second copy of the same three rules.

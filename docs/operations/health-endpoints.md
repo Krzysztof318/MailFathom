@@ -146,7 +146,7 @@ be unable to store it — and they stop at the first failure, because reporting 
 things are wrong. **The probe stores no mail to find out**: nothing about a message, an account, or a folder takes part
 in it. A bucket that has been taken away is a readiness condition rather than a configuration error a binder could
 catch, which is what
-[ADR 0017](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md)
+[ADR 0017](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md)
 § 1 decided; the host comes up, reports unready, and becomes ready by itself once the bucket answers. Each transition is
 written to the log at `Error` and `Information` as the analyzer's are, with the classified failure behind it, because
 the response carries no reason and the message names the configuration key rather than the address.

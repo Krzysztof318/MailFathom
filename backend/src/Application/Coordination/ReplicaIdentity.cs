@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 namespace MailFathom.Application.Coordination;
 
@@ -10,7 +10,7 @@ namespace MailFathom.Application.Coordination;
 /// It is what a figure only one process can answer for is reported beside, so that an operator asking the same question
 /// twice can tell whether two different answers describe two replicas or one deployment changing. A status surface that
 /// carries a per-process figure without one reports a replica as though it were the whole, which is the reading
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md">ADR 0031</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md">ADR 0031</see>
 /// says the administrative surface exists to prevent.
 /// </para>
 /// <para>

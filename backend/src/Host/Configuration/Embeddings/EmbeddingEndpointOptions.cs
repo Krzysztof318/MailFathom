@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.ComponentModel.DataAnnotations;
 using MailFathom.AI.Embeddings;
@@ -17,7 +17,7 @@ namespace MailFathom.Host.Configuration.Embeddings;
 /// repetition to tidy away. A fallback is another route to one vector space and never a second one, so the properties
 /// that decide whether two vectors are comparable have to be stated where they could disagree — which is what lets
 /// startup refuse a chain that does and name the property it differs on. See
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>.
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>.
 /// </para>
 /// <para>
 /// Nothing here is a compile-time constant in code. The provider, the model, the width, the metric, and the

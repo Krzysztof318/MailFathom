@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Copyright © 2026 Krzysztof Kasprowicz
 # Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-# Project repository: https://github.com/Krzysztof318/MailFathom
+# Project repository: https://github.com/fathomise/MailFathom
 
 # Write one `Status` value on the roadmap board, on every issue merging a pull request will close.
 #
@@ -38,8 +38,8 @@
 #                           and nothing else; empty means the board is left alone
 #   REPOSITORY              owner/name of the repository the pull request belongs to
 #   PULL_REQUEST_NUMBER     the pull request whose closing references state the contract
-#   BOARD_OWNER             the login the project belongs to
-#   BOARD_NUMBER            the project number in that login's namespace
+#   BOARD_OWNER             the organization the project belongs to
+#   BOARD_NUMBER            the project number in that organization's namespace
 #   STATUS_FIELD            the single-select field to write
 #   CLOSING_ISSUES_SCRIPT   path to `collect-closing-issues.sh`
 #   CLOSING_ISSUE_LIMIT     how many closing issues to act on
@@ -51,7 +51,7 @@ status="${1:?the status to write is required}"
 preserved_statuses="${2:-}"
 required_statuses="${3:-}"
 
-: "${BOARD_OWNER:?BOARD_OWNER must name the login the project belongs to}"
+: "${BOARD_OWNER:?BOARD_OWNER must name the organization the project belongs to}"
 : "${BOARD_NUMBER:?BOARD_NUMBER must name the project}"
 : "${STATUS_FIELD:?STATUS_FIELD must name the field to write}"
 : "${REPOSITORY:?REPOSITORY must name the repository}"
@@ -92,7 +92,7 @@ if ! GH_TOKEN="$BOARD_TOKEN" "$call_github_api" graphql \
     -f field="$STATUS_FIELD" \
     -f query='
       query($owner: String!, $number: Int!, $field: String!) {
-        user(login: $owner) {
+        organization(login: $owner) {
           projectV2(number: $number) {
             id
             field(name: $field) {
@@ -105,11 +105,11 @@ if ! GH_TOKEN="$BOARD_TOKEN" "$call_github_api" graphql \
   exit 1
 fi
 
-project_id="$(jq -r '.data.user.projectV2.id // ""' "$field_file")"
-field_id="$(jq -r '.data.user.projectV2.field.id // ""' "$field_file")"
+project_id="$(jq -r '.data.organization.projectV2.id // ""' "$field_file")"
+field_id="$(jq -r '.data.organization.projectV2.field.id // ""' "$field_file")"
 option_id="$(
   jq -r --arg name "$status" \
-    '[.data.user.projectV2.field.options[]? | select(.name == $name) | .id][0] // ""' \
+    '[.data.organization.projectV2.field.options[]? | select(.name == $name) | .id][0] // ""' \
     "$field_file"
 )"
 

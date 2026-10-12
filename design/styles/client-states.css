@@ -1,7 +1,7 @@
 /*
  * Copyright © 2026 Krzysztof Kasprowicz
  * Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
- * Project repository: https://github.com/Krzysztof318/MailFathom
+ * Project repository: https://github.com/fathomise/MailFathom
  */
 html, body { margin: 0; padding: 0; background: oklch(0.935 0.006 262); }
 html:has([data-page="dark"]), body:has([data-page="dark"]) { background: oklch(0.150 0.014 262); }

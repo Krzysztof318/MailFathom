@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Emails;
@@ -62,7 +62,7 @@ internal sealed class StoredEmailEntity
     /// The occurrence is an attribute of the email rather than what the email is: <see cref="Id" /> identifies it for
     /// its whole life, and the UIDVALIDITY and UID beside it say where a server still holds it. The two are present
     /// together or absent together, which a check constraint holds. See
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
     /// </remarks>
     public uint? UidValidity { get; set; }
 
@@ -324,7 +324,7 @@ internal sealed class StoredEmailEntity
     /// mail that is verified rather than trusted, and the stamp is what keeps the verification to once per message
     /// instead of once per abandoned batch. It is a fact about the bytes rather than a permission: the rest of the
     /// drain gate is re-read immediately before every batch. See
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
     /// </remarks>
     public DateTimeOffset? ContentVerifiedAt { get; set; }
 

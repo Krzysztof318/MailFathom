@@ -23,7 +23,7 @@ The mechanism below changes that for one process, and it stays visible while it 
 every time it starts.
 
 **One thing here turns it on for you, and only one:
-[`scripts/quick-start-compose.sh`](https://github.com/Krzysztof318/MailFathom/blob/main/scripts/quick-start-compose.sh).**
+[`scripts/quick-start-compose.sh`](https://github.com/fathomise/MailFathom/blob/main/scripts/quick-start-compose.sh).**
 It copies the sample beside the Compose deployment it prepares, mounts it, and names it in the environment — so a
 mailbox on a server offering only weak parameters is reachable from a quick start rather than failing it with a
 handshake error that names nothing. The closing report says the file is there and what it relaxes, and
@@ -88,7 +88,7 @@ Copy the sample this repository ships and point `OPENSSL_CONF` at the copy:
 cp deploy/openssl/legacy-mail-server.cnf.example /etc/mailfathom/openssl-legacy.cnf
 ```
 
-[`deploy/openssl/legacy-mail-server.cnf.example`](https://github.com/Krzysztof318/MailFathom/blob/main/deploy/openssl/legacy-mail-server.cnf.example) is that file
+[`deploy/openssl/legacy-mail-server.cnf.example`](https://github.com/fathomise/MailFathom/blob/main/deploy/openssl/legacy-mail-server.cnf.example) is that file
 with its reasoning in comments. Stripped to what it configures, it is:
 
 ```ini
@@ -153,7 +153,7 @@ therefore the same act written for a different launcher, and each is equally sup
 - **In the container.** The container's own OpenSSL enforces the same policy the machine's does, so the file has to be
   inside the container: mount it read-only and name it in the environment. For the Compose deployment that is one
   entry added to each of the two blocks the `mailfathom` service in
-  [`deploy/compose/compose.yaml`](https://github.com/Krzysztof318/MailFathom/blob/main/deploy/compose/compose.yaml) already has:
+  [`deploy/compose/compose.yaml`](https://github.com/fathomise/MailFathom/blob/main/deploy/compose/compose.yaml) already has:
 
   ```yaml
       environment:
@@ -195,7 +195,7 @@ reports it, and the other environment-only families it covers, are in
 [environment-only settings](configuration-reference.md#environment-only-settings). Set it the way the deployment shapes
 above set it, and confirm it arrived through the startup warning below.
 
-This is also why MailFathom exposes no key for it. [ADR 0002](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0002-configuration-reading-mapping-and-reload-boundary.md)
+This is also why MailFathom exposes no key for it. [ADR 0002](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0002-configuration-reading-mapping-and-reload-boundary.md)
 places configuration reading at the host boundary; this is one step earlier than any boundary that ADR describes, which
 makes it a pre-start environment concern by nature rather than by choice.
 

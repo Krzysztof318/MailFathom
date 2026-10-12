@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 namespace MailFathom.Application.Access.Credentials;
 
@@ -11,7 +11,7 @@ namespace MailFathom.Application.Access.Credentials;
 /// once per replica is not spendable once at all: the replica that refuses a replay is not the replica the next
 /// presentation reaches, and nothing about routing puts that back, because the caller replaying a captured assertion is
 /// the one who would have had to honour the affinity.
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md">ADR 0031</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md">ADR 0031</see>
 /// records both halves of that.
 /// </para>
 /// <para>

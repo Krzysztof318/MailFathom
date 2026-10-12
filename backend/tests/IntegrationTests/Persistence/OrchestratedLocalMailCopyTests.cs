@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Folders.Local;
@@ -21,7 +21,7 @@ namespace MailFathom.IntegrationTests.Persistence;
 /// <para>
 /// Three claims no substitute settles. That the copy is a second row with a payload of its own needs a real content
 /// store to show two distinct objects rather than two references to one — which is what
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md">ADR 0017</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md">ADR 0017</see>
 /// refuses to share. That the copy's row is written, filed, and pointed at that payload in one transaction needs the
 /// real cascade of foreign keys the schema declares. And that the per-account stored-content ledger counts the copy is
 /// a figure a maintained counter moves inside the same transaction, which nothing in the unit suite can observe.

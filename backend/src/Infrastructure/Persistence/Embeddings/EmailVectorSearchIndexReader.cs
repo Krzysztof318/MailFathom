@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Emails.AttachmentText;
 using MailFathom.Application.Emails.Embeddings;
@@ -42,14 +42,14 @@ namespace MailFathom.Infrastructure.Persistence.Embeddings;
 /// them once the caller's own folder and date filters are applied, and none at all once they name a sender.
 /// A profile-partial HNSW index built over that corpus was never chosen by this query's plan, and it cost 3073 MB
 /// beside a 3137 MB table, forty-five minutes to build, and a hundredfold slowdown on every embedding write — so
-/// MailFathom builds none. <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/architecture/semantic-ranking-cost.md">What
+/// MailFathom builds none. <see href="https://github.com/fathomise/MailFathom/blob/main/docs/architecture/semantic-ranking-cost.md">What
 /// a semantic search costs</see> holds the whole measurement, including the one thing it found that is worth changing:
 /// the ordering key below is a correlated subquery re-entered per message, and the same exact answer written as one
 /// pass costs less than a quarter of it.
 /// </para>
 /// <para>
 /// Two rankings come out of one eligible set, on the partition
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md">ADR 0030</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md">ADR 0030</see>
 /// requires: what a person wrote — a body, or a document attachment's own words — and what a model said a picture
 /// shows. The two are separated by the kind recorded on the attachment row the passage hangs on, so what decides it is
 /// a stored column rather than a media type re-read per query, and a passage cut from the body belongs to the written

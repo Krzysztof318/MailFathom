@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Copyright © 2026 Krzysztof Kasprowicz
 # Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-# Project repository: https://github.com/Krzysztof318/MailFathom
+# Project repository: https://github.com/fathomise/MailFathom
 #
 ### Rewrites the relative links of a Markdown document that has moved up out of its own directory.
 #
@@ -19,7 +19,7 @@
 #
 # Only a relative link is touched. An absolute URL, a scheme of any kind, a root-relative path, and a bare fragment
 # are left exactly as written, which is what keeps the rule the site already applies to a page's links — an absolute
-# `https://github.com/Krzysztof318/MailFathom` URL for anything the site does not carry — true of the artifacts too.
+# `https://github.com/fathomise/MailFathom` URL for anything the site does not carry — true of the artifacts too.
 # A fragment on a relative link travels with it, so a link into a section of another page still lands on that section.
 
 set -euo pipefail

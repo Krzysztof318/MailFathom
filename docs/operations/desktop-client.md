@@ -39,7 +39,7 @@ the package and cannot start the application. Build it yourself there, or use th
 Nothing is published for macOS, and iOS is not a head this project builds at all.
 
 **Android is the third head, and nothing on this page applies to it.** Under
-[ADR 0027](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0027-an-android-head-built-every-night-and-supported-by-nothing.md) the same shell builds one
+[ADR 0027](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0027-an-android-head-built-every-night-and-supported-by-nothing.md) the same shell builds one
 debug-signed APK left on the run that built it: there is no release asset, no store listing, no update channel, and no
 download address that outlives a run's artifact retention. It is a build somebody tries rather than a client they live
 in, and nothing about it is supported. **Every nightly run produces one**, from the same revision the image on that run
@@ -198,16 +198,16 @@ works by packaging the host's own GTK and WebKitGTK shared objects into the arti
 LGPL-2.1-or-later — so publishing one would mean redistributing those libraries under conditions this project would
 then owe an operator a source offer for. A `.deb` and an `.rpm` depend on the distribution's copies instead and carry
 none of it, which is why they are the two Linux formats published.
-[`THIRD_PARTY_LICENSES.md`](https://github.com/Krzysztof318/MailFathom/blob/main/THIRD_PARTY_LICENSES.md) records that
+[`THIRD_PARTY_LICENSES.md`](https://github.com/fathomise/MailFathom/blob/main/THIRD_PARTY_LICENSES.md) records that
 reading against the crate closure the shell links.
 
 ## Where it is built, and what a failure costs
 
-[`build-desktop-client.yml`](https://github.com/Krzysztof318/MailFathom/blob/main/.github/workflows/build-desktop-client.yml)
+[`build-desktop-client.yml`](https://github.com/fathomise/MailFathom/blob/main/.github/workflows/build-desktop-client.yml)
 is the only thing that builds these bundles. It is `workflow_call` only, and two channels call it:
-[`release.yml`](https://github.com/Krzysztof318/MailFathom/blob/main/.github/workflows/release.yml), which attaches the
+[`release.yml`](https://github.com/fathomise/MailFathom/blob/main/.github/workflows/release.yml), which attaches the
 result to the release, and
-[`nightly.yml`](https://github.com/Krzysztof318/MailFathom/blob/main/.github/workflows/nightly.yml), which leaves it on
+[`nightly.yml`](https://github.com/fathomise/MailFathom/blob/main/.github/workflows/nightly.yml), which leaves it on
 the run — a nightly is not a release and has nothing to attach to, so whoever tries a nightly image takes the client
 from the run that produced it.
 
@@ -227,7 +227,7 @@ in over the WebDriver protocol, which is what `pnpm test:desktop` is. What it co
 compilation on a runner rather than on the machine the change is being written on, and what it buys is the one class of
 break no browser suite can see: an instant placed against a zone the WebView reported differently, and a first run
 opening in a language the platform stated and nothing else reads.
-[`frontend/tests/AGENTS.md`](https://github.com/Krzysztof318/MailFathom/blob/main/frontend/tests/AGENTS.md) § _The
+[`frontend/tests/AGENTS.md`](https://github.com/fathomise/MailFathom/blob/main/frontend/tests/AGENTS.md) § _The
 desktop suite_ is what that job may assert. So the pull-request answer about the client is its linter, type check, unit
 suites, browser suite, and that — and a `deb`, an `rpm`, or an installer is still nobody's pull-request concern.
 

@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
@@ -42,7 +42,7 @@ namespace MailFathom.Application.Synchronization.Restore;
 /// message after that. A record carrying a placement is a fully answered append the next pass finishes on its own. A
 /// record standing with no placement is an append whose outcome is unknown: it is reported to an operator and never
 /// reissued, and it holds the account in its phase until they settle it. See
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
 /// </para>
 /// </remarks>
 public sealed class MailboxRestorePass

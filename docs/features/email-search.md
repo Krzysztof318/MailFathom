@@ -47,13 +47,13 @@ That separation is the point rather than an implementation detail. **A message's
 text**, because `ts_headline` cuts extracts from the message's document and that document is byte for byte what it was
 before attachments were read; a match inside a contract is a match on the file, named by the file and by the page,
 sheet, or slide it sits on, rather than words a reader would take the covering note to have said.
-[ADR 0029](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.md)
+[ADR 0029](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.md)
 records the decision and [Message chunks § passages cut from an
 attachment](message-chunks.md#passages-cut-from-an-attachment) what a passage of one carries.
 
 **An image attachment's description is never lexically indexed.** A model asked what a picture shows produces words
 nobody wrote, and matching them as though somebody had is exactly what
-[ADR 0030](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md)
+[ADR 0030](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md)
 refuses. The exclusion is in the database rather than in a writer: the generated column produces a vector for a
 document's text and nothing at all for a description, so a word occurring only in a description returns no lexical
 match whatever a later writer does with the row. A depicted match reaches retrieval through the vector index alone.
@@ -218,7 +218,7 @@ same.
 A message that exists in two folders — because the mailbox user copied it, or because MailFathom did — is **two
 results**, one per folder, ranked independently and each naming where it was found. Nothing collapses them, because
 nothing joins them: a stored row is one occurrence, which is the decision
-[ADR 0008](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0008-copied-message-local-identity.md)
+[ADR 0008](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0008-copied-message-local-identity.md)
 records. A query scoped to one folder returns one.
 
 ## Hybrid retrieval
@@ -252,7 +252,7 @@ by the kind recorded on its attachment row rather than by anything a caller sent
   distance survives into them, which is why no change of embedding model can invalidate the arrangement — the partition
   has already placed the whole section below, without reference to any score.
 
-[ADR 0030](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md)
+[ADR 0030](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md)
 records why a floor rather than a penalty, and `HybridSearchRanking` is the one step every surface composes through, so
 the guarantee holds in one place rather than being remembered in three.
 
@@ -313,7 +313,7 @@ An instance reaches `Degraded` in four ways, and every one of them needs a perso
 - the last embedding call was refused for a reason no later attempt changes — an expired or revoked credential, a
   rejected request;
 - the last embedding call failed for a reason that may pass — the whole endpoint chain unreachable, a rate limit, a
-  timeout. [ADR 0006](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md)
+  timeout. [ADR 0006](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md)
   makes the chain one vector space reached several ways, so falling from one endpoint to the next is the declaration
   working rather than ill health; only the chain being exhausted is;
 - no endpoint chain is declared any more while a profile is still active, so vectors exist and nothing can place a query

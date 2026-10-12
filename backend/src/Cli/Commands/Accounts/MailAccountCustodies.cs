@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 namespace MailFathom.Cli.Commands.Accounts;
 
@@ -8,7 +8,7 @@ namespace MailFathom.Cli.Commands.Accounts;
 /// <remarks>
 /// Here rather than on either command because the value <c>switch</c> sends and the value <c>show</c> prints back are
 /// one vocabulary, and two copies of it would drift the day a third custody exists. See
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
 /// </remarks>
 internal static class MailAccountCustodies
 {

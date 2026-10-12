@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Globalization;
 using System.Text.Json;
@@ -27,7 +27,7 @@ namespace MailFathom.Host.Api;
 /// every replica reads, so a question is written and answered with <c>202</c> at once, the composition writes into the
 /// answer it opened, and a client follows it by reading the conversation from the place it already holds — the same
 /// route for the first read and every later one.
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0035-delivering-a-running-ai-answer-from-a-persisted-run-by-cursor-signal-and-re-read.md">ADR 0035</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0035-delivering-a-running-ai-answer-from-a-persisted-run-by-cursor-signal-and-re-read.md">ADR 0035</see>
 /// is that decision. Each write is announced as a <c>run.advanced</c> signal naming the conversation, the run, and the
 /// place reached, and carrying nothing that was written; the routes are the whole contract, and a client with no hub
 /// at all loses latency rather than any of the conversation.

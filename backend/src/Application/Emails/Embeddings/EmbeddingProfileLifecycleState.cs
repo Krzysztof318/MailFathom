@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 namespace MailFathom.Application.Emails.Embeddings;
 
@@ -10,7 +10,7 @@ namespace MailFathom.Application.Emails.Embeddings;
 /// generation counter beside it: the profile is the generation, so two generations coexisting while a new one is built
 /// are two rows, one <see cref="Building" /> and one <see cref="Active" />, and a read path has no second field it must
 /// remember to consult. See
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>.
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>.
 /// </remarks>
 public enum EmbeddingProfileLifecycleState
 {
