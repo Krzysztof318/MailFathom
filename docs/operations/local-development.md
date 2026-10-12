@@ -418,9 +418,9 @@ with `test-password`. Stopping the orchestration with `Ctrl+C` — or
 the database volume outlives the container and the container outlives the run. The container is stopped rather than
 left running, so the next start is a restart of the server that was there.
 
-The AppHost PostgreSQL resource uses the `pgvector/pgvector:0.8.6-pg18` image so local development starts with a PostgreSQL server that can support the `vector` extension required by the RAG and embedding slices. It keeps its data in a named Docker volume, so synchronized mail survives a restart instead of costing a full IMAP synchronization every time the orchestration stops.
+The AppHost PostgreSQL resource uses the `pgvector/pgvector:0.8.7-pg18` image so local development starts with a PostgreSQL server that can support the `vector` extension required by the RAG and embedding slices. It keeps its data in a named Docker volume, so synchronized mail survives a restart instead of costing a full IMAP synchronization every time the orchestration stops.
 
-That volume is mounted at `/var/lib/postgresql` rather than through Aspire's `WithDataVolume`, which would choose the wrong path here. PostgreSQL 18 moved the image's data directory into a version-specific subdirectory and moved the declared volume up to the parent, and Aspire picks between the two by parsing a major version out of the image tag — taking everything before the first `-`, which on a pgvector tag shaped `0.8.6-pg18` is `0.8.6`, and reading the major component of that, which is `0`. The version test therefore never sees 18: it would mount the pre-18 path, the server would write to neither, and the database would live in the container's writable layer until the container was removed. The volume keeps the name `WithDataVolume` would have generated, so it is still one database per checkout.
+That volume is mounted at `/var/lib/postgresql` rather than through Aspire's `WithDataVolume`, which would choose the wrong path here. PostgreSQL 18 moved the image's data directory into a version-specific subdirectory and moved the declared volume up to the parent, and Aspire picks between the two by parsing a major version out of the image tag — taking everything before the first `-`, which on a pgvector tag shaped `0.8.7-pg18` is `0.8.7`, and reading the major component of that, which is `0`. The version test therefore never sees 18: it would mount the pre-18 path, the server would write to neither, and the database would live in the container's writable layer until the container was removed. The volume keeps the name `WithDataVolume` would have generated, so it is still one database per checkout.
 
 That name is also the one a checkout used before PostgreSQL 18, which is what a first start after this change runs
 into: the volume holding a PostgreSQL 17 data directory is mounted at the parent path, and the image refuses to start
@@ -640,7 +640,7 @@ GreenMail is the server this repository already runs for its integration suite, 
 ```bash
 docker run --rm -p 3025:3025 -p 3143:3143 \
   -e GREENMAIL_OPTS="-Dgreenmail.smtp.hostname=0.0.0.0 -Dgreenmail.smtp.port=3025 -Dgreenmail.imap.hostname=0.0.0.0 -Dgreenmail.imap.port=3143 -Dgreenmail.users=mailfathom:local-test-only@mailfathom.test" \
-  greenmail/standalone:2.1.11
+  greenmail/standalone:2.1.14
 ```
 
 That is one mailbox, and `synthetic-mail.example.json` is written against it: copy it to `synthetic-mail.local.json`,
@@ -1571,14 +1571,14 @@ A developer's own orchestration is untouched by any of this: its container name 
 
 ### The mail server
 
-The `mailserver` resource is `greenmail/standalone:2.1.11`, configured through `GREENMAIL_OPTS` to start only SMTP on 3025, IMAP on 3143, and the API server on 8080. The API server is what the resource's health check polls — `/api/service/readiness` — so the suite waits for a server that is accepting rather than for a container that has started; without it the first test would race the listener and fail as a connection refusal that says nothing about the behavior under test.
+The `mailserver` resource is `greenmail/standalone:2.1.14`, configured through `GREENMAIL_OPTS` to start only SMTP on 3025, IMAP on 3143, and the API server on 8080. The API server is what the resource's health check polls — `/api/service/readiness` — so the suite waits for a server that is accepting rather than for a container that has started; without it the first test would race the listener and fail as a connection refusal that says nothing about the behavior under test.
 
 It serves one throwaway mailbox, `mailfathom` / `mailfathom@mailfathom.test`, whose credentials are constants in `OrchestrationContract`. They exist only in the two ephemeral topologies, unlock nothing outside the container, and are declared once so the app model that configures the server and whatever logs into it cannot drift apart. The login is the bare local part and the address is the whole string: authenticating as the address has GreenMail auto-create a second mailbox and drop the connection, which is why the two are separate constants rather than one value used twice. GreenMail's own verbose logging stays off, because it transcribes the whole IMAP conversation — password included — into the orchestration log.
 
 Two behaviors of this server are worth knowing when reading a failure:
 
 - It advertises `AUTH=XOAUTH2` and nothing else, so both the adapter under test and the suite's own observations empty MailKit's advertised mechanism set and authenticate with the IMAP `LOGIN` command. That is a legal server shape, and `MailKitTransportSecurityMapping` permits the fallback exactly when the account's policy already allows a clear-text mechanism.
-- Each folder carries a real UIDVALIDITY, `System.currentTimeMillis() / 1000` at creation, so replacing a folder hands out a new one. That is how the suite produces a UIDVALIDITY change without simulating anything. Two consequences are built into `OrchestratedMailbox.RecreateFolderAsync`: it waits past the next whole second, because a folder replaced inside the same second is handed back the value it just had, and it retires the old folder by renaming it rather than deleting it. GreenMail 2.1.11 crashes on `DELETE` of a folder an earlier session had selected — it notifies the folder's listeners and dereferences a response object a disconnected session no longer holds — and every folder this suite replaces has been selected by a synchronization run.
+- Each folder carries a real UIDVALIDITY, `System.currentTimeMillis() / 1000` at creation, so replacing a folder hands out a new one. That is how the suite produces a UIDVALIDITY change without simulating anything. Two consequences are built into `OrchestratedMailbox.RecreateFolderAsync`: it waits past the next whole second, because a folder replaced inside the same second is handed back the value it just had, and it retires the old folder by renaming it rather than deleting it. A rename does not depend on how the server's `DELETE` treats a folder an earlier session had selected, which every folder this suite replaces has been, by a synchronization run: GreenMail before 2.1.13 crashed there — it notified the folder's listeners and dereferenced a response object a disconnected session no longer held — and the pinned release answers it.
 
 smtp4dev was evaluated first and rejected. It advertises no SASL mechanism at all, which is workable, but its INBOX reports a hard-coded UIDVALIDITY that can never change, so the suite's UIDVALIDITY scenario would have been unverifiable. Separately, a `UID SEARCH UID 1:*` against it exhausts the container's memory and kills the process; MailFathom never sends that shape, because it computes a concrete upper bound from `UIDNEXT`, but it is worth recording for anyone who reaches for that image again.
 
@@ -1614,7 +1614,7 @@ classification record. Every message it is sent is written by the test, and none
 
 ### The object-storage endpoint
 
-The `object-storage` resource is `docker.io/pgsty/silo:RELEASE.2026-08-06T00-00-00Z`. Silo is a maintained fork of the
+The `object-storage` resource is `docker.io/pgsty/silo:RELEASE.2026-09-16T00-00-00Z`. Silo is a maintained fork of the
 open-source MinIO server, keeping one release line alive after upstream ended community distribution, and it is here for
 the reason the mail server and the analyzer are: what a substituted S3 client proves is that MailFathom composed the
 request it meant to, and what a real server proves is that the request is one an S3 implementation accepts. A request a

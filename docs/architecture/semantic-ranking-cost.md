@@ -19,7 +19,7 @@ names as the one where an account predicate stops being selective on its own:
 | The measured user | 2 accounts, **100 000 messages**, **259 034 vectors** |
 | Passages | 389 396 chunks, one vector each, 1536 dimensions, cosine |
 | `email_embeddings` | 35 MB heap, **3081 MB TOAST**, 3137 MB in total |
-| Server | `pgvector/pgvector:0.8.6-pg18`, PostgreSQL 18, pgvector 0.8.6 — the image the Compose deployment and the Helm chart both name |
+| Server | `pgvector/pgvector:0.8.6-pg18`, PostgreSQL 18, pgvector 0.8.6 — the PostgreSQL major and the pgvector release line of the image the Compose deployment and the Helm chart both name |
 | Settings | the server's own defaults, which is what every deployment asset here ships: `shared_buffers` 128MB, `work_mem` 4MB, `maintenance_work_mem` 64MB, `hnsw.ef_search` 40, `hnsw.iterative_scan` off |
 
 Two things about that corpus are worth saying plainly. The vectors are synthetic — each is the normalized sum of three

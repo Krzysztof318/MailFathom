@@ -25,7 +25,7 @@ services:
     # pgvector rather than plain postgres: the schema declares the `vector` extension, and the stock image cannot
     # create it. This is the same pin the local Aspire orchestration uses, so a schema reviewed locally is reviewed
     # against this server version.
-    image: ${MAILFATHOM_POSTGRES_IMAGE:-pgvector/pgvector:0.8.6-pg18}
+    image: ${MAILFATHOM_POSTGRES_IMAGE:-pgvector/pgvector:0.8.7-pg18}
     restart: unless-stopped
     environment:
       # The superuser of this container, used by initdb and by nothing else afterwards. The role MailFathom connects as is
@@ -394,7 +394,7 @@ services:
     # open-source MinIO server, keeping one release line alive after upstream ended community distribution. It is
     # AGPL-3.0-or-later: this file names an image your host pulls from PGSTY's own registry and carries no part of it,
     # which is the reading THIRD_PARTY_LICENSES.md records.
-    image: ${MAILFATHOM_SILO_IMAGE:-docker.io/pgsty/silo:RELEASE.2026-08-06T00-00-00Z}
+    image: ${MAILFATHOM_SILO_IMAGE:-docker.io/pgsty/silo:RELEASE.2026-09-16T00-00-00Z}
     restart: unless-stopped
     # The server's own start command, which every MinIO-derived image takes as arguments rather than as configuration;
     # the image's entrypoint puts the executable in front of them. One directory, because a single-node single-drive
@@ -500,7 +500,7 @@ services:
     # built on. Any RESP endpoint answers the same protocol — Redis, Garnet, Valkey, or a managed equivalent — which is
     # what makes pointing the setting above at one you already operate the other supported shape, and what makes this
     # server the default rather than a requirement.
-    image: ${MAILFATHOM_VALKEY_IMAGE:-docker.io/valkey/valkey@sha256:c123e3715db63d06d4ad6964884037aa0d5d4d703939b9929954112889708e1d}
+    image: ${MAILFATHOM_VALKEY_IMAGE:-docker.io/valkey/valkey@sha256:418652cfb58ef879d4978c33553735d7147016032d5aefaa14c828e611eb9dfd}
     restart: unless-stopped
     # **The account is stated here because the image states none.** Its entrypoint takes a root branch when nothing
     # else has chosen an account: it chowns the working directory and then re-execs itself as `valkey`. Both halves

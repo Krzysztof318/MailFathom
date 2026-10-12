@@ -82,7 +82,7 @@ database:
     image:
       registry: docker.io
       repository: pgvector/pgvector
-      tag: 0.8.6-pg18
+      tag: 0.8.7-pg18
       pullPolicy: IfNotPresent
       pullSecrets: []
 
@@ -266,7 +266,7 @@ contentStorage:
       image:
         registry: docker.io
         repository: pgsty/silo
-        tag: RELEASE.2026-08-06T00-00-00Z
+        tag: RELEASE.2026-09-16T00-00-00Z
         pullPolicy: IfNotPresent
         pullSecrets: []
 
@@ -525,7 +525,7 @@ signalBackplane:
     image:
       registry: docker.io
       repository: valkey/valkey
-      digest: sha256:c123e3715db63d06d4ad6964884037aa0d5d4d703939b9929954112889708e1d
+      digest: sha256:418652cfb58ef879d4978c33553735d7147016032d5aefaa14c828e611eb9dfd
       pullPolicy: IfNotPresent
       pullSecrets: []
 

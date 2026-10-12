@@ -69,10 +69,10 @@ var postgresPassword = builder.AddParameter("postgres-password", OrchestrationCo
 var postgres = builder
     .AddPostgres(OrchestrationContract.PostgresResourceName, postgresUserName, postgresPassword)
     .WithImage("pgvector/pgvector")
-    .WithImageTag("0.8.6-pg18");
+    .WithImageTag("0.8.7-pg18");
 
 // Mounted explicitly rather than through WithDataVolume, which derives this path by parsing a PostgreSQL major version
-// out of the image tag: it takes everything before the first `-` — `0.8.6` on a pgvector tag shaped `0.8.6-pg18` — and
+// out of the image tag: it takes everything before the first `-` — `0.8.7` on a pgvector tag shaped `0.8.7-pg18` — and
 // reads the major component of that, which is `0`, so the version test never sees 18 and it falls back to the pre-18
 // `/var/lib/postgresql/data`. PostgreSQL 18 moved the image's data directory under a
 // version-specific subdirectory and moved the declared volume up to the parent, so a volume mounted at the old path
@@ -166,7 +166,7 @@ if (runsEphemeralServers)
     // submitted over SMTP and read back over IMAP, so the mail MailFathom then synchronizes arrived the way mail
     // arrives. Its two published ports are stated for the reason the database's is — that run reaches them from
     // outside the app model.
-    builder.AddContainer(OrchestrationContract.MailServerResourceName, "greenmail/standalone", "2.1.11")
+    builder.AddContainer(OrchestrationContract.MailServerResourceName, "greenmail/standalone", "2.1.14")
         .WithContainerName($"{ephemeralResourceNamePrefix}-mailserver")
         .WithEnvironment(
             "GREENMAIL_OPTS",
@@ -275,7 +275,7 @@ if (runsIntegrationTests)
         .AddContainer(
             OrchestrationContract.ObjectStorageResourceName,
             "docker.io/pgsty/silo",
-            "RELEASE.2026-08-06T00-00-00Z")
+            "RELEASE.2026-09-16T00-00-00Z")
         .WithContainerName($"{ephemeralResourceNamePrefix}-object-storage")
         .WithEnvironment("MINIO_ROOT_USER", OrchestrationContract.ObjectStorageAccessKey)
         .WithEnvironment("MINIO_ROOT_PASSWORD", OrchestrationContract.ObjectStorageSecretKey)

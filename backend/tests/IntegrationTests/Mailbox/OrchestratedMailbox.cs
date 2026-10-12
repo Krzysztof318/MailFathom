@@ -318,12 +318,13 @@ internal sealed class OrchestratedMailbox(OrchestratedMailServerEndpoints endpoi
     /// before gets a value of its own, so every UID handed out under the previous incarnation now names nothing.
     /// </para>
     /// <para>
-    /// The old folder is renamed out of the way rather than deleted, because GreenMail 2.1.11 crashes on <c>DELETE</c>
-    /// of a folder that an earlier session had selected: it notifies the folder's registered listeners and dereferences
-    /// a response object that a disconnected session no longer has, which drops the connection with
-    /// <c>IllegalStateException: Can not handle IMAP connection</c>. Every folder this suite deletes has been selected
-    /// by a synchronization run, so that path is unreachable here. Renaming reaches the same end state, leaves the
-    /// retired folder in a container that is discarded with the run, and is unaffected by the defect.
+    /// The old folder is renamed out of the way rather than deleted, so that replacing one does not depend on how the
+    /// server's <c>DELETE</c> treats a folder that an earlier session had selected — which every folder this suite
+    /// replaces has been, by a synchronization run. GreenMail before 2.1.13 crashed there: it notified the folder's
+    /// registered listeners and dereferenced a response object that a disconnected session no longer had, which
+    /// dropped the connection with <c>IllegalStateException: Can not handle IMAP connection</c>. The release the app
+    /// model pins answers that <c>DELETE</c>. Renaming reaches the same end state on either and leaves the retired
+    /// folder in a container that is discarded with the run.
     /// </para>
     /// <para>
     /// The wait is not a guess. GreenMail derives a folder's UIDVALIDITY from <c>System.currentTimeMillis() / 1000</c>,
@@ -394,10 +395,10 @@ internal sealed class OrchestratedMailbox(OrchestratedMailServerEndpoints endpoi
     /// <returns>A task that completes once the server no longer holds the folder.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the mailbox holds no folder of that name.</exception>
     /// <remarks>
-    /// Only a folder no session has selected may be removed this way. GreenMail 2.1.11 drops the connection when it
-    /// deletes a folder an earlier session selected, for the reason <see cref="RecreateFolderAsync" /> records at
-    /// length — which is why that method retires a folder by renaming it and why pairing it with this one reaches the
-    /// defect rather than avoiding it. <see cref="CreateFolderAsync" /> is the creation this is paired with.
+    /// Written for a folder no session has selected, and used on nothing else. GreenMail before 2.1.13 dropped the
+    /// connection when it deleted a folder an earlier session had selected, for the reason
+    /// <see cref="RecreateFolderAsync" /> records at length — which is why that method retires a folder by renaming it
+    /// rather than by calling this one. <see cref="CreateFolderAsync" /> is the creation this is paired with.
     /// </remarks>
     internal async Task DeleteFolderAsync(string folderName, CancellationToken cancellationToken)
     {

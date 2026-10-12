@@ -364,7 +364,7 @@ enough.
 
 ### Upgrading a deployment that ran PostgreSQL 17
 
-The database image is now `pgvector/pgvector:0.8.6-pg18`, and PostgreSQL does not read a data directory written by an
+The database image is now `pgvector/pgvector:0.8.7-pg18`, and PostgreSQL does not read a data directory written by an
 earlier major version. **An existing volume is not upgraded in place by bringing the new image up**, and what that
 costs is worth knowing before it happens rather than after: PostgreSQL 18 moved this image's `PGDATA` into a
 version-specific subdirectory and the Compose file now mounts the volume at the parent that holds it, so the image
