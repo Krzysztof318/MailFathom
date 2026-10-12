@@ -7,9 +7,9 @@ assumes, what it is good for, and what every shape shares. Follow the linked gui
 repeat each other and neither does this page.
 
 **A release publishes an image, the chart, the schema script, and the administrative command.** The image is
-`ghcr.io/krzysztof318/mailfathom:<version>` and `docker.io/krzysztof318/mailfathom:<version>` — one manifest list under
+`ghcr.io/fathomise/mailfathom:<version>` and `docker.io/fathomise/mailfathom:<version>` — one manifest list under
 one digest, so the registry to pull from is whichever your environment already reaches — with `latest` on the newest
-release's digest in both. The chart is `oci://ghcr.io/krzysztof318/charts/mailfathom` at the same version. Each release
+release's digest in both. The chart is `oci://ghcr.io/fathomise/charts/mailfathom` at the same version. Each release
 also attaches `mailfathom-schema-<version>.sql` and its checksum, which is the schema step below, and one `mfctl`
 binary per platform with a checksum file covering all of them —
 [getting the command](../operations/admin-endpoint.md#getting-the-command) is where that one is picked up, including
@@ -26,8 +26,8 @@ are the Compose deployment and the Quadlet units, whose files live here and are 
 them. `mfctl` is the exception, and it is a client rather than the service: it runs on the machine you administer
 *from*.
 
-Beside the release runs the nightly channel: `ghcr.io/krzysztof318/mailfathom:nightly` — or
-`docker.io/krzysztof318/mailfathom:nightly`, which is the same digest in the other registry — and the
+Beside the release runs the nightly channel: `ghcr.io/fathomise/mailfathom:nightly` — or
+`docker.io/fathomise/mailfathom:nightly`, which is the same digest in the other registry — and the
 `-nightly.<n>-<short revision>` tag of each night's build, published from `main` when it has moved. **A nightly is not a release and is a poor place to keep data
 you care about** — its schema can be ahead of any migration, it has no upgrade path in either direction, and it is
 deleted once thirty newer ones exist. [What a nightly build risks](../operations/container-image.md#what-a-nightly-build-risks)

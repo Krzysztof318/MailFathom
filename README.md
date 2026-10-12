@@ -88,8 +88,8 @@ Nightly images are built from `main` and published beside the releases. A nightl
 
 | Artifact | Where |
 | --- | --- |
-| Container image | `ghcr.io/krzysztof318/mailfathom` and `docker.io/krzysztof318/mailfathom` |
-| Helm chart | `oci://ghcr.io/krzysztof318/charts/mailfathom` |
+| Container image | `ghcr.io/fathomise/mailfathom` and `docker.io/fathomise/mailfathom` |
+| Helm chart | `oci://ghcr.io/fathomise/charts/mailfathom` |
 | Database schema script | attached to each [release](https://github.com/fathomise/MailFathom/releases) |
 | `mfctl`, the administrative command | attached to each [release](https://github.com/fathomise/MailFathom/releases), one self-contained binary per platform, verified by the checksum file beside them, and installed on Linux by [one command](https://fathomise.github.io/MailFathom/docs/operations/admin-endpoint.html#on-linux-with-the-install-script) that does both |
 

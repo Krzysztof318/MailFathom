@@ -45,10 +45,10 @@ The other six are MailFathom's own contact book — `list_contacts`, `get_contac
 | `latest` | The newest release, and never a nightly |
 | `nightly` | Built from `main`. **Not a release** — its schema can be ahead of any published migration, it has no upgrade path in either direction, and it is deleted once newer ones accumulate. [What a nightly build risks](https://fathomise.github.io/MailFathom/docs/operations/container-image.html#what-a-nightly-build-risks) states the whole of it. |
 
-The same manifest list is published to **`ghcr.io/krzysztof318/mailfathom`** and **`docker.io/krzysztof318/mailfathom`** under the same digest, so the registry you pull from is not part of what you have to trust. GHCR is the canonical reference; this one is the convenience mirror.
+The same manifest list is published to **`ghcr.io/fathomise/mailfathom`** and **`docker.io/fathomise/mailfathom`** under the same digest, so the registry you pull from is not part of what you have to trust. GHCR is the canonical reference; this one is the convenience mirror.
 
 ```bash
-docker pull krzysztof318/mailfathom:latest
+docker pull fathomise/mailfathom:latest
 ```
 
 ## What you need before it starts
@@ -68,7 +68,7 @@ cd MailFathom/deploy/compose
 cp .env.example .env
 # Then set both of these in .env, in one edit. Left at their defaults they name mailfathom:local and build the
 # checkout, which is deliberate — nothing is ever pulled by accident — so this is the step that runs this image.
-#   MAILFATHOM_IMAGE=docker.io/krzysztof318/mailfathom:<version>   # an immutable tag, never latest and never a nightly
+#   MAILFATHOM_IMAGE=docker.io/fathomise/mailfathom:<version>   # an immutable tag, never latest and never a nightly
 #   MAILFATHOM_PULL_POLICY=missing
 # And, before the first start, the password the default administrator `admin` signs in to the administrative endpoint
 # with — `admin` when unset, and read on the first start alone:
@@ -92,7 +92,7 @@ docker compose up -d postgres    # creates the role, the database, and the vecto
 docker compose up -d
 ```
 
-[Deploying with Docker Compose](https://fathomise.github.io/MailFathom/docs/operations/deployment-compose.html) is the full guide, including the schema command, the network boundary, upgrading, and backup. [Deploying on Kubernetes](https://fathomise.github.io/MailFathom/docs/operations/deployment-kubernetes.html) covers the Helm chart at `oci://ghcr.io/krzysztof318/charts/mailfathom`, which meets the Restricted Pod Security Standard. [Deploying with Podman Quadlet](https://fathomise.github.io/MailFathom/docs/operations/deployment-quadlet.html) runs the same single-machine stack as rootless systemd units, which is what lets this image take its secrets as encrypted systemd credentials instead of as plaintext files.
+[Deploying with Docker Compose](https://fathomise.github.io/MailFathom/docs/operations/deployment-compose.html) is the full guide, including the schema command, the network boundary, upgrading, and backup. [Deploying on Kubernetes](https://fathomise.github.io/MailFathom/docs/operations/deployment-kubernetes.html) covers the Helm chart at `oci://ghcr.io/fathomise/charts/mailfathom`, which meets the Restricted Pod Security Standard. [Deploying with Podman Quadlet](https://fathomise.github.io/MailFathom/docs/operations/deployment-quadlet.html) runs the same single-machine stack as rootless systemd units, which is what lets this image take its secrets as encrypted systemd credentials instead of as plaintext files.
 
 ## How the image runs
 
@@ -117,7 +117,7 @@ docker compose up -d
 Every published image carries a signed build provenance statement tying the digest to the commit and the workflow that produced it:
 
 ```bash
-gh attestation verify oci://ghcr.io/krzysztof318/mailfathom:latest --repo fathomise/MailFathom
+gh attestation verify oci://ghcr.io/fathomise/mailfathom:latest --repo fathomise/MailFathom
 ```
 
 Before a release is pushed it is built, unit-tested, format-checked, proven against its migrations, run through the integration suite, started and required to report the version and revision its labels claim, and scanned by Trivy — which refuses to publish a release carrying a fixable `HIGH` or `CRITICAL` finding. [Verification](https://fathomise.github.io/MailFathom/docs/operations/container-image.html#verification) records the whole order.

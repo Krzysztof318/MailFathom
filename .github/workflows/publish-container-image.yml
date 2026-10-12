@@ -73,7 +73,7 @@ env:
   # The Docker Hub repository the mirror is published under, and through its first segment the account that logs in.
   # `nightly.yml` names the same value, because it prunes what this workflow writes there, and the contract suite
   # fails when the two disagree.
-  DOCKER_HUB_REPOSITORY: krzysztof318/mailfathom
+  DOCKER_HUB_REPOSITORY: fathomise/mailfathom
 
 jobs:
   # **The gates this publication stands on are the caller's, and none of them is here.** `Release` and `Nightly` each

@@ -11,7 +11,7 @@
 image:
   channel: nightly
   registry: ghcr.io
-  repository: krzysztof318/mailfathom
+  repository: fathomise/mailfathom
   tag: 0.0.0-nightly.1-0000000
   nightlyAcknowledgement: i-understand-this-is-unsupported
 

@@ -112,8 +112,8 @@ at the same commit. `latest` is what an operator gets by not choosing, so it mus
   right answer, because `0.3.0` is higher.
 - **`nightly` follows the newest nightly**, and is the only other mutable reference. Every other tag is immutable.
 
-The `Release` and `Nightly` workflows implement this rule, publishing to `ghcr.io/krzysztof318/mailfathom` and
-`docker.io/krzysztof318/mailfathom`. Both registries carry every version of both channels under the same digest.
+The `Release` and `Nightly` workflows implement this rule, publishing to `ghcr.io/fathomise/mailfathom` and
+`docker.io/fathomise/mailfathom`. Both registries carry every version of both channels under the same digest.
 [The container image](container-image.md#published-images) records what each tag means and how a published image is
 verified.
 
@@ -259,8 +259,8 @@ half-published:
 
 | Artifact | Where | Depends on |
 | --- | --- | --- |
-| The image | `ghcr.io/krzysztof318/mailfathom` and `docker.io/krzysztof318/mailfathom` | the schema artifact building |
-| The Helm chart | `ghcr.io/krzysztof318/charts/mailfathom` | the image's digest |
+| The image | `ghcr.io/fathomise/mailfathom` and `docker.io/fathomise/mailfathom` | the schema artifact building |
+| The Helm chart | `ghcr.io/fathomise/charts/mailfathom` | the image's digest |
 | `mailfathom-schema-<version>.sql` | the GitHub release's assets | nothing else the release produces |
 | `mfctl-<version>-<rid>` for `linux-x64`, `linux-arm64`, `win-x64`, and `win-arm64`, plus one `.sha256` covering all of them | the GitHub release's assets | nothing else the release produces |
 | The desktop client as a `.deb`, an `.rpm`, and an NSIS installer, plus one `.sha256` covering all three | the GitHub release's assets | nothing else the release produces |

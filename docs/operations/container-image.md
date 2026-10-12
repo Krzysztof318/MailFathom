@@ -233,8 +233,8 @@ Images are published to two registries:
 
 | Registry | Reference |
 | --- | --- |
-| GitHub Container Registry | `ghcr.io/krzysztof318/mailfathom` |
-| Docker Hub | `docker.io/krzysztof318/mailfathom` |
+| GitHub Container Registry | `ghcr.io/fathomise/mailfathom` |
+| Docker Hub | `docker.io/fathomise/mailfathom` |
 
 Both carry the same manifest list under the same digest, for every version and on both channels. One build produces one
 manifest list and the publishing run pushes it to both, so they are mirrors rather than two artifacts that happen to
@@ -254,7 +254,7 @@ one to prune it.
 **The package is public**, so a pull needs no authentication and no GitHub account:
 
 ```bash
-docker pull ghcr.io/krzysztof318/mailfathom:nightly
+docker pull ghcr.io/fathomise/mailfathom:nightly
 ```
 
 A package's visibility is a setting of its own rather than something it inherits from the repository, and it is
@@ -426,8 +426,8 @@ be verified and cannot. Re-attesting a digest adds a second valid statement, and
 A published image can be verified the same way from outside:
 
 ```bash
-docker buildx imagetools inspect ghcr.io/krzysztof318/mailfathom:latest
-gh attestation verify oci://ghcr.io/krzysztof318/mailfathom:latest --repo fathomise/MailFathom
+docker buildx imagetools inspect ghcr.io/fathomise/mailfathom:latest
+gh attestation verify oci://ghcr.io/fathomise/mailfathom:latest --repo fathomise/MailFathom
 ```
 
 The first prints the manifest list, its platforms, and the labels above. The second checks the signed provenance
@@ -438,15 +438,15 @@ Both commands take the Docker Hub reference in place of the GHCR one and answer 
 same and the run attests it under each repository name it published to:
 
 ```bash
-docker buildx imagetools inspect docker.io/krzysztof318/mailfathom:latest
-gh attestation verify oci://docker.io/krzysztof318/mailfathom:latest --repo fathomise/MailFathom
+docker buildx imagetools inspect docker.io/fathomise/mailfathom:latest
+gh attestation verify oci://docker.io/fathomise/mailfathom:latest --repo fathomise/MailFathom
 ```
 
 Comparing the two digests is the check that the mirrors agree, and it needs no credential:
 
 ```bash
-docker buildx imagetools inspect ghcr.io/krzysztof318/mailfathom:latest --format '{{ .Manifest.Digest }}'
-docker buildx imagetools inspect docker.io/krzysztof318/mailfathom:latest --format '{{ .Manifest.Digest }}'
+docker buildx imagetools inspect ghcr.io/fathomise/mailfathom:latest --format '{{ .Manifest.Digest }}'
+docker buildx imagetools inspect docker.io/fathomise/mailfathom:latest --format '{{ .Manifest.Digest }}'
 ```
 
 What no gate covers is the deployment around the image — that it reads its mounted configuration, resolves its mounted

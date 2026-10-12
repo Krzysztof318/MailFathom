@@ -145,7 +145,7 @@ volume list is how a chart stops being able to say what its pod reads.
 # values.yaml
 image:
   registry: ghcr.io             # or docker.io; both carry the same digest
-  repository: krzysztof318/mailfathom
+  repository: fathomise/mailfathom
   digest: sha256:…              # or an immutable tag
 
 database:
@@ -185,7 +185,7 @@ config:
 ```
 
 ```bash
-helm install mailfathom oci://ghcr.io/krzysztof318/charts/mailfathom \
+helm install mailfathom oci://ghcr.io/fathomise/charts/mailfathom \
   --version <x.y.z> --namespace mailfathom --values values.yaml
 kubectl --namespace mailfathom rollout status deployment/mailfathom
 ```
@@ -194,8 +194,8 @@ The chart is published to GHCR as an OCI artifact by the release that publishes 
 `appVersion` is that release, so a chart says which application version it deploys without being unpacked:
 
 ```bash
-helm show chart oci://ghcr.io/krzysztof318/charts/mailfathom --version <x.y.z>
-gh attestation verify oci://ghcr.io/krzysztof318/charts/mailfathom:<x.y.z> --repo fathomise/MailFathom
+helm show chart oci://ghcr.io/fathomise/charts/mailfathom --version <x.y.z>
+gh attestation verify oci://ghcr.io/fathomise/charts/mailfathom:<x.y.z> --repo fathomise/MailFathom
 ```
 
 The chart is on GHCR alone, where the image is on both registries. Docker Hub's namespace is `namespace/name` and

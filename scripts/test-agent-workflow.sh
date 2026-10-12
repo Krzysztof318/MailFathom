@@ -6599,11 +6599,11 @@ publish_qualifies_every_nightly_tag_with_the_repository_it_resolves() {
   read_published_references "$step_output_file" > "$references_file"
 
   assert_contains 'image=ghcr.io/fathomise/mailfathom' "$step_output_file"
-  assert_contains 'docker-hub-image=docker.io/krzysztof318/mailfathom' "$step_output_file"
+  assert_contains 'docker-hub-image=docker.io/fathomise/mailfathom' "$step_output_file"
   assert_contains 'primary-reference=ghcr.io/fathomise/mailfathom:0.1.0-nightly.12-616d0a6' "$step_output_file"
-  assert_contains 'docker-hub-primary-reference=docker.io/krzysztof318/mailfathom:0.1.0-nightly.12-616d0a6' "$step_output_file"
+  assert_contains 'docker-hub-primary-reference=docker.io/fathomise/mailfathom:0.1.0-nightly.12-616d0a6' "$step_output_file"
   assert_file_content \
-    $'ghcr.io/fathomise/mailfathom:0.1.0-nightly.12-616d0a6\nghcr.io/fathomise/mailfathom:nightly\ndocker.io/krzysztof318/mailfathom:0.1.0-nightly.12-616d0a6\ndocker.io/krzysztof318/mailfathom:nightly' \
+    $'ghcr.io/fathomise/mailfathom:0.1.0-nightly.12-616d0a6\nghcr.io/fathomise/mailfathom:nightly\ndocker.io/fathomise/mailfathom:0.1.0-nightly.12-616d0a6\ndocker.io/fathomise/mailfathom:nightly' \
     "$references_file"
 }
 
@@ -6619,8 +6619,8 @@ publish_reads_the_docker_hub_account_off_the_stated_repository() {
     return 1
   fi
 
-  assert_contains 'docker-hub-namespace=krzysztof318' "$step_output_file"
-  assert_contains 'docker-hub-repository=krzysztof318/mailfathom' "$step_output_file"
+  assert_contains 'docker-hub-namespace=fathomise' "$step_output_file"
+  assert_contains 'docker-hub-repository=fathomise/mailfathom' "$step_output_file"
 }
 
 # A GHCR package belongs to the repository that publishes it and a Docker Hub repository belongs to a
@@ -6640,9 +6640,9 @@ publish_moves_ghcr_with_the_repository_and_leaves_the_mirror_where_it_is() {
   fi
 
   assert_contains 'image=ghcr.io/another-owner/mailfathom' "$step_output_file"
-  assert_contains 'docker-hub-image=docker.io/krzysztof318/mailfathom' "$step_output_file"
-  assert_contains 'docker-hub-namespace=krzysztof318' "$step_output_file"
-  assert_contains 'docker-hub-repository=krzysztof318/mailfathom' "$step_output_file"
+  assert_contains 'docker-hub-image=docker.io/fathomise/mailfathom' "$step_output_file"
+  assert_contains 'docker-hub-namespace=fathomise' "$step_output_file"
+  assert_contains 'docker-hub-repository=fathomise/mailfathom' "$step_output_file"
 
   docker_hub_repository="$(read_docker_hub_repository publish-container-image.yml)"
 
@@ -6669,7 +6669,7 @@ publish_qualifies_the_release_tags_and_ignores_a_blank_line() {
   read_published_references "$step_output_file" > "$references_file"
 
   assert_file_content \
-    $'ghcr.io/fathomise/mailfathom:0.1.0\nghcr.io/fathomise/mailfathom:latest\ndocker.io/krzysztof318/mailfathom:0.1.0\ndocker.io/krzysztof318/mailfathom:latest' \
+    $'ghcr.io/fathomise/mailfathom:0.1.0\nghcr.io/fathomise/mailfathom:latest\ndocker.io/fathomise/mailfathom:0.1.0\ndocker.io/fathomise/mailfathom:latest' \
     "$references_file"
 }
 
@@ -7375,7 +7375,7 @@ quick_start_prepares_the_deployment_the_documentation_describes() {
 
   run_quick_start "$checkout_root" --provider fastmail > "$output_file" 2>&1
 
-  assert_contains 'MAILFATHOM_IMAGE=ghcr.io/krzysztof318/mailfathom:9.9.9' "$compose_directory/.env"
+  assert_contains 'MAILFATHOM_IMAGE=ghcr.io/fathomise/mailfathom:9.9.9' "$compose_directory/.env"
   # The image and how it is obtained are one decision: a release tag with the build policy left in place would build
   # the checkout and ignore the pin.
   assert_contains 'MAILFATHOM_PULL_POLICY=missing' "$compose_directory/.env"

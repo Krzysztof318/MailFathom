@@ -641,7 +641,7 @@ survey_image_pins() {
 
     # MailFathom's own image is built here rather than pinned from anywhere.
     case "$reference" in
-      *krzysztof318* | mailfathom:*) continue ;;
+      *fathomise* | mailfathom:*) continue ;;
     esac
 
     if [[ "$reference" == *@sha256:* ]]; then
