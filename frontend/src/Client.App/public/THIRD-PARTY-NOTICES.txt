@@ -11,7 +11,7 @@ as text rather than as a banner inside the code they belong to.
 
 --------------------------------------------------------------------------------
 
-react 19.2.8, react-dom 19.2.8, and scheduler 0.27.0
+react 19.3.0, react-dom 19.3.0, and scheduler 0.28.0
 https://github.com/facebook/react
 
 All three carry the same licence text:
@@ -147,20 +147,20 @@ starts rather than in the chunk beside this file; the two interface packages, @o
 @opentelemetry/api-logs, are in that one. Both chunks are part of the bundle either way.
 
 @opentelemetry/api 1.9.1
-@opentelemetry/api-logs 0.222.0
-@opentelemetry/core 2.11.0
-@opentelemetry/exporter-logs-otlp-proto 0.222.0
-@opentelemetry/exporter-metrics-otlp-http 0.222.0
-@opentelemetry/exporter-metrics-otlp-proto 0.222.0
-@opentelemetry/exporter-trace-otlp-proto 0.222.0
-@opentelemetry/otlp-exporter-base 0.222.0
-@opentelemetry/otlp-transformer 0.222.0
-@opentelemetry/resources 2.11.0
-@opentelemetry/sdk-logs 0.222.0
-@opentelemetry/sdk-metrics 2.11.0
-@opentelemetry/sdk-trace 2.11.0
-@opentelemetry/sdk-trace-base 2.11.0
-@opentelemetry/sdk-trace-web 2.11.0
+@opentelemetry/api-logs 0.223.0
+@opentelemetry/core 2.12.0
+@opentelemetry/exporter-logs-otlp-proto 0.223.0
+@opentelemetry/exporter-metrics-otlp-http 0.223.0
+@opentelemetry/exporter-metrics-otlp-proto 0.223.0
+@opentelemetry/exporter-trace-otlp-proto 0.223.0
+@opentelemetry/otlp-exporter-base 0.223.0
+@opentelemetry/otlp-transformer 0.223.0
+@opentelemetry/resources 2.12.0
+@opentelemetry/sdk-logs 0.223.0
+@opentelemetry/sdk-metrics 2.12.0
+@opentelemetry/sdk-trace 2.12.0
+@opentelemetry/sdk-trace-base 2.12.0
+@opentelemetry/sdk-trace-web 2.12.0
 @opentelemetry/semantic-conventions 1.43.0
 
 Copyright The OpenTelemetry Authors

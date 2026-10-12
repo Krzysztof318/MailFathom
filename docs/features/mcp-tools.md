@@ -14,7 +14,7 @@ serves.
 
 ## Implemented behavior
 
-`ModelContextProtocol.AspNetCore` 2.0.0 hosts the server. The `Mcp` project owns the tool descriptors, the conversion of
+`ModelContextProtocol.AspNetCore` 2.2.0 hosts the server. The `Mcp` project owns the tool descriptors, the conversion of
 protocol arguments into the domain identities a use case is expressed in, and the mapping from a use case's result back
 onto the published contract. It holds no query, no persistence, and no mail-protocol code: `list_accounts` calls the
 `MailAccountDirectoryReader` use case and nothing else, `list_emails` calls the `MailboxTimelineReader` use case and

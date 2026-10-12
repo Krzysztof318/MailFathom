@@ -16,7 +16,7 @@
          the RESP server the client signal backplane crosses. Referenced by AppHost alone, so nothing it carries reaches
          a deployed assembly; what a deployment runs beside MailFathom is the server rather than this package. -->
     <PackageVersion Include="Aspire.Hosting.Valkey" Version="13.4.6" />
-    <PackageVersion Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.4.6" />
+    <PackageVersion Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.6.1" />
     <!-- The non-interactive Microsoft Entra credentials an Azure OpenAI endpoint is reached with where no key exists to
          provision. Referenced by AI alone, and only for the four credential types a background service can hold; the
          chain is composed explicitly rather than through DefaultAzureCredential, which would reach a developer tool. -->
@@ -26,13 +26,13 @@
          dependency, AWSSDK.Core below, which is the second half of the same decision: the alternative clients each
          brought a stack this repository takes nowhere else. Both are Apache-2.0 and both carry a row in
          THIRD_PARTY_LICENSES.md. -->
-    <PackageVersion Include="AWSSDK.S3" Version="4.0.102.3" />
+    <PackageVersion Include="AWSSDK.S3" Version="4.0.104.3" />
     <!-- The runtime behind AWSSDK.S3 rather than a dependency of MailFathom's own: the credential, the endpoint, the
          signer, and the client configuration are its types. Pinned directly for the reason MimeKit is — the version the
          code compiles against is decided here instead of inherited from another package's dependency range — and it
          carries no package dependencies of its own on the net8.0 assets .NET 10 resolves. -->
-    <PackageVersion Include="AWSSDK.Core" Version="4.0.102" />
-    <PackageVersion Include="System.CommandLine" Version="2.0.10" />
+    <PackageVersion Include="AWSSDK.Core" Version="4.0.102.10" />
+    <PackageVersion Include="System.CommandLine" Version="2.0.12" />
     <!-- What draws the command's output: the tables its listings are laid out in, and the colour that tells a failure
          from a result. Referenced by Cli alone. It brings Spectre.Console.Ansi with it, which is the same project under
          the same licence, so both carry a row in THIRD_PARTY_LICENSES.md. Both are trimmable and the trimmed publish is
@@ -42,7 +42,7 @@
          framework, because it exists on one platform. The command uses it to bind its credential key to the current
          Windows user, and guards the call with a runtime platform check, so a Linux build carries it and never enters
          it. -->
-    <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.10" />
+    <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.12" />
     <!-- The YAML parser and emitter. Referenced by Host, which reads a provisioned configuration file written in YAML,
          and by Cli, which offers a YAML view of a document it opens in the operator's editor. Both use only the
          event-level parser and emitter in YamlDotNet.Core, never the reflection-based serializer, which is what keeps
@@ -53,12 +53,12 @@
          net10.0 as a runtime of its own. It brings sixteen transitive packages with it, every one of them recorded in
          THIRD_PARTY_LICENSES.md beside it. -->
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
-    <PackageVersion Include="coverlet.MTP" Version="10.0.1" />
+    <PackageVersion Include="coverlet.MTP" Version="10.1.0" />
     <!-- The generator behind the property tests, which state an invariant once and let generated inputs hunt for the
          counterexample an example test cannot reach. It carries no dependency of its own and couples to no test
          framework — a property is an ordinary [Fact] calling into it — so it costs one assembly in three unit-test
          projects and changes nothing about how the suite is discovered or run. -->
-    <PackageVersion Include="CsCheck" Version="4.8.0" />
+    <PackageVersion Include="CsCheck" Version="4.9.1" />
     <!-- The HTML parser both readings of a message body run on. It used to arrive only behind HtmlSanitizer, which
          is why the pin below notes that a direct reference was not foreclosed; backend/src/Infrastructure now holds a
          parsed document to reduce into the client's MailDocument, so the version the code compiles against is decided
@@ -97,15 +97,11 @@
          in this repository; both are recorded in THIRD_PARTY_LICENSES.md. -->
     <PackageVersion Include="Ical.Net" Version="5.2.3" />
     <PackageVersion Include="Microsoft.Agents.AI" Version="1.15.0" />
-    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.12" />
     <!-- The OpenAPI document generator, which ships outside the shared framework. It builds the HTTP contract from the
          routes the host already mapped rather than from a second description somebody keeps in step. Referenced by Host
-         alone, where the document is registered only when the environment is Development.
-         It is one patch ahead of the 10.0.10 the rest of this line sits at, and deliberately: 10.0.10 depends on
-         Microsoft.OpenApi 2.0.0 exactly, which carries CVE-2026-49451 (GHSA-v5pm-xwqc-g5wc, high) — a stack overflow
-         parsing circular schema references — and NU1903 fails the restore over it. 10.0.11 is the release that widens
-         the dependency to the patched 2.7.5. -->
-    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />
+         alone, where the document is registered only when the environment is Development. -->
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.12" />
     <!-- The SignalR backplane, which ships outside the shared framework the hub itself is part of. It is what carries a
          client signal from the replica that raised it to the replica holding that client's connection, and it is
          registered only where a deployment declared a RESP endpoint to carry it over — so a single-replica deployment
@@ -118,18 +114,20 @@
     <PackageVersion Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.12" />
     <!-- The OpenAPI object model, brought in transitively by the generator above and pinned directly for the reason
          BouncyCastle.Cryptography is: the document and operation transformers name its types, so the version this
-         repository compiles against is decided here rather than inherited from another package's dependency range. -->
-    <PackageVersion Include="Microsoft.OpenApi" Version="2.7.5" />
+         repository compiles against is decided here rather than inherited from another package's dependency range.
+         That range is also the ceiling: the generator declares [2.12.0, 3.0.0), so this pin moves inside the 2.x line
+         and takes the next major when the generator does. A 3.x version here fails the restore with NU1608. -->
+    <PackageVersion Include="Microsoft.OpenApi" Version="2.12.2" />
     <PackageVersion Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="5.6.0" />
-    <PackageVersion Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="10.0.302" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="10.0.401" />
     <PackageVersion Include="Microsoft.VisualStudio.Threading.Analyzers" Version="17.14.15" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.AI" Version="10.8.1" />
-    <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.8.0" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.10.0" />
     <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.8.1" />
     <PackageVersion Include="Microsoft.Extensions.AI.OpenAI" Version="10.8.1" />
     <!-- The agent evaluation suite under backend/tests/Evaluations and nothing else. The family ships a release line of
@@ -145,20 +143,20 @@
          guidance shows; Azure.AI.OpenAI would be a second client construction and has published no stable release
          since 2.1.0. -->
     <PackageVersion Include="OpenAI" Version="2.12.0" />
-    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Options.DataAnnotations" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.6.0" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Options.DataAnnotations" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.10.0" />
     <PackageVersion Include="Microsoft.Security.Utilities.Core" Version="1.21.0" />
-    <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery" Version="10.6.0" />
-    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.15.3" />
-    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.15.3" />
-    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.15.2" />
-    <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.15.1" />
-    <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.15.1" />
-    <PackageVersion Include="ModelContextProtocol.AspNetCore" Version="2.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery" Version="10.10.0" />
+    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.19.1" />
+    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.19.1" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.19.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.19.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.19.0" />
+    <PackageVersion Include="ModelContextProtocol.AspNetCore" Version="2.2.0" />
     <!-- The expression language a mail rule's condition is written in, taken as the package that carries the
          asynchronous evaluator because a fact resolves through I/O. Referenced by Infrastructure alone, where the
          parser, the validating walk, and the evaluator live. Its graph is wider than the package name suggests —
@@ -166,7 +164,7 @@
          them carries a row of its own in THIRD_PARTY_LICENSES.md, and Parlot is not under the same licence as the
          rest. ADR 0010 records why an expression language is admissible here at all and what the closed environment
          around it has to guarantee. -->
-    <PackageVersion Include="NCalc" Version="7.1.0" />
+    <PackageVersion Include="NCalc" Version="7.2.0" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <!-- The PDF reader an attachment's text is extracted with. Referenced by Infrastructure alone, so every PdfPig type
          stays inside the adapter under Documents/ and the application port sees characters and a closed set of reasons.
@@ -175,28 +173,28 @@
          this is the only parser the register has to admit. Apache-2.0, and it carries a row in
          THIRD_PARTY_LICENSES.md. -->
     <PackageVersion Include="PdfPig" Version="0.1.16" />
-    <PackageVersion Include="NSubstitute" Version="6.0.0" />
+    <PackageVersion Include="NSubstitute" Version="6.2.0" />
     <PackageVersion Include="Roslynator.Analyzers" Version="4.13.1" />
     <PackageVersion Include="Roslynator.CodeAnalysis.Analyzers" Version="4.13.1" />
     <PackageVersion Include="Roslynator.Formatting.Analyzers" Version="4.13.1" />
     <PackageVersion Include="Pgvector.EntityFrameworkCore" Version="0.3.0" />
-    <PackageVersion Include="Polly.Core" Version="8.7.0" />
-    <PackageVersion Include="Polly.Extensions" Version="8.7.0" />
-    <PackageVersion Include="Polly.RateLimiting" Version="8.7.0" />
-    <PackageVersion Include="System.Threading.RateLimiting" Version="8.0.0" />
+    <PackageVersion Include="Polly.Core" Version="8.8.0" />
+    <PackageVersion Include="Polly.Extensions" Version="8.8.0" />
+    <PackageVersion Include="Polly.RateLimiting" Version="8.8.0" />
+    <PackageVersion Include="System.Threading.RateLimiting" Version="10.0.12" />
     <!-- The API explorer the generated document is read in. It carries no package dependency of its own and serves its
          own script bundle out of the assembly, so a running instance fetches nothing from a content delivery network.
          Referenced by Host alone, and mapped only when the environment is Development — the assembly is redistributed
          with the image either way, which is why THIRD_PARTY_LICENSES.md records it among the shipped components. -->
-    <PackageVersion Include="Scalar.AspNetCore" Version="2.17.1" />
+    <PackageVersion Include="Scalar.AspNetCore" Version="2.18.0" />
     <!-- The boundary rules that read compiled intermediate language rather than assembly metadata, referenced by
          Boundaries.UnitTests alone. The pin is the xUnit v3 integration, which carries the analyzer itself and with it
          Mono.Cecil, the reader that makes a method body visible at all, plus Newtonsoft.Json, JetBrains.Annotations,
          CycleDetection, and System.ValueTuple. Seven packages for one test project is the whole cost of the
          mechanism, and THIRD_PARTY_LICENSES.md records every one of them. -->
-    <PackageVersion Include="TngTech.ArchUnitNET.xUnitV3" Version="0.13.3" />
+    <PackageVersion Include="TngTech.ArchUnitNET.xUnitV3" Version="0.13.4" />
     <PackageVersion Include="xRetry.v3" Version="1.0.0" />
-    <PackageVersion Include="xunit.analyzers" Version="2.1.0" />
-    <PackageVersion Include="xunit.v3.mtp-v2" Version="4.0.1" />
+    <PackageVersion Include="xunit.analyzers" Version="2.2.0" />
+    <PackageVersion Include="xunit.v3.mtp-v2" Version="4.0.2" />
   </ItemGroup>
 </Project>
