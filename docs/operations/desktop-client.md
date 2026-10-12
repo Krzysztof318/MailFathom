@@ -132,8 +132,8 @@ environment and a packaged shortcut may override both:
 
    | Platform | Path |
    |---|---|
-   | Linux | `~/.config/io.github.krzysztof318.mailfathom/client.conf` |
-   | Windows | `%APPDATA%\io.github.krzysztof318.mailfathom\client.conf` |
+   | Linux | `~/.config/io.github.fathomise.mailfathom/client.conf` |
+   | Windows | `%APPDATA%\io.github.fathomise.mailfathom\client.conf` |
 
    `key = value` lines, `#` for a comment, and nothing else. A key it does not know is skipped, and a file larger than
    64 KiB is not read at all.

@@ -1,4 +1,4 @@
-package io.github.krzysztof318.mailfathom
+package io.github.fathomise.mailfathom
 
 import android.os.Bundle
 import androidx.activity.enableEdgeToEdge

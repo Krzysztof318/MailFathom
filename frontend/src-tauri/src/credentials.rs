@@ -97,7 +97,7 @@ mod platform {
 
     /// What holds the four operations on this head: an ordinary Kotlin class in the head's own application module,
     /// reached through Tauri's Android plugin bridge because the Keystore is Java's and the shell is Rust's.
-    const PLUGIN_IDENTIFIER: &str = "io.github.krzysztof318.mailfathom";
+    const PLUGIN_IDENTIFIER: &str = "io.github.fathomise.mailfathom";
     const PLUGIN_CLASS: &str = "CredentialStorePlugin";
 
     /// The bridge, once the shell has started. Held here rather than in Tauri's state because every caller below is a
