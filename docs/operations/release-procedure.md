@@ -311,7 +311,10 @@ deploys from, so it carries less of the availability argument that puts the imag
 The nightly channel publishes no chart. An operator running a nightly installs the most recent released chart and names
 the nightly image through `image.tag`, which the chart supports behind the acknowledgement it already requires.
 
-**Credentials.** GHCR authenticates with the workflow token and needs nothing configured. Docker Hub authenticates with
+**Credentials.** GHCR authenticates with the workflow token and needs nothing configured, as long as the repository
+running the release is the one the packages belong to. `GHCR_PUBLISH_TOKEN` is the optional secret for a repository
+that is not: a token of the published namespace carrying `write:packages`, which both publishing workflows log in to
+GHCR with whenever it is set. Docker Hub authenticates with
 the `DOCKERHUB_TOKEN` repository secret — a personal access token with read, write, and delete scope: write pushes the
 mirror, delete lets the nightly channel prune it, and the repository-overview sync needs all three. The publishing job
 refuses to start when the secret is missing, before it logs in or builds anything, so the failure names the missing

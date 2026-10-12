@@ -6543,8 +6543,16 @@ extract_publish_reference_step() {
   bash -n "$step_script"
 }
 
+# What a workflow states as the repository the image is published under, read out of its
+# workflow-level `env` the way the runner reads it.
+read_published_repository() {
+  sed -n 's/^  PUBLISHED_REPOSITORY: //p' "$source_repository_root/.github/workflows/$1"
+}
+
 # The step reads the committed timestamp of the checkout it runs in, so it runs inside the fixture
-# repository rather than in the temporary directory beside it.
+# repository rather than in the temporary directory beside it. The runner's own description of the
+# repository names somebody else's, which is what a repository that moved away from the published
+# namespace looks like to the step.
 run_publish_reference_step() {
   local image_tags="$1"
   local output_file="$2"
@@ -6557,7 +6565,10 @@ run_publish_reference_step() {
   : > "$step_output_file"
 
   (
-    export REPOSITORY='Krzysztof318/MailFathom'
+    PUBLISHED_REPOSITORY="$(read_published_repository publish-container-image.yml)"
+    export PUBLISHED_REPOSITORY
+    export GITHUB_REPOSITORY='another-owner/Another'
+    export GITHUB_REPOSITORY_OWNER='another-owner'
     export IMAGE_TAGS="$image_tags"
     export IMAGE_CHANNEL="$image_channel"
     export IMAGE_VERSION="$image_version"
@@ -6598,10 +6609,10 @@ publish_qualifies_every_nightly_tag_with_the_repository_it_resolves() {
     "$references_file"
 }
 
-# The Docker Hub account is this owner's login, and a registry namespace is lowercase where a GitHub
-# login need not be. One fold produces both, so a mirror cannot come to point at a namespace that is
-# somebody else's or at none at all.
-publish_folds_the_owner_login_into_the_docker_hub_namespace() {
+# The Docker Hub account is the published namespace's own, so the login and the repository overview
+# are read off the same statement the references are. A mirror then cannot come to point at a
+# namespace that is somebody else's, whichever repository runs the workflow.
+publish_reads_the_docker_hub_account_off_the_published_repository() {
   local output_file="$test_directory/publish-reference-namespace-output"
   local step_output_file="$test_directory/publish-reference-namespace-step-output"
 
@@ -6612,6 +6623,37 @@ publish_folds_the_owner_login_into_the_docker_hub_namespace() {
 
   assert_contains 'docker-hub-namespace=krzysztof318' "$step_output_file"
   assert_contains 'docker-hub-repository=krzysztof318/mailfathom' "$step_output_file"
+}
+
+# The nightly decides whether `main` has moved by reading what the publisher wrote, and prunes it
+# afterwards. Each workflow states the repository rather than deriving it, so the two statements are
+# held to each other here: a nightly naming another one would republish every night and prune
+# nothing, and report success doing it. Neither may read the name off the repository running it,
+# which is the derivation that moves the artifacts whenever the source moves.
+the_nightly_names_the_repository_the_publisher_writes() {
+  local workflow_directory="$source_repository_root/.github/workflows"
+  local published_repository
+  local failures=''
+  local workflow
+
+  published_repository="$(read_published_repository publish-container-image.yml)"
+
+  [[ "$published_repository" == 'krzysztof318/mailfathom' ]] ||
+    failures+="publish-container-image.yml publishes under '${published_repository}'. "
+  [[ "$(read_published_repository nightly.yml)" == "$published_repository" ]] ||
+    failures+='nightly.yml names another repository than the publisher. '
+
+  for workflow in publish-container-image.yml publish-helm-chart.yml nightly.yml; do
+    if grep -E 'github\.(repository|repository_owner|event\.repository\.name)\b' "$workflow_directory/$workflow" |
+      grep -qv '^[[:space:]]*#'; then
+      failures+="${workflow} reads a name off the repository running it. "
+    fi
+  done
+
+  if [[ -n "$failures" ]]; then
+    printf 'The published repository is not one statement: %s\n' "$failures" >&2
+    return 1
+  fi
 }
 
 # The release channel's own tag list, and the blank line a heredoc-built list carries. `latest` is the
@@ -10303,7 +10345,8 @@ run_test fathom_review_substitutes_every_placeholder_its_prompts_carry
 run_test fathom_review_schemas_keep_coverage_with_the_readers
 run_test publish_qualifies_every_nightly_tag_with_the_repository_it_resolves
 run_test publish_qualifies_the_release_tags_and_ignores_a_blank_line
-run_test publish_folds_the_owner_login_into_the_docker_hub_namespace
+run_test publish_reads_the_docker_hub_account_off_the_published_repository
+run_test the_nightly_names_the_repository_the_publisher_writes
 run_test publish_sends_a_release_to_its_own_documentation_directory
 run_test publish_sends_a_nightly_to_the_default_branch_documentation
 run_test publish_refuses_a_tag_list_with_nothing_to_publish

@@ -51,6 +51,9 @@ on:
       DOCKERHUB_TOKEN:
         description: 'A Docker Hub personal access token with read, write, and delete scope. Write pushes the mirror, delete lets the nightly channel prune, and the description sync needs all three.'
         required: true
+      GHCR_PUBLISH_TOKEN:
+        description: 'Optional. A token of the published namespace with `write:packages`, for a repository that does not own the packages it publishes to. The workflow token logs in to GHCR when it is absent.'
+        required: false
     outputs:
       image:
         description: 'The GHCR repository that was published to. Both registries carry the same digest; this is the canonical one to quote.'
@@ -70,6 +73,9 @@ env:
   # standing failure: a finding with no fixed version available cannot be answered by rebuilding, so blocking on one
   # would block every release until an upstream base image moves.
   TRIVY_SEVERITY: 'HIGH,CRITICAL'
+  # The namespace and name both registries carry the image under. `nightly.yml` names the same value, because it
+  # reads and prunes what this workflow writes, and the contract suite fails when the two disagree.
+  PUBLISHED_REPOSITORY: krzysztof318/mailfathom
 
 jobs:
   # **The gates this publication stands on are the caller's, and none of them is here.** `Release` and `Nightly` each
@@ -103,10 +109,11 @@ jobs:
           ref: ${{ inputs.ref }}
           persist-credentials: false
 
-      # An OCI repository name is lowercase, and this owner's login is not, so both references are folded once here
-      # rather than written as literals that a rename would leave pointing at nothing. The same fold produces the Docker
-      # Hub account name, because that account is this owner's login: one identity, spelled the way each registry
-      # requires, so a mirror cannot come to point at somebody else's namespace.
+      # Both references are composed from `PUBLISHED_REPOSITORY`, which this workflow states rather than derives from
+      # the repository running it. Where an operator pulls from is a published identity: every installation names it,
+      # so it moves when somebody decides it does and never as a side effect of where the source lives. The same
+      # value produces the Docker Hub account name, because that account is the namespace's own: one identity for both
+      # registries, so a mirror cannot come to point at somebody else's namespace.
       #
       # Qualifying the caller's tags is part of the same resolution, because a tag on its own is not a tag to a registry
       # client: an unqualified name is an image on the default registry, so pushing a bare `nightly` would reach
@@ -116,14 +123,13 @@ jobs:
       - name: Resolve the image references
         id: reference
         env:
-          REPOSITORY: ${{ github.repository }}
           IMAGE_TAGS: ${{ inputs.tags }}
           IMAGE_CHANNEL: ${{ inputs.channel }}
           IMAGE_VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
 
-          repository="$(printf '%s' "$REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+          repository="$PUBLISHED_REPOSITORY"
           image="ghcr.io/${repository}"
           docker_hub_image="docker.io/${repository}"
           tags="$(printf '%s\n' "$IMAGE_TAGS" | sed '/^[[:space:]]*$/d')"
@@ -179,12 +185,15 @@ jobs:
             exit 1
           fi
 
+      # The workflow token writes to a package only while the repository running this is the one the package belongs
+      # to. `GHCR_PUBLISH_TOKEN` is the credential for when it is not: a token of the namespace's own, which the
+      # registry accepts from any repository. Absent, the workflow token is what logs in.
       - name: Log in to GHCR
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.GHCR_PUBLISH_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Log in to Docker Hub
         uses: docker/login-action@v4
