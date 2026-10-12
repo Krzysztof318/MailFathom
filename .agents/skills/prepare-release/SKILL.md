@@ -585,7 +585,7 @@ Release x.y.z is prepared. Merge in this order — the tag has to land between t
    After the release workflow succeeds, publish the Registry metadata from that tagged tree and verify the exact
    server identifier and version through the Registry API:
        git switch --detach vx.y.z
-       mcp-publisher login github
+       mcp-publisher login github -token <personal access token with read:org and nothing else>
        mcp-publisher validate
        mcp-publisher publish
        curl --fail --silent --show-error \
