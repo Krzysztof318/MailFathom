@@ -102,15 +102,31 @@ export interface OAuthSignInStart {
     readonly resource: ProtectedResource;
     readonly redirect: SignInRedirect;
     readonly transport: MailFathomTransport;
+
+    /**
+     * Aborted once nobody is waiting for this hand-over any more.
+     *
+     * What it stops is everything the hand-over would still do to the one attempt a tab writes down, because that
+     * entry belongs to whichever sign-in was started last: a hand-over that was called off writes no verifier, hands
+     * nobody over, and discards nothing it comes back to. Whoever aborts it discards what it had already written.
+     */
+    readonly abandoned: AbortSignal;
 }
+
+/** What a hand-over that was called off answers, which nobody reads: the caller that aborted it has already moved on. */
+const calledOff: OAuthSignInOutcome = { outcome: 'refused', refusal: 'unavailable' };
 
 /**
  * Starts an OAuth sign-in: discovers the server, writes the attempt down, and hands the person over.
  *
- * @param start The server the deployment published, what a token is asked for, how the person is handed over, and how requests go out.
+ * @param start The server the deployment published, what a token is asked for, how the person is handed over, how requests go out, and what calls it off.
  * @returns The grant where this head came back with the answer itself, the refusal, or that the document is being replaced.
  */
 export async function startOAuthSignIn(start: OAuthSignInStart): Promise<OAuthSignInOutcome> {
+    // Asked again at each step rather than read once, and through a function because the compiler takes one reading
+    // of a property to hold across an `await` — which is exactly where this one changes.
+    const abandoned = (): boolean => start.abandoned.aborted;
+
     const server = await readAuthorizationServer(start.server.issuer, start.transport);
 
     if (server.outcome !== 'read') {
@@ -124,6 +140,13 @@ export async function startOAuthSignIn(start: OAuthSignInStart): Promise<OAuthSi
         // outcome as a server that could not be read: the sign-in could not be started, and the screen says so rather
         // than standing behind a spinner nothing will settle.
         return { outcome: 'refused', refusal: 'unavailable' };
+    }
+
+    // Calling a hand-over off cannot interrupt the discovery or the digest above, so it is read here, before the first
+    // thing that outlives this call: a verifier written down now is a secret nothing will take, over whatever a
+    // sign-in started since has written, and the person would be handed to a server from a screen that put them back.
+    if (abandoned()) {
+        return calledOff;
     }
 
     const written: WrittenAttempt = {
@@ -158,6 +181,13 @@ export async function startOAuthSignIn(start: OAuthSignInStart): Promise<OAuthSi
     });
 
     const answer = await start.redirect.hand(address);
+
+    // Somebody is away for minutes, and a hand-over called off in that time comes back to an entry that is no longer
+    // its own: whoever called it off discarded what it wrote, and anything written down now belongs to a sign-in
+    // started since — which discarding here, or reading an answer against, would take the verifier of.
+    if (abandoned()) {
+        return calledOff;
+    }
 
     // A shell that answered nothing could not open the browser, or nobody came back inside the wait it holds the
     // redirect port for. Both put the person back on the sign-in screen rather than in front of a control that never

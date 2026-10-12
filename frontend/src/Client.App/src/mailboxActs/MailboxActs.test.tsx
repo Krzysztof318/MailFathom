@@ -234,6 +234,13 @@ function answeringLate(deployment: Deployment): {
 /** Somebody else, signed in on the same tab, which is a different credential handed to providers that stay mounted. */
 const someoneElse: ClientSession = { baseAddress: 'https://mail.example.invalid', authorization: 'Basic b3RoZXI=' };
 
+/**
+ * The provider standing over a hook that reads it, and the way to sign somebody else in on the same tab.
+ *
+ * `held` answers what the hook last published, and it is published by an effect — after the commit that drew whatever
+ * the same answer put on the screen. So a toast on the screen says nothing yet about what `held` answers, however
+ * surely the provider wrote the two in one render, and a case that awaited the one waits for the other.
+ */
 function acting(
     deployment: Deployment,
     {
@@ -520,11 +527,13 @@ describe('MailboxActsProvider', () => {
             body: { deletes: [{ storedEmailId: 'message-3' }] },
         });
         expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull();
-        expect(held().asked.get('message-3')).toStrictEqual({
-            act: 'delete',
-            from: 'work-trash',
-            leaves: true,
-            destroys: true,
+        await waitFor(() => {
+            expect(held().asked.get('message-3')).toStrictEqual({
+                act: 'delete',
+                from: 'work-trash',
+                leaves: true,
+                destroys: true,
+            });
         });
     });
 
@@ -591,8 +600,10 @@ describe('MailboxActsProvider', () => {
             path: 'https://mail.example.invalid/api/client/mutations/moves',
             body: { moves: [{ storedEmailId: 'message-1', destinationFolder: 'work-trash' }] },
         });
-        expect(held().asked.get('message-1')?.act).toBe('delete');
         expect(screen.getByRole('button', { name: 'Undo' })).toBeDefined();
+        await waitFor(() => {
+            expect(held().asked.get('message-1')?.act).toBe('delete');
+        });
     });
 
     it('files a selection reaching outside the trash rather than destroying the part of it already there', async () => {
@@ -706,7 +717,9 @@ describe('MailboxActsProvider', () => {
             expect(submitted(deployment).length).toBe(1);
         });
 
-        expect(held().asked.get('message-1')?.act).toBe('flag');
+        await waitFor(() => {
+            expect(held().asked.get('message-1')?.act).toBe('flag');
+        });
     });
 
     // Marking a message unread and then flagging it are two changes to two flags, and a row draws both: a flag asked
@@ -776,12 +789,14 @@ describe('MailboxActsProvider', () => {
 
         await screen.findByText('One message was not flagged.');
 
-        expect(held().asked.get('message-1')).toStrictEqual({
-            act: 'unflag',
-            from: 'work-inbox',
-            leaves: false,
-            destroys: false,
-            beside: { act: 'markUnread', from: 'work-inbox', leaves: false, destroys: false },
+        await waitFor(() => {
+            expect(held().asked.get('message-1')).toStrictEqual({
+                act: 'unflag',
+                from: 'work-inbox',
+                leaves: false,
+                destroys: false,
+                beside: { act: 'markUnread', from: 'work-inbox', leaves: false, destroys: false },
+            });
         });
     });
 
@@ -817,9 +832,6 @@ describe('MailboxActsProvider', () => {
 
         await screen.findByText('One message was not flagged.');
 
-        // Waited for rather than read straight after the toast: what a row draws and what a toast says are two
-        // separate things this provider writes, and asserting one the instant the other appears is an assumption about
-        // which render carried them.
         await waitFor(() => {
             expect(held().asked.has('message-2')).toBe(false);
         });
@@ -842,7 +854,9 @@ describe('MailboxActsProvider', () => {
 
         await screen.findByText('Archived');
 
-        expect(held().asked.get('message-1')?.act).toBe('archive');
+        await waitFor(() => {
+            expect(held().asked.get('message-1')?.act).toBe('archive');
+        });
         expect(recordsOf(recording.recorded, 'act_refused')).toStrictEqual([]);
     });
 
@@ -859,7 +873,9 @@ describe('MailboxActsProvider', () => {
         await screen.findByText('Moved to the trash');
 
         expect(screen.queryByText('Deleting…')).toBeNull();
-        expect(held().asked.has('message-3')).toBe(false);
+        await waitFor(() => {
+            expect(held().asked.has('message-3')).toBe(false);
+        });
     });
 
     it('says an act that never reached the deployment changed nothing, and claims nothing about the message', async () => {
@@ -1119,7 +1135,9 @@ describe('MailboxActsProvider', () => {
 
         await screen.findByText('Your folders were not read: unavailable.');
 
-        expect(held().refusalOf('archive', [invoice])).toBe('foldersUnknown');
+        await waitFor(() => {
+            expect(held().refusalOf('archive', [invoice])).toBe('foldersUnknown');
+        });
 
         answered = 200;
         fireEvent.click(screen.getByRole('button', { name: 'Try again' }));

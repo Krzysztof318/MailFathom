@@ -232,6 +232,7 @@ async function attemptWaitingForItsAnswer(): Promise<string> {
             abandon: () => undefined,
             answerWaiting: () => null,
         },
+        abandoned: new AbortController().signal,
         transport: bothProviders,
     });
 
@@ -1276,6 +1277,56 @@ describe('SignIn', () => {
         fireEvent.click(provider);
 
         expect(presenting?.aborted).toBe(true);
+    });
+
+    // The head goes on holding a hand-over somebody gave up on until it has let go of it, and by then they may be on
+    // their way to a provider again. What the first one comes back with is nothing, and it is nothing about the second:
+    // one tab writes one attempt down, so a first hand-over that cleared the entry on its way out would leave the
+    // person coming back from the provider to an answer no verifier is left to redeem.
+    it('signs somebody in through a hand-over started after another was given up on, whenever the first comes back', async () => {
+        const handed: string[] = [];
+        const comingBack: ((answer: SignInRedirectAnswer | null) => void)[] = [];
+        const redirect: SignInRedirect = {
+            offered: true,
+            redirectUri: 'https://mail.example.invalid/',
+            hand: (address) => {
+                handed.push(address);
+
+                return new Promise<SignInRedirectAnswer | null>((settle) => {
+                    comingBack.push(settle);
+                });
+            },
+            abandon: () => undefined,
+            answerWaiting: () => null,
+        };
+
+        const { granted } = renderScreen(bothProviders, servingDeployment, 'inThisBrowser', [], null, redirect);
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Continue to Keycloak' }));
+
+        await vi.waitFor(() => {
+            expect(handed).toHaveLength(1);
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Stop trying' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Continue to Keycloak' }));
+
+        await vi.waitFor(() => {
+            expect(handed).toHaveLength(2);
+        });
+
+        comingBack[0]?.(null);
+        comingBack[1]?.({
+            answered: 'code',
+            code: 'a-code',
+            state: new URL(handed[1] ?? '').searchParams.get('state') ?? '',
+        });
+
+        await waitFor(() => {
+            expect(granted).toHaveLength(1);
+        });
+
+        expect(screen.queryByRole('alert')).toBeNull();
     });
 
     // The client is mounted in `StrictMode`, which runs an effect, its cleanup, and the effect again. The verifier is
