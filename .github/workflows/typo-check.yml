@@ -33,10 +33,11 @@ on:
     branches:
       - main
 
-# No `paths` filter, deliberately, and for a different reason than the one `ci.yml` records. Nothing
-# waits on this check, so an uninstantiated run would block nothing; the reason is that there is no
-# such thing as a change this check does not concern. Prose is what it reads, and prose is in every
-# path — a C# doc comment, a workflow's own comments, a Helm value's description, this file.
+# No `paths` filter, deliberately, and for two reasons. The check is required, so a run GitHub never
+# instantiated would hold a pull request forever, which is the reason `ci.yml` records for its own.
+# And there is no such thing as a change this check does not concern: prose is what it reads, and
+# prose is in every path — a C# doc comment, a workflow's own comments, a Helm value's description,
+# this file.
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
