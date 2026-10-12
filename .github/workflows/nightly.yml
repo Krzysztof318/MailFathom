@@ -37,7 +37,7 @@ env:
   # The Docker Hub repository `publish-container-image.yml` mirrors the image to. This workflow prunes it afterwards,
   # so it names the same value; a Docker Hub account is no part of GitHub, which is why neither workflow reads it off
   # the repository running it, and the contract suite fails when the two disagree.
-  DOCKER_HUB_REPOSITORY: krzysztof318/mailfathom
+  DOCKER_HUB_REPOSITORY: fathomise/mailfathom
 
 jobs:
   decide:

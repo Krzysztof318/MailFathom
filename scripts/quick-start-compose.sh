@@ -678,7 +678,7 @@ cat > .env << ENV
 # The image is pinned to a release rather than tracking a moving tag: an immutable tag is what makes a deployment
 # reproducible and an upgrade a decision. The pull policy below pairs with it, so Compose pulls this image instead of
 # building the checkout — the two are one decision, which is why they move together.
-MAILFATHOM_IMAGE=ghcr.io/krzysztof318/mailfathom:$version
+MAILFATHOM_IMAGE=ghcr.io/fathomise/mailfathom:$version
 MAILFATHOM_PULL_POLICY=missing
 ENV
 

@@ -27,7 +27,7 @@ It installs no Secret deliberately: credentials belong to whoever operates the c
 
 ## What you supply
 
-**An image.** The chart defaults to none: a default would pin every install to whichever version the chart happened to name. Released images are on `ghcr.io/krzysztof318/mailfathom` and `docker.io/krzysztof318/mailfathom` under the same digest, and `values.schema.json` rejects `latest` and the other moving tags outright.
+**An image.** The chart defaults to none: a default would pin every install to whichever version the chart happened to name. Released images are on `ghcr.io/fathomise/mailfathom` and `docker.io/fathomise/mailfathom` under the same digest, and `values.schema.json` rejects `latest` and the other moving tags outright.
 
 **A Secret.** It is mounted read-only at `/etc/mailfathom/secrets`, one file per key, so every credential in your configuration is a `file:` reference. A database the chart deploys needs a *second* Secret for the PostgreSQL superuser password, which the application pod never mounts — and the chart refuses a values document naming one Secret for both.
 
@@ -102,7 +102,7 @@ is the page.
 ## Installing
 
 ```bash
-helm install mailfathom oci://ghcr.io/krzysztof318/charts/mailfathom \
+helm install mailfathom oci://ghcr.io/fathomise/charts/mailfathom \
   --version <x.y.z> --namespace mailfathom --values values.yaml
 ```
 
@@ -110,7 +110,7 @@ helm install mailfathom oci://ghcr.io/krzysztof318/charts/mailfathom \
 # values.yaml
 image:
   registry: ghcr.io             # or docker.io; both carry the same digest
-  repository: krzysztof318/mailfathom
+  repository: fathomise/mailfathom
   digest: sha256:…              # or an immutable tag
 
 database:
@@ -166,8 +166,8 @@ The nightly channel publishes no chart. Install the most recent released chart a
 ## Verification
 
 ```bash
-helm show chart oci://ghcr.io/krzysztof318/charts/mailfathom --version <x.y.z>
-gh attestation verify oci://ghcr.io/krzysztof318/charts/mailfathom:<x.y.z> --repo fathomise/MailFathom
+helm show chart oci://ghcr.io/fathomise/charts/mailfathom --version <x.y.z>
+gh attestation verify oci://ghcr.io/fathomise/charts/mailfathom:<x.y.z> --repo fathomise/MailFathom
 ```
 
 Every published chart carries a signed build provenance statement tying its digest to the commit and the workflow that produced it, exactly as the image does. Before it is pushed it is linted and rendered against every values document the repository verifies it with, and the packaged chart is rendered once more against the digest that release actually published — so a chart that would deploy a different artifact than its own release is never published.

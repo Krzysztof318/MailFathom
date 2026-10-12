@@ -35,7 +35,7 @@
 
 services:
   mailfathom:
-    image: ${MAILFATHOM_NIGHTLY_REGISTRY:-ghcr.io}/krzysztof318/mailfathom:${MAILFATHOM_NIGHTLY_TAG:?Name the nightly identifier to deploy. Nightly builds are unsupported development output and carry no release promise.}
+    image: ${MAILFATHOM_NIGHTLY_REGISTRY:-ghcr.io}/fathomise/mailfathom:${MAILFATHOM_NIGHTLY_TAG:?Name the nightly identifier to deploy. Nightly builds are unsupported development output and carry no release promise.}
     build: !reset null
     labels:
       # Readable from `docker inspect` and from any monitoring that reads labels, so a container started from this

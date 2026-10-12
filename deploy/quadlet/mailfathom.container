@@ -60,10 +60,10 @@ AssertPathExistsGlob=|%h/.config/mailfathom/config/*.yml
 [Container]
 # There is no default version here, deliberately, and the placeholder is invalid on purpose: an unedited unit fails
 # with an unparseable image reference rather than pulling whatever a moving tag points at today. Replace <version> with
-# the release you are installing — `ghcr.io/krzysztof318/mailfathom` and `docker.io/krzysztof318/mailfathom` are the
+# the release you are installing — `ghcr.io/fathomise/mailfathom` and `docker.io/fathomise/mailfathom` are the
 # same digest, so the registry is a question about your environment. Never a moving tag, and never a nightly
 # identifier; ADR 0004 defines the channels.
-Image=ghcr.io/krzysztof318/mailfathom:<version>
+Image=ghcr.io/fathomise/mailfathom:<version>
 ContainerName=mailfathom
 
 # Both networks. The internal one is how the database is reached; the other is how the mail servers and the configured
