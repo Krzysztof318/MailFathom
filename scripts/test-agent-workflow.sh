@@ -137,12 +137,19 @@ printf 'namespace Fixture;\n' > "$repository_root/backend/src/Sample.cs"
 git -C "$repository_root" add backend/src/Sample.cs
 git -C "$repository_root" commit --quiet -m 'fixture C# file'
 
-# The protected-paths contracts stand in for the GitHub REST call the workflow makes, so their fake
-# `gh` lives in a directory of its own rather than beside the fake `dotnet`. Only those contracts put
-# it on `PATH`, and nothing else in this suite can then reach a `gh` it did not ask for.
+# The protected-paths contracts stand in for the two GitHub REST calls the workflow makes — the
+# permission the author holds on the repository, then the files the pull request changes — so their
+# fake `gh` lives in a directory of its own rather than beside the fake `dotnet`. Only those contracts
+# put it on `PATH`, and nothing else in this suite can then reach a `gh` it did not ask for. An empty
+# permission stands for a read that failed.
 mkdir -p "$protected_paths_bin_directory"
 cat > "$protected_paths_bin_directory/gh" <<'FAKE_GH'
 #!/usr/bin/env bash
+if [[ "$*" == *'/permission'* ]]; then
+  [[ -n "$FAKE_AUTHOR_PERMISSION" ]] || exit 1
+  printf '%s\n' "$FAKE_AUTHOR_PERMISSION"
+  exit 0
+fi
 printf '%s\n' "$FAKE_CHANGED_PATHS"
 FAKE_GH
 chmod +x "$protected_paths_bin_directory/gh"
@@ -1558,7 +1565,9 @@ extract_protected_paths_step() {
 }
 
 # Returns the step's own exit status, so every caller invokes it as a condition rather than letting
-# `set -e` end the test before the refusal can be inspected.
+# `set -e` end the test before the refusal can be inspected. The author holds `read` on the repository
+# unless the caller sets `AUTHOR_PERMISSION`, which is what an outside contributor holds on a public
+# one.
 run_protected_paths_step() {
   local pull_request_author="$1"
   local changed_paths="$2"
@@ -1574,10 +1583,10 @@ run_protected_paths_step() {
     export PATH="$protected_paths_bin_directory:$PATH"
     export GH_TOKEN='fake-token'
     export REPOSITORY='Krzysztof318/MailFathom'
-    export REPOSITORY_OWNER='Krzysztof318'
     export PULL_REQUEST_NUMBER='1'
     export PULL_REQUEST_AUTHOR="$pull_request_author"
     export CHANGED_FILE_COUNT="$changed_file_count"
+    export FAKE_AUTHOR_PERMISSION="${AUTHOR_PERMISSION-read}"
     export FAKE_CHANGED_PATHS="$changed_paths"
     export GITHUB_STEP_SUMMARY="$summary_file"
     bash "$step_script"
@@ -1691,10 +1700,11 @@ protected_paths_reports_the_paths_it_found_when_the_owner_is_the_author() {
   local output_file="$test_directory/protected-paths-owner-output"
   local summary_file="$test_directory/protected-paths-owner-summary"
 
-  # Login casing must not decide the gate, so the fixture spells the owner differently from the
-  # repository. The pass still has to name what it let through.
-  if ! run_protected_paths_step \
-    'krzysztof318' \
+  # The owner is whoever administers the repository, so the fixture's author shares no login with the
+  # account the repository belongs to — which is every owner's case once that account is an
+  # organization. The pass still has to name what it let through.
+  if ! AUTHOR_PERMISSION='admin' run_protected_paths_step \
+    'a-maintainer' \
     $'.config/BannedSymbols.txt\n.gitattributes\n.gitattributes\nglobal.json' \
     "$output_file" \
     "$summary_file"; then
@@ -1710,6 +1720,43 @@ protected_paths_reports_the_paths_it_found_when_the_owner_is_the_author() {
   assert_contains '- `.config/BannedSymbols.txt`' "$summary_file"
   assert_contains '- `.gitattributes`' "$summary_file"
   assert_contains '- `global.json`' "$summary_file"
+}
+
+# `write` is what a collaborator the owner added deliberately holds, and it is not the owner's: the
+# check recognises the one role that could have changed the ruleset it reports to.
+protected_paths_refuses_a_collaborator_who_does_not_administer_the_repository() {
+  local output_file="$test_directory/protected-paths-collaborator-output"
+  local summary_file="$test_directory/protected-paths-collaborator-summary"
+
+  if AUTHOR_PERMISSION='write' run_protected_paths_step \
+    'a-collaborator' \
+    '.github/workflows/ci.yml' \
+    "$output_file" \
+    "$summary_file"; then
+    printf 'Protected paths allowed a collaborator without the admin role to change a protected path\n' >&2
+    return 1
+  fi
+
+  assert_contains '::error file=.github/workflows/ci.yml::' "$output_file"
+}
+
+# A read that failed is not an answer. The author is refused as anybody else would be, and the
+# warning is what tells a reader of the run that nothing was learned about them.
+protected_paths_refuses_an_author_whose_permission_could_not_be_read() {
+  local output_file="$test_directory/protected-paths-unreadable-output"
+  local summary_file="$test_directory/protected-paths-unreadable-summary"
+
+  if AUTHOR_PERMISSION='' run_protected_paths_step \
+    'a-maintainer' \
+    '.github/workflows/ci.yml' \
+    "$output_file" \
+    "$summary_file"; then
+    printf 'Protected paths allowed an author whose permission it could not read\n' >&2
+    return 1
+  fi
+
+  assert_contains '::warning::The permission a-maintainer holds' "$output_file"
+  assert_contains '::error file=.github/workflows/ci.yml::' "$output_file"
 }
 
 protected_paths_allows_dependabot_to_update_the_workflows() {
@@ -1797,8 +1844,8 @@ protected_paths_lets_the_owner_past_the_reportable_limit() {
   local output_file="$test_directory/protected-paths-oversized-owner-output"
   local summary_file="$test_directory/protected-paths-oversized-owner-summary"
 
-  if ! run_protected_paths_step \
-    'Krzysztof318' \
+  if ! AUTHOR_PERMISSION='admin' run_protected_paths_step \
+    'a-maintainer' \
     'README.md' \
     "$output_file" \
     "$summary_file" \
@@ -10073,6 +10120,8 @@ run_test protected_paths_refuses_a_contributor_changing_a_protected_directory
 run_test protected_paths_matches_the_configuration_files_at_every_depth
 run_test protected_paths_ignores_paths_that_only_resemble_a_protected_one
 run_test protected_paths_reports_the_paths_it_found_when_the_owner_is_the_author
+run_test protected_paths_refuses_a_collaborator_who_does_not_administer_the_repository
+run_test protected_paths_refuses_an_author_whose_permission_could_not_be_read
 run_test protected_paths_allows_dependabot_to_update_the_workflows
 run_test protected_paths_refuses_dependabot_outside_the_workflows
 run_test protected_paths_refuses_an_author_merely_resembling_dependabot
