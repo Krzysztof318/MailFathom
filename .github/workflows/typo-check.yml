@@ -14,9 +14,9 @@ name: Typo check
 # separate — a red `Required CI` means the change does not build, and a red `Typo check` means a word
 # is misspelled, which are not facts a reader should have to disentangle from one status line.
 #
-# It is not in the `main` ruleset and reports no required status check. A misspelling is worth
-# surfacing on the pull request rather than worth blocking a merge over, and making it required would
-# mean a word this repository has not met yet stops a release.
+# It is a required status check in the `main` ruleset, so a finding blocks the merge until the word is
+# corrected or recorded in the vocabulary. The job skips on a draft and still reports a conclusion,
+# which is what lets the ruleset require it.
 on:
   pull_request:
     types:

@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/fathomise/MailFathom
 
-package io.github.krzysztof318.mailfathom
+package io.github.fathomise.mailfathom
 
 import android.app.Activity
 import android.content.Context

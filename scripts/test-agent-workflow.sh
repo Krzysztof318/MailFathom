@@ -9143,7 +9143,7 @@ every_browser_asset_carries_the_license_header() {
     '*.js' '*.mjs' '*.cjs' '*.ts' '*.tsx' '*.rs' '*.kt' '*.css' '*.html' \
     ':(exclude)design/runtime/*' \
     ':(exclude)frontend/src-tauri/gen/android/buildSrc/*' \
-    ':(exclude)frontend/src-tauri/gen/android/app/src/main/java/io/github/krzysztof318/mailfathom/MainActivity.kt')
+    ':(exclude)frontend/src-tauri/gen/android/app/src/main/java/io/github/fathomise/mailfathom/MainActivity.kt')
 
   (( failures == 0 ))
 }
