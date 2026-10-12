@@ -113,11 +113,13 @@ under a second gate running beside them, passing alone, and passing on the re-ru
   has not been handed. So a `getBy*`, a `queryBy*`, or a read of a double placed after it is reading a moment that has
   no relationship to the state it asserts on, and a machine loaded enough to put the two commits apart is where it
   stops holding. `findBy*` for something that will be on the screen, `waitFor` around the exact condition otherwise.
-- **Three shapes are where it always is**, and each of them is an `await` for one thing followed by a read of another.
+- **Four shapes are where it always is**, and each of them is an `await` for one thing followed by a read of another.
   An assertion on which routes were asked for, after awaiting the screen the _first_ of them drew. An assertion on what
-  a double was last handed, after awaiting something a different answer produced. And an assertion on
+  a double was last handed, after awaiting something a different answer produced. An assertion on
   `document.activeElement` after a view changed, because placing focus is an effect and an effect runs after the commit
-  that inserted the thing it is placed on — the two are the same screen and not the same moment.
+  that inserted the thing it is placed on — the two are the same screen and not the same moment. And an assertion on
+  what `renderHook` handed back, after awaiting the screen: `result.current` is written by an effect too, so where one
+  render put a sentence on the screen and changed what a hook answers, the sentence is there before the answer is.
 - **A gesture is not one of them.** Focus a handler moves — a key that walks a list, a press that closes a dialog — is
   in place when the event returns, and waiting for it would say a synchronous thing is asynchronous. What is waited for
   is what a _render_ produced.

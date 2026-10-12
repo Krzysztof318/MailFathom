@@ -114,7 +114,20 @@ function statedIn(address: string, parameter: string): string {
 function starting(
     start: Partial<OAuthSignInStart> & Pick<OAuthSignInStart, 'redirect' | 'transport'>,
 ): OAuthSignInStart {
-    return { deployment, server, resource, ...start };
+    return { deployment, server, resource, abandoned: new AbortController().signal, ...start };
+}
+
+/** Starts an attempt on the head that is replaced by what it opens, so the second half can be driven on its own. */
+async function attemptInFlight(): Promise<string> {
+    const redirect = replacingTheDocument();
+
+    void startOAuthSignIn(starting({ redirect, transport: answering().transport }));
+
+    await vi.waitFor(() => {
+        expect(redirect.handed).toHaveLength(1);
+    });
+
+    return statedIn(redirect.handed[0] ?? '', 'state');
 }
 
 afterEach(() => {
@@ -221,22 +234,82 @@ describe('startOAuthSignIn', () => {
         expect(outcome).toEqual({ outcome: 'refused', refusal: 'unavailable' });
         expect(window.sessionStorage.getItem('mailfathom.signIn.attempt')).toBeNull();
     });
+
+    // Calling a hand-over off cannot stop the step it is in the middle of, so what it does is stop the next one: a
+    // verifier written down after nobody is waiting is a secret nothing will ever take, and the person would be sent
+    // to a server from a screen that has already put them back.
+    it('writes nothing down and hands nobody over once it was called off before it got that far', async () => {
+        const redirect = comingBackWith({ answered: 'code', code: 'a-code', state: '' });
+        const calledOff = new AbortController();
+        const { transport } = answering();
+
+        let publish = (): void => undefined;
+        const published = new Promise<void>((settle) => {
+            publish = settle;
+        });
+
+        const outcome = startOAuthSignIn(
+            starting({
+                redirect,
+                abandoned: calledOff.signal,
+                transport: (request) => published.then(() => transport(request)),
+            }),
+        );
+
+        calledOff.abort();
+        publish();
+
+        expect(await outcome).toEqual({ outcome: 'refused', refusal: 'unavailable' });
+        expect(redirect.handed).toEqual([]);
+        expect(window.sessionStorage.getItem('mailfathom.signIn.attempt')).toBeNull();
+    });
+
+    // One tab writes one attempt down, so by the time a hand-over that was called off comes back the entry belongs to
+    // whichever sign-in was started since. Discarding it there takes the verifier of a sign-in somebody is in the
+    // middle of, and they come back from the server to an answer nothing can redeem.
+    it('leaves the attempt of a sign-in started since alone when a hand-over that was called off comes back', async () => {
+        const calledOff = new AbortController();
+        const handed: string[] = [];
+        const comingBack: ((answer: SignInRedirectAnswer | null) => void)[] = [];
+
+        const first = startOAuthSignIn(
+            starting({
+                abandoned: calledOff.signal,
+                transport: answering().transport,
+                redirect: {
+                    offered: true,
+                    redirectUri,
+                    hand: (address) => {
+                        handed.push(address);
+
+                        return new Promise<SignInRedirectAnswer | null>((settle) => {
+                            comingBack.push(settle);
+                        });
+                    },
+                    abandon: () => undefined,
+                    answerWaiting: () => null,
+                },
+            }),
+        );
+
+        await vi.waitFor(() => {
+            expect(handed).toHaveLength(1);
+        });
+
+        calledOff.abort();
+
+        const state = await attemptInFlight();
+
+        comingBack[0]?.(null);
+        await first;
+
+        const outcome = await completeOAuthSignIn({ answered: 'code', code: 'a-code', state }, answering().transport);
+
+        expect(outcome.outcome).toBe('signedIn');
+    });
 });
 
 describe('completeOAuthSignIn', () => {
-    /** Starts an attempt on the head that is replaced by what it opens, so the second half can be driven on its own. */
-    async function attemptInFlight(): Promise<string> {
-        const redirect = replacingTheDocument();
-
-        void startOAuthSignIn(starting({ redirect, transport: answering().transport }));
-
-        await vi.waitFor(() => {
-            expect(redirect.handed).toHaveLength(1);
-        });
-
-        return statedIn(redirect.handed[0] ?? '', 'state');
-    }
-
     it('redeems the code against the attempt this tab wrote down', async () => {
         const state = await attemptInFlight();
         const { transport, asked } = answering();

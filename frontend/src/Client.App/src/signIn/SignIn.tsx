@@ -543,6 +543,7 @@ export function SignIn({
             server,
             resource,
             redirect,
+            abandoned: running.signal,
             transport: send(running.signal),
         });
 

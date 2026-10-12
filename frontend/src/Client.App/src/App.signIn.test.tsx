@@ -154,6 +154,7 @@ async function attemptWaitingForItsAnswer(): Promise<string> {
             abandon: () => undefined,
             answerWaiting: () => null,
         },
+        abandoned: new AbortController().signal,
         transport: answeringTheWholeGrant()(new AbortController().signal),
     });
 
