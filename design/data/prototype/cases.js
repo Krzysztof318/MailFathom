@@ -11,7 +11,7 @@ MailFathomDesign.data.cases = [
     agreed: [
       { text: "SLA for critical incidents: 2 h on business days", src: "SLA addendum.pdf" },
       { text: "Fee +8% from the 2027 period", src: "SLA addendum.pdf" },
-      { text: "An indexation cap is contractually permissible", src: "Legal opinion — Wrona" },
+      { text: "An indexation cap is contractually permissible", src: "Legal opinion - Wrona" },
     ],
     openQ: [
       { text: "Will Contoso accept a 5% CPI cap", src: "Thread: Contract addendum" },
@@ -25,7 +25,7 @@ MailFathomDesign.data.cases = [
     facts: [
       { p: "Response time (critical)", a: "4 h", b: "2 h", src: "§ 1 of the addendum" },
       { p: "Annual fee", a: "€236,000", b: "€254,880", src: "§ 2 of the addendum" },
-      { p: "CPI indexation cap", a: "none", b: "none — 5% under negotiation", src: "§ 3 of the addendum" },
+      { p: "CPI indexation cap", a: "none", b: "none - 5% under negotiation", src: "§ 3 of the addendum" },
       { p: "Notice period", a: "3 months", b: "unchanged", src: "Master agreement" },
     ],
     timeline: [
@@ -36,10 +36,10 @@ MailFathomDesign.data.cases = [
       { d: "today", t: "Addendum in signature version" },
     ],
     threads: [
-      { id: "contoso", label: "Contract addendum — signatures", meta: "Contoso · 6 messages" },
+      { id: "contoso", label: "Contract addendum - signatures", meta: "Contoso · 6 messages" },
       { id: "anna2", label: "Re: proposed terms for 2027", meta: "Contoso · 3 messages" },
       { id: "marta", label: "CPI calculation 2027", meta: "Finance · 4 messages" },
-      { id: "jacek", label: "Legal opinion — indexation cap", meta: "Law office · 2 messages" },
+      { id: "jacek", label: "Legal opinion - indexation cap", meta: "Law office · 2 messages" },
     ],
     docs: [
       { type: "PDF", name: "SLA addendum.pdf", size: "248 kB" },
@@ -73,14 +73,14 @@ MailFathomDesign.data.cases = [
     duties: [{ who: "Karolina", what: "Decide whether to accept the date", when: "02.09", state: "open" }],
   },
   {
-    id: "audyt", title: "IT contract audit 2024–2026", parties: "Internal Audit",
+    id: "audyt", title: "IT contract audit 2024-2026", parties: "Internal Audit",
     status: "List due 03.09", statusKind: "attention", owner: "KK",
     summary: "Audit is asking for a list of IT contracts with addenda and notice periods.",
     scope: "2 threads · 1 document",
-    agreed: [{ text: "Scope: IT contracts 2024–2026", src: "Thread: Contract register request" }],
+    agreed: [{ text: "Scope: IT contracts 2024-2026", src: "Thread: Contract register request" }],
     openQ: [{ text: "Who prepares the list", src: "Thread: Contract register request" }],
     dates: [{ text: "List submitted", when: "03.09", src: "Thread: Contract register request" }],
-    facts: [{ p: "Contracts in scope", a: "—", b: "12 (preliminary)", src: "Contract register" }],
+    facts: [{ p: "Contracts in scope", a: "-", b: "12 (preliminary)", src: "Contract register" }],
     timeline: [{ d: "yesterday", t: "Audit request" }],
     threads: [{ id: "audyt1", label: "Contract register request", meta: "Audit · 3 messages" }],
     docs: [{ type: "DOCX", name: "NDA_Northwind.docx", size: "72 kB" }],
@@ -94,7 +94,7 @@ MailFathomDesign.data.newCase = {
   ourSide: "Nordwind",
   due: "12.09",
   found: [
-    { kind: "thread", label: "Question about weekend SLA — 4 messages" },
+    { kind: "thread", label: "Question about weekend SLA - 4 messages" },
     { kind: "document", label: "Master agreement.pdf" },
     { kind: "deadline", label: "Reply by 01.09" },
   ],

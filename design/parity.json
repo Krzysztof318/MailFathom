@@ -39,7 +39,7 @@
         },
         {
           "click": {
-            "text": "Contract addendum — signatures"
+            "text": "Contract addendum - signatures"
           }
         }
       ]
@@ -90,7 +90,7 @@
         },
         {
           "expect": {
-            "text": "LANGUAGE"
+            "text": "Language"
           }
         }
       ]
@@ -149,7 +149,7 @@
         },
         {
           "click": {
-            "text": "Contract addendum — signatures"
+            "text": "Contract addendum - signatures"
           }
         },
         {
@@ -164,7 +164,7 @@
         },
         {
           "expect": {
-            "text": "lockIsolated preview — scripts and remote content are blocked"
+            "text": "lockIsolated preview - scripts and remote content are blocked"
           }
         }
       ]
@@ -182,7 +182,7 @@
         },
         {
           "click": {
-            "text": "Contract addendum — signatures"
+            "text": "Contract addendum - signatures"
           }
         },
         {
