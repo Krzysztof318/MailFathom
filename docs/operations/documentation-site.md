@@ -101,8 +101,8 @@ that every entry names a page the version carries is what covers them instead.
 
 ## The mirror on Context7
 
-MailFathom is registered with [Context7](https://context7.com/krzysztof318/mailfathom) as
-`/krzysztof318/mailfathom`, so an agent that already has that connector reaches this documentation without being given
+MailFathom is registered with [Context7](https://context7.com/fathomise/mailfathom) as
+`/fathomise/mailfathom`, so an agent that already has that connector reaches this documentation without being given
 an address. It is a mirror of the artifacts above rather than a second channel, and two properties are why: it indexes
 the default branch, so nothing binds an answer to the release a reader is running, and retrieval over chunks returns a
 rule without the pointer that completes it — these pages state a rule in one place and point at it from everywhere

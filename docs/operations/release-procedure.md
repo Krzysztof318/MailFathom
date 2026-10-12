@@ -228,9 +228,11 @@ unavailable:
    name, its checksum, and the migrations it carries.
 
    After that workflow succeeds, validate and publish the `server.json` from the tagged tree with the official
-   `mcp-publisher`, then query the Registry API for `io.github.Krzysztof318/mailfathom` and confirm it returns version
+   `mcp-publisher`, then query the Registry API for `io.github.fathomise/mailfathom` and confirm it returns version
    `x.y.z`. Publishing before the workflow succeeds would advertise a release whose installable artifacts do not yet
-   exist; publishing from the later bump would advertise the next, unreleased version instead.
+   exist; publishing from the later bump would advertise the next, unreleased version instead. The name sits in the
+   organization's namespace, which the Registry grants only to an Owner of that organization, so the GitHub login
+   `mcp-publisher` asks for is made as one; ordinary membership of the organization is not enough.
 
 3. **Merge the version-bump pull request, titled `[#<issue>] Bump main version to <next>`.** It raises `VersionPrefix`
    to the next version, and it names the same issue the changelog pull request does and carries the `Closes` line for
