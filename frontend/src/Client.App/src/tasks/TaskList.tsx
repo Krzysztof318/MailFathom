@@ -190,7 +190,7 @@ export function TaskList({
                         <h2 id={`${headings}-${group.name}`} className="text-xs font-semibold text-muted">
                             {translate(groupLabels[group.name])}
                         </h2>
-                        <span className="rounded-xl border border-line bg-rail px-1.75 text-xs text-muted">
+                        <span className="rounded-md border border-line bg-rail px-1.75 text-xs text-muted">
                             {counted.format(group.tasks.length)}
                         </span>
                     </div>

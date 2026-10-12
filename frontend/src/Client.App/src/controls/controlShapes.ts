@@ -58,7 +58,8 @@ export const controlShapes: Readonly<Record<ControlShape, string>> = {
     selected: 'gap-1.75 rounded-md px-2.75 py-1.75 text-base text-accent-deep hover:bg-accent-line',
     selectedSymbol: 'size-9.5 justify-center rounded-md text-accent-deep hover:bg-accent-line',
     link: 'rounded-sm text-accent hover:text-accent-strong',
-    accentPill: 'min-h-8.5 justify-center gap-1.75 rounded-xl bg-accent px-3.25 text-base font-semibold text-on-accent',
+    accentPill:
+        'min-h-8.5 justify-center gap-1.75 rounded-2xl bg-accent px-3.25 text-base font-semibold text-on-accent',
     outlined: 'gap-2 rounded-md border border-line-strong px-3 py-1.75 text-base text-text-soft hover:bg-rail',
     outlinedSymbol: 'size-9.5 justify-center rounded-md border border-line-strong text-text-soft hover:bg-rail',
 };

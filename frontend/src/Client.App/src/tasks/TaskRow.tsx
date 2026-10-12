@@ -272,7 +272,7 @@ export function TaskRow({
                     <span
                         ref={chip}
                         tabIndex={-1}
-                        className="rounded-xl border border-line bg-rail px-2.5 py-1 text-sm text-muted"
+                        className="rounded-2xl border border-line bg-rail px-2.5 py-1 text-sm text-muted"
                     >
                         {translate('tasks.inTheCalendar')}
                     </span>

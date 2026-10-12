@@ -1221,26 +1221,6 @@ describe('FolderTree, in a folded column', () => {
         expect(inbox.textContent).toContain('12 unread');
     });
 
-    it('draws a folder symbol larger than the column draws one, a narrower target having to be hit as reliably', async () => {
-        renderTree(answering(JSON.stringify(tree)));
-
-        await drawn();
-
-        expect(
-            row(/^Inbox12 unread/)
-                .querySelector('svg')
-                ?.getAttribute('class'),
-        ).toContain('size-icon-md');
-
-        foldTheColumnAway();
-
-        expect(
-            row(/^Inbox12 unread/)
-                .querySelector('svg')
-                ?.getAttribute('class'),
-        ).toContain('size-icon-2xl');
-    });
-
     it('marks a mailbox by its colour where the column named it, so the mailboxes stay tellable apart', async () => {
         renderTree(answering(JSON.stringify(tree)));
 

@@ -178,7 +178,7 @@ export function RecipientField({
             {addresses.map((address) => (
                 <span
                     key={address}
-                    className="flex items-center gap-1.75 rounded-xl border border-line bg-rail px-2.5 py-0.75 text-base"
+                    className="flex items-center gap-1.75 rounded-lg border border-line bg-rail px-2.5 py-0.75 text-base"
                 >
                     {address}
                     <button

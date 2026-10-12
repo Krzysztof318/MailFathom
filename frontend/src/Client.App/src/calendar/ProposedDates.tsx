@@ -45,7 +45,7 @@ export function ProposedDates({
         >
             <h3 className="flex items-center gap-2.25 text-xs font-semibold text-muted">
                 {translate('calendar.proposedHeading')}
-                <span className="rounded-sm bg-accent px-1.5 py-0.5 text-xs tracking-normal text-on-accent normal-case">
+                <span className="rounded-sm bg-accent px-1.5 py-0.5 text-xs text-on-accent">
                     {translate('calendar.authored')}
                 </span>
             </h3>
