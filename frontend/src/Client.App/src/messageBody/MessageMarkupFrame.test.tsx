@@ -148,7 +148,7 @@ describe('EmbeddedMessageMarkup', () => {
         reporting({ height: 900 });
 
         expect(frame().style.height).toBe('902px');
-        expect(screen.getByText("The sender's HTML in isolation — scripts and remote resources blocked")).toBeDefined();
+        expect(screen.getByText("The sender's HTML in isolation - scripts and remote resources blocked")).toBeDefined();
     });
 
     it('holds the frame within bounds no document may push it past', () => {

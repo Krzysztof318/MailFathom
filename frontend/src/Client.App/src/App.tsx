@@ -1790,7 +1790,7 @@ function SignInScreen({
                 {/* Centred in what the brand above it leaves, rather than centred with it: the design stands the
                     product's name at the top of the column and the claim in the middle of the rest. */}
                 <div className="hidden max-w-100 flex-col gap-4.5 pb-10 split:my-auto split:flex">
-                    <p className="text-5xl font-semibold tracking-tight text-balance">{translate('signIn.claim')}</p>
+                    <p className="text-7xl font-semibold tracking-tightest text-balance">{translate('signIn.claim')}</p>
                     <p className="text-lg text-muted text-pretty">{translate('signIn.claimExplanation')}</p>
                 </div>
             </aside>
@@ -1836,7 +1836,7 @@ function SignInScreen({
                             {translate('signIn.forgotPassword')}&nbsp;
                             <PlannedControl label={translate('signIn.itHelp')} shape="link" />
                         </p>
-                        <VersionLine deploymentVersion={null} className="text-2xs whitespace-nowrap text-faint" />
+                        <VersionLine deploymentVersion={null} className="text-xs whitespace-nowrap text-faint" />
                     </div>
                 </div>
             </main>

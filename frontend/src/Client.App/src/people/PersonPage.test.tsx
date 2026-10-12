@@ -115,7 +115,7 @@ describe('PersonPage', () => {
     it('says a collected record is not the reader’s to amend, and offers taking it on', () => {
         drawPage({ contact: personCalled('Collected') });
 
-        expect(screen.getByText('Read-only — editable once added to your contacts')).toBeDefined();
+        expect(screen.getByText('Read-only - editable once added to your contacts')).toBeDefined();
         expect(screen.getByRole('button', { name: 'Add to my contacts' })).toBeDefined();
     });
 

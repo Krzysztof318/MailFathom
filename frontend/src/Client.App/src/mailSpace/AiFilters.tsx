@@ -48,7 +48,7 @@ export function AiFilters({ folded }: { readonly folded: boolean }) {
             {/* The heading names a group a reader can see the whole of; the rail draws the group as its symbols and the
                 section's own name is what a reader who cannot see them is given instead. */}
             {folded ? null : (
-                <p className="px-2.75 text-xs tracking-widest text-muted uppercase">{translate('aiFilters.heading')}</p>
+                <p className="px-2.75 text-xs font-semibold text-muted">{translate('aiFilters.heading')}</p>
             )}
 
             {standingViews.map((view) => (
@@ -56,14 +56,17 @@ export function AiFilters({ folded }: { readonly folded: boolean }) {
                     key={view}
                     type="button"
                     title={translate('aiFilters.entryTitle', { view: translate(views[view].label) })}
-                    className={`flex cursor-pointer items-center rounded-md text-sm text-text-soft transition hover:bg-hover ${
+                    className={`flex cursor-pointer items-center rounded-md text-base text-text-soft transition hover:bg-hover ${
                         folded ? 'justify-center self-center px-1.75 py-1.5' : 'gap-2.5 px-2.75 py-1.25'
                     }`}
                     onClick={() => {
                         listed.stand(view);
                     }}
                 >
-                    <Icon name={views[view].icon} className={folded ? 'size-5.75 text-muted' : 'size-4.5 text-muted'} />
+                    <Icon
+                        name={views[view].icon}
+                        className={folded ? 'size-icon-2xl text-muted' : 'size-icon-md text-muted'}
+                    />
 
                     {folded ? (
                         <span className="sr-only">{translate(views[view].label)}</span>

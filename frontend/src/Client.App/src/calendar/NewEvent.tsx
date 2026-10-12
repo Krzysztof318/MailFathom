@@ -131,7 +131,7 @@ export function NewEvent({
         <dialog
             ref={asked}
             aria-label={translate('calendar.newEvent')}
-            className="m-auto w-dialog max-w-dialog-narrow rounded-2xl border border-line bg-panel p-0 text-text shadow-dialog backdrop:bg-scrim"
+            className="m-auto w-dialog max-w-dialog-narrow rounded-lg border border-line bg-panel p-0 text-text shadow-dialog backdrop:bg-scrim"
             onClose={emptied}
         >
             <form
@@ -151,7 +151,7 @@ export function NewEvent({
                 }}
             >
                 <div className="flex items-center gap-3 border-b border-line bg-sunken px-4.5 py-3.5">
-                    <Icon name="event" className="size-5 shrink-0 text-muted" />
+                    <Icon name="event" className="size-icon-lg shrink-0 text-muted" />
 
                     <h2 className="min-w-0 flex-1 truncate text-lg font-semibold">{translate('calendar.newEvent')}</h2>
 
@@ -166,9 +166,9 @@ export function NewEvent({
 
                 <div className="flex flex-col gap-3.5 px-4.5 py-4.5">
                     {!readsDescriptions ? null : (
-                        <div className="flex flex-col gap-2.25 rounded-xl bg-accent-soft px-3.25 py-3">
+                        <div className="flex flex-col gap-2.25 rounded-lg bg-accent-soft px-3.25 py-3">
                             <label htmlFor={describes} className="flex items-center gap-2.25 text-sm text-accent-deep">
-                                <span className="rounded-sm bg-accent px-1.5 py-0.5 text-2xs text-on-accent">
+                                <span className="rounded-sm bg-accent px-1.5 py-0.5 text-xs text-on-accent">
                                     {translate('calendar.authored')}
                                 </span>
                                 {translate('calendar.describeEvent')}

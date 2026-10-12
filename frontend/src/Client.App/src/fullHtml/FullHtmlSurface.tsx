@@ -223,7 +223,7 @@ export function FullHtmlSurface({
     return (
         <section ref={region} tabIndex={-1} aria-label={translate('fullHtml.surface')} className="flex h-full flex-col">
             <header className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-2.5">
-                <span className="rounded-xs bg-accent px-1.75 py-0.75 text-xs tracking-widest text-on-accent">
+                <span className="rounded-xs bg-accent px-1.75 py-0.75 text-xs font-semibold text-on-accent">
                     {translate('fullHtml.mark')}
                 </span>
 
@@ -369,7 +369,7 @@ function Isolation({
 
     return (
         <footer className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-line bg-sunken px-4 py-2.5 text-sm text-muted">
-            <Icon name="lock" className="size-4 shrink-0" />
+            <Icon name="lock" className="size-icon-sm shrink-0" />
 
             <p className="min-w-0 flex-1 basis-64">
                 {translate(remotePictures ? 'fullHtml.picturesAsked' : 'fullHtml.isolated')}

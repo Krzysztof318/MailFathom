@@ -60,8 +60,8 @@ export function ThreadState({ block }: { readonly block: AnswerBlock }) {
             note={said === 0 ? translate('threadStanding.empty') : undefined}
             state={said === 0 ? 'empty' : 'ready'}
         >
-            <span className={`flex w-fit items-center gap-1 rounded-full px-2.25 py-0.5 text-2xs ${verdict.tint}`}>
-                <Icon className="size-3.25" name={verdict.icon} />
+            <span className={`flex w-fit items-center gap-1 rounded-full px-2.25 py-0.5 text-xs ${verdict.tint}`}>
+                <Icon className="size-icon-xs" name={verdict.icon} />
                 {translate(verdict.label)}
             </span>
 
@@ -112,9 +112,7 @@ export function ConversationStandingBody({
                 />
 
                 <section className="flex min-w-0 flex-col gap-1.5">
-                    <h4 className="text-2xs tracking-wider text-muted uppercase">
-                        {translate('threadStanding.commitments')}
-                    </h4>
+                    <h4 className="text-xs font-semibold text-muted">{translate('threadStanding.commitments')}</h4>
 
                     {standing.commitments.length === 0 ? (
                         <p className="text-sm text-faint">{translate('threadStanding.noCommitments')}</p>
@@ -179,7 +177,7 @@ function Statements({
 
     return (
         <section className="flex min-w-0 flex-col gap-1.5">
-            <h4 className="text-2xs tracking-wider text-muted uppercase">{translate(heading)}</h4>
+            <h4 className="text-xs font-semibold text-muted">{translate(heading)}</h4>
 
             {statements.length === 0 ? (
                 <p className="text-sm text-faint">{translate(empty)}</p>

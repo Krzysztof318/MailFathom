@@ -70,10 +70,10 @@ export function ProposedAction({
                 impact, so a region that contained it would answer for copy the card had stopped showing. */}
             <section
                 aria-labelledby={offers}
-                className="flex flex-col gap-2 rounded-2xl border border-accent-line bg-accent-soft px-3.5 py-3"
+                className="flex flex-col gap-2 rounded-lg border border-accent-line bg-accent-soft px-3.5 py-3"
             >
                 <p id={offers} className="flex items-center gap-2 text-sm font-semibold text-accent-deep">
-                    <Icon name="auto_awesome" className="size-4 shrink-0" />
+                    <Icon name="auto_awesome" className="size-icon-sm shrink-0" />
                     {translate('proposal.offered')}
                 </p>
 

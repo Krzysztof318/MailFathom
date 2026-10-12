@@ -125,10 +125,10 @@ export function DraftingBlock({
 
     return (
         <div className="flex shrink-0 flex-col gap-2.25 border-b border-accent-line bg-accent-soft px-3.75 py-2.75">
-            <div className="flex items-center gap-2.75 rounded-xl border-2 border-accent bg-panel px-2.75 py-2 transition focus-within:ring-3 focus-within:ring-accent-soft">
+            <div className="flex items-center gap-2.75 rounded-md border-2 border-accent bg-panel px-2.75 py-2 transition focus-within:ring-3 focus-within:ring-accent-soft">
                 <span
                     aria-hidden="true"
-                    className="shrink-0 rounded-sm bg-accent px-1.75 py-0.75 text-2xs font-semibold tracking-widest text-on-accent"
+                    className="shrink-0 rounded-sm bg-accent px-1.75 py-0.75 text-xs font-semibold text-on-accent"
                 >
                     {translate('ai.badge')}
                 </span>

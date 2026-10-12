@@ -114,7 +114,7 @@ describe('ConnectionSummary', () => {
 
         expect(
             screen.getByText(
-                `Your deployment did not answer. Trying again — attempt 2 of ${String(mostReconnectionAttempts)}.`,
+                `Your deployment did not answer. Trying again - attempt 2 of ${String(mostReconnectionAttempts)}.`,
             ),
         ).toBeDefined();
     });
@@ -122,7 +122,7 @@ describe('ConnectionSummary', () => {
     it('says another attempt is coming while the budget for one is left, and offers nothing to press', () => {
         renderSummary({ session: failing('unavailable'), attempts: 0 });
 
-        expect(screen.getByText(/Trying again — attempt 1 of/)).toBeDefined();
+        expect(screen.getByText(/Trying again - attempt 1 of/)).toBeDefined();
         expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
     });
 

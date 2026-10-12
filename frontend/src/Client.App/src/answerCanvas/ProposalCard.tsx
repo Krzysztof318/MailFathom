@@ -195,7 +195,7 @@ export function ProposalCard({
                     <span
                         className={`ms-auto flex items-center gap-1.25 rounded-full border px-2.25 py-0.75 text-xs whitespace-nowrap ${chip.tint}`}
                     >
-                        <Icon className="size-3.25" name={chip.icon} />
+                        <Icon className="size-icon-xs" name={chip.icon} />
                         {translate(chip.said)}
                     </span>
                 )
@@ -212,7 +212,7 @@ export function ProposalCard({
         >
             {phase === 'declined' ? (
                 <p className="flex flex-wrap items-center gap-2 text-base text-muted">
-                    <Icon className="size-4" name="block" />
+                    <Icon className="size-icon-sm" name="block" />
                     <s className="min-w-0" lang={lang}>
                         {title}
                     </s>
@@ -229,7 +229,7 @@ export function ProposalCard({
                             }`}
                         >
                             <Icon
-                                className={`size-4 shrink-0 ${phase === 'failed' ? 'text-highlight-line' : ''}`}
+                                className={`size-icon-sm shrink-0 ${phase === 'failed' ? 'text-highlight-line' : ''}`}
                                 name={phase === 'accepted' ? 'check_circle' : 'error'}
                             />
                             {translate(phase === 'accepted' ? wording.done : wording.failed)}
@@ -243,7 +243,7 @@ export function ProposalCard({
                                     key={control.said}
                                     aria-label={control.name}
                                     aria-disabled={control.held === true ? true : undefined}
-                                    className={`inline-flex items-center justify-center gap-1.75 rounded-lg border px-3.75 py-2.25 text-md whitespace-nowrap transition disabled:opacity-60 aria-disabled:opacity-60 ${
+                                    className={`inline-flex items-center justify-center gap-1.75 rounded-md border px-3.75 py-2.25 text-md whitespace-nowrap transition disabled:opacity-60 aria-disabled:opacity-60 ${
                                         control.primary === true
                                             ? 'border-accent bg-accent font-semibold text-on-accent hover:bg-accent-strong'
                                             : 'border-line-strong bg-panel text-text-soft hover:bg-hover'
@@ -283,7 +283,7 @@ export function ProposalCard({
                                             look?.(where);
                                         }}
                                     >
-                                        <Icon className="size-4 text-muted" name={drawn.icon} />
+                                        <Icon className="size-icon-sm text-muted" name={drawn.icon} />
                                         {translate(drawn.said)}
                                     </button>
                                 );
@@ -321,7 +321,7 @@ export function ProposalFields({
         <dl className="flex flex-col gap-1.25">
             {fields.map((field) => (
                 <div key={field.name} className="flex items-baseline gap-2.5">
-                    <dt className="w-16.5 shrink-0 text-xs tracking-wide text-muted workspace:w-19.5">{field.name}</dt>
+                    <dt className="w-16.5 shrink-0 text-xs text-muted workspace:w-19.5">{field.name}</dt>
                     <dd className="min-w-0 flex-1 text-md text-text text-pretty">{field.value}</dd>
                 </div>
             ))}

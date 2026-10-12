@@ -37,7 +37,7 @@ export interface ContextMenuItem {
 }
 
 const menuItem =
-    'flex min-h-9 cursor-pointer items-center gap-2.75 rounded-lg px-3 text-start text-base transition hover:bg-hover pointer-coarse:min-h-12 pointer-coarse:text-md';
+    'flex min-h-9 cursor-pointer items-center gap-2.75 rounded-md px-3 text-start text-base transition hover:bg-hover pointer-coarse:min-h-12 pointer-coarse:text-md';
 
 export function ContextMenu({
     header,
@@ -168,7 +168,7 @@ export function ContextMenu({
                 <div
                     ref={panel}
                     style={placed === null ? undefined : { left: placed.x, top: placed.y }}
-                    className={`pointer-events-auto flex max-h-full w-75 max-w-full flex-col overflow-y-auto rounded-3xl border border-line bg-panel pt-1.75 pr-1.5 pb-2 pl-1.5 text-text shadow-dialog workspace:absolute workspace:w-59 workspace:pointer-coarse:w-65.5 ${
+                    className={`pointer-events-auto flex max-h-full w-75 max-w-full flex-col overflow-y-auto rounded-lg border border-line bg-panel pt-1.75 pr-1.5 pb-2 pl-1.5 text-text shadow-dialog workspace:absolute workspace:w-59 workspace:pointer-coarse:w-65.5 ${
                         wide && placed === null ? 'invisible' : ''
                     }`}
                     onKeyDown={onKeyDown}
@@ -178,7 +178,7 @@ export function ContextMenu({
                         event.preventDefault();
                     }}
                 >
-                    <p id={names} className="truncate px-3 pt-1 pb-1.5 text-2xs tracking-widest text-muted">
+                    <p id={names} className="truncate px-3 pt-1 pb-1.5 text-xs font-semibold text-muted">
                         {header}
                     </p>
 
@@ -203,7 +203,7 @@ export function ContextMenu({
                                 {/* The symbol keeps its own column so every label starts in the same place, which is
                                     what the design draws and what makes the list readable as a column. */}
                                 <span className="flex w-6 shrink-0 justify-center">
-                                    <Icon name={item.icon} className="size-5" />
+                                    <Icon name={item.icon} className="size-icon-lg" />
                                 </span>
 
                                 <span className="truncate">{item.label}</span>

@@ -133,17 +133,17 @@ export function Draft({ block }: { readonly block: AnswerBlock }) {
             title={draft.subject}
         >
             <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full bg-rail px-2.25 py-0.5 text-2xs text-muted">
+                <span className="rounded-full bg-rail px-2.25 py-0.5 text-xs text-muted">
                     {translate(draftDispositions[draft.disposition])}
                 </span>
 
-                <span className={`flex items-center gap-1 rounded-full px-2.25 py-0.5 text-2xs ${verdict.tint}`}>
-                    <Icon className="size-3.25" name={verdict.icon} />
+                <span className={`flex items-center gap-1 rounded-full px-2.25 py-0.5 text-xs ${verdict.tint}`}>
+                    <Icon className="size-icon-xs" name={verdict.icon} />
                     {translate(verdict.label)}
                 </span>
             </div>
 
-            <div className="flex flex-col gap-2 rounded-lg border border-line bg-sunken px-3.75 py-3.25">
+            <div className="flex flex-col gap-2 rounded-md border border-line bg-sunken px-3.75 py-3.25">
                 <p className="flex flex-wrap gap-2 text-sm">
                     <span className="text-muted">{translate('draft.to')}</span>
 
@@ -160,7 +160,7 @@ export function Draft({ block }: { readonly block: AnswerBlock }) {
 
                 {editing && editable ? (
                     <>
-                        <label className="text-2xs tracking-wider text-muted uppercase" htmlFor={written}>
+                        <label className="text-xs font-semibold text-muted" htmlFor={written}>
                             {translate('draft.bodyLabel')}
                         </label>
 

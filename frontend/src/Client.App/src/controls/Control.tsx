@@ -51,7 +51,7 @@ export function Control({
             onClick={onPress}
         >
             {icon === undefined || !symbolShown(shape) ? null : (
-                <Icon name={icon} className={shape === 'floating' ? 'size-6' : 'size-4.5'} />
+                <Icon name={icon} className={shape === 'floating' ? 'size-icon-2xl' : 'size-icon-md'} />
             )}
             {labelled ? <span>{label}</span> : null}
         </button>

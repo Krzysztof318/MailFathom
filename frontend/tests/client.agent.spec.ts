@@ -96,7 +96,7 @@ test('follows a question asked of the agent from its status line to the answer, 
 
     await expect(thread.getByText('Four bays were confirmed, held to the end of the week.')).toBeVisible();
     await expect(thread.getByText('Reading the confirmation')).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Cancel — nothing is running' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Cancel - nothing is running' })).toBeVisible();
 });
 
 test('draws the answer’s Markdown as structure and fetches nothing the markup in it names', async ({ page }) => {
@@ -165,7 +165,7 @@ for (const [act, decision, said] of [
             if (decision === 'accepted') {
                 await expect(card.getByText(proposal.done, { exact: true })).toBeVisible();
             } else {
-                await expect(card.getByText('Declined — nothing was done')).toBeVisible();
+                await expect(card.getByText('Declined - nothing was done')).toBeVisible();
             }
 
             await expect(card.getByRole('button', { name: proposal.decline })).toHaveCount(0);

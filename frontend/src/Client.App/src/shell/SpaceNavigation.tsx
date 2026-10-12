@@ -129,13 +129,13 @@ function SpaceLink({ space, current }: { readonly space: Space; readonly current
             // A placeholder says what it is in its own name rather than in a note beside it: the name is what a screen
             // reader announces on the link, and it is the one place the sentence is not read on every other item too.
             aria-label={built ? undefined : translate('space.notBuiltYet', { space: name })}
-            className={`flex flex-1 flex-col items-center gap-0.75 rounded-2xl px-0.5 py-1.75 text-2xs font-medium transition workspace:flex-none workspace:gap-1 workspace:rounded-none workspace:border-e-3 workspace:py-2.25 workspace:text-xs desktop:text-sm ${
+            className={`flex flex-1 flex-col items-center gap-0.75 rounded-xl px-0.5 py-1.75 text-sm transition workspace:flex-none workspace:gap-1 workspace:rounded-none workspace:border-e-3 workspace:py-2.25 workspace:text-xs desktop:text-sm ${
                 current
-                    ? 'bg-accent-soft font-semibold text-accent-deep workspace:border-accent'
+                    ? 'bg-accent-soft font-semibold text-accent-deep workspace:border-accent workspace:font-normal'
                     : `workspace:border-transparent hover:bg-hover hover:text-text ${built ? 'text-muted' : 'text-faint'}`
             }`}
         >
-            <Icon name={spaceIcons[space]} className="size-6 workspace:size-5.5" />
+            <Icon name={spaceIcons[space]} className="size-icon-2xl workspace:size-icon-xl" />
             <span className="max-w-full truncate">{name}</span>
         </a>
     );

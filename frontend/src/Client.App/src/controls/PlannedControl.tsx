@@ -48,7 +48,7 @@ export function PlannedControl({
             className={`flex shrink-0 cursor-not-allowed items-center whitespace-nowrap opacity-60 transition ${controlShapes[shape]} ${className ?? ''}`}
         >
             {icon === undefined || !symbolShown(shape) ? null : (
-                <Icon name={icon} className={shape === 'floating' ? 'size-6' : 'size-4.5'} />
+                <Icon name={icon} className={shape === 'floating' ? 'size-icon-2xl' : 'size-icon-md'} />
             )}
             {labelled ? <span>{label}</span> : null}
         </button>

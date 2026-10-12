@@ -76,12 +76,12 @@ function FoundFile({ entry }: { readonly entry: AttachmentEntry }) {
     const said = (
         <>
             <span className="flex items-center justify-between gap-1.5">
-                <span className="text-2xs text-muted uppercase">{kindOf(entry.name, entry.mediaType ?? '')}</span>
+                <span className="text-xs text-muted uppercase">{kindOf(entry.name, entry.mediaType ?? '')}</span>
 
                 <span
-                    className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs whitespace-nowrap ${availability.tint}`}
+                    className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs whitespace-nowrap ${availability.tint}`}
                 >
-                    <Icon className="size-3" name={availability.icon} />
+                    <Icon className="size-icon-2xs" name={availability.icon} />
                     {translate(availability.label)}
                 </span>
             </span>
@@ -94,7 +94,7 @@ function FoundFile({ entry }: { readonly entry: AttachmentEntry }) {
         </>
     );
 
-    const card = 'flex w-full flex-col gap-1.75 rounded-lg border border-line bg-sunken px-3.5 py-3.25 text-start';
+    const card = 'flex w-full flex-col gap-1.75 rounded-md border border-line bg-sunken px-3.5 py-3.25 text-start';
 
     // A source that can be followed is a control and one that cannot is not: drawing the private entry as a button
     // would offer somebody a way into mail this client was never given, which is the rule `EvidenceList.tsx` states

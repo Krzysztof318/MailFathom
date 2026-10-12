@@ -21,7 +21,7 @@ export function ReturnToConversation({ onReturn }: { readonly onReturn: () => vo
             type="button"
             onClick={onReturn}
         >
-            <Icon className="size-4.5" name="arrow_back" />
+            <Icon className="size-icon-md" name="arrow_back" />
             {translate('agent.returnToConversation')}
         </button>
     );

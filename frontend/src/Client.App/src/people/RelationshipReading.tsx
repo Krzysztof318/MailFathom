@@ -35,19 +35,19 @@ export function RelationshipReading({
     return (
         <section
             aria-label={translate('person.relationship')}
-            className="flex flex-col gap-2.25 rounded-xl border border-line border-s-4 border-s-accent bg-panel px-4.25 py-3.75"
+            className="flex flex-col gap-2.25 rounded-lg border border-line border-s-4 border-s-accent bg-panel px-4.25 py-3.75"
         >
             <div className="flex items-center gap-2.25">
-                <h3 className="text-xs tracking-widest text-muted uppercase">{translate('person.relationship')}</h3>
-                <span className="rounded-sm bg-accent px-1.5 py-0.5 text-2xs font-semibold text-on-accent">
+                <h3 className="text-xs font-semibold text-muted">{translate('person.relationship')}</h3>
+                <span className="rounded-sm bg-accent px-1.5 py-0.5 text-xs font-semibold text-on-accent">
                     {translate('person.authored')}
                 </span>
             </div>
 
             <p className="text-md text-text-soft text-pretty">{translate('person.relationshipPending')}</p>
 
-            <div className="flex flex-col gap-2 rounded-lg bg-sunken px-3 py-2.5">
-                <p className="text-xs tracking-wide text-muted uppercase">{translate('person.lastContact')}</p>
+            <div className="flex flex-col gap-2 rounded-md bg-sunken px-3 py-2.5">
+                <p className="text-xs font-semibold text-muted">{translate('person.lastContact')}</p>
 
                 {reading ? (
                     <p role="status" className="text-sm text-muted">

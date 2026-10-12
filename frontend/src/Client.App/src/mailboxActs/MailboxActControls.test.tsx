@@ -144,7 +144,7 @@ describe('MailboxActControls', () => {
         expect(within(asked).getByRole('heading', { name: 'Delete 2 messages?' })).toBeDefined();
         expect(
             within(asked).getByText(
-                'Already in the trash — deleting now removes 2 messages together with attachments.',
+                'Already in the trash - deleting now removes 2 messages together with attachments.',
             ),
         ).toBeDefined();
         expect(within(asked).getByText('This cannot be undone.')).toBeDefined();
@@ -203,7 +203,7 @@ describe('MailboxActControls', () => {
         });
 
         const control = screen.getByRole('button', {
-            name: 'Archive — this is already on its way to your mail server.',
+            name: 'Archive - this is already on its way to your mail server.',
         });
 
         fireEvent.click(control);
@@ -227,12 +227,12 @@ describe('MailboxActControls', () => {
     });
 
     it.each([
-        ['notOffered', 'Archive — this credential may not change mail on your mail server.'],
-        ['nothingToActOn', 'Archive — nothing is open or selected for this to be about.'],
-        ['noArchiveFolder', 'Archive — this account names no archive folder, so there is nowhere to archive to.'],
-        ['severalAccounts', 'Archive — messages from several accounts cannot be filed into one folder.'],
-        ['noOtherFolder', 'Archive — this account has no other folder to file into.'],
-        ['foldersUnknown', 'Archive — MailFathom has not read your folders, so it cannot say where this would go.'],
+        ['notOffered', 'Archive - this credential may not change mail on your mail server.'],
+        ['nothingToActOn', 'Archive - nothing is open or selected for this to be about.'],
+        ['noArchiveFolder', 'Archive - this account names no archive folder, so there is nowhere to archive to.'],
+        ['severalAccounts', 'Archive - messages from several accounts cannot be filed into one folder.'],
+        ['noOtherFolder', 'Archive - this account has no other folder to file into.'],
+        ['foldersUnknown', 'Archive - MailFathom has not read your folders, so it cannot say where this would go.'],
     ] as [ActRefusal, string][])(
         'says %s in the control’s own name rather than refusing after the press',
         (refusal, said) => {

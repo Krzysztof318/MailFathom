@@ -29,17 +29,17 @@ const pickedOut = 'border-accent bg-accent-soft';
 
 export const eventShapes: Readonly<Record<EventShape, EventLook>> = {
     column: {
-        shape: 'flex cursor-pointer flex-col gap-0.75 rounded-lg border px-2.5 py-2 text-start',
+        shape: 'flex cursor-pointer flex-col gap-0.75 rounded-md border px-2.5 py-2 text-start',
         selected: pickedOut,
         unselected: 'border-line bg-panel hover:border-accent',
     },
     hour: {
-        shape: 'flex cursor-pointer flex-col gap-0.75 rounded-lg border px-2.5 py-2 text-start',
+        shape: 'flex cursor-pointer flex-col gap-0.75 rounded-md border px-2.5 py-2 text-start',
         selected: pickedOut,
         unselected: 'border-line bg-panel hover:border-accent',
     },
     agenda: {
-        shape: 'flex cursor-pointer flex-col gap-0.75 rounded-lg border px-2.5 py-2 text-start',
+        shape: 'flex cursor-pointer flex-col gap-0.75 rounded-md border px-2.5 py-2 text-start',
         selected: pickedOut,
         unselected: 'border-transparent hover:bg-hover',
     },

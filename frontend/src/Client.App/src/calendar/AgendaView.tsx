@@ -49,9 +49,7 @@ export function AgendaView({
                         <span className={`text-base font-semibold ${sameDay(day, today) ? 'text-accent-deep' : ''}`}>
                             {wordAgendaDay(day, locale)}
                         </span>
-                        <span className="text-2xs tracking-widest text-muted uppercase">
-                            {wordWeekday(day, locale)}
-                        </span>
+                        <span className="text-xs font-semibold text-muted">{wordWeekday(day, locale)}</span>
                     </p>
 
                     <ul

@@ -80,7 +80,7 @@ export function SurfaceWindow({
             onClose={onClosed}
             // The insets are the screen's here rather than the frame's, exactly as they are for the settings surface: a
             // modal dialog stands in the platform's own top layer, so the padding the frame carries is not around it.
-            className={`fixed inset-x-0 top-0 bottom-navigation m-0 mb-safe-bottom h-auto max-h-none w-auto max-w-none overflow-hidden rounded-none border-0 bg-panel p-0 text-text open:flex open:flex-col workspace:bottom-0 workspace:mb-0 panes:inset-0 panes:m-auto panes:rounded-window panes:border panes:border-line panes:shadow-dialog panes:backdrop:bg-scrim ${windowSizes[drawn]}`}
+            className={`fixed inset-x-0 top-0 bottom-navigation m-0 mb-safe-bottom h-auto max-h-none w-auto max-w-none overflow-hidden rounded-none border-0 bg-panel p-0 text-text open:flex open:flex-col workspace:bottom-0 workspace:mb-0 panes:inset-0 panes:m-auto panes:rounded-lg panes:border panes:border-line panes:shadow-dialog panes:backdrop:bg-scrim ${windowSizes[drawn]}`}
         >
             {children(close)}
         </dialog>

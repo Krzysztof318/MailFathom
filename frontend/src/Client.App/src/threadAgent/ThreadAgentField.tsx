@@ -54,10 +54,10 @@ export function ThreadAgentField() {
             {/* The focus treatment stands on the box rather than on the field inside it, for the reason Discover's own
                 field gives: a ring drawn round a transparent field inside a bordered box reads as two nested borders
                 rather than one field that lit up. */}
-            <div className="flex items-center gap-3 rounded-xl border-2 border-accent px-3.25 py-2.5 transition focus-within:ring-3 focus-within:ring-accent-soft">
+            <div className="flex items-center gap-3 rounded-lg border-2 border-accent px-3.25 py-2.5 transition focus-within:ring-3 focus-within:ring-accent-soft">
                 <span
                     aria-hidden="true"
-                    className="shrink-0 rounded-sm bg-accent px-2 py-1 text-xs tracking-wider text-on-accent"
+                    className="shrink-0 rounded-sm bg-accent px-2 py-1 text-xs font-semibold text-on-accent"
                 >
                     {translate('ai.badge')}
                 </span>

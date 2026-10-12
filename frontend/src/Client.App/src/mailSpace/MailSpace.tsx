@@ -501,9 +501,7 @@ function Mailboxes({
         <>
             <div className={`flex items-center px-2.25 pt-3 pb-1.5 ${folded ? 'justify-end' : 'justify-between'}`}>
                 {folded ? null : (
-                    <p className="ps-1.5 text-xs tracking-widest text-muted uppercase">
-                        {translate('mailboxes.heading')}
-                    </p>
+                    <p className="ps-1.5 text-xs font-semibold text-muted">{translate('mailboxes.heading')}</p>
                 )}
 
                 {control}

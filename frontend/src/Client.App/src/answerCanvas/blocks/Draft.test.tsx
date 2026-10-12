@@ -92,9 +92,9 @@ describe('Draft', () => {
     });
 
     it.each([
-        ['Composed', 'Local draft — nothing was sent'],
-        ['Saved', 'Saved to your drafts — nothing was sent'],
-        ['Queued', 'Waiting in the outbox — nothing has been sent yet'],
+        ['Composed', 'Local draft - nothing was sent'],
+        ['Saved', 'Saved to your drafts - nothing was sent'],
+        ['Queued', 'Waiting in the outbox - nothing has been sent yet'],
     ] as const)('says what has become of a %s draft, and that nothing left', (disposition, said) => {
         renderDraft(drafted(disposition));
 
@@ -167,7 +167,7 @@ describe('Draft', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Edit the text' }));
 
-        expect(screen.getByText('Changes stay on this screen — nothing here saves or sends the draft.')).toBeDefined();
+        expect(screen.getByText('Changes stay on this screen - nothing here saves or sends the draft.')).toBeDefined();
     });
 
     it('keeps saying so once the editor closes, the paragraph then drawing what the reader wrote', () => {
@@ -179,13 +179,13 @@ describe('Draft', () => {
         });
         fireEvent.click(screen.getByRole('button', { name: 'Stop editing' }));
 
-        expect(screen.getByText('Changes stay on this screen — nothing here saves or sends the draft.')).toBeDefined();
+        expect(screen.getByText('Changes stay on this screen - nothing here saves or sends the draft.')).toBeDefined();
     });
 
     it('says nothing about an edit nobody made, the card standing as the deployment holds it', () => {
         renderDraft(drafted());
 
-        expect(screen.queryByText('Changes stay on this screen — nothing here saves or sends the draft.')).toBeNull();
+        expect(screen.queryByText('Changes stay on this screen - nothing here saves or sends the draft.')).toBeNull();
     });
 
     it('names a block it is not the renderer for rather than drawing somebody else’s data as a draft', () => {
@@ -205,7 +205,7 @@ describe('Draft', () => {
             expect(answer.mock.calls).toEqual([['accepted'], ['declined']]);
             expect(
                 screen.getByRole('button', {
-                    name: 'Edit here — the draft to anna@contoso.example, inside the conversation',
+                    name: 'Edit here - the draft to anna@contoso.example, inside the conversation',
                 }),
             ).toBeDefined();
         });
@@ -215,7 +215,7 @@ describe('Draft', () => {
 
             fireEvent.click(
                 screen.getByRole('button', {
-                    name: 'Edit here — the draft to anna@contoso.example, inside the conversation',
+                    name: 'Edit here - the draft to anna@contoso.example, inside the conversation',
                 }),
             );
 
@@ -234,7 +234,7 @@ describe('Draft', () => {
 
             fireEvent.click(
                 screen.getByRole('button', {
-                    name: 'Edit here — the draft to anna@contoso.example, inside the conversation',
+                    name: 'Edit here - the draft to anna@contoso.example, inside the conversation',
                 }),
             );
             fireEvent.change(screen.getByRole('textbox', { name: 'Draft text' }), { target: { value: 'Agreed.' } });

@@ -121,7 +121,7 @@ export function AccountMenu({
                 className={
                     wide
                         ? `flex size-8.5 shrink-0 items-center justify-center rounded-full text-text-soft shadow-raised transition hover:-translate-y-px hover:shadow-overlay ${standing ? 'outline-2 outline-offset-2 outline-accent-line' : ''}`
-                        : 'flex min-h-13 w-full items-center gap-3.5 rounded-xl px-2.5 text-start text-text transition hover:bg-hover'
+                        : 'flex min-h-13 w-full items-center gap-3.5 rounded-md px-2.5 text-start text-text transition hover:bg-hover'
                 }
             >
                 <PersonAvatar displayName={profile.displayName} picture={profile.picture} place="menu" />
@@ -138,7 +138,7 @@ export function AccountMenu({
                     setStanding(event.newState === 'open');
                 }}
                 aria-label={translate('shell.accountMenu')}
-                className="inset-x-4 top-auto bottom-22 m-0 overflow-hidden rounded-2xl border border-line bg-panel p-0 text-base text-text shadow-overlay workspace:inset-x-auto workspace:bottom-4.5 workspace:left-26.5 workspace:w-54"
+                className="inset-x-4 top-auto bottom-22 m-0 overflow-hidden rounded-lg border border-line bg-panel p-0 text-base text-text shadow-overlay workspace:inset-x-auto workspace:bottom-4.5 workspace:left-26.5 workspace:w-54"
             >
                 <div className="flex flex-col gap-0.5 border-b border-line-soft px-3.25 py-2.75">
                     {profile.displayName === null ? null : (
@@ -162,7 +162,7 @@ export function AccountMenu({
                     className="flex w-full items-center gap-2.5 px-3.25 py-2.5 text-start transition hover:bg-hover"
                     onClick={openSettings}
                 >
-                    <Icon name="settings" className="size-4.75" />
+                    <Icon name="settings" className="size-icon-lg" />
                     {translate('settings.title')}
                 </button>
 
@@ -177,7 +177,7 @@ export function AccountMenu({
                     className="flex w-full items-center gap-2.5 border-t border-line-soft px-3.25 py-2.5 text-start text-muted transition hover:bg-hover hover:text-text"
                     onClick={onSignOut}
                 >
-                    <Icon name="logout" className="size-4.75" />
+                    <Icon name="logout" className="size-icon-lg" />
                     {translate('shell.signOut')}
                 </button>
             </div>
@@ -232,7 +232,7 @@ function Mailboxes({ accounts }: { readonly accounts: readonly MailAccount[] }) 
 
     return (
         <>
-            <p id={named} className="pt-1.5 text-2xs tracking-widest text-faint uppercase">
+            <p id={named} className="pt-1.5 text-xs font-semibold text-faint">
                 {translate('shell.mailboxes')}
             </p>
 
@@ -255,7 +255,7 @@ function Mailboxes({ accounts }: { readonly accounts: readonly MailAccount[] }) 
                             <span className="min-w-0 flex-1 truncate text-xs">{account.displayName}</span>
 
                             {account.id === inScope ? (
-                                <Icon name="check" className="size-3.5 shrink-0 text-accent-strong" />
+                                <Icon name="check" className="size-icon-xs shrink-0 text-accent-strong" />
                             ) : null}
                         </button>
                     </li>

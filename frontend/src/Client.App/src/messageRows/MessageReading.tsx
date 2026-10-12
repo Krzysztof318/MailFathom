@@ -32,7 +32,7 @@ export function MessageReading({ mark }: { readonly mark: MailEnrichmentMark }) 
                 statements about the same mark would be read out one after the other. */}
             <span
                 aria-hidden="true"
-                className="shrink-0 rounded-xs border border-line-strong px-1.25 text-2xs leading-none text-muted"
+                className="shrink-0 rounded-xs border border-line-strong px-1.25 py-px text-xs leading-3.5 text-muted"
             >
                 {translate('ai.badge')}
             </span>

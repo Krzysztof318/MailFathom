@@ -322,7 +322,7 @@ function RemoteContent({
         return (
             <>
                 <p className="flex items-center gap-2 text-sm text-muted" ref={line} role="status">
-                    <Icon name="image" className="size-4 shrink-0" />
+                    <Icon name="image" className="size-icon-sm shrink-0" />
                     {translate('body.remotePicturesShown')}
                 </p>
                 <UndrawnPictures undrawn={document.undrawnInlineImageCount} />
@@ -335,7 +335,7 @@ function RemoteContent({
     }
 
     return (
-        <aside className="flex flex-col items-start gap-2.25 rounded-xl border border-line bg-sunken px-4 py-3.25">
+        <aside className="flex flex-col items-start gap-2.25 rounded-lg border border-line bg-sunken px-4 py-3.25">
             <p className="text-md text-pretty text-text">{translate('body.remoteContentRemoved')}</p>
             <p className="text-base text-muted">
                 {translate('body.remoteContentRemovedCount', {

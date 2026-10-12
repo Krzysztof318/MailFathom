@@ -84,7 +84,7 @@ describe('SynthesizedAnswer', () => {
         [
             'Unsupported',
             'unsupported',
-            'Nothing this run found backs this — treat it as a reading rather than as a fact.',
+            'Nothing this run found backs this - treat it as a reading rather than as a fact.',
         ],
         ['Stale', 'outdated', 'This is backed, and the local copy behind it is known to be behind the mail server.'],
         [

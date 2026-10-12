@@ -29,74 +29,79 @@
 
 @import 'tailwindcss';
 
-/* Instrument Sans, the design's typeface, as the two variable faces Google Fonts publishes it in — one upright, one
-   italic, each covering the whole 400–700 range so a weight is an axis position rather than a second file. The two
-   subsets are split by `unicode-range` the way the upstream stylesheet splits them, so a reader whose mail is entirely
-   Latin-1 never pulls the extended file that Polish needs. */
+/* Geist, the design's typeface, and Geist Mono, which the design sets a literal in — a file name, an address a
+   machine reads. Each is the one variable face Google Fonts publishes it as, covering the whole 100–900 range so a
+   weight is an axis position rather than a second file, and neither family has an italic: a slanted run is the
+   upright face obliqued by the browser, which is what the design's own pages draw. The two subsets are split by
+   `unicode-range` the way the upstream stylesheet splits them, so a reader whose mail is entirely Latin-1 never pulls
+   the extended file that Polish needs. */
 @font-face {
-    font-family: 'Instrument Sans';
+    font-family: 'Geist';
     font-style: normal;
-    font-weight: 400 700;
+    font-weight: 100 900;
     font-display: swap;
-    src: url('./assets/fonts/instrument-sans-latin.woff2') format('woff2');
+    src: url('./assets/fonts/geist-latin.woff2') format('woff2');
     unicode-range:
         U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F,
         U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
 @font-face {
-    font-family: 'Instrument Sans';
+    font-family: 'Geist';
     font-style: normal;
-    font-weight: 400 700;
+    font-weight: 100 900;
     font-display: swap;
-    src: url('./assets/fonts/instrument-sans-latin-ext.woff2') format('woff2');
+    src: url('./assets/fonts/geist-latin-ext.woff2') format('woff2');
     unicode-range:
         U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF,
-        U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+        U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 
 @font-face {
-    font-family: 'Instrument Sans';
-    font-style: italic;
-    font-weight: 400 700;
+    font-family: 'Geist Mono';
+    font-style: normal;
+    font-weight: 100 900;
     font-display: swap;
-    src: url('./assets/fonts/instrument-sans-italic-latin.woff2') format('woff2');
+    src: url('./assets/fonts/geist-mono-latin.woff2') format('woff2');
     unicode-range:
         U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F,
         U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
 @font-face {
-    font-family: 'Instrument Sans';
-    font-style: italic;
-    font-weight: 400 700;
+    font-family: 'Geist Mono';
+    font-style: normal;
+    font-weight: 100 900;
     font-display: swap;
-    src: url('./assets/fonts/instrument-sans-italic-latin-ext.woff2') format('woff2');
+    src: url('./assets/fonts/geist-mono-latin-ext.woff2') format('woff2');
     unicode-range:
         U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF,
-        U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+        U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 
 @theme {
     /* Surfaces, from the page underneath everything to the chrome that sits on it. `sunken` is a region set into a
-       panel — a side column, a summary strip — and `hover` is what any of them becomes under a pointer. */
-    --color-page: oklch(0.98 0.004 88);
-    --color-panel: oklch(1 0 0);
-    --color-rail: oklch(0.951 0.006 88);
-    --color-sunken: oklch(0.969 0.005 88);
-    --color-hover: oklch(0.906 0.01 88);
+       panel — a side column, a summary strip — and `hover` is what any of them becomes under a pointer. Every neutral
+       here and in the two groups below is one hue, in both themes: a surface, a line, and the text on them differ in
+       lightness and never in temperature. */
+    --color-page: oklch(0.982 0.003 262);
+    --color-panel: oklch(0.996 0.002 262);
+    --color-rail: oklch(0.958 0.006 262);
+    --color-sunken: oklch(0.97 0.005 262);
+    --color-hover: oklch(0.925 0.01 262);
 
     /* Three line weights: one that separates regions, one that separates rows inside a region, and one that draws the
        edge of a control a person is meant to aim at — a field, a checkbox, a secondary button. */
-    --color-line: oklch(0.906 0.008 88);
-    --color-line-soft: oklch(0.949 0.005 88);
-    --color-line-strong: oklch(0.856 0.01 88);
+    --color-line: oklch(0.912 0.008 262);
+    --color-line-soft: oklch(0.95 0.005 262);
+    --color-line-strong: oklch(0.862 0.012 262);
 
-    /* Four text weights, from what a sentence is written in down to what a timestamp is. */
+    /* Four text weights, from what a sentence is written in down to what a timestamp is. The lightest still reads at
+       4.5:1 on every surface above, in both themes, so no step of the ramp is decoration only. */
     --color-text: oklch(0.24 0.014 262);
-    --color-text-soft: oklch(0.42 0.012 240);
-    --color-muted: oklch(0.565 0.01 200);
-    --color-faint: oklch(0.69 0.009 160);
+    --color-text-soft: oklch(0.4 0.014 262);
+    --color-muted: oklch(0.465 0.014 262);
+    --color-faint: oklch(0.515 0.014 262);
 
     /* The accent, and the three things it has to be able to be: the fill a primary control takes, the weight it becomes
        under a pointer, the weight it has to reach to be read as text on its own tint, and that tint with the line that
@@ -151,11 +156,12 @@
         0 1px 0 var(--color-inset) inset, 0 10px 24px var(--color-shadow-soft), 0 2px 6px var(--color-shadow-soft);
     --shadow-dialog: 0 20px 48px var(--color-shadow-strong);
 
-    /* The design's type ladder, in the order it climbs. It is finer and lower than a stock scale because a mail client
-       is dense: the row a mailbox is scanned down sets at `base`, everything said about a row sets below it, and only a
-       screen's own title reaches the top three steps. */
-    --text-2xs: 0.625rem;
-    --text-2xs--line-height: 1.4;
+    /* The design's type scale, in the order it climbs, and it is closed: text is one of these twelve sizes and nothing
+       between. The first line empties the namespace, so the steps Tailwind ships are not there to be reached for and
+       a size written against a name this block does not declare draws no size at all. It is finer and lower than a
+       stock scale because a mail client is dense: the row a mailbox is scanned down sets at `base`, everything said
+       about a row sets below it, and only a screen's own title reaches the steps above `xl`. */
+    --text-*: initial;
     --text-xs: 0.6875rem;
     --text-xs--line-height: 1.45;
     --text-sm: 0.75rem;
@@ -168,31 +174,52 @@
     --text-lg--line-height: 1.55;
     --text-xl: 1rem;
     --text-xl--line-height: 1.4;
-    --text-2xl: 1.0625rem;
+    --text-2xl: 1.125rem;
     --text-2xl--line-height: 1.35;
-    --text-3xl: 1.1875rem;
+    --text-3xl: 1.25rem;
     --text-3xl--line-height: 1.3;
     --text-4xl: 1.375rem;
     --text-4xl--line-height: 1.25;
-    --text-5xl: 2.125rem;
-    --text-5xl--line-height: 1.15;
+    --text-5xl: 1.5rem;
+    --text-5xl--line-height: 1.25;
+    --text-6xl: 1.75rem;
+    --text-6xl--line-height: 1.2;
+    --text-7xl: 2.125rem;
+    --text-7xl--line-height: 1.15;
 
-    /* The design's corners. A control takes one of the first three, a panel or a card one of the next two, and the
-       last is what a sheet rising from the bottom of a narrow window is cut with. */
+    /* The design's corners, closed the same way: 4, 6, 8, 12, 16 and 24 pixels, beside the full round a circle and a
+       pill take. */
+    --radius-*: initial;
     --radius-xs: 0.25rem;
-    --radius-sm: 0.3125rem;
-    --radius-md: 0.4375rem;
-    --radius-lg: 0.5rem;
-    --radius-xl: 0.625rem;
-    --radius-2xl: 0.75rem;
-    --radius-3xl: 0.875rem;
-    --radius-4xl: 1.125rem;
+    --radius-sm: 0.375rem;
+    --radius-md: 0.5rem;
+    --radius-lg: 0.75rem;
+    --radius-xl: 1rem;
+    --radius-2xl: 1.5rem;
 
-    /* The one corner outside that ladder, and it belongs to two surfaces: the window a message's own markup and an
-       opened file stand in over the message. The design cuts both at a corner of its own rather than at the
-       one it gives a card, so the value is named here for the surfaces that read it instead of being rounded onto the
-       nearest rung — a rung the ladder does not have. */
-    --radius-window: 0.8125rem;
+    /* How far apart the letters of a line stand, which the design moves in four places and nowhere else: a title
+       closes up a little and the largest closes up most, and the initials in an avatar open out so two capitals in a
+       circle do not read as one shape. Emptied first like the two scales above, so the steps Tailwind ships — a
+       caption tracked out among them, which the design does not draw — are not there to be reached for. */
+    --tracking-*: initial;
+    --tracking-tightest: -0.02em;
+    --tracking-tighter: -0.015em;
+    --tracking-tight: -0.01em;
+    --tracking-normal: 0em;
+    --tracking-wide: 0.02em;
+
+    /* The sizes a symbol is drawn at, which is the design's third closed scale: 12 to 40 pixels in nine steps. A
+       symbol composes against `size-icon-*` rather than against a number off the spacing grid, which is what keeps
+       one from being drawn at a size the design does not have. */
+    --spacing-icon-2xs: 0.75rem;
+    --spacing-icon-xs: 0.875rem;
+    --spacing-icon-sm: 1rem;
+    --spacing-icon-md: 1.125rem;
+    --spacing-icon-lg: 1.25rem;
+    --spacing-icon-xl: 1.375rem;
+    --spacing-icon-2xl: 1.5rem;
+    --spacing-icon-3xl: 2rem;
+    --spacing-icon-4xl: 2.5rem;
 
     /* The three widths the shell is composed at, and they are the design's own numbers rather than three
        roundings of one idea. The design's prototype asks exactly these three questions of the width it was given, and
@@ -225,19 +252,20 @@
        than a rail beside a list. It is the sign-in artboard's own number rather than a fourth shell composition. */
     --breakpoint-split: 58.75rem;
 
-    /* One row of the message list, in the two heights the design draws it. Declared here rather than in the
+    /* One row of the message list, in the heights the design draws it. Declared here rather than in the
        list because it is a density decision like any other — and because the list is arithmetic over it: the window
        that keeps a mailbox of two hundred thousand messages costing what a screenful costs measures this value off a
        rendered row rather than holding a second copy of it. It is three lines and the space around them: who wrote,
        what about, and a line for a sentence about the message rather than from it — why a search result matched, and
        what MailFathom made of the message once stage 3 lands.
 
-       The narrow one is not the wide one loosened by taste: the design draws one height at the desktop, the tablet
-       and the fold alike, and a taller row at the phone, where the list is the whole screen and a row is something a
-       thumb lands on rather than something a cursor points at. So the row is the one place a composition changes a
-       height, and it changes it at the width the phone shape begins at. */
-    --spacing-message-row: 5.6875rem;
-    --spacing-message-row-narrow: 6.875rem;
+       The narrow one is not the wide one loosened by taste: the design draws a taller row at the phone, where the
+       list is the whole screen and a row is something a thumb lands on rather than something a cursor points at. So
+       the row is the one place a composition changes a height, and it changes it at the width the phone shape begins
+       at. The wide one is taller under a finger as well, by what the mark on the row grows to there, and the base
+       layer below is where that is stated, because it is the pointer's answer rather than a width's. */
+    --spacing-message-row: 5.9375rem;
+    --spacing-message-row-narrow: 7rem;
 
     /* One row of the address book, which is one height at every width — the design draws the contact row the
        same at the phone as at the desktop, unlike the message row above it. It is here for the other reason that one
@@ -307,8 +335,8 @@
        Both are the design's, and both are a size the card is given rather than a ceiling it stops at, which is why
        they sit here beside the rail's widths rather than among the `--container-*` measures a column is read against.
        Below the workspace breakpoint neither is read, because the surface is the screen. */
-    --spacing-settings: 28.75rem;
-    --spacing-settings-card: min(78vh, 37.5rem);
+    --spacing-settings: 43.75rem;
+    --spacing-settings-card: min(92vh, 45rem);
 
     /* The two windows that stand over the message where somebody does not work in tabs — the sender's own markup and an
        opened file — in the composition where each is a window rather than the whole screen. Each is a width and a
@@ -387,7 +415,7 @@
 
     /* Motion is decided once. A component writes `transition` and gets these; one that writes a duration of its own is
        the same drift as one that writes a hexadecimal colour. */
-    --default-transition-duration: 120ms;
+    --default-transition-duration: 160ms;
     --default-transition-timing-function: ease;
 
     /* The one animation the client runs, and the same rule decides it once: how fast a symbol saying that something is
@@ -615,9 +643,8 @@
     }
 
     --font-sans:
-        'Instrument Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
-        sans-serif;
-    --font-mono: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, monospace;
+        'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --font-mono: 'Geist Mono', ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, monospace;
 }
 
 /* What tells one mailbox from the next wherever they are listed: a mark in front of each account, taking these hues in
@@ -676,9 +703,9 @@
     --color-line-strong: oklch(0.416 0.022 262);
 
     --color-text: oklch(0.945 0.007 262);
-    --color-text-soft: oklch(0.835 0.011 262);
-    --color-muted: oklch(0.705 0.013 262);
-    --color-faint: oklch(0.585 0.015 262);
+    --color-text-soft: oklch(0.845 0.011 262);
+    --color-muted: oklch(0.765 0.013 262);
+    --color-faint: oklch(0.7 0.014 262);
 
     /* The accent inverts its direction here rather than keeping its light values: on a dark panel the weight that has
        to be reachable as text is lighter than the fill, not darker, which is why `strong` and `deep` climb. */
@@ -822,6 +849,26 @@
         color: var(--color-text);
         font-size: var(--text-base);
         line-height: var(--text-base--line-height);
+        font-variant-numeric: tabular-nums;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+    }
+
+    /* How the design sets a figure and a run of prose everywhere, stated on the body above and here rather than per
+       screen: digits are one width each, so a count or a time keeps its column as it changes, and a paragraph, a list
+       item and a heading break without leaving one word alone on their last line. */
+    p,
+    li,
+    h1,
+    h2,
+    h3,
+    h4 {
+        text-wrap: pretty;
+    }
+
+    ::selection {
+        background-color: var(--color-accent-soft);
+        color: var(--color-text);
     }
 
     /* Focus is always visible, and it is decided once here rather than by every control remembering a ring utility.
@@ -829,6 +876,26 @@
     :focus-visible {
         outline: 2px solid var(--color-accent);
         outline-offset: 2px;
+    }
+
+    /* What a control does under a press, decided once for the reason the ring above is: it gives a little, which is
+       the design's answer to *did that land* before anything the press asked for has come back. It is asked of what
+       declares itself a button, a tab or a menu item and of nothing else — a list row is swiped and held as well as
+       pressed, and one shrinking under a finger that is about to drag it would read as a fault. A control that cannot
+       be pressed is left out in both of the forms this client draws one in, so a refused act does not answer as though
+       it had been taken. `:where` keeps both rules at no specificity, so a control that states a scale or a
+       transition of its own keeps it; the colours travel on the theme's own defaults, which is what a control gets
+       under a pointer when it says nothing. The movement is removed under `prefers-reduced-motion` with every other
+       transition, by the rule at the foot of this file. */
+    :where(button, [role='button'], [role='tab'], [role='menuitem']) {
+        transition:
+            scale 140ms cubic-bezier(0.16, 1, 0.3, 1),
+            background-color var(--default-transition-duration) var(--default-transition-timing-function),
+            color var(--default-transition-duration) var(--default-transition-timing-function);
+    }
+
+    :where(button, [role='button'], [role='tab'], [role='menuitem']):active:not(:disabled, [aria-disabled='true']) {
+        scale: 0.98;
     }
 
     /* What the pointer says over something that can be pressed, decided once here for the same reason the ring above
@@ -859,19 +926,18 @@
         pointer-events: none;
     }
 
-    /* The quotation a message carries is the one surface in this client where the quiet tones sit on a coloured
-       background rather than on the page, and neither of them was chosen against it: on the highlight, `muted` reads
-       at 4.41 in the dark theme and 3.85 in the light one, and `warning` at 3.22 in the light one — each below the
-       4.5:1 a body-sized sentence is owed. The sentences that land there are not decoration either: where a link goes
-       is drawn in `muted` and what is wrong with it in `warning`, which is the one reading somebody has to be able to
-       make before they follow it.
+    /* The quotation a message carries is the one surface in this client where a quiet tone sits on a coloured
+       background rather than on the page, and one of the two that land there was not chosen against it: on the
+       highlight, `warning` reads at 3.22 in the light theme — below the 4.5:1 a body-sized sentence is owed — where
+       `muted`, the other, reads at 5.92 and at 5.48 in the dark one. The sentence that lands there is not decoration
+       either: what is wrong with a link is drawn in `warning`, which is the one reading somebody has to be able to make
+       before they follow it.
 
-       So the surface restates the two tones rather than every component inside it learning what it is drawn on — a
-       quotation nests, and the components that write those sentences are the same ones that write them on the page.
-       Each is moved to the step of its own family that carries a whole sentence, which is what those steps are for:
-       `text-soft` reads at 6.97 and 7.16, and `warning-text` at 7.55 and 6.32. */
+       So the surface restates the tone rather than every component inside it learning what it is drawn on — a
+       quotation nests, and the components that write that sentence are the same ones that write it on the page. It is
+       moved to the step of its own family that carries a whole sentence, which is what that step is for:
+       `warning-text` reads at 6.32 in the light theme and 7.55 in the dark one. */
     blockquote {
-        --color-muted: var(--color-text-soft);
         --color-warning: var(--color-warning-text);
     }
 
@@ -902,6 +968,13 @@
         input:not(.sr-only):not([type='checkbox']):not([type='radio']):not([type='range']) {
             min-width: --spacing(11);
             min-height: --spacing(11);
+        }
+
+        /* The message row at the wide compositions, which the design draws taller where the mark on it is the size
+           of a finger: the tablet and the fold, and a touch screen at the desktop's width. The phone's row is a token
+           of its own and is already the tallest of the three. */
+        :root {
+            --spacing-message-row: 6.4375rem;
         }
     }
 

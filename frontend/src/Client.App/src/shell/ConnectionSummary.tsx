@@ -174,7 +174,7 @@ function Freshness({ connection }: { readonly connection: Connection }) {
                 {translate(freshness.message)}
             </summary>
 
-            <div className="mt-2 flex flex-col gap-2 rounded-lg bg-sunken px-3 py-2">
+            <div className="mt-2 flex flex-col gap-2 rounded-md bg-sunken px-3 py-2">
                 {oldest === null ? null : <p>{translate('accounts.oldest', { age: oldest })}</p>}
 
                 <ul className="flex flex-col gap-1">

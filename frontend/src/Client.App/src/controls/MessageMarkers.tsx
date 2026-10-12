@@ -52,7 +52,7 @@ export function MessageMarkers({
 function Marker({ name, label }: { readonly name: IconName; readonly label: string }) {
     return (
         <span className="text-muted">
-            <Icon name={name} className="size-4" />
+            <Icon name={name} className="size-icon-sm" />
             <span className="sr-only">{label}</span>
         </span>
     );

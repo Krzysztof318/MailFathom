@@ -212,7 +212,7 @@ function OtherParticipants({
                     compact ? 'ms-px text-sm' : '-ms-1.25 text-base'
                 }`}
             >
-                <Icon name="arrow_right" className="size-4.25 shrink-0 text-faint transition group-open:rotate-90" />
+                <Icon name="arrow_right" className="size-icon-md shrink-0 text-faint transition group-open:rotate-90" />
 
                 <span className="min-w-0 truncate">{children}</span>
 

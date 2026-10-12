@@ -75,7 +75,7 @@ test('opens what MailFathom made of a message from its own row, with the passage
 
     const checking = page.getByRole('dialog', { name: 'What MailFathom read from this message' });
 
-    await expect(checking.getByText('A model — agents/reader')).toBeVisible();
+    await expect(checking.getByText('A model - agents/reader')).toBeVisible();
     await expect(checking.getByText('Please confirm the bays you want before the end of the week.')).toBeVisible();
 });
 

@@ -95,7 +95,7 @@ describe('ThreadState', () => {
         // The hour is written out rather than compared against a formatter built here, because that comparison passes
         // just as happily for a block that named a zone of its own. New York is four hours behind in August.
         expect(
-            screen.getByText(/^Karolina Kowalska — Counter-proposal with a 5% cap · due 8\/28\/26, 5:00/u),
+            screen.getByText(/^Karolina Kowalska - Counter-proposal with a 5% cap · due 8\/28\/26, 5:00/u),
         ).toBeDefined();
     });
 
@@ -109,7 +109,7 @@ describe('ThreadState', () => {
         renderStanding(stood({ commitments: [{ ...counterProposal, dueAt: 'sometime next spring' }] }));
 
         expect(
-            screen.getByText('Karolina Kowalska — Counter-proposal with a 5% cap · due date not readable'),
+            screen.getByText('Karolina Kowalska - Counter-proposal with a 5% cap · due date not readable'),
         ).toBeDefined();
     });
 

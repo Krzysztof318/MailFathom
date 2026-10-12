@@ -142,7 +142,7 @@ export function TaskRow({
         <li
             ref={onElement}
             tabIndex={-1}
-            className={`flex flex-wrap items-center gap-x-3 gap-y-2.5 rounded-xl border p-3 transition ${
+            className={`flex flex-wrap items-center gap-x-3 gap-y-2.5 rounded-lg border p-3 transition ${
                 selected ? 'border-accent-line bg-accent-soft' : 'border-line bg-panel hover:bg-hover'
             } ${completed ? 'opacity-60' : ''}`}
             onKeyDown={pressed}
@@ -187,7 +187,7 @@ export function TaskRow({
                         }`}
                         onClick={onToggleSelected}
                     >
-                        <Icon name="check" className="size-3.5" />
+                        <Icon name="check" className="size-icon-xs" />
                     </button>
                 ) : null}
 
@@ -220,7 +220,7 @@ export function TaskRow({
                             className="flex items-center gap-1.5 self-start rounded-md px-1.5 py-1 text-sm text-muted transition hover:bg-hover hover:text-text"
                             onClick={onOpenSource}
                         >
-                            <Icon name="open_in_new" className="size-4" />
+                            <Icon name="open_in_new" className="size-icon-sm" />
                             {translate('tasks.openSource')}
                         </button>
                     )}
@@ -238,7 +238,7 @@ export function TaskRow({
                                 count: wordReminderCount(task.reminders.length, locale, translate),
                             },
                         )}
-                        className={`flex items-center gap-1 rounded-xl border px-2.25 py-1 text-xs font-semibold transition hover:border-accent hover:text-accent-deep ${
+                        className={`flex items-center gap-1 rounded-md border px-2.25 py-1 text-xs font-semibold transition hover:border-accent hover:text-accent-deep ${
                             task.reminders.length === 0
                                 ? 'border-line bg-sunken text-muted'
                                 : 'border-accent-line bg-accent-soft text-accent-deep'
@@ -247,7 +247,7 @@ export function TaskRow({
                     >
                         <Icon
                             name={task.reminders.length === 0 ? 'notifications' : 'notifications_active'}
-                            className="size-4"
+                            className="size-icon-sm"
                         />
                         {task.reminders.length > 1 ? counted.format(task.reminders.length) : null}
                     </button>
@@ -272,7 +272,7 @@ export function TaskRow({
                     <span
                         ref={chip}
                         tabIndex={-1}
-                        className="rounded-4xl border border-line bg-rail px-2.5 py-1 text-sm text-muted"
+                        className="rounded-xl border border-line bg-rail px-2.5 py-1 text-sm text-muted"
                     >
                         {translate('tasks.inTheCalendar')}
                     </span>

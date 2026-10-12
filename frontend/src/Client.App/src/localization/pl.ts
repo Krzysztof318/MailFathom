@@ -24,7 +24,7 @@ export const pl: Catalogue = {
     'shell.mailboxes': 'Skrzynki',
     'shell.tabMode': 'Tryb zakładek',
     'shell.tabModeTooNarrow': 'dostępne na szerszym ekranie',
-    'control.notBuiltYet': '{control} — jeszcze niezbudowane',
+    'control.notBuiltYet': '{control} – jeszcze niezbudowane',
     'ai.badge': 'AI',
     'agent.history': 'Historia',
     'agent.new': 'Nowa',
@@ -78,7 +78,7 @@ export const pl: Catalogue = {
     'agent.thread': 'Rozmowa z agentem',
     'agent.answer': 'Odpowiedź agenta',
     'agent.greeting':
-        'Cześć. Mogę napisać wiadomość, rozplanować Twój dzień albo sprawdzić, co utknęło. Wynik zawsze pokazuję do akceptacji — nic nie wychodzi bez Ciebie.',
+        'Cześć. Mogę napisać wiadomość, rozplanować Twój dzień albo sprawdzić, co utknęło. Wynik zawsze pokazuję do akceptacji – nic nie wychodzi bez Ciebie.',
     'agent.scopeLine': '· {scope}',
     'agent.scope.mailbox': 'Twoja poczta',
     'agent.scope.thread': 'ten wątek',
@@ -90,12 +90,12 @@ export const pl: Catalogue = {
     'agent.context.discoveryRun': 'Kontekst: odpowiedź z Odkrywania „{title}”',
     'agent.clearContext': 'Usuń kontekst',
     'agent.askAgent': 'Zapytaj agenta',
-    'agent.goWithThread': 'Przejdź do agenta — zapytam własnymi słowami',
+    'agent.goWithThread': 'Przejdź do agenta – zapytam własnymi słowami',
     'agent.working': 'Agent przegląda Twoją pocztę…',
     'agent.returnToConversation': 'Wróć do rozmowy',
     'agent.statusFallback': 'Przeglądam Twoją pocztę',
     'agent.failed':
-        'Agent nie zdołał dokończyć tej odpowiedzi. To, co dotarło, zostaje — zapytaj ponownie, aby kontynuować.',
+        'Agent nie zdołał dokończyć tej odpowiedzi. To, co dotarło, zostaje – zapytaj ponownie, aby kontynuować.',
     'agent.reading': 'Wczytuję rozmowę…',
     'agent.readFailed.unauthenticated': 'Sesja wygasła, więc nie udało się wczytać rozmowy. Zaloguj się ponownie.',
     'agent.readFailed.unauthorized': 'To konto nie ma uprawnień do czytania rozmów z agentem.',
@@ -111,17 +111,17 @@ export const pl: Catalogue = {
     'agent.starter.slipped': 'Co umknęło w tym tygodniu?',
     'agent.starter.cases': 'Stan otwartych spraw',
     'agent.composerLabel': 'Powiedz agentowi, co ma zrobić',
-    'agent.composerPlaceholder': 'Powiedz, co mam zrobić — napisać, zaplanować, sprawdzić',
+    'agent.composerPlaceholder': 'Powiedz, co mam zrobić – napisać, zaplanować, sprawdzić',
     'agent.sendKey': '⏎',
     'agent.send': 'Wyślij',
     'agent.cancel': 'Anuluj',
     'agent.cancelRunning': 'Zatrzymaj to, co robi agent',
-    'agent.cancelIdle': 'Anuluj — nic nie jest w toku',
-    'agent.footer': 'Agent proponuje działania — nic nie zostanie wysłane bez Twojej zgody.',
+    'agent.cancelIdle': 'Anuluj – nic nie jest w toku',
+    'agent.footer': 'Agent proponuje działania – nic nie zostanie wysłane bez Twojej zgody.',
     'agent.notSent.unauthenticated': 'Sesja wygasła przed wysłaniem. Zaloguj się ponownie i wyślij to jeszcze raz.',
     'agent.notSent.unauthorized': 'To konto nie ma uprawnień do rozmowy z agentem.',
     'agent.notSent.unavailable':
-        'Nie wysłano — nie udało się połączyć z wdrożeniem albo odpowiedź, do której to było, właśnie się zakończyła. Wyślij ponownie.',
+        'Nie wysłano – nie udało się połączyć z wdrożeniem albo odpowiedź, do której to było, właśnie się zakończyła. Wyślij ponownie.',
     'agent.notSent.unreadable':
         'Wdrożenie przyjęło to w sposób, którego ten klient nie potrafi odczytać. Otwórz rozmowę z historii, aby sprawdzić, czy dotarło.',
     'agent.notSent.missing': 'Tej rozmowy już nie ma, więc nic nie zostało wysłane. Zacznij nową.',
@@ -137,7 +137,7 @@ export const pl: Catalogue = {
         'Sesja skończyła się, zanim pytanie zostało wysłane. Zaloguj się i zapytaj ponownie.',
     'discover.notAsked.unauthorized': 'To konto nie może zadawać pytań o pocztę.',
     'discover.notAsked.unavailable':
-        'Wdrożenie nie rozpoczęło uruchomienia dla tego pytania — może być niedostępne albo mogło odmówić tego, o co pytasz. Tak czy inaczej nic nie zostało przeczytane, więc można zapytać ponownie.',
+        'Wdrożenie nie rozpoczęło uruchomienia dla tego pytania – może być niedostępne albo mogło odmówić tego, o co pytasz. Tak czy inaczej nic nie zostało przeczytane, więc można zapytać ponownie.',
     'discover.notAsked.unreadable':
         'Wdrożenie przyjęło to pytanie, ale odpowiedziało uruchomieniem, którego ten klient nie potrafi odczytać. Warto zgłosić to jako usterkę.',
     'answerCanvas.blocks': 'Bloki odpowiedzi',
@@ -145,37 +145,37 @@ export const pl: Catalogue = {
     'answerCanvas.nothing': 'To uruchomienie nie dało nic do pokazania.',
     'answerCanvas.planAhead':
         'Ten wynik korzysta z nowszej wersji schematu planu (v{plan}) niż obsługuje ta aplikacja (v{client}). Nowe rodzaje bloków mogły zostać pominięte.',
-    'answerBlock.loading': '{block} — wciąż powstaje.',
+    'answerBlock.loading': '{block} – wciąż powstaje.',
     'answerBlock.partial': 'Część danych źródłowych jest jeszcze odczytywana.',
     'answerBlock.empty': 'Nie było czym wypełnić tego bloku.',
     'answerBlock.error': 'Nie udało się zbudować tego bloku.',
-    'answerBlock.offline': 'Brak połączenia z serwerem — tego bloku nie można wczytać.',
+    'answerBlock.offline': 'Brak połączenia z serwerem – tego bloku nie można wczytać.',
     'answerBlock.unauthenticated':
         'Sesja zakończyła się w trakcie odczytu tej odpowiedzi. Zaloguj się ponownie, aby zobaczyć resztę.',
     'answerBlock.unauthorized': 'To konto nie ma uprawnień do odczytania tej odpowiedzi.',
     'answerBlock.unreadable':
-        'Dalsza część tej odpowiedzi przyszła w postaci, której ten klient nie potrafi odczytać — to usterka warta zgłoszenia.',
+        'Dalsza część tej odpowiedzi przyszła w postaci, której ten klient nie potrafi odczytać – to usterka warta zgłoszenia.',
     'answerBlock.unrecognised': 'Nieznany blok',
     'answerBlock.unrecognisedType': 'typ: {named}',
     'answerBlock.unrecognisedBody':
-        'Ten klient nie rozpoznaje rodzaju bloku „{named}”. Blok został pominięty — reszta wyniku wyświetliła się normalnie.',
+        'Ten klient nie rozpoznaje rodzaju bloku „{named}”. Blok został pominięty – reszta wyniku wyświetliła się normalnie.',
     'answerBlock.unrecognisedRemedy': 'Aktualizacja aplikacji może odblokować ten rodzaj bloku.',
-    'run.working': 'Przeszukuję Twoją pocztę — bloki pojawiają się, gdy są gotowe.',
+    'run.working': 'Przeszukuję Twoją pocztę – bloki pojawiają się, gdy są gotowe.',
     'run.retrieval': 'Przeszukano {lookups} z {planned} zapytań · {passages} fragmentów jak dotąd.',
     'run.stop': 'Anuluj',
-    'run.stopping': 'Anuluję to uruchomienie — to, co już przyszło, zostaje.',
+    'run.stopping': 'Anuluję to uruchomienie – to, co już przyszło, zostaje.',
     'run.stopNotReached': 'Anulowanie nie dotarło do serwera, więc uruchomienie wciąż trwa. Spróbuj ponownie.',
     'run.allowanceReturns': 'Pytania będzie można zadawać ponownie od {at}.',
     'run.answeredBy': 'Odpowiedział {endpoint}',
     'run.answeredByModel': 'Odpowiedział {endpoint} ({model})',
     'run.spend':
         '{calls} z {mostCalls} wywołań · {tokens} z {mostTokens} tokenów · {characters} z {mostCharacters} znaków, z {messages} wiadomości',
-    'run.spendFloor': 'Liczone z tego, co zgłosił dostawca — to dolna granica, a nie rachunek.',
+    'run.spendFloor': 'Liczone z tego, co zgłosił dostawca – to dolna granica, a nie rachunek.',
     'run.ended.completed': 'To uruchomienie zakończyło się.',
     'run.ended.cancelled':
         'To uruchomienie zostało anulowane na Twoją prośbę. To, co przyszło, zostaje; to, co wydano, pozostaje wydane.',
     'run.ended.gone':
-        'Ten serwer nie przechowuje już tego uruchomienia. To, co przyszło, zostaje — ponowne pytanie zaczyna nowe.',
+        'Ten serwer nie przechowuje już tego uruchomienia. To, co przyszło, zostaje – ponowne pytanie zaczyna nowe.',
     'run.ended.periodSpent':
         'Ten serwer wydał tyle, ile obecnie dopuszcza na odpowiadanie. Nic w Twoim pytaniu tego nie spowodowało.',
     'run.ended.runSpent':
@@ -198,10 +198,10 @@ export const pl: Catalogue = {
     'answer.confidenceModerate': 'umiarkowana pewność',
     'answer.confidenceLow': 'niska pewność',
     'answer.supported': 'potwierdzone',
-    'answer.supportedNote': 'Korespondencja to potwierdza — ze źródeł aktualnych w chwili odczytu.',
+    'answer.supportedNote': 'Korespondencja to potwierdza – ze źródeł aktualnych w chwili odczytu.',
     'answer.unsupported': 'niepotwierdzone',
     'answer.unsupportedNote':
-        'Nic, co znalazło to uruchomienie, tego nie potwierdza — potraktuj to jako odczyt, nie jako fakt.',
+        'Nic, co znalazło to uruchomienie, tego nie potwierdza – potraktuj to jako odczyt, nie jako fakt.',
     'answer.outdated': 'nieaktualne',
     'answer.outdatedNote':
         'To jest potwierdzone, ale lokalna kopia źródła jest znana jako zaległa wobec serwera poczty.',
@@ -214,15 +214,15 @@ export const pl: Catalogue = {
     'answer.citationCount.many': '{count} cytowań',
     'answer.citationCount.other': '{count} cytowania',
     'answer.citation': 'Cytowanie {position}: {source}',
-    'answer.citationUndeclared': 'Cytowanie {position} — ten klient nie otrzymał źródła, które za nim stoi',
+    'answer.citationUndeclared': 'Cytowanie {position} – ten klient nie otrzymał źródła, które za nim stoi',
     'answer.citationUnfollowable':
-        'Cytowanie {position}: {source} — ten klient nie potrafi otworzyć wskazanego miejsca',
+        'Cytowanie {position}: {source} – ten klient nie potrafi otworzyć wskazanego miejsca',
     'answer.evidenceCount.one': '{count} pozycja · wg trafności',
     'answer.evidenceCount.few': '{count} pozycje · wg trafności',
     'answer.evidenceCount.many': '{count} pozycji · wg trafności',
     'answer.evidenceCount.other': '{count} pozycji · wg trafności',
     'answer.evidenceEmpty': 'Żaden dokument nie przekroczył progu trafności dla tego zapytania.',
-    'answer.evidenceItem': 'Dowód: {source} — trafność {relevance}, {freshness}',
+    'answer.evidenceItem': 'Dowód: {source} – trafność {relevance}, {freshness}',
     'answer.relevance': 'trafność {share}',
     'answer.freshnessCurrent': 'aktualne · {at}',
     'answer.freshnessStale': 'zaległe · {at}',
@@ -232,7 +232,7 @@ export const pl: Catalogue = {
     'answer.sourceDepicted': 'opis obrazu',
     'answer.sourcePrivate': 'źródło prywatne',
     'answer.sourcePrivateName': 'Źródło prywatne',
-    'answer.sourcePrivateBody': 'Treść niedostępna do wglądu — wniosek wyciągnięty z tego źródła pozostaje w wyniku.',
+    'answer.sourcePrivateBody': 'Treść niedostępna do wglądu – wniosek wyciągnięty z tego źródła pozostaje w wyniku.',
     'answer.timelineLabel': 'Oś czasu',
     'answer.timelineCount.one': '{count} zdarzenie',
     'answer.timelineCount.few': '{count} zdarzenia',
@@ -246,7 +246,7 @@ export const pl: Catalogue = {
     'answer.factTableCount.few': '{count} wiersze',
     'answer.factTableCount.many': '{count} wierszy',
     'answer.factTableCount.other': '{count} wiersza',
-    'answer.factTableEmpty': 'Żadna kolumna nie miała pokrycia w źródłach — tabela pozostaje pusta.',
+    'answer.factTableEmpty': 'Żadna kolumna nie miała pokrycia w źródłach – tabela pozostaje pusta.',
     'answer.factCellUnstated': 'nie podano',
     'answer.columnSubject': 'Czego dotyczy',
     'answer.columnParty': 'Strona',
@@ -265,7 +265,7 @@ export const pl: Catalogue = {
     'answer.galleryCount.other': '{count} pliku',
     'answer.galleryEmpty': 'Wiadomości w tym zakresie nie miały załączników.',
     'answer.galleryFrom': '{size} · z {message}',
-    'answer.galleryItem': 'Załącznik: {name}, {size}, {availability} — z {message}',
+    'answer.galleryItem': 'Załącznik: {name}, {size}, {availability} – z {message}',
     'answer.attachmentStored': 'dostępny',
     'answer.attachmentNotStored': 'niezapisany',
     'answer.attachmentRemoved': 'usunięty',
@@ -285,7 +285,7 @@ export const pl: Catalogue = {
     'evidence.unauthenticated':
         'Sesja zakończyła się w trakcie otwierania tego źródła. Zaloguj się ponownie, aby je zobaczyć.',
     'evidence.unauthorized': 'To konto nie ma prawa czytać tego źródła.',
-    'evidence.unavailable': 'Brak połączenia z serwerem — nie można otworzyć tego źródła.',
+    'evidence.unavailable': 'Brak połączenia z serwerem – nie można otworzyć tego źródła.',
     'evidence.unreadable': 'Źródło dotarło w postaci, której ten klient nie odczytał; to usterka warta zgłoszenia.',
     'evidence.missing': 'To wdrożenie nie przechowuje już wiadomości stojącej za tym źródłem.',
     'answer.peopleLabel': 'Osoby',
@@ -311,21 +311,21 @@ export const pl: Catalogue = {
     'threadStanding.noCommitments': 'Nikt się do niczego nie zobowiązał.',
     'threadStanding.commitment': '{what}',
     'threadStanding.commitmentDue': '{what} · termin {when}',
-    'threadStanding.commitmentOwedBy': '{name} — {what}',
-    'threadStanding.commitmentOwedByDue': '{name} — {what} · termin {when}',
+    'threadStanding.commitmentOwedBy': '{name} – {what}',
+    'threadStanding.commitmentOwedByDue': '{name} – {what} · termin {when}',
     'threadStanding.commitmentDueUnreadable': '{what} · data terminu nieczytelna',
-    'threadStanding.commitmentOwedByDueUnreadable': '{name} — {what} · data terminu nieczytelna',
+    'threadStanding.commitmentOwedByDueUnreadable': '{name} – {what} · data terminu nieczytelna',
     'threadStanding.empty': 'Ta rozmowa nie zawiera jeszcze ustaleń, pytań otwartych ani zobowiązań.',
     'draft.label': 'Szkic',
-    'draft.composed': 'Szkic lokalny — nic nie zostało wysłane',
-    'draft.saved': 'Zapisany w Twoich szkicach — nic nie zostało wysłane',
-    'draft.queued': 'Czeka w skrzynce nadawczej — nic nie zostało jeszcze wysłane',
+    'draft.composed': 'Szkic lokalny – nic nie zostało wysłane',
+    'draft.saved': 'Zapisany w Twoich szkicach – nic nie zostało wysłane',
+    'draft.queued': 'Czeka w skrzynce nadawczej – nic nie zostało jeszcze wysłane',
     'draft.to': 'Do:',
     'draft.subject': 'Temat:',
     'draft.bodyLabel': 'Treść szkicu',
     'draft.edit': 'Edytuj treść',
     'draft.stopEditing': 'Zakończ edycję',
-    'draft.editKept': 'Zmiany zostają na tym ekranie — nic tutaj nie zapisuje ani nie wysyła szkicu.',
+    'draft.editKept': 'Zmiany zostają na tym ekranie – nic tutaj nie zapisuje ani nie wysyła szkicu.',
     'suggestedAction.label': 'Proponowane działanie',
     'suggestedAction.replyToThread': 'Odpowiedz w tej rozmowie',
     'suggestedAction.forwardEmail': 'Przekaż wiadomość komuś innemu',
@@ -334,7 +334,7 @@ export const pl: Catalogue = {
     'suggestedAction.openThread': 'Przeczytaj całą rozmowę',
     'suggestedAction.searchAgain': 'Poszukaj ponownie z tym, co udało się ustalić',
     'suggestedAction.createMailRule': 'Utwórz regułę, która sama posegreguje taką pocztę',
-    'suggestedAction.readsOnly': 'nic się nie zmienia — tylko coś Ci pokaże',
+    'suggestedAction.readsOnly': 'nic się nie zmienia – tylko coś Ci pokaże',
     'suggestedAction.changesMailbox': 'coś zmieni się w Twojej skrzynce i możesz to cofnąć',
     'suggestedAction.sendsMail': 'poczta opuści to wdrożenie, czego nic tutaj nie odwróci',
     'suggestedAction.take': 'Zrób to',
@@ -342,21 +342,21 @@ export const pl: Catalogue = {
     'suggestedAction.declineName': 'Odrzuć: {title}',
     'suggestedAction.done': 'Zrobione',
     'suggestedAction.failed': 'Nie udało się tego zrobić.',
-    'suggestedAction.empty': 'Nie ma tu nic wartego zrobienia — ta rozmowa nie wymaga żadnego kroku.',
+    'suggestedAction.empty': 'Nie ma tu nic wartego zrobienia – ta rozmowa nie wymaga żadnego kroku.',
     'suggestedAction.error': 'Nie udało się przygotować tej propozycji. Model nie odpowiedział na czas.',
     'draft.send': 'Wyślij',
     'draft.sendName': 'Wyślij szkic do {to}',
     'draft.sendEditedName': 'Wyślij poprawiony szkic do {to}',
     'draft.editHere': 'Edytuj tutaj',
-    'draft.editHereName': 'Edytuj tutaj — szkic do {to}, w tej rozmowie',
+    'draft.editHereName': 'Edytuj tutaj – szkic do {to}, w tej rozmowie',
     'draft.discard': 'Odrzuć',
     'draft.discardName': 'Odrzuć szkic do {to}',
     'draft.stopEditingName': 'Zakończ edycję szkicu do {to}',
     'draft.editedUnsendable':
-        'Poprawionej treści nie da się jeszcze stąd wysłać — można wysłać tylko szkic w zaproponowanej postaci. Przywróć treść, aby go wysłać, albo przenieś swoje zmiany do odpowiedzi.',
+        'Poprawionej treści nie da się jeszcze stąd wysłać – można wysłać tylko szkic w zaproponowanej postaci. Przywróć treść, aby go wysłać, albo przenieś swoje zmiany do odpowiedzi.',
     'draft.done': 'Wysłano',
     'draft.failed': 'Nie udało się tego wysłać.',
-    'draft.empty': 'Nie ma czego szkicować — ostatnia wiadomość w tej rozmowie jest Twoja.',
+    'draft.empty': 'Nie ma czego szkicować – ostatnia wiadomość w tej rozmowie jest Twoja.',
     'draft.error': 'Nie udało się przygotować tej propozycji. Model nie odpowiedział na czas.',
     'eventProposal.label': 'Propozycja wydarzenia',
     'eventProposal.when': 'Kiedy',
@@ -367,10 +367,10 @@ export const pl: Catalogue = {
     'eventProposal.anotherTime': 'Inny termin',
     'eventProposal.anotherTimeName': 'Poproś o inny termin dla „{title}”',
     'eventProposal.anotherTimeLine': 'Znajdź inny termin dla „{title}”',
-    'eventProposal.declineName': 'Odrzuć — nie dodawaj „{title}” do kalendarza',
+    'eventProposal.declineName': 'Odrzuć – nie dodawaj „{title}” do kalendarza',
     'eventProposal.done': 'Dodano do kalendarza',
     'eventProposal.failed': 'Nie udało się dodać tego do kalendarza.',
-    'eventProposal.empty': 'W tym tygodniu nie ma wystarczająco długiego wolnego terminu — nie ma czego zaproponować.',
+    'eventProposal.empty': 'W tym tygodniu nie ma wystarczająco długiego wolnego terminu – nie ma czego zaproponować.',
     'eventProposal.error': 'Nie udało się przygotować tej propozycji. Kalendarz nie odpowiedział.',
     'taskProposal.label': 'Propozycja zadania',
     'taskProposal.due': 'Termin',
@@ -387,14 +387,14 @@ export const pl: Catalogue = {
     'proposal.done': 'zrobione',
     'proposal.notDone': 'nie zrobiono',
     'proposal.declined': 'odrzucone',
-    'proposal.declinedLine': 'Odrzucono — nic nie zostało zrobione',
+    'proposal.declinedLine': 'Odrzucono – nic nie zostało zrobione',
     'proposal.decline': 'Odrzuć',
     'proposal.tryAgain': 'Spróbuj ponownie',
     'proposal.tryAgainName': 'Spróbuj ponownie: {title}',
     'proposal.retryName': 'Spróbuj ponownie: {block}',
     'proposal.openCalendar': 'Otwórz kalendarz',
     'proposal.openThread': 'Otwórz wątek',
-    'proposal.lookName': '{look} — opuszcza rozmowę, możesz od razu do niej wrócić',
+    'proposal.lookName': '{look} – opuszcza rozmowę, możesz od razu do niej wrócić',
     'proposal.refused.unauthenticated':
         'Sesja wygasła, zanim to zostało rozstrzygnięte. Zaloguj się ponownie i odpowiedz jeszcze raz.',
     'proposal.refused.unauthorized': 'To konto nie może odpowiadać na propozycje agenta.',
@@ -425,7 +425,7 @@ export const pl: Catalogue = {
     'space.tasks': 'Zadania',
     'space.calendar': 'Kalendarz',
     'space.people': 'Kontakty',
-    'space.notBuiltYet': '{space} — jeszcze niezbudowane',
+    'space.notBuiltYet': '{space} – jeszcze niezbudowane',
     'space.pending': 'Ta przestrzeń nie jest jeszcze zbudowana. Jest tu rama wokół niej: jej adres i nawigacja.',
 
     'intent.label': 'Zapytaj swoją pocztę',
@@ -462,7 +462,7 @@ export const pl: Catalogue = {
 
     'signIn.claim': 'Twoja poczta zostaje na Twoim serwerze.',
     'signIn.claimExplanation':
-        'Łączysz się z serwerem MailFathom swojej organizacji. Indeksowanie i analiza wiadomości dzieją się po jego stronie — nic nie trafia do chmury bez Twojej zgody.',
+        'Łączysz się z serwerem MailFathom swojej organizacji. Indeksowanie i analiza wiadomości dzieją się po jego stronie – nic nie trafia do chmury bez Twojej zgody.',
     'signIn.revealPassword': 'Pokaż',
     'signIn.hidePassword': 'Ukryj',
     'signIn.revealPasswordControl': 'Pokaż hasło',
@@ -474,7 +474,7 @@ export const pl: Catalogue = {
     'signIn.signInWithProvider': 'Zaloguj się',
     'signIn.providerOpensInBrowser': '{provider} otworzy się w Twojej przeglądarce.',
     'signIn.openingProvider': 'Otwieram {provider}…',
-    'signIn.finishInBrowser': 'Dokończ logowanie w oknie przeglądarki — ten ekran podejmie sesję, gdy wrócisz.',
+    'signIn.finishInBrowser': 'Dokończ logowanie w oknie przeglądarki – ten ekran podejmie sesję, gdy wrócisz.',
     'signIn.continueToProvider': 'Przejdź do {provider}',
     'signIn.noMethods':
         'To wdrożenie nie udostępnia żadnej metody logowania. Sprawdź adres albo poproś osobę, która je prowadzi, o skonfigurowanie jednej.',
@@ -524,20 +524,20 @@ export const pl: Catalogue = {
         'Nie udało się zapisać tego logowania na tej maszynie, więc przy następnym otwarciu MailFathom ponownie przekierujemy Cię do Twojego dostawcy. Jesteś zalogowany tak czy inaczej.',
     'signIn.keepMeSignedIn': 'Nie wylogowuj mnie',
     'signIn.keepMeSignedInUnticked':
-        'To logowanie jest trzymane do zamknięcia tej karty. Dotyczy wyłącznie logowania hasłem — sesje u dostawców rządzą się własnymi regułami.',
+        'To logowanie jest trzymane do zamknięcia tej karty. Dotyczy wyłącznie logowania hasłem – sesje u dostawców rządzą się własnymi regułami.',
     'signIn.keptOnThisDevice': 'To urządzenie pozostanie zalogowane przez 30 dni. Dotyczy wyłącznie logowania hasłem.',
     'signIn.keptInThisBrowser':
-        'Ta przeglądarka pozostanie zalogowana przez 30 dni, we wszystkich kartach. Dotyczy wyłącznie logowania hasłem — a to, co przeglądarka przechowuje, może odczytać wszystko, co ma dostęp do tej strony.',
+        'Ta przeglądarka pozostanie zalogowana przez 30 dni, we wszystkich kartach. Dotyczy wyłącznie logowania hasłem – a to, co przeglądarka przechowuje, może odczytać wszystko, co ma dostęp do tej strony.',
     'signIn.keptUntilTheClientCloses':
-        'Twoje hasło nie jest nigdzie przechowywane. To logowanie jest trzymane do zamknięcia MailFathom i zapytamy wtedy o hasło ponownie — ten komputer nie udostępnia pęku kluczy, w którym można je bezpiecznie przechować.',
+        'Twoje hasło nie jest nigdzie przechowywane. To logowanie jest trzymane do zamknięcia MailFathom i zapytamy wtedy o hasło ponownie – ten komputer nie udostępnia pęku kluczy, w którym można je bezpiecznie przechować.',
     'signIn.notKeptStorageUnreachable':
-        'Twoje hasło nie jest nigdzie przechowywane, a tego logowania też nie zapamiętamy, więc zapytamy o hasło ponownie przy następnym uruchomieniu MailFathom — nie udało się sięgnąć do chronionego magazynu tego urządzenia, a MailFathom nie zostawi poświadczenia w mniej bezpiecznym miejscu.',
+        'Twoje hasło nie jest nigdzie przechowywane, a tego logowania też nie zapamiętamy, więc zapytamy o hasło ponownie przy następnym uruchomieniu MailFathom – nie udało się sięgnąć do chronionego magazynu tego urządzenia, a MailFathom nie zostawi poświadczenia w mniej bezpiecznym miejscu.',
     'signIn.notKeptKeyInvalidated':
-        'Twoje hasło nie jest nigdzie przechowywane, a tego logowania też nie zapamiętamy, więc zapytamy o hasło ponownie przy następnym uruchomieniu MailFathom — to urządzenie nie potrafi już zwrócić klucza, pod którym MailFathom je przechowywał, więc to, co zapisano wcześniej, zostało usunięte.',
+        'Twoje hasło nie jest nigdzie przechowywane, a tego logowania też nie zapamiętamy, więc zapytamy o hasło ponownie przy następnym uruchomieniu MailFathom – to urządzenie nie potrafi już zwrócić klucza, pod którym MailFathom je przechowywał, więc to, co zapisano wcześniej, zostało usunięte.',
 
     'connect.address': 'Serwer',
     'connect.addressExample': 'mailfathom.example.com:8443',
-    'connect.addressHint': 'Port opcjonalny — bez niego ten klient łączy się na porcie {port}.',
+    'connect.addressHint': 'Port opcjonalny – bez niego ten klient łączy się na porcie {port}.',
     'connect.clearText': 'Łącz się z tym wdrożeniem zwykłym protokołem HTTP',
     'connect.clearTextConfigured':
         'To ustawienie zostało określone przy instalacji klienta, więc nie zmienisz go tutaj. Decyduje o nim osoba, która go skonfigurowała.',
@@ -557,7 +557,7 @@ export const pl: Catalogue = {
     'connect.portDefault': '{port} (domyślny)',
     'connect.certificate': 'Weryfikacja certyfikatu',
     'connect.certificateChecked': 'Wymagana',
-    'connect.certificateNone': 'Brak — nic nie jest szyfrowane',
+    'connect.certificateNone': 'Brak – nic nie jest szyfrowane',
     'connect.nothingNamed': 'Nic jeszcze nie podano',
     'connect.blank': 'Podaj wdrożenie, które przechowuje Twoją pocztę.',
     'connect.malformed': 'To nie jest adres. Podaj host, na którym wdrożenie odpowiada, oraz port, jeśli go używa.',
@@ -576,7 +576,7 @@ export const pl: Catalogue = {
     'configuration.permissionNotABoolean':
         'Zezwolenie na niezabezpieczone połączenie musi mieć wartość true albo false, a podana wartość nie jest żadną z nich.',
     'configuration.whereItIsStated':
-        'Oba ustawienia są odczytywane z argumentów uruchomienia MailFathom, z jego środowiska oraz z pliku client.conf obok jego własnej konfiguracji — w tej kolejności.',
+        'Oba ustawienia są odczytywane z argumentów uruchomienia MailFathom, z jego środowiska oraz z pliku client.conf obok jego własnej konfiguracji – w tej kolejności.',
 
     'preferences.notStated': 'Ta zmiana nie została zapisana na wdrożeniu.',
 
@@ -617,7 +617,7 @@ export const pl: Catalogue = {
     'settings.messageViewReduced': 'Uproszczony',
     'settings.messageViewHtml': 'Oryginał',
     'settings.messageViewCleanedExplanation':
-        'To samo deterministyczne oczyszczanie co w widoku uproszczonym, a AI decyduje wyłącznie o tym, co zostawić, a co pominąć — nie przepisuje ani jednego słowa, więc tekst zostaje dokładnie taki, jaki napisał nadawca; zmienia się tylko sposób wyświetlenia. Zwykle czystszy niż zwykły uproszczony, szczególnie przy newsletterach i długich wątkach odpowiedzi.',
+        'To samo deterministyczne oczyszczanie co w widoku uproszczonym, a AI decyduje wyłącznie o tym, co zostawić, a co pominąć – nie przepisuje ani jednego słowa, więc tekst zostaje dokładnie taki, jaki napisał nadawca; zmienia się tylko sposób wyświetlenia. Zwykle czystszy niż zwykły uproszczony, szczególnie przy newsletterach i długich wątkach odpowiedzi.',
     'settings.messageViewReducedExplanation':
         'Wiadomości pokazują oczyszczony tekst; oryginał otwierasz ikoną przy nagłówku.',
     'settings.messageViewHtmlExplanation':
@@ -630,7 +630,7 @@ export const pl: Catalogue = {
     'settings.systemNotifications': 'Powiadomienia',
     'settings.raiseSystemNotifications': 'Powiadamiaj mnie na tym urządzeniu',
     'settings.raiseSystemNotificationsExplanation':
-        'Gdy okno nie jest przed Tobą, to urządzenie mówi, ile rzeczy przyszło i jakiego rodzaju — nigdy od kogo ani w jakiej sprawie.',
+        'Gdy okno nie jest przed Tobą, to urządzenie mówi, ile rzeczy przyszło i jakiego rodzaju – nigdy od kogo ani w jakiej sprawie.',
     'settings.systemNotificationsRefused':
         'Ta przeglądarka ma zablokowane powiadomienia z tej strony. Zezwól na nie w jej własnych ustawieniach witryny, a przełącznik znów zadziała.',
     'settings.notificationSeconds': 'Jak długo widać powiadomienie',
@@ -646,9 +646,9 @@ export const pl: Catalogue = {
     'settings.telemetryWithheld': 'Nie wysyłaj danych telemetrycznych',
     'settings.telemetryExplanation': 'Diagnostyka błędów i statystyki użycia zostają na tym urządzeniu.',
     'settings.telemetryWithheldWarning':
-        'Bez telemetrii pomoc techniczna będzie utrudniona — zgłoszenia trzeba będzie opisywać ręcznie, a części błędów nie da się odtworzyć po stronie wsparcia.',
+        'Bez telemetrii pomoc techniczna będzie utrudniona – zgłoszenia trzeba będzie opisywać ręcznie, a części błędów nie da się odtworzyć po stronie wsparcia.',
     'settings.telemetryDestination':
-        'Wysyłane do {address}, które przekazuje je dalej do skonfigurowanego kolektora. Zawierają to, które ekrany otwierasz i jak długo się otwierały — nigdy Twojej poczty, adresów, folderów ani hasła.',
+        'Wysyłane do {address}, które przekazuje je dalej do skonfigurowanego kolektora. Zawierają to, które ekrany otwierasz i jak długo się otwierały – nigdy Twojej poczty, adresów, folderów ani hasła.',
     'settings.telemetryNotForwarded':
         'To wdrożenie nie przyjmuje telemetrii od tego klienta, więc klient jej nie wysyła i nie ma czego wyłączać.',
     'settings.telemetryUnanswered':
@@ -689,7 +689,7 @@ export const pl: Catalogue = {
     'folders.newFolderTitle': 'Nowy folder',
     'folders.editFolderTitle': 'Edytuj folder',
     'folders.inMailbox': '{mailbox}',
-    'folders.insideFolder': '{mailbox} — wewnątrz „{folder}”',
+    'folders.insideFolder': '{mailbox} – wewnątrz „{folder}”',
     'folders.name': 'Nazwa folderu',
     'folders.parent': 'Wewnątrz',
     'folders.parentTop': 'Najwyższy poziom skrzynki {mailbox}',
@@ -797,7 +797,7 @@ export const pl: Catalogue = {
     'menu.markUnread': 'Oznacz jako nieprzeczytaną',
     'menu.move': 'Przenieś…',
     'mail.backToList': 'Wróć do listy',
-    'mail.hidePanels': 'Ukryj panele — sama korespondencja',
+    'mail.hidePanels': 'Ukryj panele – sama korespondencja',
     'mail.showPanels': 'Pokaż panele wątku',
     'mail.listColumn': 'Lista wiadomości',
     'mail.readingColumn': 'To, co otwarte',
@@ -828,15 +828,15 @@ export const pl: Catalogue = {
     'act.archiving': 'Archiwizujemy…',
     'act.deleting': 'Przenosimy do kosza…',
     'act.filing': 'Przenosimy…',
-    'act.underway': '{control} — to już jest w drodze na Twój serwer pocztowy.',
-    'act.notOffered': '{control} — to poświadczenie nie może zmieniać poczty na Twoim serwerze.',
-    'act.nothingToActOn': '{control} — nic nie jest otwarte ani zaznaczone, czego miałoby to dotyczyć.',
-    'act.noArchiveFolder': '{control} — to konto nie wskazuje katalogu archiwum, więc nie ma dokąd archiwizować.',
-    'act.noTrashFolder': '{control} — to konto nie wskazuje kosza, więc nie ma dokąd usuwać.',
-    'act.severalAccounts': '{control} — wiadomości z kilku kont nie przeniesiemy do jednego katalogu.',
-    'act.noOtherFolder': '{control} — to konto nie ma innego katalogu, do którego można przenieść.',
-    'act.draftsStayOut': '{control} — wersję roboczą można przenieść tylko do katalogu utworzonego przez Ciebie.',
-    'act.foldersUnknown': '{control} — MailFathom nie odczytał Twoich katalogów, więc nie wie, dokąd to trafi.',
+    'act.underway': '{control} – to już jest w drodze na Twój serwer pocztowy.',
+    'act.notOffered': '{control} – to poświadczenie nie może zmieniać poczty na Twoim serwerze.',
+    'act.nothingToActOn': '{control} – nic nie jest otwarte ani zaznaczone, czego miałoby to dotyczyć.',
+    'act.noArchiveFolder': '{control} – to konto nie wskazuje katalogu archiwum, więc nie ma dokąd archiwizować.',
+    'act.noTrashFolder': '{control} – to konto nie wskazuje kosza, więc nie ma dokąd usuwać.',
+    'act.severalAccounts': '{control} – wiadomości z kilku kont nie przeniesiemy do jednego katalogu.',
+    'act.noOtherFolder': '{control} – to konto nie ma innego katalogu, do którego można przenieść.',
+    'act.draftsStayOut': '{control} – wersję roboczą można przenieść tylko do katalogu utworzonego przez Ciebie.',
+    'act.foldersUnknown': '{control} – MailFathom nie odczytał Twoich katalogów, więc nie wie, dokąd to trafi.',
     'act.foldersNotRead': 'Nie odczytaliśmy Twoich katalogów: {reason}.',
     'act.readFoldersAgain': 'Spróbuj ponownie',
     'act.cancel': 'Anuluj',
@@ -846,12 +846,12 @@ export const pl: Catalogue = {
     'act.deleteQuestion.other': 'Usunąć {count} wiadomości?',
     'act.deleteConsequence': 'Każdą z nich przenosimy do kosza konta, na którym się znajduje.',
     'act.deleteConfirm': 'Przenieś do kosza',
-    'act.purgeConsequence.one': 'To już jest w koszu — usunięcie teraz kasuje {count} wiadomość razem z załącznikami.',
-    'act.purgeConsequence.few': 'To już jest w koszu — usunięcie teraz kasuje {count} wiadomości razem z załącznikami.',
+    'act.purgeConsequence.one': 'To już jest w koszu – usunięcie teraz kasuje {count} wiadomość razem z załącznikami.',
+    'act.purgeConsequence.few': 'To już jest w koszu – usunięcie teraz kasuje {count} wiadomości razem z załącznikami.',
     'act.purgeConsequence.many':
-        'To już jest w koszu — usunięcie teraz kasuje {count} wiadomości razem z załącznikami.',
+        'To już jest w koszu – usunięcie teraz kasuje {count} wiadomości razem z załącznikami.',
     'act.purgeConsequence.other':
-        'To już jest w koszu — usunięcie teraz kasuje {count} wiadomości razem z załącznikami.',
+        'To już jest w koszu – usunięcie teraz kasuje {count} wiadomości razem z załącznikami.',
     'act.purgeReversal': 'Tego nie da się cofnąć.',
     'act.purgeConfirm': 'Usuń',
     'act.purging': 'Usuwamy…',
@@ -890,7 +890,7 @@ export const pl: Catalogue = {
     'compose.subjectOfAnAnswer': 'Temat odpowiedzi zapisuje Twoje wdrożenie, więc nie edytujemy go tutaj.',
     'compose.aiPrompt': 'Czego ma dotyczy\u0107 szkic',
     'compose.aiPromptPlaceholder':
-        'Napisz, o co chodzi \u2014 np. \u201eprzyjmujemy SLA 2 h, ale prosimy o 5% czapki na indeksacj\u0119\u201d',
+        'Napisz, o co chodzi – np. \u201eprzyjmujemy SLA 2 h, ale prosimy o 5% czapki na indeksacj\u0119\u201d',
     'compose.aiWrite': 'Napisz szkic',
     'compose.aiShorten': 'Skr\u00f3\u0107',
     'compose.aiExpand': 'Rozwi\u0144',
@@ -903,12 +903,12 @@ export const pl: Catalogue = {
     'compose.aiContextNothing': 'nowa wiadomo\u015b\u0107',
     'compose.aiStaysLocal': 'szkic zostaje tutaj, dop\u00f3ki go nie wy\u015blesz',
     'compose.aiDrafting': 'AI pisze szkic\u2026',
-    'compose.aiDraftShown': 'Szkic AI \u2014 sprawd\u017a fakty i ton, zanim wy\u015blesz',
+    'compose.aiDraftShown': 'Szkic AI – sprawd\u017a fakty i ton, zanim wy\u015blesz',
     'compose.aiRestore': 'Przywr\u00f3\u0107 moj\u0105 wersj\u0119',
     'compose.aiAccept': 'Przyjmij',
     'compose.notDraftedTitle': 'Nie powsta\u0142 \u017caden szkic',
     'compose.notDrafted':
-        'Twoje wdro\u017cenie tym razem nie napisa\u0142o szkicu. To, co napisane, zosta\u0142o nietkni\u0119te \u2014 zostaje napisa\u0107 to samemu.',
+        'Twoje wdro\u017cenie tym razem nie napisa\u0142o szkicu. To, co napisane, zosta\u0142o nietkni\u0119te – zostaje napisa\u0107 to samemu.',
     'compose.draftAllowanceSpent':
         'Twoje wdro\u017cenie wyczerpa\u0142o na teraz to, na co pozwala swojemu autorowi. Osoba prowadz\u0105ca wdro\u017cenie mo\u017ce to podnie\u015b\u0107, a nic z napisanego nie zosta\u0142o tkni\u0119te.',
     'compose.cautionUnreadDraft':
@@ -986,17 +986,17 @@ export const pl: Catalogue = {
     'compose.refusedContent':
         'Kontrola treści odrzuciła to, co niesie ta wiadomość. Zmiana treści albo załączników jest tym, co to zmieni.',
     'compose.refusedNotScanned':
-        'Części tej wiadomości nie dało się sprawdzić, więc nie została wysłana. Spróbuj jeszcze raz — odczyt mógł przekroczyć czas; jeśli zostanie odrzucona ponownie, usunięcie tego, czego nie dało się odczytać, jest tym, co to zmieni.',
+        'Części tej wiadomości nie dało się sprawdzić, więc nie została wysłana. Spróbuj jeszcze raz – odczyt mógł przekroczyć czas; jeśli zostanie odrzucona ponownie, usunięcie tego, czego nie dało się odczytać, jest tym, co to zmieni.',
     'compose.refusedAttachmentNotRead':
-        'Jednego z załączonych plików nie dało się odczytać, więc nic nie sprawdziło tego, co miało z nim wyjść, i wiadomość nie została wysłana. Spróbuj jeszcze raz — odczyt mógł przekroczyć czas; jeśli zostanie odrzucona ponownie, wysłanie bez tego pliku albo załączenie go w postaci, którą da się odczytać, jest tym, co to zmieni.',
+        'Jednego z załączonych plików nie dało się odczytać, więc nic nie sprawdziło tego, co miało z nim wyjść, i wiadomość nie została wysłana. Spróbuj jeszcze raz – odczyt mógł przekroczyć czas; jeśli zostanie odrzucona ponownie, wysłanie bez tego pliku albo załączenie go w postaci, którą da się odczytać, jest tym, co to zmieni.',
     'compose.refusedScreeningUnavailable':
         'Kontrola treści nie odpowiada, więc nic nie wychodzi, dopóki nie odpowie. Wiadomość nadal tu jest.',
     'compose.saveRefusedContent':
         'Kontrola treści odrzuciła to, co niesie ta wiadomość, więc nie została zapisana. Zmiana tego, co mówi, albo tego, co załącza, jest tym, co to zmieni. Nic z tego, co zostało napisane, nie zginęło.',
     'compose.saveRefusedNotScanned':
-        'Części tej wiadomości nie dało się sprawdzić, więc nie została zapisana. Spróbuj jeszcze raz — odczyt mógł przekroczyć czas; jeśli zostanie odrzucona ponownie, usunięcie tego, czego nie dało się odczytać, jest tym, co to zmieni. Nic z tego, co zostało napisane, nie zginęło.',
+        'Części tej wiadomości nie dało się sprawdzić, więc nie została zapisana. Spróbuj jeszcze raz – odczyt mógł przekroczyć czas; jeśli zostanie odrzucona ponownie, usunięcie tego, czego nie dało się odczytać, jest tym, co to zmieni. Nic z tego, co zostało napisane, nie zginęło.',
     'compose.saveRefusedAttachmentNotRead':
-        'Jednego z załączonych plików nie dało się odczytać, więc nic nie sprawdziło tego, co miało zostać z nim zapisane, i wiadomość nie została zapisana. Spróbuj jeszcze raz — odczyt mógł przekroczyć czas; jeśli zostanie odrzucona ponownie, zapisanie bez tego pliku albo załączenie go w postaci, którą da się odczytać, jest tym, co to zmieni.',
+        'Jednego z załączonych plików nie dało się odczytać, więc nic nie sprawdziło tego, co miało zostać z nim zapisane, i wiadomość nie została zapisana. Spróbuj jeszcze raz – odczyt mógł przekroczyć czas; jeśli zostanie odrzucona ponownie, zapisanie bez tego pliku albo załączenie go w postaci, którą da się odczytać, jest tym, co to zmieni.',
     'compose.saveRefusedScreeningUnavailable':
         'Kontrola treści nie odpowiada, więc nic nie jest zapisywane, dopóki nie odpowie. Wiadomość nadal tu jest.',
     'compose.saveRefusedForAnotherReason':
@@ -1004,7 +1004,7 @@ export const pl: Catalogue = {
     'compose.refusedForAnotherReason':
         'Twoje wdrożenie odmówiło wysłania. Osoba prowadząca wdrożenie odczyta powód z jego dziennika.',
     'compose.failedUnauthenticated':
-        'Ten klient nie jest już zalogowany. Zaloguj się ponownie — to, co zostało napisane, nadal tu jest.',
+        'Ten klient nie jest już zalogowany. Zaloguj się ponownie – to, co zostało napisane, nadal tu jest.',
     'compose.failedUnauthorized':
         'To poświadczenie nie może tego zrobić w tym wdrożeniu. Osoba prowadząca wdrożenie może nadać takie uprawnienie.',
     'compose.failedUnavailable':
@@ -1023,12 +1023,12 @@ export const pl: Catalogue = {
     'tabs.closeAllOpen.many': 'Otwartych zakładek: {count}.',
     'tabs.closeAllOpen.other': 'Otwartych zakładek: {count}.',
     'tabs.closeAllDraft': 'Niewysłany szkic zostanie odrzucony.',
-    'tabs.closeAllIsFinal': 'Nic nie otworzy ich z powrotem razem — każdą otwierasz ponownie z listy.',
+    'tabs.closeAllIsFinal': 'Nic nie otworzy ich z powrotem razem – każdą otwierasz ponownie z listy.',
     'tabs.closeAllConfirm': 'Zamknij wszystkie',
     'tabs.closeAllCancel': 'Anuluj',
     'tabs.nothingOpen': 'Nic nie jest otwarte',
     'tabs.nothingOpenExplanation':
-        'Wybierz wiadomość z listy, napisz nową albo zapytaj o całą historię korespondencji — każda z tych rzeczy otworzy się jako zakładka.',
+        'Wybierz wiadomość z listy, napisz nową albo zapytaj o całą historię korespondencji – każda z tych rzeczy otworzy się jako zakładka.',
     'tabs.reopenLastRead': 'Otwórz ostatnią wiadomość',
     'tabs.askHistory': 'Zapytaj o historię',
 
@@ -1055,7 +1055,7 @@ export const pl: Catalogue = {
     'list.nothingRead':
         'Żadna wiadomość w tym folderze nie ma odczytu, po którym zawężasz listę. Albo naprawdę żadna go nie ma, albo MailFathom jeszcze nie przeczytał tego folderu.',
     'list.notSynchronizedYet':
-        'Do tego wdrożenia nie pobrano jeszcze niczego z tej skrzynki, więc nie ma czego pokazać. Folder nie jest pusty — nie został odczytany.',
+        'Do tego wdrożenia nie pobrano jeszcze niczego z tej skrzynki, więc nie ma czego pokazać. Folder nie jest pusty – nie został odczytany.',
     'list.emptyWhileFailing':
         'Ta skrzynka przestała się synchronizować, więc może tu być mniej wiadomości, niż ma serwer pocztowy.',
 
@@ -1110,12 +1110,12 @@ export const pl: Catalogue = {
     'reading.close': 'Zamknij',
     'reading.reason': 'Dlaczego: {reason}',
     'reading.dueAt': 'Termin: {when}',
-    'reading.byRule': 'Reguła tego wdrożenia — {origin}',
-    'reading.byModel': 'Model — {origin}',
+    'reading.byRule': 'Reguła tego wdrożenia – {origin}',
+    'reading.byModel': 'Model – {origin}',
     'reading.readingEvidence': 'Wczytuję fragmenty, na których się to opiera…',
     'reading.evidenceFailed': 'Nie udało się wczytać fragmentów, na których się to opiera: {reason}.',
     'reading.noEvidence': 'Ten odczyt nie wskazuje żadnego fragmentu.',
-    'reading.passageGone': 'Tego fragmentu już tam nie ma — wiadomość została w międzyczasie przeczytana na nowo.',
+    'reading.passageGone': 'Tego fragmentu już tam nie ma – wiadomość została w międzyczasie przeczytana na nowo.',
     'reading.passagePrivate': 'Tego fragmentu nie da się odczytać przy tym logowaniu.',
     'reading.passageNotFollowed':
         'Sprawdzanych jest tylko pierwszych dziesięć fragmentów, na których opiera się wiadomość, a ten jest poza nimi.',
@@ -1192,7 +1192,7 @@ export const pl: Catalogue = {
     'connection.noAccounts': 'Dla tego właściciela nie skonfigurowano jeszcze żadnego konta pocztowego.',
     'connection.retry': 'Spróbuj ponownie',
     'connection.connecting': 'Łączenie z Twoim wdrożeniem…',
-    'connection.reconnecting': 'Twoje wdrożenie nie odpowiedziało. Próbujemy ponownie — próba {attempt} z {total}.',
+    'connection.reconnecting': 'Twoje wdrożenie nie odpowiedziało. Próbujemy ponownie – próba {attempt} z {total}.',
     'connection.lost': 'Twoje wdrożenie nie odpowiedziało po {total} próbach.',
     'connection.unreadable': 'Twoje wdrożenie odpowiedziało, ale klient nie mógł wykorzystać tej odpowiedzi: {reason}.',
     'connection.offline': 'Ta maszyna nie ma połączenia z siecią. Klient połączy się ponownie sam, gdy sieć wróci.',
@@ -1281,8 +1281,8 @@ export const pl: Catalogue = {
     'body.undrawnPicturesCount': 'Obrazów zbyt dużych, by je narysować: {count}',
     'body.quotedHistory': 'Rozmowa cytowana w tej wiadomości',
     'body.markupFitting': 'Dopasowywanie wysokości do treści…',
-    'body.markupIsolated': 'Treść HTML nadawcy w izolacji — skrypty i zdalne zasoby zablokowane',
-    'body.markupNotMeasured': 'Nie udało się zmierzyć wysokości treści — ta jedna ramka przewija się osobno',
+    'body.markupIsolated': 'Treść HTML nadawcy w izolacji – skrypty i zdalne zasoby zablokowane',
+    'body.markupNotMeasured': 'Nie udało się zmierzyć wysokości treści – ta jedna ramka przewija się osobno',
     'body.cleaning': 'Ustalamy, co zostawić z tej wiadomości…',
     'body.cleaningNotActivated': 'To wdrożenie nie upraszcza wiadomości modelem, więc pokazujemy wersję uproszczoną.',
     'body.cleaningAllowanceExhausted':
@@ -1315,7 +1315,7 @@ export const pl: Catalogue = {
     'fullHtml.truncated': 'Ta wiadomość jest dłuższa, niż zwraca jeden odczyt, więc urywa się w tym miejscu.',
     'fullHtml.picturesTruncated':
         'Ta wiadomość niosła więcej własnych obrazów, niż mieści jeden widok, więc części z nich tu nie ma.',
-    'fullHtml.isolated': 'Podgląd izolowany — skrypty i zdalne treści są zablokowane',
+    'fullHtml.isolated': 'Podgląd izolowany – skrypty i zdalne treści są zablokowane',
     'fullHtml.picturesAsked':
         'Obrazy tej wiadomości są pobierane od nadawcy, więc jego serwery mogą rozpoznać, że ją otwarto. Nic z tego nie jest zapamiętywane: po wyjściu z wiadomości i powrocie pytamy ponownie.',
 
@@ -1361,7 +1361,7 @@ export const pl: Catalogue = {
     'threadState.owedByDue': 'Po stronie: {name}, termin: {when}',
     'threadState.source': 'wiadomość {position} · {name}',
     'threadState.tooLarge':
-        'Ta rozmowa jest dłuższa, niż obejmuje jedno wyprowadzenie stanu, więc żaden nie powstał — zamiast takiego, który opisywałby tylko jej część.',
+        'Ta rozmowa jest dłuższa, niż obejmuje jedno wyprowadzenie stanu, więc żaden nie powstał – zamiast takiego, który opisywałby tylko jej część.',
     'threadState.none': 'Nie wyprowadzono jeszcze niczego o tym, na czym stanęła ta rozmowa.',
     'threadState.stale':
         'Ta rozmowa zmieniła się od ostatniego wyprowadzenia tego, na czym stanęła, więc tamten odczyt czeka na ponowne wyprowadzenie.',
@@ -1397,7 +1397,7 @@ export const pl: Catalogue = {
         'Odbierający serwer pocztowy sprawdził, kto naprawdę wysłał tę wiadomość, i stwierdził, że wskazany w niej autor się nie potwierdził.',
     'sender.recognized': 'To wdrożenie rozpoznaje nadawcę tej wiadomości.',
     'sender.authenticatedBy':
-        'Uwierzytelniona przez {domain} — to ona naprawdę ją wysłała, a nie nazwa widoczna powyżej.',
+        'Uwierzytelniona przez {domain} – to ona naprawdę ją wysłała, a nie nazwa widoczna powyżej.',
     'sender.authenticatedByNobody': 'Nic nie uwierzytelniło nadawcy tej wiadomości.',
 
     'attachments.list': 'Pliki dołączone do tej wiadomości',
@@ -1420,7 +1420,7 @@ export const pl: Catalogue = {
         'Te dane logowania nie pozwalają czytać poczty w tym wdrożeniu, więc plik nie został pobrany.',
     'attachment.refusedUnavailable': 'Wdrożenie nie odpowiedziało, więc plik nie został pobrany. Spróbuj ponownie.',
     'attachment.refusedScreened':
-        'To wdrożenie sprawdza pliki, które udostępnia, i tego nie udostępnia, więc nie został pobrany. Spróbuj ponownie — odczyt mógł przekroczyć czas albo kontrola chwilowo nie odpowiadała.',
+        'To wdrożenie sprawdza pliki, które udostępnia, i tego nie udostępnia, więc nie został pobrany. Spróbuj ponownie – odczyt mógł przekroczyć czas albo kontrola chwilowo nie odpowiadała.',
     'attachment.refusedLargerThanDescribed':
         'Wdrożenie przysłało więcej, niż ta wiadomość deklaruje dla tego pliku, więc nic nie zostało zapisane. Zgłoś to jako usterkę.',
     'attachment.reading': 'Trwa otwieranie pliku {name}…',
@@ -1433,7 +1433,7 @@ export const pl: Catalogue = {
     'attachment.notShownUnavailable':
         'Wdrożenie nie odpowiedziało, więc nie udało się pokazać pliku. Spróbuj ponownie.',
     'attachment.notShownScreened':
-        'To wdrożenie sprawdza pliki, które udostępnia, i tego nie udostępnia, więc nie udało się go pokazać. Spróbuj ponownie — odczyt mógł przekroczyć czas albo kontrola chwilowo nie odpowiadała.',
+        'To wdrożenie sprawdza pliki, które udostępnia, i tego nie udostępnia, więc nie udało się go pokazać. Spróbuj ponownie – odczyt mógł przekroczyć czas albo kontrola chwilowo nie odpowiadała.',
     'attachment.notShownUnreadable':
         'To, co dotarło, nie zgadza się z tym, co ta wiadomość mówi o pliku, więc nic z niego nie rysujemy. Pobierz go i zgłoś to jako usterkę.',
     'attachment.empty': 'Ten plik nic nie zawiera.',
@@ -1451,9 +1451,9 @@ export const pl: Catalogue = {
     'scope.fragment': 'Pytanie dotyczy zaznaczonego fragmentu tej wiadomości: „{fragment}”',
 
     'blocking.progress': 'Jak daleko zaszła operacja',
-    'blocking.progressReading': '{percentage} — nie zamykaj tego okna',
+    'blocking.progressReading': '{percentage} – nie zamykaj tego okna',
     'blocking.noKnownFinish': 'Bez znanego czasu zakończenia',
-    'blocking.doNotClose': 'Nie zamykaj aplikacji — operacja wciąż trwa.',
+    'blocking.doNotClose': 'Nie zamykaj aplikacji – operacja wciąż trwa.',
     'blocking.cancel': 'Anuluj',
     'blocking.stopQuestion': 'Na pewno przerwać?',
     'blocking.continue': 'Kontynuuj operację',
@@ -1480,7 +1480,7 @@ export const pl: Catalogue = {
     'pendingChange.undecided': 'Zmiana czeka na Twoją decyzję.',
     'pendingChange.exhausted': 'Twoja skrzynka nie przyjęła tej zmiany, a MailFathom przestał próbować ją wprowadzić.',
     'pendingChange.unanswered':
-        'Zmiana została wysłana, a skrzynka nigdy nie odpowiedziała — mogła zostać wprowadzona albo nie.',
+        'Zmiana została wysłana, a skrzynka nigdy nie odpowiedziała – mogła zostać wprowadzona albo nie.',
     'pendingChange.askAgain': 'Poproś ponownie',
     'pendingChange.letGo': 'Odpuść',
     'pendingChange.notMarkedRead.one': 'Jedna wiadomość nie została oznaczona jako przeczytana.',
@@ -1518,7 +1518,7 @@ export const pl: Catalogue = {
     'pendingChange.messageNotFound': 'Tej poczty nie ma już w skrzynce, którą czyta to wdrożenie.',
     'pendingChange.destinationNotFound': 'Folderu, do którego miała trafić, już nie ma.',
     'pendingChange.accountNoLongerConfigured': 'To wdrożenie nie czyta już tego konta pocztowego.',
-    'pendingChange.changeNotUsable': 'Wskazanej zmiany nie da się wyrazić w jednym żądaniu — zgłoś to jako usterkę.',
+    'pendingChange.changeNotUsable': 'Wskazanej zmiany nie da się wyrazić w jednym żądaniu – zgłoś to jako usterkę.',
     'pendingChange.destinationNotAllowed':
         'Ten folder jej nie przyjmie: wersje robocze zostają w folderze wersji roboczych albo w folderze utworzonym przez Ciebie, a nic innego tam nie trafia.',
     'pendingChange.notDelivered': 'Ta zmiana nie dotarła do Twojego wdrożenia.',
@@ -1592,7 +1592,7 @@ export const pl: Catalogue = {
     'notifications.said.calendarReminderDue.title': 'Przypomnienie: {subject}',
     'notifications.said.taskReminderDue.title': 'Przypomnienie: {subject}',
     'reminders.title': 'Przypomnienia',
-    'reminders.about': '{subject} — {anchor}',
+    'reminders.about': '{subject} – {anchor}',
     'reminders.anchor.eventTime': 'przed godziną wydarzenia',
     'reminders.anchor.eventDay': 'o 09:00 w dniu wydarzenia',
     'reminders.anchor.taskDueDate': 'o 09:00 w dniu terminu',
@@ -1636,8 +1636,8 @@ export const pl: Catalogue = {
     'reminders.custom.unit': 'Jednostka',
     'reminders.custom.add': 'Dodaj',
     'reminders.remove': 'Usuń: {lead}',
-    'reminders.none.event': 'Brak przypomnienia — nie dostaniesz powiadomienia o tym wydarzeniu.',
-    'reminders.none.task': 'Brak przypomnienia — nie dostaniesz powiadomienia o tym zadaniu.',
+    'reminders.none.event': 'Brak przypomnienia – nie dostaniesz powiadomienia o tym wydarzeniu.',
+    'reminders.none.task': 'Brak przypomnienia – nie dostaniesz powiadomienia o tym zadaniu.',
     'reminders.raises': 'Każde przypomnienie trafia do centrum powiadomień i pojawia się w rogu ekranu.',
     'reminders.turnAllOff': 'Wyłącz wszystkie',
     'reminders.done': 'Gotowe',
@@ -1678,7 +1678,7 @@ export const pl: Catalogue = {
     'toast.stopOperation': 'Przerwij operację',
     'toast.stopQuestion': 'Przerwać operację?',
     'toast.keepGoing': 'Kontynuuj',
-    'toast.stopIsFinal': 'Przerwania nie da się cofnąć — operację trzeba by uruchomić od nowa.',
+    'toast.stopIsFinal': 'Przerwania nie da się cofnąć – operację trzeba by uruchomić od nowa.',
     'toast.stopped': 'Anulowano',
     'people.books': 'Która książka adresowa',
     'people.own': 'Własne',
@@ -1723,7 +1723,7 @@ export const pl: Catalogue = {
     'people.clearSelection': 'Wyczyść zaznaczenie',
     'people.backToList': 'Wróć do książki adresowej',
     'people.nobodyOpen': 'Otwórz kogoś, aby przeczytać jego stronę.',
-    'people.collectedReadOnly': 'Tylko do odczytu — edytowalny po dodaniu do kontaktów',
+    'people.collectedReadOnly': 'Tylko do odczytu – edytowalny po dodaniu do kontaktów',
     'people.promote': 'Dodaj do moich kontaktów',
     'people.promoting': 'Dodajemy…',
 

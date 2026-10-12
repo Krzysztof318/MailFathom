@@ -23,5 +23,5 @@ export function Organisation({ address }: { readonly address: string | null }) {
         return null;
     }
 
-    return <span className="hidden truncate text-xs text-faint desktop:inline">{address.slice(at + 1)}</span>;
+    return <span className="hidden truncate text-sm text-muted desktop:inline">{address.slice(at + 1)}</span>;
 }

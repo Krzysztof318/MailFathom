@@ -35,7 +35,7 @@ export function DiscoverIdle({ onAsk }: { readonly onAsk: (question: string) => 
 
     return (
         <section aria-labelledby="discover-suggestions" className="flex max-w-2xl flex-col gap-2.5">
-            <h2 className="text-2xs tracking-widest text-muted uppercase" id="discover-suggestions">
+            <h2 className="text-xs font-semibold text-muted" id="discover-suggestions">
                 {translate('discover.tryThis')}
             </h2>
 
@@ -46,7 +46,7 @@ export function DiscoverIdle({ onAsk }: { readonly onAsk: (question: string) => 
                     return (
                         <li key={suggestion}>
                             <button
-                                className="w-full rounded-lg border border-line bg-panel px-3.5 py-3 text-start text-md text-pretty transition hover:border-accent"
+                                className="w-full rounded-md border border-line bg-panel px-3.5 py-3 text-start text-md text-pretty transition hover:border-accent"
                                 type="button"
                                 onClick={() => {
                                     onAsk(question);

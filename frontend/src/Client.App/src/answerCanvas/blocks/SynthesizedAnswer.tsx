@@ -47,10 +47,10 @@ export function SynthesizedAnswer({ block }: { readonly block: AnswerBlock }) {
             state="ready"
         >
             <div className="flex flex-wrap items-center gap-2">
-                <span className={`rounded-full px-2.25 py-0.5 text-2xs ${band.tint}`}>{translate(band.label)}</span>
+                <span className={`rounded-full px-2.25 py-0.5 text-xs ${band.tint}`}>{translate(band.label)}</span>
 
-                <span className={`flex items-center gap-1 rounded-full px-2.25 py-0.5 text-2xs ${verdict.tint}`}>
-                    <Icon className="size-3.25" name={verdict.icon} />
+                <span className={`flex items-center gap-1 rounded-full px-2.25 py-0.5 text-xs ${verdict.tint}`}>
+                    <Icon className="size-icon-xs" name={verdict.icon} />
                     {translate(verdict.label)}
                 </span>
             </div>
@@ -71,7 +71,7 @@ export function SynthesizedAnswer({ block }: { readonly block: AnswerBlock }) {
                 <ul aria-label={translate('answer.sides')} className="flex flex-col gap-2">
                     {evidence.conflictingClaims.map((claim) => (
                         <li
-                            className="flex flex-col gap-1 rounded-e-lg border-s-2 border-s-warning bg-sunken px-3 py-2"
+                            className="flex flex-col gap-1 rounded-e-md border-s-2 border-s-warning bg-sunken px-3 py-2"
                             key={claim.statement}
                         >
                             <p className="text-sm text-pretty">{claim.statement}</p>

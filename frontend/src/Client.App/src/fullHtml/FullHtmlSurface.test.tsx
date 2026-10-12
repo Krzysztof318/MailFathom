@@ -189,7 +189,7 @@ describe('FullHtmlSurface', () => {
         await drawing(transport);
         await screen.findByTitle("The sender's own markup, drawn in isolation");
 
-        expect(screen.getByText('Isolated preview — scripts and remote content are blocked')).toBeDefined();
+        expect(screen.getByText('Isolated preview - scripts and remote content are blocked')).toBeDefined();
     });
 
     it('says so in words where the deployment served no markup for this message', async () => {

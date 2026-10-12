@@ -132,7 +132,7 @@ describe('ProposalCard', () => {
 
         expect(within(card()).getByText('declined')).toBeDefined();
         expect(within(card()).getByText('Renewal call').tagName).toBe('S');
-        expect(within(card()).getByText('Declined — nothing was done')).toBeDefined();
+        expect(within(card()).getByText('Declined - nothing was done')).toBeDefined();
         expect(within(card()).queryByText('What the proposal says')).toBeNull();
         expect(within(card()).queryAllByRole('button')).toEqual([]);
     });
@@ -181,7 +181,7 @@ describe('ProposalCard', () => {
 
         fireEvent.click(
             within(card()).getByRole('button', {
-                name: 'Open the calendar — leaves the conversation, you can come straight back',
+                name: 'Open the calendar - leaves the conversation, you can come straight back',
             }),
         );
 
@@ -195,7 +195,7 @@ describe('ProposalCard', () => {
 
         fireEvent.click(
             within(card()).getByRole('button', {
-                name: 'Open the thread — leaves the conversation, you can come straight back',
+                name: 'Open the thread - leaves the conversation, you can come straight back',
             }),
         );
 
@@ -210,10 +210,10 @@ describe('ProposalCard', () => {
     });
 
     it.each<[ProposalKind, string]>([
-        ['eventProposal', 'No free slot long enough this week — nothing to propose.'],
+        ['eventProposal', 'No free slot long enough this week - nothing to propose.'],
         ['taskProposal', 'Nothing in this thread carries a date or an owner.'],
-        ['draft', 'Nothing to draft — the last message in the thread is yours.'],
-        ['suggestedAction', 'Nothing worth doing here — the thread needs no step.'],
+        ['draft', 'Nothing to draft - the last message in the thread is yours.'],
+        ['suggestedAction', 'Nothing worth doing here - the thread needs no step.'],
     ])('says in its own words why a %s has nothing to propose', (kind, said) => {
         drawCard({ kind, state: 'empty' });
 

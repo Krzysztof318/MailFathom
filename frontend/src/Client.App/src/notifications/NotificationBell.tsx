@@ -59,7 +59,7 @@ export function NotificationBell({
                       })
                     : translate('notifications.place')
             }
-            className={`flex flex-1 cursor-pointer flex-col items-center gap-0.75 rounded-2xl px-0.5 py-1.75 text-2xs font-medium transition workspace:size-11.5 workspace:flex-none workspace:justify-center workspace:gap-0 workspace:rounded-3xl workspace:border workspace:px-0 workspace:py-0 ${
+            className={`flex flex-1 cursor-pointer flex-col items-center gap-0.75 rounded-lg px-0.5 py-1.75 text-xs font-medium transition workspace:size-11.5 workspace:flex-none workspace:justify-center workspace:gap-0 workspace:rounded-lg workspace:border workspace:px-0 workspace:py-0 ${
                 shown
                     ? 'bg-accent-soft text-accent-deep workspace:border-accent-line'
                     : 'text-muted hover:bg-hover hover:text-text workspace:border-line workspace:bg-panel workspace:text-text-soft workspace:shadow-raised'
@@ -67,14 +67,14 @@ export function NotificationBell({
             onClick={onPress}
         >
             <span className="relative flex items-center justify-center">
-                <Icon name={unread ? 'notifications_active' : 'notifications'} className="size-6" />
+                <Icon name={unread ? 'notifications_active' : 'notifications'} className="size-icon-2xl" />
 
                 {/* Bounded rather than round, so `9+` is as legible as `3`. The ring is the rail's own colour, which is
                     what lifts the badge off the symbol underneath it at both widths. */}
                 {unread ? (
                     <span
                         aria-hidden="true"
-                        className="absolute -end-1.5 -top-1.5 flex h-5.25 min-w-5.25 items-center justify-center rounded-full border-2 border-rail bg-error px-1.25 text-2xs font-bold text-on-accent"
+                        className="absolute -end-1.5 -top-1.5 flex h-5.25 min-w-5.25 items-center justify-center rounded-full border-2 border-rail bg-error px-1.25 text-xs font-bold text-on-accent"
                     >
                         {unreadCount > mostUnreadShown ? `${counted}+` : counted}
                     </span>

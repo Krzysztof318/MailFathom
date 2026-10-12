@@ -160,16 +160,16 @@ export function ListSettings({
             aria-expanded={open}
             aria-controls={panel}
             title={translate(inForce === 0 ? 'list.filters' : 'list.filtersInForce', { count: String(inForce) })}
-            className={`flex h-8.5 shrink-0 cursor-pointer items-center justify-center gap-0.75 rounded-lg px-1.75 transition hover:bg-hover ${
+            className={`flex h-8.5 shrink-0 cursor-pointer items-center justify-center gap-0.75 rounded-md px-1.75 transition hover:bg-hover ${
                 inForce === 0 ? 'text-muted' : 'bg-accent-soft text-accent-deep'
             }`}
             onClick={() => {
                 setOpen(!open);
             }}
         >
-            <Icon name={inForce === 0 ? 'tune' : 'filter_alt'} className="size-4.75" />
+            <Icon name={inForce === 0 ? 'tune' : 'filter_alt'} className="size-icon-lg" />
             <span className="sr-only">{translate('list.filters')}</span>
-            {inForce === 0 ? null : <span className="text-2xs font-semibold">{inForce}</span>}
+            {inForce === 0 ? null : <span className="text-xs font-semibold">{inForce}</span>}
         </button>
     );
 
@@ -405,4 +405,4 @@ const dateField = 'rounded-md border border-line bg-panel px-2 py-1 text-sm text
 // What each group inside the panel is headed with, in the size and the weight the design sets those labels
 // in. Not the settings screen's own section label, which the design draws a shade fainter — two labels that differ in
 // the design are two shapes rather than one drifting.
-const sectionLabel = 'text-2xs tracking-widest text-muted uppercase';
+const sectionLabel = 'text-xs font-semibold text-muted';

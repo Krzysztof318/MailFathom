@@ -57,8 +57,8 @@ export function AdvancedConnection({
 
     return (
         <details className="group">
-            <summary className="-ms-2 flex min-h-12 cursor-pointer items-center gap-1.5 self-start rounded-xl ps-2 pe-3 text-md font-medium text-accent transition hover:bg-hover hover:text-accent-strong workspace:-ms-1.25 workspace:min-h-7 workspace:ps-1.25 workspace:pe-2.25 workspace:text-base">
-                <Icon name="chevron_right" className="size-4.5 transition group-open:rotate-90" />
+            <summary className="-ms-2 flex min-h-12 cursor-pointer items-center gap-1.5 self-start rounded-lg ps-2 pe-3 text-md font-medium text-accent transition hover:bg-hover hover:text-accent-strong workspace:-ms-1.25 workspace:min-h-7 workspace:ps-1.25 workspace:pe-2.25 workspace:text-base">
+                <Icon name="chevron_right" className="size-icon-md transition group-open:rotate-90" />
                 {translate('connect.advanced')}
 
                 {/* The mark a closed disclosure still carries. It is words rather than a colour, for the reason the
@@ -73,7 +73,7 @@ export function AdvancedConnection({
             </summary>
 
             <div className="mt-2.75 flex flex-col gap-2.75">
-                <dl className="flex flex-col gap-2.75 rounded-xl border border-line bg-sunken px-3.75 py-3.25 text-sm">
+                <dl className="flex flex-col gap-2.75 rounded-lg border border-line bg-sunken px-3.75 py-3.25 text-sm">
                     <Detail
                         label="connect.protocol"
                         value={
@@ -121,19 +121,19 @@ export function AdvancedConnection({
                 )}
 
                 {onPermitClearText !== null && clearTextPermitted ? (
-                    <p className="flex items-start gap-2.25 rounded-lg border border-warning bg-warning-soft px-3 py-2.5 text-sm text-warning-text">
-                        <Icon name="warning" className="mt-px size-4" />
+                    <p className="flex items-start gap-2.25 rounded-md border border-warning bg-warning-soft px-3 py-2.5 text-sm text-warning-text">
+                        <Icon name="warning" className="mt-px size-icon-sm" />
                         {translate('connect.clearTextInForce')}
                     </p>
                 ) : null}
 
                 {onChangeServer === undefined ? null : (
                     <button
-                        className="flex min-h-13 items-center justify-center gap-2 rounded-full border border-line bg-panel px-4 text-lg font-semibold text-accent transition hover:border-accent hover:bg-hover hover:text-accent-strong workspace:min-h-11 workspace:rounded-xl workspace:text-base"
+                        className="flex min-h-13 items-center justify-center gap-2 rounded-full border border-line bg-panel px-4 text-lg font-semibold text-accent transition hover:border-accent hover:bg-hover hover:text-accent-strong workspace:min-h-11 workspace:rounded-lg workspace:text-base"
                         type="button"
                         onClick={onChangeServer}
                     >
-                        <Icon name="dns" className="size-4.25" />
+                        <Icon name="dns" className="size-icon-md" />
                         {translate('connect.changeServer')}
                     </button>
                 )}
@@ -174,7 +174,7 @@ function ClearTextPermission({
     if (configured) {
         return (
             <p
-                className={`flex items-start gap-2.75 rounded-xl border p-3.5 workspace:px-3.25 workspace:py-3 ${border}`}
+                className={`flex items-start gap-2.75 rounded-md border p-3.5 workspace:px-3.25 workspace:py-3 ${border}`}
             >
                 {said}
             </p>
@@ -183,7 +183,7 @@ function ClearTextPermission({
 
     return (
         <label
-            className={`flex cursor-pointer items-start gap-2.75 rounded-xl border p-3.5 transition workspace:px-3.25 workspace:py-3 ${border}`}
+            className={`flex cursor-pointer items-start gap-2.75 rounded-md border p-3.5 transition workspace:px-3.25 workspace:py-3 ${border}`}
         >
             <input
                 aria-describedby="sign-in-clear-text-explanation"

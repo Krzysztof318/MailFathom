@@ -60,20 +60,20 @@ describe('BlockingOverlay', () => {
 
         expect(screen.getByRole('heading', { name: 'Moving this mailbox' })).toBeDefined();
         expect(screen.getByText(/stopping halfway would split it between two/)).toBeDefined();
-        expect(screen.getByText('Do not close the application — the operation is still running.')).toBeDefined();
+        expect(screen.getByText('Do not close the application - the operation is still running.')).toBeDefined();
     });
 
     it('advances the reading an operation that knows how far it has got supplies', () => {
         drawing(migrating({ progress: 0.46 }));
 
         expect(screen.getByRole('progressbar', { name: 'How far the operation has got' })).toBeDefined();
-        expect(screen.getByText('46% — do not close this window')).toBeDefined();
+        expect(screen.getByText('46% - do not close this window')).toBeDefined();
     });
 
     it('holds a reading inside the bar it is drawn on, so an operation that counts past its own work says 100%', () => {
         drawing(migrating({ progress: 1.04 }));
 
-        expect(screen.getByText('100% — do not close this window')).toBeDefined();
+        expect(screen.getByText('100% - do not close this window')).toBeDefined();
     });
 
     it('reports no progress at all for an operation that cannot say how far it has got', () => {
@@ -115,11 +115,11 @@ describe('BlockingOverlay', () => {
     it('advances in place while the same operation keeps moving, rather than drawing itself a second time', () => {
         const { rerender } = drawing(migrating({ progress: 0.2 }));
 
-        expect(screen.getByText('20% — do not close this window')).toBeDefined();
+        expect(screen.getByText('20% - do not close this window')).toBeDefined();
 
         rerender(migrating({ progress: 0.5 }));
 
-        expect(screen.getByText('50% — do not close this window')).toBeDefined();
+        expect(screen.getByText('50% - do not close this window')).toBeDefined();
         expect(screen.getByRole('dialog', { name: 'Moving this mailbox' })).toBeDefined();
     });
 

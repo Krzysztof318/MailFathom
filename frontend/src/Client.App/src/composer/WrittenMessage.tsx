@@ -202,7 +202,7 @@ export function WrittenMessage({
                             {control.icon === undefined ? (
                                 control.mark
                             ) : (
-                                <Icon name={control.icon} className="size-4.25" />
+                                <Icon name={control.icon} className="size-icon-md" />
                             )}
                         </button>
                     ))}
@@ -261,11 +261,11 @@ export function WrittenMessage({
                         setBarShown(!barShown);
                     }}
                 >
-                    <Icon name="text_format" className="size-5.25" />
+                    <Icon name="text_format" className="size-icon-xl" />
                     <span className="min-w-0 flex-1 text-start">
                         {translate(barShown ? 'compose.formattingHide' : 'compose.formatting')}
                     </span>
-                    <Icon name={barShown ? 'expand_less' : 'expand_more'} className="size-5 text-muted" />
+                    <Icon name={barShown ? 'expand_less' : 'expand_more'} className="size-icon-lg text-muted" />
                 </button>
             ) : null}
 

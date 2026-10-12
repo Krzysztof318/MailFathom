@@ -75,14 +75,14 @@ export function Refresh() {
             // Refused while one is under way, which is the design's rule: a second press would read everything
             // again under reads that have not landed yet.
             aria-disabled={working}
-            className={`flex flex-1 cursor-pointer flex-col items-center gap-0.75 rounded-2xl px-0.5 py-1.75 text-2xs font-medium transition workspace:size-8.5 workspace:flex-none workspace:justify-center workspace:gap-0 workspace:rounded-xl workspace:border workspace:px-0 workspace:py-0 ${working ? underWay : resting}`}
+            className={`flex flex-1 cursor-pointer flex-col items-center gap-0.75 rounded-xl px-0.5 py-1.75 text-sm transition workspace:size-8.5 workspace:flex-none workspace:justify-center workspace:gap-0 workspace:rounded-lg workspace:border workspace:px-0 workspace:py-0 ${working ? underWay : resting}`}
             onClick={() => {
                 if (!working) {
                     changes.refresh();
                 }
             }}
         >
-            <Icon name="refresh" className={working ? 'size-5 animate-working' : 'size-5'} />
+            <Icon name="refresh" className={working ? 'size-icon-lg animate-working' : 'size-icon-lg'} />
 
             {/* The name is under the symbol wherever the navigation carries names, and gone in the rail, where the
                 design draws this control as the symbol alone. */}

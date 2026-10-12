@@ -33,7 +33,7 @@ const settingRow = 'flex items-center gap-2.5 px-3.25 py-2.5 text-base';
 // The compact pill the sign-in screen's two pickers stand in. Written once here because the two are one shape in the
 // design and a second arrangement of the same utilities is how a client stops looking like one product; what
 // stands inside it is `controls/ChoiceSegment.tsx`, which the settings screen's groups draw from as well.
-const compactGroup = 'flex gap-0.75 rounded-lg border border-line bg-sunken p-0.5';
+const compactGroup = 'flex gap-0.75 rounded-md border border-line bg-sunken p-0.5';
 
 // What the compact segments say on their face: the design draws each theme as one glyph and each language as its
 // two-letter code, so the strip above the form stays one line at the narrowest width. The full name is still the
@@ -59,11 +59,11 @@ export function ThemeSegments({ onChoose }: { readonly onChoose: (choice: (typeo
     return (
         <fieldset className="flex flex-col gap-1.75 px-3.25 py-2.5">
             <legend className="flex items-center gap-2.5 text-base">
-                <Icon name="dark_mode" className="size-4.75" />
+                <Icon name="dark_mode" className="size-icon-lg" />
                 {translate('shell.theme')}
             </legend>
 
-            <div className="flex gap-0.75 rounded-xl border border-line bg-rail p-0.5">
+            <div className="flex gap-0.75 rounded-md border border-line bg-rail p-0.5">
                 {themeChoices.map((offered) => (
                     <ChoiceSegment
                         key={offered}
@@ -98,7 +98,7 @@ export function TabModeSwitch({ on, onChange }: { readonly on: boolean; readonly
 
     return (
         <label className={`${settingRow} ${wideEnough ? 'cursor-pointer hover:bg-hover' : 'opacity-50'}`}>
-            <Icon name="tab" className="size-4.75" />
+            <Icon name="tab" className="size-icon-lg" />
 
             <span className="flex min-w-0 flex-1 flex-col gap-px">
                 {translate('shell.tabMode')}
@@ -123,7 +123,7 @@ export function ThemeChoice() {
     return (
         <fieldset className="flex items-center gap-1.5">
             <legend className="sr-only">{translate('shell.theme')}</legend>
-            <Icon name="dark_mode" className="size-4 text-faint" />
+            <Icon name="dark_mode" className="size-icon-sm text-faint" />
 
             <div className={compactGroup}>
                 {themeChoices.map((offered) => (
@@ -192,7 +192,7 @@ export function LanguageChoice() {
     return (
         <fieldset className="flex items-center gap-1.5">
             <legend className="sr-only">{translate('shell.language')}</legend>
-            <Icon name="language" className="size-4 text-faint" />
+            <Icon name="language" className="size-icon-sm text-faint" />
 
             <div className={compactGroup}>
                 {locales.map((offered) => (
@@ -208,7 +208,7 @@ export function LanguageChoice() {
                             }
                         }}
                     >
-                        <span aria-hidden="true" className="tracking-wider uppercase">
+                        <span aria-hidden="true" className="uppercase">
                             {offered}
                         </span>
                         <span className="sr-only">{localeNames[offered]}</span>

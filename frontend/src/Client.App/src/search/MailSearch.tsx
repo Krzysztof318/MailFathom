@@ -228,7 +228,7 @@ export function MailSearch({
                     title={translate('search.submit')}
                     className={`flex shrink-0 items-center whitespace-nowrap text-muted transition ${controlShapes.symbol}`}
                 >
-                    <Icon name="search" className="size-4.75" />
+                    <Icon name="search" className="size-icon-lg" />
                 </button>
 
                 {ask === null && beingRead === null ? null : (

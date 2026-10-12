@@ -83,12 +83,12 @@ export function SendConfirmation({
             <button
                 type="button"
                 disabled={disabled}
-                className="flex items-center gap-1.75 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-on-accent transition hover:opacity-90 disabled:opacity-60"
+                className="flex items-center gap-1.75 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-on-accent transition hover:opacity-90 disabled:opacity-60"
                 onClick={() => {
                     asked.current?.showModal();
                 }}
             >
-                <Icon name="send" className="size-4.5" />
+                <Icon name="send" className="size-icon-md" />
                 {translate('compose.send')}
             </button>
 

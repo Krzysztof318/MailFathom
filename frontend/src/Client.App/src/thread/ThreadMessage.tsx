@@ -95,8 +95,8 @@ export function ThreadMessage({
                         invisible to somebody who cannot tell it from the text beside it. */}
                     {mark === null ? null : (
                         <p className="flex items-center">
-                            <span className="flex items-center gap-1 rounded-sm bg-accent-soft px-1.75 py-0.5 text-2xs tracking-wide whitespace-nowrap text-accent-deep">
-                                <Icon name="arrow_right" className="size-3" />
+                            <span className="flex items-center gap-1 rounded-sm bg-accent-soft px-1.75 py-0.5 text-xs whitespace-nowrap text-accent-deep">
+                                <Icon name="arrow_right" className="size-icon-2xs" />
                                 {translate(arrivalLabels[mark])}
                             </span>
                         </p>

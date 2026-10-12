@@ -111,10 +111,10 @@ export function PersonPage({
 
                 <div className="flex min-w-0 flex-col gap-0.75">
                     <div className="flex min-w-0 items-center gap-2.25">
-                        <h2 className="truncate text-2xl font-semibold tracking-tight">{contact.displayName}</h2>
+                        <h2 className="truncate text-2xl font-semibold tracking-tighter">{contact.displayName}</h2>
 
                         {collected ? (
-                            <span className="shrink-0 rounded-sm border border-line-strong px-1.75 py-0.5 text-2xs tracking-widest text-muted uppercase">
+                            <span className="shrink-0 rounded-sm border border-line-strong px-1.75 py-0.5 text-xs font-semibold text-muted">
                                 {translate('people.collected')}
                             </span>
                         ) : null}
@@ -124,7 +124,7 @@ export function PersonPage({
 
                     {collected ? (
                         <p className="flex items-center gap-1.5 text-sm text-muted text-pretty">
-                            <Icon name="lock" className="size-4" />
+                            <Icon name="lock" className="size-icon-sm" />
                             {translate('people.collectedReadOnly')}
                         </p>
                     ) : null}

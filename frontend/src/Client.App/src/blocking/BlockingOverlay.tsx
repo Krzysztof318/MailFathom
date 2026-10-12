@@ -76,7 +76,7 @@ export function BlockingOverlay({
         <dialog
             ref={surface}
             aria-labelledby={named}
-            className="m-auto w-105 max-w-full rounded-4xl border border-line bg-panel px-7.5 pt-8 pb-6 text-text shadow-dialog backdrop:bg-scrim backdrop:backdrop-blur-xs"
+            className="m-auto w-105 max-w-full rounded-xl border border-line bg-panel px-7.5 pt-8 pb-6 text-text shadow-dialog backdrop:bg-scrim backdrop:backdrop-blur-xs"
             onCancel={(event) => {
                 // A close request — Escape, and whatever else a platform decides is one. Leaving this surface is
                 // stopping the operation, so it happens through the control below and the question in front of it.
@@ -90,7 +90,7 @@ export function BlockingOverlay({
                     surface opting out of it in its own way is the same drift as one writing a colour. What is left
                     without the movement is the symbol, the bar, and the words, which are what actually say the
                     operation is running. */}
-                    <Icon name="progress_activity" className="size-10 animate-spin text-accent-strong" />
+                    <Icon name="progress_activity" className="size-icon-4xl animate-spin text-accent-strong" />
 
                     <h2 id={named} className="text-2xl font-semibold text-balance">
                         {operation.title}

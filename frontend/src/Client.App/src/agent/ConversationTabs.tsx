@@ -111,7 +111,7 @@ export function ConversationTabs({
                         <div
                             key={conversation.id}
                             role="presentation"
-                            className={`flex max-w-agent-tab items-center gap-1 rounded-t-lg border text-base whitespace-nowrap ${
+                            className={`flex max-w-agent-tab items-center gap-1 rounded-t-md border text-base whitespace-nowrap ${
                                 chosen
                                     ? 'border-line border-b-transparent bg-panel text-text'
                                     : 'border-transparent text-muted hover:text-text'
@@ -136,7 +136,7 @@ export function ConversationTabs({
                                     onChoose(conversation.id);
                                 }}
                             >
-                                <Icon name="auto_awesome" className="size-3.5 shrink-0 text-faint" />
+                                <Icon name="auto_awesome" className="size-icon-xs shrink-0 text-faint" />
                                 <span className="truncate">{title}</span>
                             </button>
 
@@ -150,7 +150,7 @@ export function ConversationTabs({
                                     close(conversation.id);
                                 }}
                             >
-                                <Icon name="close" className="size-3.75" />
+                                <Icon name="close" className="size-icon-sm" />
                             </button>
                         </div>
                     );

@@ -276,7 +276,7 @@ describe('ThreadState', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
         fireEvent.click(screen.getByRole('button', { name: 'Where this conversation stands' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Go to the agent — I’ll ask in my own words' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Go to the agent - I’ll ask in my own words' }));
 
         expect(handToAgent).toHaveBeenNthCalledWith(1, conversation);
         expect(handToAgent).toHaveBeenNthCalledWith(2, conversation);

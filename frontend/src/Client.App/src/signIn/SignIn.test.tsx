@@ -803,7 +803,7 @@ describe('SignIn', () => {
         expect(screen.getByRole('checkbox', { name: 'Keep me signed in' })).toHaveProperty('checked', false);
         expect(
             screen.getByText(
-                'This sign-in is kept until you close this tab. Applies to password sign-in only — provider sessions follow their own rules.',
+                'This sign-in is kept until you close this tab. Applies to password sign-in only - provider sessions follow their own rules.',
             ),
         ).toBeDefined();
     });
@@ -815,7 +815,7 @@ describe('SignIn', () => {
 
         expect(
             screen.getByText(
-                'This browser stays signed in for 30 days, in every tab. Applies to password sign-in only — and anything that reaches this page can read what a browser keeps.',
+                'This browser stays signed in for 30 days, in every tab. Applies to password sign-in only - and anything that reaches this page can read what a browser keeps.',
             ),
         ).toBeDefined();
 
@@ -841,11 +841,11 @@ describe('SignIn', () => {
     it.each([
         [
             'nowhereStorageUnreachable' as const,
-            'Your password is not stored anywhere, and this sign-in will not be kept either, so you will be asked for your password again the next time MailFathom starts — this device’s protected storage could not be reached, and MailFathom will not leave a credential anywhere less safe.',
+            'Your password is not stored anywhere, and this sign-in will not be kept either, so you will be asked for your password again the next time MailFathom starts - this device’s protected storage could not be reached, and MailFathom will not leave a credential anywhere less safe.',
         ],
         [
             'nowhereKeyInvalidated' as const,
-            'Your password is not stored anywhere, and this sign-in will not be kept either, so you will be asked for your password again the next time MailFathom starts — this device can no longer give back the key MailFathom stored it under, so anything kept earlier has been removed.',
+            'Your password is not stored anywhere, and this sign-in will not be kept either, so you will be asked for your password again the next time MailFathom starts - this device can no longer give back the key MailFathom stored it under, so anything kept earlier has been removed.',
         ],
     ])('says nothing will be kept, and why, where the store reports %s', (beyondTheTab, sentence) => {
         renderScreen(signedIn, servingDeployment, beyondTheTab);
@@ -867,7 +867,7 @@ describe('SignIn', () => {
         renderScreen(signedIn);
         typeAddress('mail.example.test');
 
-        expect(screen.getByText(/The port is optional — without one this client reaches 443\./u)).toBeDefined();
+        expect(screen.getByText(/The port is optional - without one this client reaches 443\./u)).toBeDefined();
     });
 
     // The sentence is about the port reached in the absence of the one that is there, so an address naming its own
@@ -876,7 +876,7 @@ describe('SignIn', () => {
         renderScreen(signedIn);
         typeAddress('mail.example.test:8443');
 
-        expect(screen.getByText(/The port is optional — without one this client reaches 443\./u)).toBeDefined();
+        expect(screen.getByText(/The port is optional - without one this client reaches 443\./u)).toBeDefined();
     });
 
     // Before anything is typed there is no resolved connection to read the port off, and the field is exactly where
@@ -884,14 +884,14 @@ describe('SignIn', () => {
     it('names the port the scheme reaches before an address has been typed at all', () => {
         renderScreen(signedIn);
 
-        expect(screen.getByText(/The port is optional — without one this client reaches 443\./u)).toBeDefined();
+        expect(screen.getByText(/The port is optional - without one this client reaches 443\./u)).toBeDefined();
     });
 
     it('names the unsecured port instead once a clear-text connection is what has been permitted', () => {
         renderScreen(signedIn);
         permitClearText();
 
-        expect(screen.getByText(/The port is optional — without one this client reaches 80\./u)).toBeDefined();
+        expect(screen.getByText(/The port is optional - without one this client reaches 80\./u)).toBeDefined();
     });
 
     it('lets somebody read back the password they typed, and put it away again', () => {

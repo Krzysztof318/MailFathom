@@ -187,7 +187,7 @@ describe('AnswerCanvas', () => {
     it('keeps what had arrived when a read fails, rather than waiting on it in silence', () => {
         renderCanvas([arrival(1, 'evidenceList')], { running: true, failure: 'unavailable' });
 
-        expect(screen.getByText('No connection to the server — this block cannot be loaded.')).toBeDefined();
+        expect(screen.getByText('No connection to the server - this block cannot be loaded.')).toBeDefined();
         expect(screen.getByText('evidenceList')).toBeDefined();
     });
 
@@ -197,7 +197,7 @@ describe('AnswerCanvas', () => {
     it.each([
         ['unauthenticated', 'The session ended while this answer was being read. Sign in again to see the rest.'],
         ['unauthorized', 'This account is not allowed to read this answer.'],
-        ['unavailable', 'No connection to the server — this block cannot be loaded.'],
+        ['unavailable', 'No connection to the server - this block cannot be loaded.'],
         [
             'unreadable',
             'The rest of this answer arrived in a form this client could not read, which is a defect worth reporting.',

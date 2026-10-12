@@ -13,7 +13,7 @@
 export const headingShapes = [
     'mt-0.5 text-3xl font-semibold tracking-tight text-text',
     'mt-0.5 text-xl font-semibold text-text',
-    'mt-0.5 text-xs font-medium tracking-widest uppercase text-muted',
+    'mt-0.5 text-xs font-semibold text-muted',
 ] as const;
 
 /** The shape a heading written at a level is drawn in, the third step answering for every level below it. */
@@ -28,12 +28,12 @@ export const orderedListShape = 'list-decimal space-y-1.5 ps-6 marker:text-faint
 export const unorderedListShape = 'list-disc space-y-1.5 ps-6 marker:text-faint';
 
 export const separatorShape = 'my-0.5 border-line';
-export const quoteShape = 'rounded-e-lg border-s-3 border-highlight-line bg-highlight px-3.75 py-2.75';
+export const quoteShape = 'rounded-e-md border-s-3 border-highlight-line bg-highlight px-3.75 py-2.75';
 export const preformattedShape =
-    'overflow-x-auto rounded-xl border border-line bg-sunken px-3.5 py-3 font-mono text-base whitespace-pre-wrap';
+    'overflow-x-auto rounded-md border border-line bg-sunken px-3.5 py-3 font-mono text-base whitespace-pre-wrap';
 
-export const tableRegionShape = 'overflow-x-auto rounded-xl border border-line bg-panel';
-export const tableShape = 'w-full border-collapse text-start text-base';
+export const tableRegionShape = 'overflow-x-auto rounded-md border border-line bg-panel';
+export const tableShape = 'w-full border-collapse text-start text-md';
 export const tableRowShape = 'border-b border-line last:border-b-0';
 export const tableCellShape = 'border-e border-line px-3 py-2.25 align-top last:border-e-0';
 export const tableHeaderCellShape = 'bg-sunken font-semibold text-text';

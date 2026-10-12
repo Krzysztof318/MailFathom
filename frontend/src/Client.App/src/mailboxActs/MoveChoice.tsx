@@ -61,7 +61,7 @@ export function MoveChoice({
         <dialog
             ref={asked}
             aria-labelledby={asks}
-            className="m-auto w-96 max-w-full rounded-2xl border border-line bg-panel p-0 text-text shadow-dialog backdrop:bg-scrim"
+            className="m-auto w-96 max-w-full rounded-lg border border-line bg-panel p-0 text-text shadow-dialog backdrop:bg-scrim"
             onClose={(closing) => {
                 const dialog = closing.currentTarget;
                 const picked = dialog.returnValue;
@@ -78,7 +78,7 @@ export function MoveChoice({
             }}
         >
             <div className="flex items-center gap-2.5 border-b border-line px-4 py-3">
-                <Icon name="drive_file_move" className="size-5 shrink-0 text-accent-strong" />
+                <Icon name="drive_file_move" className="size-icon-lg shrink-0 text-accent-strong" />
 
                 <h2 id={asks} className="flex-1 text-base font-semibold">
                     {translate('act.moveTitle')}
@@ -96,7 +96,7 @@ export function MoveChoice({
             <div className="flex max-h-96 flex-col overflow-y-auto py-1.5">
                 {groups.map((group) => (
                     <section key={group.accountId} aria-label={group.accountName}>
-                        <p className="flex items-center gap-2 px-4 pt-2 pb-1 text-2xs tracking-widest text-faint uppercase">
+                        <p className="flex items-center gap-2 px-4 pt-2 pb-1 text-xs font-semibold text-muted">
                             <MailboxMark ordinal={group.ordinal} />
                             <span className="min-w-0 flex-1 truncate">{group.accountName}</span>
                         </p>
@@ -115,7 +115,7 @@ export function MoveChoice({
                                             name={
                                                 destination.role === null ? 'folder' : folderRoleIcons[destination.role]
                                             }
-                                            className="size-4.5 shrink-0 text-muted"
+                                            className="size-icon-md shrink-0 text-muted"
                                         />
 
                                         <span className="truncate">{destinationName(destination, translate)}</span>
@@ -147,7 +147,7 @@ export function MoveChoice({
                                     );
                                 }}
                             >
-                                <Icon name="create_new_folder" className="size-4.5 shrink-0" />
+                                <Icon name="create_new_folder" className="size-icon-md shrink-0" />
                                 <span className="truncate">{translate('folders.newFolderHere')}</span>
                             </button>
                         ) : null}

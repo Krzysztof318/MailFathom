@@ -131,7 +131,7 @@ export function TabStrip({
                         <div
                             key={tab.key}
                             role="presentation"
-                            className={`flex max-w-tab items-center rounded-t-xl border ${
+                            className={`flex max-w-tab items-center rounded-t-md border ${
                                 selected ? 'border-line bg-panel text-text' : 'border-transparent text-muted'
                             }`}
                         >
@@ -154,7 +154,7 @@ export function TabStrip({
                                     onActivate(tab.key);
                                 }}
                             >
-                                <Icon name={kindIcons[tab.kind]} className="size-3.75 shrink-0 text-faint" />
+                                <Icon name={kindIcons[tab.kind]} className="size-icon-sm shrink-0 text-faint" />
                                 <span className={`truncate ${selected ? 'font-semibold' : ''}`}>{title}</span>
                             </button>
 
@@ -167,7 +167,7 @@ export function TabStrip({
                                     close(tab.key);
                                 }}
                             >
-                                <Icon name="close" className="size-3.75" />
+                                <Icon name="close" className="size-icon-sm" />
                             </button>
                         </div>
                     );
@@ -233,7 +233,7 @@ function CloseEverything({
                     asked.current?.showModal();
                 }}
             >
-                <Icon name="cancel" className="size-4.5" />
+                <Icon name="cancel" className="size-icon-md" />
             </button>
 
             <Confirmation

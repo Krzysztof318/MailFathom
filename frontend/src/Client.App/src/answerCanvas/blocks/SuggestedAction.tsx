@@ -81,7 +81,7 @@ export function SuggestedAction({ block }: { readonly block: AnswerBlock }) {
         >
             <div className="flex flex-wrap items-start gap-3">
                 <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-accent-soft text-accent-deep">
-                    <Icon className="size-4.5" name={step.icon} />
+                    <Icon className="size-icon-md" name={step.icon} />
                 </span>
 
                 <div className="flex min-w-0 flex-col gap-1.25">
@@ -102,8 +102,8 @@ export function SuggestedAction({ block }: { readonly block: AnswerBlock }) {
             </div>
 
             <p className="flex flex-wrap items-center gap-2">
-                <span className={`flex items-center gap-1 rounded-full px-2.25 py-0.5 text-2xs ${verdict.tint}`}>
-                    <Icon className="size-3.25" name={verdict.icon} />
+                <span className={`flex items-center gap-1 rounded-full px-2.25 py-0.5 text-xs ${verdict.tint}`}>
+                    <Icon className="size-icon-xs" name={verdict.icon} />
                     {translate(verdict.label)}
                 </span>
 

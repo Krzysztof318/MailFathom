@@ -36,7 +36,7 @@ export function ProposedNext({
 
     return (
         <div className={`flex flex-col gap-2 self-start pt-0.5 ${arriving ? 'animate-arrival' : ''}`}>
-            <p id={label} className="text-2xs tracking-wider text-muted uppercase">
+            <p id={label} className="text-xs font-semibold text-muted">
                 {translate('agent.proposedNext')}
             </p>
             <ul aria-labelledby={label} className="flex flex-wrap gap-2">
@@ -46,12 +46,12 @@ export function ProposedNext({
                             type="button"
                             disabled={asking}
                             aria-label={translate('agent.askFollowUp', { question: followUp })}
-                            className="inline-flex items-center gap-1.75 rounded-lg border border-line-strong bg-panel py-1.75 ps-2.5 pe-3 text-start text-base leading-tight text-text-soft transition hover:border-accent hover:text-accent-deep disabled:opacity-60"
+                            className="inline-flex items-center gap-1.75 rounded-md border border-line-strong bg-panel py-1.75 ps-2.5 pe-3 text-start text-base leading-tight text-text-soft transition hover:border-accent hover:text-accent-deep disabled:opacity-60"
                             onClick={() => {
                                 void ask(followUp);
                             }}
                         >
-                            <Icon name="arrow_forward" className="size-3.75 text-accent-deep" />
+                            <Icon name="arrow_forward" className="size-icon-sm text-accent-deep" />
                             {followUp}
                         </button>
                     </li>

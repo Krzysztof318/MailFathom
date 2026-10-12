@@ -467,7 +467,7 @@ describe('Thread', () => {
         expect(screen.getByRole('button', { name: /^Forward/ })).toBeDefined();
         expect(screen.getByRole('button', { name: /^Flag/ })).toBeDefined();
         expect(
-            screen.queryByRole('button', { name: 'Flag — nothing is open or selected for this to be about.' }),
+            screen.queryByRole('button', { name: 'Flag - nothing is open or selected for this to be about.' }),
         ).toBeNull();
     });
 

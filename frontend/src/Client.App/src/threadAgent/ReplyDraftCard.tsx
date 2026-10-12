@@ -38,10 +38,10 @@ function DraftCard({ drafting, draft }: { readonly drafting: ReplyDrafting; read
     return (
         <section
             aria-label={translate('threadAgent.draft')}
-            className="flex flex-col gap-2 rounded-lg border border-l-3 border-line border-l-accent bg-panel px-4 py-3.5"
+            className="flex flex-col gap-2 rounded-md border border-l-3 border-line border-l-accent bg-panel px-4 py-3.5"
         >
             <div className="flex items-center gap-2.5">
-                <p className="text-xs tracking-widest text-muted uppercase">{translate('threadAgent.draft')}</p>
+                <p className="text-xs font-semibold text-muted">{translate('threadAgent.draft')}</p>
 
                 {wide ? <p className="ms-auto text-sm text-muted">{translate('threadAgent.nothingSent')}</p> : null}
             </div>

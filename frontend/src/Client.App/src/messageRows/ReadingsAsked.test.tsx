@@ -137,8 +137,8 @@ describe('ReadingsAsked', () => {
             answering(resolving([{ outcome: 'Unresolvable' }, { outcome: 'Unresolvable' }])),
         );
 
-        expect(screen.getByText('A model — agents/reader')).toBeTruthy();
-        expect(screen.getByText('A rule of this deployment — rules/invoice')).toBeTruthy();
+        expect(screen.getByText('A model - agents/reader')).toBeTruthy();
+        expect(screen.getByText('A rule of this deployment - rules/invoice')).toBeTruthy();
     });
 
     it('says why the producer says it, so the reading can be disagreed with', () => {
@@ -198,7 +198,7 @@ describe('ReadingsAsked', () => {
         check(asking([commitment]), answering(resolving([{ outcome: 'Unresolvable' }, { outcome: 'PrivateSource' }])));
 
         expect(
-            await screen.findByText('This passage is no longer where it was — the message has been read again since.'),
+            await screen.findByText('This passage is no longer where it was - the message has been read again since.'),
         ).toBeTruthy();
         expect(screen.getByText('This passage cannot be read with this sign-in.')).toBeTruthy();
     });

@@ -128,9 +128,9 @@ export function NotificationRow({
             >
                 <span
                     aria-hidden="true"
-                    className={`flex size-8 shrink-0 items-center justify-center rounded-xl ${tone.mark}`}
+                    className={`flex size-8 shrink-0 items-center justify-center rounded-lg ${tone.mark}`}
                 >
-                    <Icon name={tone.icon} className="size-4.75" />
+                    <Icon name={tone.icon} className="size-icon-lg" />
                 </span>
 
                 <span className="flex min-w-0 flex-1 flex-col gap-0.75">
@@ -175,14 +175,14 @@ export function NotificationRow({
                     type="button"
                     aria-label={translate(notification.read ? 'notifications.markUnread' : 'notifications.markRead')}
                     title={translate(notification.read ? 'notifications.markUnread' : 'notifications.markRead')}
-                    className={`flex size-8 cursor-pointer items-center justify-center rounded-xl border transition pointer-coarse:size-9.5 ${
+                    className={`flex size-8 cursor-pointer items-center justify-center rounded-lg border transition pointer-coarse:size-9.5 ${
                         notification.read
                             ? 'border-line bg-panel text-muted'
                             : 'border-transparent bg-accent text-on-accent'
                     }`}
                     onClick={onToggleRead}
                 >
-                    <Icon name={notification.read ? 'mark_email_unread' : 'mark_email_read'} className="size-4.75" />
+                    <Icon name={notification.read ? 'mark_email_unread' : 'mark_email_read'} className="size-icon-lg" />
                 </button>
             </span>
         </li>

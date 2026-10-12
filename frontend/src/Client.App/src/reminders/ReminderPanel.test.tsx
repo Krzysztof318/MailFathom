@@ -67,20 +67,20 @@ describe('ReminderPanel', () => {
         const panel = screen.getByRole('dialog').textContent;
 
         expect(panel).toContain('Reminders');
-        expect(panel).toContain('Design review — before the event time');
+        expect(panel).toContain('Design review - before the event time');
         expect(panel).toContain('1 reminder');
     });
 
     it('names the hour a day is announced from, which is not the hour it begins at', () => {
         open([], 'eventDay');
 
-        expect(screen.getByRole('dialog').textContent).toContain('Design review — 09:00 on the day of the event');
+        expect(screen.getByRole('dialog').textContent).toContain('Design review - 09:00 on the day of the event');
     });
 
     it('names the hour a due date is announced from, which is the rule the deployment owns', () => {
         open([], 'taskDueDate');
 
-        expect(screen.getByRole('dialog').textContent).toContain('Design review — 09:00 on the day it is due');
+        expect(screen.getByRole('dialog').textContent).toContain('Design review - 09:00 on the day it is due');
     });
 
     it('offers a due date the leads the design draws for one, and none of the ones around a clock time', () => {
@@ -95,7 +95,7 @@ describe('ReminderPanel', () => {
         open([], 'taskDueDate');
 
         expect(screen.getByRole('dialog').textContent).toContain(
-            "No reminder — you won't be notified about this task.",
+            "No reminder - you won't be notified about this task.",
         );
     });
 
@@ -140,7 +140,7 @@ describe('ReminderPanel', () => {
     it('says an event announcing nothing does so in as many words, rather than drawing an untouched control', () => {
         open([]);
 
-        expect(screen.getByRole('dialog').textContent).toContain("No reminder — you won't be notified");
+        expect(screen.getByRole('dialog').textContent).toContain("No reminder - you won't be notified");
         expect(chosen()).toEqual([]);
     });
 

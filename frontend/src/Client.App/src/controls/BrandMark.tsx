@@ -19,7 +19,7 @@ export function BrandMark({ label, className }: { readonly label?: string; reado
             src={mark}
             alt={label ?? ''}
             aria-hidden={label === undefined ? 'true' : undefined}
-            className={`shrink-0 rounded-xl ${className ?? 'size-10'}`}
+            className={`shrink-0 rounded-lg ${className ?? 'size-10'}`}
         />
     );
 }

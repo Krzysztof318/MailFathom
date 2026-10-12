@@ -1756,7 +1756,7 @@ describe('Composer drafting', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Write a draft' }));
 
         expect(await screen.findByText('We accept the two-hour response time.')).toBeDefined();
-        expect(screen.getByText('AI draft — check the facts and tone before sending')).toBeDefined();
+        expect(screen.getByText('AI draft - check the facts and tone before sending')).toBeDefined();
 
         fireEvent.click(screen.getByRole('button', { name: 'Restore my version' }));
 
@@ -1790,7 +1790,7 @@ describe('Composer drafting', () => {
 
         fireEvent.click(await screen.findByRole('button', { name: 'Write a draft' }));
 
-        await screen.findByText('AI draft — check the facts and tone before sending');
+        await screen.findByText('AI draft - check the facts and tone before sending');
 
         fireEvent.click(screen.getByRole('button', { name: 'Send' }));
 
@@ -1825,7 +1825,7 @@ describe('Composer drafting', () => {
         fireEvent.click(await screen.findByRole('button', { name: 'Write a draft' }));
 
         expect(await screen.findByText('Nothing was drafted')).toBeDefined();
-        expect(screen.queryByText('AI draft — check the facts and tone before sending')).toBeNull();
+        expect(screen.queryByText('AI draft - check the facts and tone before sending')).toBeNull();
     });
 
     it('tells a spent allowance apart from a deployment that wrote nothing', async () => {
@@ -1915,7 +1915,7 @@ describe('Composer drafting', () => {
             true,
         );
 
-        expect(await screen.findByText('AI draft — check the facts and tone before sending')).toBeDefined();
+        expect(await screen.findByText('AI draft - check the facts and tone before sending')).toBeDefined();
         expect(screen.getByRole('button', { name: 'Accept' })).toBeDefined();
 
         fireEvent.click(screen.getByRole('button', { name: 'Restore my version' }));
@@ -1923,6 +1923,6 @@ describe('Composer drafting', () => {
         await waitFor(() => {
             expect(screen.queryByText('We accept the two-hour response time.')).toBeNull();
         });
-        expect(screen.queryByText('AI draft — check the facts and tone before sending')).toBeNull();
+        expect(screen.queryByText('AI draft - check the facts and tone before sending')).toBeNull();
     });
 });

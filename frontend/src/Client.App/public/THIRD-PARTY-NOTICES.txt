@@ -170,15 +170,15 @@ this file. None of them publishes a NOTICE file of its own.
 
 --------------------------------------------------------------------------------
 
-Instrument Sans, the Google Fonts v4 revision
-https://github.com/Instrument/instrument-sans
+Geist and Geist Mono, the Google Fonts v5 and v6 revisions
+https://github.com/vercel/geist-font
 
-The client's typeface, committed under src/Client.App/src/assets/fonts/ as four woff2 subsets and
-served from the bundle rather than from a font CDN, so a deployment that keeps mail on its own
-server hands nobody else a request for it. The files are the upstream ones, unmodified; nothing
-here uses the Reserved Font Name for a modified version, because nothing here modifies them.
+The client's two typefaces, committed under src/Client.App/src/assets/fonts/ as four woff2 subsets
+and served from the bundle rather than from a font CDN, so a deployment that keeps mail on its own
+server hands nobody else a request for them. The files are the upstream ones, unmodified, and both
+families are published under the one licence below.
 
-Copyright 2022 The Instrument Sans Project Authors (https://github.com/Instrument/instrument-sans)
+Copyright 2024 The Geist Project Authors (https://github.com/vercel/geist-font)
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:

@@ -80,7 +80,7 @@ export function ConversationRow({
             aria-current={open ? 'true' : undefined}
             ref={attach}
             tabIndex={focusable ? 0 : -1}
-            className={`flex cursor-pointer flex-col gap-0.5 rounded-lg border-s-3 py-2.25 pe-2.75 ps-2.25 ${
+            className={`flex cursor-pointer flex-col gap-0.5 rounded-md border-s-3 py-2.25 pe-2.75 ps-2.25 ${
                 open || selected ? 'border-s-accent bg-accent-soft' : 'border-s-transparent hover:bg-hover'
             }`}
             onKeyDown={pressed}
@@ -103,7 +103,7 @@ export function ConversationRow({
             }}
         >
             <span className="flex items-baseline gap-2">
-                {selected ? <Icon name="check" className="size-3.5 shrink-0 self-center text-accent-deep" /> : null}
+                {selected ? <Icon name="check" className="size-icon-xs shrink-0 self-center text-accent-deep" /> : null}
 
                 <span className="min-w-0 flex-1 truncate text-md font-semibold">
                     {conversation.title ?? translate('agent.newConversation')}

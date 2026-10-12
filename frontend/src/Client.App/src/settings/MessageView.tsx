@@ -49,7 +49,7 @@ export function MessageView({ preferences }: { readonly preferences: ClientPrefe
 
     return (
         <>
-            <fieldset className="flex gap-0.75 rounded-xl border border-line-strong bg-sunken p-0.75">
+            <fieldset className="flex gap-0.75 rounded-md border border-line-strong bg-sunken p-0.75">
                 <legend className="sr-only">{translate('settings.messageView')}</legend>
 
                 {views.map((offered) => (
@@ -70,7 +70,7 @@ export function MessageView({ preferences }: { readonly preferences: ClientPrefe
                 ))}
             </fieldset>
 
-            <p className="text-xs text-muted">{translate(viewExplanations[chosen])}</p>
+            <p className="text-base text-muted">{translate(viewExplanations[chosen])}</p>
         </>
     );
 }
@@ -84,8 +84,8 @@ export function MessageViewWarning({ preferences }: { readonly preferences: Clie
     }
 
     return (
-        <p className="flex items-start gap-2 rounded-xl border border-warning bg-warning-soft px-2.5 py-2.25 text-xs text-warning-text">
-            <Icon name="gpp_maybe" className="size-4 shrink-0" />
+        <p className="flex items-start gap-2 rounded-md border border-warning bg-warning-soft px-2.5 py-2.25 text-base text-warning-text">
+            <Icon name="gpp_maybe" className="size-icon-sm shrink-0" />
             {translate('settings.messageViewHtmlWarning')}
         </p>
     );

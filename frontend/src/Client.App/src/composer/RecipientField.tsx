@@ -178,7 +178,7 @@ export function RecipientField({
             {addresses.map((address) => (
                 <span
                     key={address}
-                    className="flex items-center gap-1.75 rounded-4xl border border-line bg-rail px-2.5 py-0.75 text-base"
+                    className="flex items-center gap-1.75 rounded-xl border border-line bg-rail px-2.5 py-0.75 text-base"
                 >
                     {address}
                     <button
@@ -189,7 +189,7 @@ export function RecipientField({
                             onChanged(addresses.filter((kept) => kept !== address));
                         }}
                     >
-                        <Icon name="close" className="size-3.5" />
+                        <Icon name="close" className="size-icon-xs" />
                     </button>
                 </span>
             ))}
@@ -232,7 +232,7 @@ export function RecipientField({
             {trailing}
 
             {open ? (
-                <div className="absolute inset-x-3.75 top-full z-20 mt-1 overflow-hidden rounded-xl border border-line bg-panel py-1 shadow-overlay">
+                <div className="absolute inset-x-3.75 top-full z-20 mt-1 overflow-hidden rounded-lg border border-line bg-panel py-1 shadow-overlay">
                     {listed ? (
                         <ul
                             id={listId}

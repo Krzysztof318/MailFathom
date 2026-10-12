@@ -26,14 +26,14 @@ import { initialsOf } from './initials';
 export type SenderAvatarPlace = 'row' | 'card' | 'contact' | 'person' | 'answerRow' | 'answerStack';
 
 const places: Readonly<Record<SenderAvatarPlace, string>> = {
-    row: 'size-8.5 text-xs workspace:size-5.5 workspace:text-2xs',
+    row: 'size-8.5 text-sm workspace:size-5.5 workspace:text-xs',
     card: 'size-7.5 text-xs',
     contact: 'size-8 text-xs',
     person: 'size-13 text-lg',
     answerRow: 'size-8 text-xs',
     // The participants of a conversation are drawn as one overlapping run of circles rather than a list of names, which
     // is what the ring in the panel's own colour and the negative margin are: each circle sits over the one before it.
-    answerStack: 'size-6.5 text-2xs -me-1.75 border-2 border-panel',
+    answerStack: 'size-6.5 text-xs -me-1.75 border-2 border-panel',
 };
 
 /** The circle a sender is recognised by, drawn only where there are letters to put in it. */

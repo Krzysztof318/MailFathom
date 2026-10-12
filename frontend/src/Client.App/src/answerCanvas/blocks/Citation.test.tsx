@@ -67,7 +67,7 @@ describe('Citation', () => {
         // The source is named, because this client was given it; what it says instead is which half is missing,
         // rather than the capability report a control nobody has built yet would carry.
         expect(chip.getAttribute('aria-label')).toBe(
-            'Citation 1: Master agreement.pdf — this client cannot open where it points',
+            'Citation 1: Master agreement.pdf - this client cannot open where it points',
         );
         expect(chip.getAttribute('aria-disabled')).toBe('true');
 
@@ -82,7 +82,7 @@ describe('Citation', () => {
         // The reason is its own sentence rather than one wrapped in another: every other citation on the screen
         // follows, so reporting this one as a capability nobody has built would be false as well as doubled.
         expect(screen.getByRole('button').getAttribute('aria-label')).toBe(
-            'Citation 1 — this client was not given the source behind it',
+            'Citation 1 - this client was not given the source behind it',
         );
     });
 });

@@ -1230,7 +1230,7 @@ describe('FolderTree, in a folded column', () => {
             row(/^Inbox12 unread/)
                 .querySelector('svg')
                 ?.getAttribute('class'),
-        ).toContain('size-4.5');
+        ).toContain('size-icon-md');
 
         foldTheColumnAway();
 
@@ -1238,7 +1238,7 @@ describe('FolderTree, in a folded column', () => {
             row(/^Inbox12 unread/)
                 .querySelector('svg')
                 ?.getAttribute('class'),
-        ).toContain('size-6');
+        ).toContain('size-icon-2xl');
     });
 
     it('marks a mailbox by its colour where the column named it, so the mailboxes stay tellable apart', async () => {

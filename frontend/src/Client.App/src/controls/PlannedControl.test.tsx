@@ -15,7 +15,7 @@ describe('PlannedControl', () => {
             </LocalizationProvider>,
         );
 
-        const control = screen.getByRole('button', { name: 'Archive — not built yet' });
+        const control = screen.getByRole('button', { name: 'Archive - not built yet' });
 
         expect(control.getAttribute('aria-disabled')).toBe('true');
     });
@@ -27,7 +27,7 @@ describe('PlannedControl', () => {
             </LocalizationProvider>,
         );
 
-        expect(screen.getByRole('button', { name: 'Archive — not built yet' }).hasAttribute('disabled')).toBe(false);
+        expect(screen.getByRole('button', { name: 'Archive - not built yet' }).hasAttribute('disabled')).toBe(false);
     });
 
     // Two reasons a control cannot act, and a reader needs to be told which: the client has not built it, or this
@@ -35,13 +35,13 @@ describe('PlannedControl', () => {
     it('says the caller’s own reason in place of the default one, where the caller gave one', () => {
         render(
             <LocalizationProvider>
-                <PlannedControl label="Archive" icon="archive" why="Archive — this account names no archive folder." />
+                <PlannedControl label="Archive" icon="archive" why="Archive - this account names no archive folder." />
             </LocalizationProvider>,
         );
 
-        const control = screen.getByRole('button', { name: 'Archive — this account names no archive folder.' });
+        const control = screen.getByRole('button', { name: 'Archive - this account names no archive folder.' });
 
-        expect(control.getAttribute('title')).toBe('Archive — this account names no archive folder.');
+        expect(control.getAttribute('title')).toBe('Archive - this account names no archive folder.');
         expect(control.getAttribute('aria-disabled')).toBe('true');
     });
 
