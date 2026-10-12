@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Persistence;
 using MailFathom.Infrastructure.Observability;
@@ -37,7 +37,7 @@ internal interface IEfCorePersistenceSession
     /// <para>
     /// Stating it is not deleting it. What is stated on a session that rolls back is discarded with the session, and
     /// what is stated on one that commits is removed from the endpoint afterwards, which is the ordering
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md">ADR 0017</see>
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md">ADR 0017</see>
     /// § 7 requires: deleting an object before its row's deletion is durable would destroy mail whose deletion then
     /// rolled back.
     /// </para>

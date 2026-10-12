@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Globalization;
 using System.Security.Cryptography;
@@ -30,7 +30,7 @@ namespace MailFathom.Application.Mail.Maintenance;
 /// </para>
 /// <para>
 /// A scope is walked by one segment at a time across every replica, because a segment walks only while it holds the
-/// lease on the scope, as <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md">ADR 0031</see>
+/// lease on the scope, as <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md">ADR 0031</see>
 /// decides for an operator-asked re-derivation. Which replica the operator's request reached decides nothing: the
 /// request writes the run down, and whichever segment holds the scope's lease walks it. A segment that finds the scope
 /// held reads no mail and hands the rest on as any stopped segment does, to a successor the queue releases only once a

@@ -13,13 +13,13 @@ indexes it for search, and serves it to AI agents as tools over the
 [Model Context Protocol](https://modelcontextprotocol.io/). Reading is local, no tool writes to a mailbox, and
 synchronization never marks anything read on the mail server. What an agent can write is MailFathom's own contact book.
 
-![A chat client asked to show the latest mail, answered with a table of the ten most recent messages, their receipt times, and the moment the local copy was last synchronized](https://raw.githubusercontent.com/Krzysztof318/MailFathom/main/assets/mcp-tools/list-recent-emails.png)
+![A chat client asked to show the latest mail, answered with a table of the ten most recent messages, their receipt times, and the moment the local copy was last synchronized](https://raw.githubusercontent.com/fathomise/MailFathom/main/assets/mcp-tools/list-recent-emails.png)
 
 *One question, answered from the local copy in an ordinary chat client. The `***` were blacked out by hand before the
 file entered a public repository — MailFathom redacts nothing on its way to a client.*
 
 This page is the front door of the published site. It exists only there: the file GitHub shows when you browse
-`docs/` is [`README.md`](https://github.com/Krzysztof318/MailFathom/blob/main/docs/README.md), which indexes the same
+`docs/` is [`README.md`](https://github.com/fathomise/MailFathom/blob/main/docs/README.md), which indexes the same
 pages for somebody reading them in the repository.
 
 ## Where to start
@@ -49,9 +49,9 @@ in that same selector, and a page outside the current release says so in a banne
 
 ## What this site leaves out
 
-The [repository](https://github.com/Krzysztof318/MailFathom) holds what is deliberately not published here: the
+The [repository](https://github.com/fathomise/MailFathom) holds what is deliberately not published here: the
 architectural decision records under
-[`docs/decisions/`](https://github.com/Krzysztof318/MailFathom/tree/main/docs/decisions), which are a closed record of
+[`docs/decisions/`](https://github.com/fathomise/MailFathom/tree/main/docs/decisions), which are a closed record of
 why a decision was taken rather than documentation of how MailFathom behaves, and the instructions that govern the
 agents and contributors working on it. MailFathom is published under the
-[GNU Affero General Public License, Version 3](https://github.com/Krzysztof318/MailFathom/blob/main/LICENSE).
+[GNU Affero General Public License, Version 3](https://github.com/fathomise/MailFathom/blob/main/LICENSE).

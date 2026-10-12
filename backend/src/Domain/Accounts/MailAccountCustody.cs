@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 namespace MailFathom.Domain.Accounts;
 
@@ -15,7 +15,7 @@ namespace MailFathom.Domain.Accounts;
 /// It is never a configuration key. An administrator switches it for one user's one mail account through a command of
 /// its own, and what was asked for is stored in the database beside the account, because emptying somebody's source
 /// server is a deliberate act against one mailbox rather than a setting copied between deployments. See
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
 /// </para>
 /// </remarks>
 public enum MailAccountCustody

@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Host.Configuration.Administration;
 using Xunit;
@@ -10,7 +10,7 @@ namespace MailFathom.PublicSurfaces.UnitTests;
 /// <summary>Holds the surfaces nothing else records against the files committed beside this suite.</summary>
 /// <remarks>
 /// <para>
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md">ADR 0004</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md">ADR 0004</see>
 /// permits a break on any of the four public surfaces below <c>1.0.0</c> and makes the record of the break the
 /// obligation instead. The database schema already has a test that proves what a release ships, and the deployment
 /// contract is read by the assets that render it; the tool contract and the configuration key set had nothing but the

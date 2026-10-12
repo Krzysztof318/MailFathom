@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Persistence;
 
@@ -94,7 +94,7 @@ public interface IEmbeddingGenerationStore
     /// delete would hold one transaction, one lock set, and one write-ahead burst for as long as it took. They are
     /// removed rather than kept for a rollback window: they are personal data derived from mail whose purpose ended at
     /// the switch, which is the trade
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
     /// makes deliberately and states the cost of.
     /// </remarks>
     Task<int> RemoveVectorsAsync(

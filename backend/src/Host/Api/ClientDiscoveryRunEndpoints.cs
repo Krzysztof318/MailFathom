@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Globalization;
 using MailFathom.Application.Access;
@@ -33,7 +33,7 @@ namespace MailFathom.Host.Api;
 /// <strong>Every one of them answers from any replica.</strong> The run's output is rows rather than objects in the
 /// process composing it, so a client reading its own run reaches it wherever the load balancer routed the request, a
 /// second screen the same person opened reaches the same answer, and a rolling upgrade does not lose it.
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0035-delivering-a-running-ai-answer-from-a-persisted-run-by-cursor-signal-and-re-read.md">ADR 0035</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0035-delivering-a-running-ai-answer-from-a-persisted-run-by-cursor-signal-and-re-read.md">ADR 0035</see>
 /// is that decision, and the cursor this reading route takes is what makes it exact: a cursor addresses rows every
 /// replica can read, so where a client lands decides nothing about what it is given.
 /// </para>

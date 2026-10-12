@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Globalization;
 using System.Text;
@@ -31,7 +31,7 @@ namespace MailFathom.IntegrationTests.Synchronization;
 /// The drain half is performed here rather than assumed, so the folder the restore fills is one that really was
 /// emptied message by message. It is this test's own folder, named per run: the shared mailbox has other tests in it,
 /// and a claim that a folder holds exactly two messages is only true of a folder nobody else writes to. See
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
 /// </para>
 /// </remarks>
 [Collection(OrchestratedInfrastructureCollectionDefinition.Name)]

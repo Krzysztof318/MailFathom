@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Coordination;
@@ -39,7 +39,7 @@ namespace MailFathom.Host.Hosting.Workers;
 /// creates the work releases it, and the instant it would otherwise end at is readable while it lasts.
 /// </para>
 /// <para>
-/// A pass runs on one replica at a time, as <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md">ADR 0031</see>
+/// A pass runs on one replica at a time, as <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md">ADR 0031</see>
 /// decides. Each pass takes the sweep's lease before it reads the position and gives it back when it ends, so the next
 /// pass is contested afresh and a replica that stops parks nothing beyond one lease. A replica refused the lease reads
 /// nothing and asks again after the short interval; a pass whose hold is lost stops, and what it committed is where the

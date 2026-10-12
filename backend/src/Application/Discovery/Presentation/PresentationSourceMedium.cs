@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Text.Json.Serialization;
 
@@ -9,7 +9,7 @@ namespace MailFathom.Application.Discovery.Presentation;
 /// <summary>Says whether a source is something somebody wrote or a description of something somebody pictured.</summary>
 /// <remarks>
 /// <para>
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md">ADR 0030</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md">ADR 0030</see>
 /// makes a depicted source corroborating rather than a headline, and that ranking has to survive the journey from
 /// retrieval to a screen. A description of a photographed invoice is this deployment's own reading of a picture, so a
 /// fact resting on one alone rests on a machine's account of what an image shows; a fact resting on a sentence somebody

@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.CodeCoverage;
@@ -23,7 +23,7 @@ namespace MailFathom.Infrastructure.Persistence.Emails;
 /// <para>
 /// The serialization is a transaction-level advisory lock rather than a row to contend on, because there is no row a
 /// claim naturally belongs to — a claim is an insert, and an insert takes no lock a second insert would wait behind.
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md">ADR 0031</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md">ADR 0031</see>
 /// records why an advisory lock is not how a scope is held and where it is nonetheless the right answer: a short
 /// critical section that touches nothing but the database, ending with the transaction whatever happened to the caller.
 /// It is taken in a statement of its own because a lock acquired inside the reading statement would come too late —

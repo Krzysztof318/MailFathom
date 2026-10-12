@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Emails.Extraction;
@@ -50,7 +50,7 @@ public interface IEmailTextChunker
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     /// <remarks>
     /// The same walk, the same rules, and the same determinism as the body cut, which is the whole of what
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.md">ADR 0029</see>
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.md">ADR 0029</see>
     /// means by one kind of passage: a passage out of a contract and a passage out of the note that carried it are
     /// comparable because they were cut the same way and are embedded into the same space. What differs is the identity
     /// each passage is stored under, which <paramref name="source" /> supplies, and the text being cut — the ordinals

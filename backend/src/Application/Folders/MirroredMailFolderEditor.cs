@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Access;
 using MailFathom.Application.Jobs;
@@ -25,7 +25,7 @@ namespace MailFathom.Application.Folders;
 /// It acts only on folders the account's own record declares. A folder the deployment's own configuration fixed is
 /// refused, because what an operator wrote is theirs; a folder playing a role is refused for every act but creation,
 /// because the folder an account files by is not one an earlier act may take away. See
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md">ADR 0007</see>,
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md">ADR 0007</see>,
 /// axes L, M, and N.
 /// </para>
 /// <para>

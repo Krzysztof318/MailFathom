@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 // The arithmetic of the two gestures the notification panel is driven by on a phone, apart from the pointers that
 // produce it. Every number here is the design's own and is stated once, because the two directions are one

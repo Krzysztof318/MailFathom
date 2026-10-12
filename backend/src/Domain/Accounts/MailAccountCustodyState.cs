@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 namespace MailFathom.Domain.Accounts;
 
@@ -11,7 +11,7 @@ namespace MailFathom.Domain.Accounts;
 /// The pair is read together everywhere a decision turns on custody, because neither value answers on its own: an
 /// account asked to hold its mailbox is still mirrored until its outstanding remote mutations have been carried, and
 /// one asked to mirror again is still the truth for as long as the restore is appending. See
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
 /// </remarks>
 public sealed record MailAccountCustodyState(MailAccountCustody Requested, MailAccountCustodyPhase Phase)
 {

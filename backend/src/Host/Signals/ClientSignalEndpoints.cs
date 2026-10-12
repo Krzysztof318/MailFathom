@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Access;
 using MailFathom.Application.Signals;
@@ -60,7 +60,7 @@ internal static partial class ClientSignalEndpoints
     /// </para>
     /// <para>
     /// What it costs is stated in
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0032-reaching-a-client-from-any-replica-over-websockets-and-a-resp-backplane.md">ADR 0032</see>:
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0032-reaching-a-client-from-any-replica-over-websockets-and-a-resp-backplane.md">ADR 0032</see>:
     /// a network or a proxy that will not pass the WebSocket upgrade gives that client no live updates at all, and it
     /// reads its screens over the ordinary routes on its own schedule instead.
     /// </para>

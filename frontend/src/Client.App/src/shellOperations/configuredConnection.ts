@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 // What a deployment said about the connection before anybody typed anything: where its service is, and whether an
 // unsecured connection to it is permitted. Somebody handed a packaged client by their organization should be asked for

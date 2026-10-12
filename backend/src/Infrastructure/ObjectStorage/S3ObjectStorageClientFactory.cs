@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using Amazon.Runtime;
 using Amazon.S3;
@@ -17,7 +17,7 @@ namespace MailFathom.Infrastructure.ObjectStorage;
 /// taking explicit credentials and an explicit configuration, with the address, the signing region, and the addressing
 /// style all set from what an operator wrote. <see cref="ClientConfig.IgnoreConfiguredEndpointUrls" /> closes the last
 /// of it, which is the environment's own ability to redirect a configured address.
-/// See <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md">ADR 0017</see> § 8.
+/// See <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md">ADR 0017</see> § 8.
 /// </para>
 /// <para>
 /// <b>The SDK's own retry is off, and that is the single-layer rule rather than a preference.</b> Every call runs under

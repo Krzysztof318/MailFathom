@@ -296,7 +296,7 @@ this process's own memory, which is what a limiter in front of a socket can coun
 replicas spends a bucket on each. That is deliberate rather than a gap — the thing being protected is each process's
 capacity to serve, and a deployment behind a load balancer bounds a caller at the balancer, where every one of that
 caller's requests is visible.
-[ADR 0031](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md) records the rule these
+[ADR 0031](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md) records the rule these
 follow: a rate that names a *provider's* quota becomes the deployment's, and an in-flight count over this process's own
 resources stays a process's and says so.
 

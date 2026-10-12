@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 // Where a menu opened at a gesture stands, which is arithmetic over two rectangles and nothing else — no element, no
 // event, and no question about which composition is on the screen. It sits apart from the menu that reads it because

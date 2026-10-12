@@ -173,7 +173,7 @@ Where the image is named differs per deployment shape, and nothing else about th
 | Shape | What names the analyzer image |
 | --- | --- |
 | Compose | `MAILFATHOM_PRESIDIO_IMAGE` in `.env`, which the analyzer service reads — see [Docker Compose](deployment-compose.md#personal-data-scanning) |
-| Quadlet | The `Image=` line in the copy of [`mailfathom-presidio.container`](https://github.com/Krzysztof318/MailFathom/blob/main/deploy/quadlet/mailfathom-presidio.container) that was installed |
+| Quadlet | The `Image=` line in the copy of [`mailfathom-presidio.container`](https://github.com/fathomise/MailFathom/blob/main/deploy/quadlet/mailfathom-presidio.container) that was installed |
 | Kubernetes | `personalDataScanning.analyzer.image`, or `analyzer.deploy: false` with an `endpoint` naming an analyzer you operate — see [Kubernetes](deployment-kubernetes.md#personal-data-scanning) |
 
 The chart's analyzer Deployment mounts no configuration and takes no analyzer environment of its own, deliberately: a
@@ -186,7 +186,7 @@ carry the analyzer profile they were produced under rather than the image tag, s
 you; treat the derived image as a dependency of your own, rebuild it when the pin here moves, and record it wherever
 your deployment records the images it runs. A derived image is also yours to distribute rather than MailFathom's, so
 its notices are yours to preserve — the analyzer and the models it loads are permissively licensed and
-[the third-party register](https://github.com/Krzysztof318/MailFathom/blob/main/THIRD_PARTY_LICENSES.md) names the terms
+[the third-party register](https://github.com/fathomise/MailFathom/blob/main/THIRD_PARTY_LICENSES.md) names the terms
 this project reviewed them under.
 
 ## Adding a recognizer MailFathom can use
@@ -222,7 +222,7 @@ that works on some sentences and not others. Choose the base score against the f
 that lowering the floor to accommodate one recognizer lowers it for every other one too.
 
 **In this repository.** Add the entity to
-[`PresidioEntityCorpus`](https://github.com/Krzysztof318/MailFathom/blob/main/src/Infrastructure/SensitiveContent/PersonalData/PresidioEntityCorpus.cs),
+[`PresidioEntityCorpus`](https://github.com/fathomise/MailFathom/blob/main/src/Infrastructure/SensitiveContent/PersonalData/PresidioEntityCorpus.cs),
 spelled exactly as the analyzer spells it, inside the category it belongs to — `IdentityDocument` here. That is what
 puts it in the request, what makes it a rule an operator can suppress by name, and what maps the offsets back onto the
 text. Then move `MappingRevision` in the same file, because a changed mapping is a changed detector.

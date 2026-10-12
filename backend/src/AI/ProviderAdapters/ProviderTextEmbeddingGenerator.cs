@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.AI.Embeddings;
 using MailFathom.AI.Providers;
@@ -25,7 +25,7 @@ namespace MailFathom.AI.ProviderAdapters;
 /// Falling through the chain never changes what is written. Every endpoint declares the same geometry — startup
 /// refuses a chain where they differ — so the vectors a fallback returns belong to the same profile as the ones before
 /// them, and no read path has to know which endpoint produced which. See
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>.
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>.
 /// </para>
 /// <para>
 /// Every passage is scanned before it is sent, where this deployment scans anything, and a scanner that cannot answer

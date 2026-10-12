@@ -4,7 +4,7 @@ description: Use when repository work is implemented and must be verified, commi
 license: AGPL-3.0-only
 metadata:
   author: Krzysztof Kasprowicz
-  repository: https://github.com/Krzysztof318/MailFathom
+  repository: https://github.com/fathomise/MailFathom
 ---
 
 # Finish Change
@@ -59,9 +59,9 @@ Do not proceed while a gate fails.
 3. Fetch the base remote and confirm the branch remains safely based on its current `main`. Integrate
    remote movement without discarding work, then repeat affected gates.
 4. Push the branch. In the owner's checkout that is `origin`; in the fork role it is the fork's own
-   `origin`, and nothing is ever pushed to `Krzysztof318/MailFathom`.
+   `origin`, and nothing is ever pushed to `fathomise/MailFathom`.
 5. Create a pull request whose body contains `Closes #<issue>` for the issue the change
-   completes. In the fork role it targets `main` on `Krzysztof318/MailFathom` from the fork's branch.
+   completes. In the fork role it targets `main` on `fathomise/MailFathom` from the fork's branch.
 6. Confirm the reference is present in the published body. `gh pr edit` fails against this repository
    with a Projects-classic GraphQL error and silently drops the edit, so correct a missing reference
    through `gh api repos/<owner>/<repo>/pulls/<number> -X PATCH -f body=...`. That endpoint names the
@@ -82,7 +82,7 @@ Do not proceed while a gate fails.
    available:
 
    ```bash
-   band=$(gh api repos/Krzysztof318/MailFathom/pulls/<number> \
+   band=$(gh api repos/fathomise/MailFathom/pulls/<number> \
      --jq '.additions + .deletions
            | if . < 1000 then "S" elif . < 2500 then "M" elif . < 5000 then "L" else "XL" end')
    ```

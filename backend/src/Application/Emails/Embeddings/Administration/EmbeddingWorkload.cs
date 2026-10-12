@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 namespace MailFathom.Application.Emails.Embeddings.Administration;
 
@@ -9,7 +9,7 @@ namespace MailFathom.Application.Emails.Embeddings.Administration;
 /// <para>
 /// One value answering two questions, because they are the same count read at different moments. Before an activation
 /// it is the estimate
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
 /// puts in front of the operator; while a reindex runs it is how far that run has come. A second type for the second
 /// reading would let the two drift apart and would leave an operator comparing an estimate against a progress figure
 /// that was counted differently.

@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Domain.Scheduling;
 
@@ -27,7 +27,7 @@ namespace MailFathom.Application.Emails.Embeddings.Limits;
 /// </para>
 /// <para>
 /// Configuration alone, and deliberately never part of an embedding profile.
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
 /// keeps the profile row to what a stored vector means; a ceiling decides how many vectors exist and changes the
 /// meaning of none of them, so raising it re-embeds nothing.
 /// </para>

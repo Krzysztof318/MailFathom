@@ -1,12 +1,12 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 namespace MailFathom.Infrastructure.Policies;
 
 /// <summary>Which of a settings policy's three statements a property of a governed record takes.</summary>
 /// <remarks>
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0037-a-settings-policy-at-the-deployment-and-at-each-organization.md">ADR 0037</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0037-a-settings-policy-at-the-deployment-and-at-each-organization.md">ADR 0037</see>
 /// § <em>Three classes of property</em> holds why there are three and what each one refuses.
 /// </remarks>
 public enum SettingsPolicyPropertyClass

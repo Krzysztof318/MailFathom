@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Access;
 using MailFathom.Application.Emails.Mailboxes;
@@ -16,7 +16,7 @@ namespace MailFathom.Application.Mail.Mutations.Authoring;
 /// <remarks>
 /// <para>
 /// It is the deleting half of what
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md">ADR 0007</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md">ADR 0007</see>
 /// permits a caller to author, and it is built exactly as <see cref="MailRelocationRecorder" /> is: it asks for the
 /// grant before it asks about the email, it answers the same question about which mail may be written as about which
 /// mail may be read, and it issues no IMAP command at all. The account's own convergence pass expunges the remote

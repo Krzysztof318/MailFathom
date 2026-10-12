@@ -12,16 +12,16 @@ frontmatter, and fails when a skill has no row or a row names no skill.
 
 | Skill | Source | Licence |
 |---|---|---|
-| `add-migration` | https://github.com/Krzysztof318/MailFathom | AGPL-3.0-only |
-| `check-docs-licenses` | https://github.com/Krzysztof318/MailFathom | AGPL-3.0-only |
-| `closed-enumeration` | https://github.com/Krzysztof318/MailFathom | AGPL-3.0-only |
-| `finish-change` | https://github.com/Krzysztof318/MailFathom | AGPL-3.0-only |
-| `get-started-contributors` | https://github.com/Krzysztof318/MailFathom | AGPL-3.0-only |
-| `prepare-release` | https://github.com/Krzysztof318/MailFathom | AGPL-3.0-only |
-| `read-design` | https://github.com/Krzysztof318/MailFathom | AGPL-3.0-only |
-| `review-change` | https://github.com/Krzysztof318/MailFathom | AGPL-3.0-only |
-| `start-task` | https://github.com/Krzysztof318/MailFathom | AGPL-3.0-only |
-| `update-dependencies` | https://github.com/Krzysztof318/MailFathom | AGPL-3.0-only |
+| `add-migration` | https://github.com/fathomise/MailFathom | AGPL-3.0-only |
+| `check-docs-licenses` | https://github.com/fathomise/MailFathom | AGPL-3.0-only |
+| `closed-enumeration` | https://github.com/fathomise/MailFathom | AGPL-3.0-only |
+| `finish-change` | https://github.com/fathomise/MailFathom | AGPL-3.0-only |
+| `get-started-contributors` | https://github.com/fathomise/MailFathom | AGPL-3.0-only |
+| `prepare-release` | https://github.com/fathomise/MailFathom | AGPL-3.0-only |
+| `read-design` | https://github.com/fathomise/MailFathom | AGPL-3.0-only |
+| `review-change` | https://github.com/fathomise/MailFathom | AGPL-3.0-only |
+| `start-task` | https://github.com/fathomise/MailFathom | AGPL-3.0-only |
+| `update-dependencies` | https://github.com/fathomise/MailFathom | AGPL-3.0-only |
 | `brandkit` | https://github.com/Leonxlnx/taste-skill | MIT |
 | `design-taste-frontend` | https://github.com/Leonxlnx/taste-skill | MIT |
 | `full-output-enforcement` | https://github.com/Leonxlnx/taste-skill | MIT |

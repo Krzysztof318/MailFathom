@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Copyright © 2026 Krzysztof Kasprowicz
 # Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-# Project repository: https://github.com/Krzysztof318/MailFathom
+# Project repository: https://github.com/fathomise/MailFathom
 
 set -euo pipefail
 
@@ -58,9 +58,9 @@ set -euo pipefail
 # It reads a checkout, so unlike scripts/install-mfctl.sh it is not fetched over HTTP and run — `git clone` comes
 # first, and the file is here to be read before it is run.
 
-readonly repository='Krzysztof318/MailFathom'
+readonly repository='fathomise/MailFathom'
 readonly release_base="https://github.com/$repository/releases"
-readonly documentation_base='https://krzysztof318.github.io/MailFathom/docs'
+readonly documentation_base='https://fathomise.github.io/MailFathom/docs'
 
 # The port compose.yaml publishes, which every surface served on the container's own 8080 answers on: the MCP endpoint,
 # the client's routes, and the page a browser downloads.

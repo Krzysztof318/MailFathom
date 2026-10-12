@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Coordination;
@@ -64,7 +64,7 @@ public sealed record EmbeddingStatus(
     /// <remarks>
     /// <para>
     /// The member this whole value exists for. Editing configuration declares a model and starts nothing, which
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
     /// records as the cost of keeping the declaration reviewable — so an operator who edited a file and expected search
     /// results to change learns here that they have not, rather than from search results that stayed the same.
     /// </para>

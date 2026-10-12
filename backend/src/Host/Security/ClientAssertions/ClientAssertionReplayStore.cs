@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Access.Credentials;
 using MailFathom.Common.ClientAssertions;
@@ -23,7 +23,7 @@ namespace MailFathom.Host.Security.ClientAssertions;
 /// the replica that refuses a replay is not the replica the next presentation reaches, so raising <c>replicaCount</c>
 /// would have turned a closed window into an open one without anything saying so. The trade that reading named — binding
 /// a client to one instance — is refused by
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md">ADR 0031</see>,
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md">ADR 0031</see>,
 /// because affinity is honoured by the client and the client here is whoever captured the assertion.
 /// </para>
 /// <para>

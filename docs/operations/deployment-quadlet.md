@@ -2,7 +2,7 @@
 
 <!-- describes: deploy/quadlet/** -->
 
-[`deploy/quadlet/`](https://github.com/Krzysztof318/MailFathom/tree/main/deploy/quadlet) runs MailFathom and PostgreSQL
+[`deploy/quadlet/`](https://github.com/fathomise/MailFathom/tree/main/deploy/quadlet) runs MailFathom and PostgreSQL
 as **rootless systemd units** under Podman. It exists for one reason: a Quadlet `.container` file *is* a systemd unit
 source, so a container started from one takes credentials the way the native installation does — `LoadCredentialEncrypted=`,
 material that is ciphertext at rest, and a `systemd-credential:` reference that resolves inside the container with no
@@ -765,7 +765,7 @@ carries no `AutoUpdate=`, so nothing moves it for you.
 
 **Nothing of Silo is in MailFathom's image or in this repository.** The unit names an image your host pulls from PGSTY's
 own registry. Silo is AGPL-3.0-or-later, which
-[`THIRD_PARTY_LICENSES.md`](https://github.com/Krzysztof318/MailFathom/blob/main/THIRD_PARTY_LICENSES.md) records
+[`THIRD_PARTY_LICENSES.md`](https://github.com/fathomise/MailFathom/blob/main/THIRD_PARTY_LICENSES.md) records
 together with the reading it is used under. Its own lifecycle — upgrades, its configuration, its users beyond the one
 above — is yours; MailFathom manages none of it.
 
@@ -851,7 +851,7 @@ states the order that takes.
 Docker Hub, pinned by the same digest the Compose deployment and the chart carry — Valkey publishes its
 release tags beside moving `9`, `9.1`, and `latest` ones, so a digest is the only reference that names one artifact.
 Valkey is BSD-3-Clause, which
-[`THIRD_PARTY_LICENSES.md`](https://github.com/Krzysztof318/MailFathom/blob/main/THIRD_PARTY_LICENSES.md) records
+[`THIRD_PARTY_LICENSES.md`](https://github.com/fathomise/MailFathom/blob/main/THIRD_PARTY_LICENSES.md) records
 together with the base image it is built on.
 
 ## Bounds

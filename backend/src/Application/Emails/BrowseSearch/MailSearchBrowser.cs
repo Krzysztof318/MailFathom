@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
@@ -35,7 +35,7 @@ namespace MailFathom.Application.Emails.BrowseSearch;
 /// A message a description of a picture alone placed sits below every message a query word or a written passage
 /// reached, and says so on the result. That floor is <see cref="HybridSearchRanking" />'s rather than this use case's,
 /// because
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md">ADR 0030</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md">ADR 0030</see>
 /// requires one step every surface calls instead of a rule each of them remembers.
 /// </para>
 /// <para>

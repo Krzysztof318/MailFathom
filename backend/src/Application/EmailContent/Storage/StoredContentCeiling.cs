@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Domain.Accounts;
@@ -40,7 +40,7 @@ namespace MailFathom.Application.EmailContent.Storage;
 /// Which per-user ceilings it is charged to follows from the assignments at the moment of the claim, and a mailbox
 /// shared by two people counts in full against both — so a user whose own mailboxes have reached their ceiling holds
 /// the shared one back for everybody assigned to it, which is the trade-off
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md">ADR 0014</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md">ADR 0014</see>
 /// states rather than an oversight here.
 /// </para>
 /// </remarks>

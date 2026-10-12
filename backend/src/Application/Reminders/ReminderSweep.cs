@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Globalization;
 using MailFathom.Application.Access;
@@ -29,7 +29,7 @@ namespace MailFathom.Application.Reminders;
 /// </para>
 /// <para>
 /// The pass is one run for the whole deployment, so it runs only under the lease on its own scope, as
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md">ADR 0031</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md">ADR 0031</see>
 /// decides. A replica refused the lease announces nothing and asks again on its next interval. The scope is the
 /// reminders' rather than the calendar's, so a rolling upgrade past the build that renamed it has one replica
 /// holding each — which announces nothing twice, because the claim is conditional on the instant and the

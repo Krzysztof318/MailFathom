@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 // `tauri::generate_context!` in `src/main.rs` expands to what this generates: the parsed configuration, the icons, and
 // the access-control list. Without it the crate does not compile rather than starting without them.

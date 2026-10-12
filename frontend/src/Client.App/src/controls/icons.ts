@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 // The set of symbols the client has, and the outlines they are drawn from. It sits beside `Icon.tsx` rather than in it
 // because a module exporting a component exports nothing else, which is what keeps a development reload replacing a

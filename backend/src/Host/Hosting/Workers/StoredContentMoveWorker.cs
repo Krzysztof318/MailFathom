@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Coordination;
@@ -25,7 +25,7 @@ namespace MailFathom.Host.Hosting.Workers;
 /// </para>
 /// <para>
 /// The move is one run for the whole deployment, so a pass is carried only by the replica holding the move's lease, as
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md">ADR 0031</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md">ADR 0031</see>
 /// decides. The lease is taken for one pass, kept through the interval after it, and given back. Keeping the interval is
 /// what makes the rate the deployment's rather than one per replica, because no replica can start the next pass until it
 /// has elapsed; giving it back is what lets the move outlive the replica that started it.
@@ -99,7 +99,7 @@ internal sealed partial class StoredContentMoveWorker : BackgroundService
     /// A pass cut short that way cannot leave the move inconsistent, because nothing it writes assumes it was alone. A row
     /// is repointed only while it is still database-backed, so a payload two passes both reached is pointed at and counted
     /// once, and the other object is an orphan the reclamation sweep removes, as
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md">ADR 0017</see>
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md">ADR 0017</see>
     /// § 2 accepts. The run's progress is written from a fresh read, and the walk names only what the database still
     /// holds, so whichever replica carries the next pass resumes rather than repeats.
     /// </para>

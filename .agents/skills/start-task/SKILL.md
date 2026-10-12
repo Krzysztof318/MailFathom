@@ -4,7 +4,7 @@ description: Use when beginning repository work that may edit files, change depe
 license: AGPL-3.0-only
 metadata:
   author: Krzysztof Kasprowicz
-  repository: https://github.com/Krzysztof318/MailFathom
+  repository: https://github.com/fathomise/MailFathom
 ---
 
 # Start Task
@@ -19,18 +19,18 @@ step 2 rather than assuming, and state it in the brief.
    MailFathom itself, which is the **owner's checkout**. Anything else — `upstream/main`, or
    `unresolved` — means `origin` is a fork, which is the **fork role**.
 2. Probe the board, in either role, because access to it is a separate fact from which repository
-   this is: the owner grants read or write on project `4` to a contributor whenever they decide to,
+   this is: the owner grants read or write on project `1` to a contributor whenever they decide to,
    and a clone of MailFathom made without write access reads as the owner's checkout until something
    asks:
 
    ```bash
-   gh api graphql -f query='{ user(login: "Krzysztof318") { projectV2(number: 4) { viewerCanUpdate } } }'
+   gh api graphql -f query='{ organization(login: "fathomise") { projectV2(number: 1) { viewerCanUpdate } } }'
    ```
 
    `true` is write access and every board step below applies. `false` is read access: read the board
    for context and report each write as unavailable rather than attempting it. No access reads as
    `"projectV2": null` beside a `NOT_FOUND` error saying `Could not resolve to a ProjectV2 with the
-   number 4` — GitHub hides a project the viewer cannot see rather than refusing it, so nothing in
+   number 1` — GitHub hides a project the viewer cannot see rather than refusing it, so nothing in
    that answer says *permission* and it must not be reported as the board having been deleted or the
    number being wrong. A `CLAUDE.local.md` written by `$get-started-contributors` states the answer
    already, and this probe confirms it rather than replacing it.
@@ -41,7 +41,7 @@ step 2 rather than assuming, and state it in the brief.
    list its scopes. Without that scope the call fails identically whoever is running it, so report it
    as a credential to repair, never as the board being out of reach.
 
-The fork role assigns no label and no milestone and never pushes to `Krzysztof318/MailFathom`,
+The fork role assigns no label and no milestone and never pushes to `fathomise/MailFathom`,
 because those are write access to the repository rather than to the board, and no board grant confers
 them. Those are not degraded versions of the owner's steps — they are steps that belong to a
 maintainer, and attempting one produces a permission error rather than a partial result. The board
@@ -65,7 +65,7 @@ them if that access were ever removed.
    when `Base branch` reported `unresolved` the corrective step comes first:
 
    ```bash
-   git remote add upstream https://github.com/Krzysztof318/MailFathom.git
+   git remote add upstream https://github.com/fathomise/MailFathom.git
    git fetch upstream main
    ```
 
@@ -98,7 +98,7 @@ them if that access were ever removed.
    step 6 read. Then read what it waits on, before it is placed and before it is claimed:
 
    ```bash
-   gh api repos/Krzysztof318/MailFathom/issues/<number>/dependencies/blocked_by \
+   gh api repos/fathomise/MailFathom/issues/<number>/dependencies/blocked_by \
      --jq '.[] | select(.state == "open") | "#\(.number) \(.title)"'
    ```
 
@@ -148,7 +148,7 @@ them if that access were ever removed.
     if [[ -n "${CODEX_THREAD_ID:-}" ]]; then
       claim_label=agent:codex
     fi
-    gh issue edit <number> --repo Krzysztof318/MailFathom --add-label "$claim_label"
+    gh issue edit <number> --repo fathomise/MailFathom --add-label "$claim_label"
     ```
 
     This is the step that says work has begun, so it belongs here rather than at step 8: an issue

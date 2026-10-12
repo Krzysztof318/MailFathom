@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 namespace MailFathom.Application.Emails.Embeddings;
 
@@ -8,7 +8,7 @@ namespace MailFathom.Application.Emails.Embeddings;
 /// <remarks>
 /// <para>
 /// These are exactly the properties that decide whether two vectors can be compared, and
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
 /// admits nothing else. The chunk boundary rules are absent by decision rather than by omission: they belong to the
 /// chunk's own hash, so re-cutting a mailbox is a local derivation instead of a paid re-embed. The endpoint address, the
 /// credential, the batch size, the request rate, the concurrency, and the ceilings are configuration, because none of

@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Domain.Emails;
 
@@ -10,7 +10,7 @@ namespace MailFathom.Application.Emails.Search;
 /// <remarks>
 /// <para>
 /// The one step a surface calls, rather than a rule each of them remembers.
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md">ADR 0030</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md">ADR 0030</see>
 /// requires exactly that: a guarantee that has to be remembered in two places is one that holds in one of them after the
 /// next change to the other. Every surface that publishes a ranked result composes it here: <c>search_emails</c> and an
 /// answering run's retrieval through <c>MailboxSearchReader</c>, and the client's search route through

@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 // Turning octets a deployment answered with into an address the client may draw them at, for the two adapters in this
 // directory that draw one: the picture the signed-in person is drawn by, and a picture a message carries.

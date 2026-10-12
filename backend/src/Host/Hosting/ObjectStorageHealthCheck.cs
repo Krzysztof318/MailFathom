@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Infrastructure.ObjectStorage;
@@ -15,7 +15,7 @@ namespace MailFathom.Host.Hosting;
 /// does, its credential may be rotated out from under a running deployment, and a policy change can leave it readable
 /// and no longer writable — so a check that ran once while the host came up establishes nothing about any of it. That is
 /// also what
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md">ADR 0017</see> § 1
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md">ADR 0017</see> § 1
 /// means by making an endpoint that has been taken away a readiness condition rather than a configuration error a binder
 /// could catch: whether object-backed rows exist depends on the database, and startup must not query one.
 /// </para>

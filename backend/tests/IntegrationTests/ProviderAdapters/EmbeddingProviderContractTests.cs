@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.AI.Embeddings;
 using MailFathom.AI.ProviderAdapters;
@@ -28,7 +28,7 @@ namespace MailFathom.IntegrationTests.ProviderAdapters;
 /// uniqueness constraint, the per-profile index, the idempotent write, two generations coexisting, the bounded
 /// removal — is provable against a real database and the in-repository generator at zero provider cost, and belongs
 /// there. What only a real provider can establish is exactly what is below. See
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>.
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>.
 /// </para>
 /// <para>
 /// Skipped unless somebody asks. The condition reads an environment variable nothing sets, so a developer's run and an

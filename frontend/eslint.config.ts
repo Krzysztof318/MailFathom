@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 // What `TreatWarningsAsErrors` and the analyzer set are to the service, this file is to the client. Every rule below
 // reports as an error and `pnpm lint` runs with `--max-warnings 0`, so a lint violation fails a build rather than

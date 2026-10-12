@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 namespace MailFathom.Application.Emails.Embeddings.Generations;
 
@@ -10,7 +10,7 @@ namespace MailFathom.Application.Emails.Embeddings.Generations;
 /// Two rather than one, because changing model must not take semantic search away for as long as a mailbox takes to
 /// re-embed. The generation being built is never read, and the one serving stays authoritative until the new one is
 /// complete — which is what
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
 /// means by making the profile the generation: there is no counter beside these two rows.
 /// </para>
 /// <para>

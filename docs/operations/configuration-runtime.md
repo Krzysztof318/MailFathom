@@ -59,7 +59,7 @@ cluster's `-rw` Service, a proxy, a floating address — is a single host like a
 
 **Reads are never served from a replica.** Every session reaches the primary whichever instance that is, so replication
 here is redundancy rather than read capacity; routing a query to a standby is a decision
-[ADR 0001](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0001-application-owned-repositories-for-persistence-ports.md)
+[ADR 0001](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0001-application-owned-repositories-for-persistence-ports.md)
 would have to be amended for.
 
 ## `ContentStorage`
@@ -67,7 +67,7 @@ would have to be amended for.
 Where the raw MIME of the messages this deployment stores next is written. A configuration root of its own rather than a
 section of `Persistence`, because what it selects is whether message payloads are in the database at all: an instance
 writing them into a bucket still runs every metadata row, every index, and every job through PostgreSQL.
-[ADR 0017](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md)
+[ADR 0017](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md)
 records the whole decision.
 
 An absent section is `Database`, which is what a deployment that has never heard of this setting is already running.
@@ -203,7 +203,7 @@ of the steps and what each one cannot be undone from.
 
 The key ring every value MailFathom seals at rest is sealed under. A configuration root of its own rather than a
 section of `Persistence`, because the database is the first thing sealed under it and there is no reason it is the
-last. [ADR 0005](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0005-data-encryption-key-ring-and-provisioning.md) records the whole decision, and
+last. [ADR 0005](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0005-data-encryption-key-ring-and-provisioning.md) records the whole decision, and
 [secret provisioning](secret-provisioning.md) states how the material is generated and referenced.
 
 An absent section is a valid deployment that seals nothing. Configuring the section makes every rule below apply.
@@ -309,7 +309,7 @@ re-evaluation of one kind of work is never the reason another kind never runs.
 process holding the jobs, which is a quantity a second replica has its own of — so a deployment running *n* replicas
 runs up to *n* × `MaxConcurrentJobs` at once, and that is the figure to hold against a database's connection limit or a
 remote dependency's own concurrency.
-[ADR 0031](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md) records why an in-flight
+[ADR 0031](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md) records why an in-flight
 count stays a process's where a rate and a spend become the deployment's.
 
 `MaxQueueDepthPerType` bounds what may be waiting rather than what is running. An enqueue against a queue already

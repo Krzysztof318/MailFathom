@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
@@ -28,7 +28,7 @@ namespace MailFathom.Host.Api;
 /// </para>
 /// <para>
 /// Every one of them is <c>mailfathom.admin.export</c> rather than split between reading and operating, which is what
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>
 /// decided and what ADR 0012's rule produces here: measuring a mailbox reports how large a copy of it would be, which
 /// is a step of taking the copy rather than a reading of what the deployment holds. One grant provisions the whole act
 /// and one revocation ends it.

@@ -9,7 +9,7 @@ that acts on it lives there rather than only in the middleware a request happene
 
 The vocabulary of named permissions itself — what a permission is, which ones exist, and how a credential comes to hold
 one — is [what a credential may do](../operations/permissions.md), and
-[ADR 0012](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0012-authorization-model-named-permissions-and-where-they-are-enforced.md)
+[ADR 0012](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0012-authorization-model-named-permissions-and-where-they-are-enforced.md)
 is the record behind it. What follows is only how that grant reaches the code that acts on it.
 
 ## Two checks, and why neither replaces the other

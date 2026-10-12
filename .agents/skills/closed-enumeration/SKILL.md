@@ -4,7 +4,7 @@ description: Use when modelling a fixed set of named values that carries data, b
 license: AGPL-3.0-only
 metadata:
   author: Krzysztof Kasprowicz
-  repository: https://github.com/Krzysztof318/MailFathom
+  repository: https://github.com/fathomise/MailFathom
 ---
 
 # Closed Enumeration

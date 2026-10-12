@@ -67,7 +67,7 @@ reason rather than only a standby.
 **Reads are not routed to a replica**, in either shape. Every session MailFathom opens reaches the primary, so a replica
 carries redundancy rather than load. Serving a query from a standby is a decision about read-your-writes and replication
 lag that
-[ADR 0001](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0001-application-owned-repositories-for-persistence-ports.md)
+[ADR 0001](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0001-application-owned-repositories-for-persistence-ports.md)
 would have to be amended for, and no configuration here approximates it.
 
 The role MailFathom connects as is never a superuser, in either arrangement. When the chart deploys the server, its
@@ -195,7 +195,7 @@ The chart is published to GHCR as an OCI artifact by the release that publishes 
 
 ```bash
 helm show chart oci://ghcr.io/krzysztof318/charts/mailfathom --version <x.y.z>
-gh attestation verify oci://ghcr.io/krzysztof318/charts/mailfathom:<x.y.z> --repo Krzysztof318/MailFathom
+gh attestation verify oci://ghcr.io/krzysztof318/charts/mailfathom:<x.y.z> --repo fathomise/MailFathom
 ```
 
 The chart is on GHCR alone, where the image is on both registries. Docker Hub's namespace is `namespace/name` and
@@ -223,7 +223,7 @@ An unpackaged directory states no `appVersion`, because it is not a release of a
 below stands down for it.
 
 The notes an install prints carry the documentation for the version they installed, as a `Docs:` line naming that
-version's own directory on the documentation site — `https://krzysztof318.github.io/MailFathom/docs/v<version>/`, or
+version's own directory on the documentation site — `https://fathomise.github.io/MailFathom/docs/v<version>/`, or
 `latest` on the nightly channel, which is what a nightly actually carries. It is an address rather than a repository
 path because somebody reading `helm install` output has no checkout to resolve one against, which is why the notes'
 pointer to [applying the schema](database-schema.md) is an address as well. The unpackaged directory states no version
@@ -454,7 +454,7 @@ call, and page is answered by whichever replica the Service routed it to, and th
 serving side. On the working side a scope is held by one replica at a time under a lease row — one mail account's
 synchronization, one deployment-wide sweep, one operator-asked re-derivation, the stored-content move — so three
 replicas divide the accounts between themselves rather than each synchronizing all of them.
-[ADR 0031](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md)
+[ADR 0031](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md)
 is that mechanism, and the administrative surface answers who holds what.
 
 **What one replica does that several do not** is worth reading before raising the number, because two of the three are
@@ -690,7 +690,7 @@ signalBackplane:
       replicas: 1
 ```
 
-**Read what this is worth before turning it on.** [ADR 0032](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0032-reaching-a-client-from-any-replica-over-websockets-and-a-resp-backplane.md)
+**Read what this is worth before turning it on.** [ADR 0032](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0032-reaching-a-client-from-any-replica-over-websockets-and-a-resp-backplane.md)
 makes the client's own re-read the guarantee a signal is not, so losing the backplane is already a delay rather than a
 loss. **Replication shortens the part of that delay you spend bringing a second instance up. It does not make a signal
 reliable**, and nothing here changes what a signal is: pub/sub delivers to whoever is subscribed at that moment and
@@ -1088,7 +1088,7 @@ where the image points `HOME`.
 
 **Nothing of Silo is in this chart, in any MailFathom image, or in this repository.** The chart names an image your
 cluster pulls from PGSTY's own registry. Silo is AGPL-3.0-or-later, which
-[`THIRD_PARTY_LICENSES.md`](https://github.com/Krzysztof318/MailFathom/blob/main/THIRD_PARTY_LICENSES.md) records
+[`THIRD_PARTY_LICENSES.md`](https://github.com/fathomise/MailFathom/blob/main/THIRD_PARTY_LICENSES.md) records
 together with the reading it is used under. Its own lifecycle — upgrades, its configuration, its users beyond the one
 above — is yours; MailFathom manages none of it and the chart runs no job against it.
 

@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Persistence;
@@ -19,7 +19,7 @@ namespace MailFathom.Application.Emails.Embeddings.Generations;
 /// The completion is what makes a model change an operation without an outage. A new generation is filled while the old
 /// one goes on answering searches, and the moment it is complete it takes over in one recorded transition; the old
 /// generation's vectors then go, in batches, because they are personal data whose purpose ended there. See
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>.
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>.
 /// </para>
 /// </remarks>
 public sealed class EmbeddingGenerationUpkeep

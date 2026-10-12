@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
@@ -50,7 +50,7 @@ public sealed record OutgoingEmailRecord
     /// A submitted message belongs to the account like the sent mail it becomes, so this is a reference rather than a
     /// narrowing term: every user assigned the account reads the send whoever asked for it, and erasing the author does
     /// not withdraw it from the mailbox.
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md">ADR 0014</see>
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md">ADR 0014</see>
     /// records both halves. What the author is for is the idempotency identity beside it: two assigned users retrying
     /// one requester's submission are two submissions rather than one.
     /// </para>

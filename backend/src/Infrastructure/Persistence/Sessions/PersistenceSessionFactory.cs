@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Persistence;
@@ -27,7 +27,7 @@ internal sealed class PersistenceSessionFactory(
     /// opened by the first of them and never before: work a caller stages outside the database — an object handed to a
     /// content endpoint, a digest computed over it — then happens with no transaction held open across it, which is
     /// what
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0001-application-owned-repositories-for-persistence-ports.md">ADR 0001</see>
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0001-application-owned-repositories-for-persistence-ports.md">ADR 0001</see>
     /// requires of anything that reaches a remote store.
     /// </remarks>
     [SuppressMessage(

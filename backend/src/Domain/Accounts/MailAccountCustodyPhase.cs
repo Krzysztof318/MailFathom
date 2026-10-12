@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 namespace MailFathom.Domain.Accounts;
 
@@ -8,7 +8,7 @@ namespace MailFathom.Domain.Accounts;
 /// <remarks>
 /// The phase is stored beside the account rather than configured, because an administrator switches it for one account
 /// and a switch is a period of work rather than an instant. See
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
 /// </remarks>
 public enum MailAccountCustodyPhase
 {

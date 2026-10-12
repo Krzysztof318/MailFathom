@@ -9,7 +9,7 @@ page documents both halves: every fact a condition can read, every function and 
 is read and run under, the order a set of rules is evaluated in, and every change a matching rule can ask for.
 
 Rules live in configuration rather than in a table, and a condition is one expression rather than a nested structure of
-predicates. [ADR 0010](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0010-rule-authoring-in-configuration-and-ncalc-conditions.md)
+predicates. [ADR 0010](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0010-rule-authoring-in-configuration-and-ncalc-conditions.md)
 records both decisions and what each one costs. Nothing creates, edits, or deletes a rule at run time: not `mfctl`, not
 MCP, not the administrative endpoint. A user who wants to change what their instance selects edits a file.
 
@@ -637,7 +637,7 @@ destinations and permits its actions, are reported by a start rather than refuse
 ## Reload, and what a bad edit does
 
 The section reloads. An edit takes effect for the next pass, and a pass already running finishes against the rule set it
-started with — the reload contract [ADR 0002](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0002-configuration-reading-mapping-and-reload-boundary.md)
+started with — the reload contract [ADR 0002](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0002-configuration-reading-mapping-and-reload-boundary.md)
 defines for every group that reaches a running operation.
 
 **An edit that does not validate is refused and logged, and the previous rule set stays in effect.** That is deliberately

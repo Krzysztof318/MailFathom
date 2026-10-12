@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.CommandLine;
 using System.Globalization;
@@ -15,7 +15,7 @@ namespace MailFathom.Cli.Commands;
 /// <remarks>
 /// <para>
 /// The command takes no model, no provider, and no width:
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
 /// makes configuration the place a vector space is declared and reviewed, and leaves this the act that materializes the
 /// declaration. Editing a file costs nothing; running this is the first thing MailFathom does that costs money per unit
 /// of mail.

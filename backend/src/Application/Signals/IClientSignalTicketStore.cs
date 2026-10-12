@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Domain.Access;
 
@@ -13,7 +13,7 @@ namespace MailFathom.Application.Signals;
 /// whichever replica answered the connection, and nothing routes the two together: the connection skips negotiation, so
 /// it is one request the load balancer places on its own. A ticket held in a process is therefore redeemable about one
 /// time in the replica count, which is a live channel that silently stops working when an operator scales out.
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0032-reaching-a-client-from-any-replica-over-websockets-and-a-resp-backplane.md">ADR 0032</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0032-reaching-a-client-from-any-replica-over-websockets-and-a-resp-backplane.md">ADR 0032</see>
 /// records that and why the ticket does not live in the optional backplane instead.
 /// </para>
 /// <para>

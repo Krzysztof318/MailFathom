@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Reflection;
 using MailFathom.Application.Mail.Delivery.Drafts;
@@ -38,7 +38,7 @@ namespace MailFathom.Application.UnitTests.Mail.Mutations;
 /// </para>
 /// <para>
 /// It has grown a second time by a tier, and by the only other record allowed to open one:
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>
 /// gives a held account's drain a removal nobody authored message by message — an administrator switched the account
 /// into holding its own mailbox, and the pass empties the source of what MailFathom verifiably holds. It is a tier
 /// rather than a mutation because no user asked for any one of its expunges, and it reaches the source through the
@@ -59,7 +59,7 @@ public sealed class MailboxWriteCapabilityBoundaryTests
     /// <remarks>
     /// Failing here is not a reason to extend the expected set. A read path that needs to write is a read path that has
     /// acquired something
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md">ADR 0007</see>
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md">ADR 0007</see>
     /// refuses it, and a change to the user's own mail belongs behind <see cref="IMailboxMutationPerformer" /> instead.
     /// A further name is admissible only where the act it performs is one that record already decided — which is what
     /// the draft filer is, since the copies it appends and withdraws are messages MailFathom composed and stored itself,

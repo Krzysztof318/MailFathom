@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Security.Cryptography;
 using MailFathom.Application.Digests;
@@ -14,7 +14,7 @@ namespace MailFathom.Application.Emails.Chunking;
 /// rules yields the same hashes, so nothing downstream is re-done; a change to the rules yields different ones even
 /// where the text is identical, so no vector is left hanging on boundaries it no longer describes. A hash covering only
 /// the text would report the second case as unchanged, which is the failure
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
 /// records this type to prevent.
 /// </para>
 /// <para>
@@ -33,7 +33,7 @@ public readonly record struct EmailChunkContentHash
     /// <summary>Names the scheme a passage cut from an attachment is identified under.</summary>
     /// <remarks>
     /// A domain of its own rather than a field added to the body encoding, which is what makes taking
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.md">ADR 0029</see>
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.md">ADR 0029</see>
     /// cost a delivered mailbox nothing: a body passage's digest is the digest it already had, byte for byte, so no
     /// stored vector moves and no mailbox is re-billed at a provider's rate. The two kinds still cannot collide,
     /// because the domain is the first thing either encoding writes.

@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 namespace MailFathom.Application.EmailContent.Storage;
 
@@ -8,7 +8,7 @@ namespace MailFathom.Application.EmailContent.Storage;
 /// <remarks>
 /// <para>
 /// One value for the whole deployment rather than one per mail account or per user, which
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md">ADR 0017</see> § 1
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md">ADR 0017</see> § 1
 /// decided: the process-wide ceilings on stored content bound one thing, the readiness probe reports one bucket, and a
 /// second axis of storage tenancy is what ADR 0014 already closed.
 /// </para>

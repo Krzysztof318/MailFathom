@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.ClientModel;
 using System.ClientModel.Primitives;
@@ -23,7 +23,7 @@ namespace MailFathom.AI.ProviderAdapters;
 /// One client construction serves both providers, because Azure OpenAI's v1 data plane is OpenAI-compatible: an Azure
 /// deployment is this client with its endpoint pointed at the resource's <c>/openai/v1/</c> address and its model set
 /// to the deployment's name. That is Microsoft's own current guidance, and it is the choice
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
 /// makes deliberately beyond embeddings: the chat model the answering feature needs is served by this same wiring
 /// rather than by a second one.
 /// </para>

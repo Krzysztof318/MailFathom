@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 namespace MailFathom.Application.Emails.Embeddings;
 
@@ -15,7 +15,7 @@ namespace MailFathom.Application.Emails.Embeddings;
 /// <see cref="Identity" /> is part of the contract rather than a convenience, because a vector means nothing without
 /// the geometry it belongs to: it is what an activation computes a profile fingerprint from, and what a stored vector
 /// is attributed to afterwards. See
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>.
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>.
 /// </para>
 /// </remarks>
 public interface ITextEmbeddingGenerator

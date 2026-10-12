@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Primitives;
@@ -21,7 +21,7 @@ namespace MailFathom.Host.Signals;
 /// the versions PostgreSQL holds and republishes whatever is newer than what it bound. No setting, no user identifier,
 /// and no version number crosses the backplane, and a message published by anything else able to reach the endpoint
 /// costs one round of reads rather than a change.
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0032-reaching-a-client-from-any-replica-over-websockets-and-a-resp-backplane.md#amendment-2-a-configuration-change-is-announced-over-the-backplane">ADR 0032, Amendment 2</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0032-reaching-a-client-from-any-replica-over-websockets-and-a-resp-backplane.md#amendment-2-a-configuration-change-is-announced-over-the-backplane">ADR 0032, Amendment 2</see>
 /// records that exception to what the backplane carries.
 /// </para>
 /// <para>

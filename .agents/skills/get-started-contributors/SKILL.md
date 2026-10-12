@@ -5,7 +5,7 @@ disable-model-invocation: true
 license: AGPL-3.0-only
 metadata:
   author: Krzysztof Kasprowicz
-  repository: https://github.com/Krzysztof318/MailFathom
+  repository: https://github.com/fathomise/MailFathom
 ---
 
 # Get Started
@@ -374,11 +374,11 @@ offer to go deeper on any one of them instead of expanding all six.
    fork.
 
    **What this credential may do in MailFathom itself.** The answer above is *which clone this is*, and it is not this
-   one — somebody who cloned `Krzysztof318/MailFathom` directly rather than forking it reads as the owner's checkout
+   one — somebody who cloned `fathomise/MailFathom` directly rather than forking it reads as the owner's checkout
    there and holds none of the owner's access. Ask the repository instead of inferring it from a remote:
 
    ```bash
-   gh api repos/Krzysztof318/MailFathom --jq '.permissions'
+   gh api repos/fathomise/MailFathom --jq '.permissions'
    ```
 
    `{"admin":true,"maintain":true,"pull":true,"push":true,"triage":true}` is the owner's own account. An outside
@@ -390,7 +390,7 @@ offer to go deeper on any one of them instead of expanding all six.
    repair, and step 2 is where.
 
    **What this account may do with the roadmap board**, which is a third fact again. The maintainer
-   grants read or write on project `4` to a contributor whenever they decide to, so a fork is not evidence of no access
+   grants read or write on project `1` to a contributor whenever they decide to, so a fork is not evidence of no access
    and a clone of MailFathom made without write access is not evidence of having it. Probe for it rather than inferring
    it, always, in either role, and only when `gh auth status` from the step above lists the `project` scope — without it
    the call fails whoever is running it, and reading that as no access would write a `CLAUDE.local.md` telling every
@@ -398,14 +398,14 @@ offer to go deeper on any one of them instead of expanding all six.
 
    ```bash
    gh auth status | grep -q 'project' \
-     && gh api graphql -f query='{ user(login: "Krzysztof318") { projectV2(number: 4) { viewerCanUpdate } } }'
+     && gh api graphql -f query='{ organization(login: "fathomise") { projectV2(number: 1) { viewerCanUpdate } } }'
    ```
 
    One call, three outcomes, and `viewerCanUpdate` is what separates the two that matter: `true` is write access, so
    every board step in `start-task` and `finish-change` applies; `false` is read access, so the board may be read for
    context and every write is reported as unavailable rather than attempted; no access at all reads as
    `"projectV2": null` beside a `NOT_FOUND` error, with `gh` adding `gh: Could not resolve to a ProjectV2 with the
-   number 4` on standard error and exiting `1`. Read that last one to them, because it does not look like what it is:
+   number 1` on standard error and exiting `1`. Read that last one to them, because it does not look like what it is:
    GitHub hides a project the viewer cannot see instead of refusing it, so the line `gh` shows reads as a wrong number
    or a deleted board and is neither. A failure *without* the scope says nothing at all, so add the scope and ask
    again rather than concluding from it.
@@ -419,9 +419,8 @@ offer to go deeper on any one of them instead of expanding all six.
    - the stored `gh` credential predates the grant, or was never asked for the scope — `gh auth refresh -s project`;
    - `GH_TOKEN` or `GITHUB_TOKEN` is set in the environment, which `gh` prefers over anything it stored and whose
      scopes `gh auth status` cannot list. Unset it for this shell, or reissue the token with the scope it needs;
-   - the token is fine-grained. Those carry no account-level `Projects` permission at all, so no fine-grained token
-     reaches a user-owned project however it was configured; a classic token with `project`, or `gh auth login`, is the
-     credential that does.
+   - the token is fine-grained. One issued for their own account reaches no project of another organization however
+     it was configured; a classic token with `project`, or `gh auth login`, is the credential that does.
 
    `gh auth status` is where they look first, and a `true` or `false` answer needs none of this — only a negative is
    worth a second look, and it costs one command.
@@ -441,7 +440,7 @@ offer to go deeper on any one of them instead of expanding all six.
    | Write `Area`, `Queue`, or `Size` | The board probe | `true` alone. On `false` or no access, every board write is reported as unavailable rather than attempted |
 
    **Board access is never repository access**, which is why the board holds rows of its own in that table rather than
-   following the ones above it. The maintainer may grant write on project `4` to somebody who still cannot label an
+   following the ones above it. The maintainer may grant write on project `1` to somebody who still cannot label an
    issue here, and that is a coherent state rather than a half-configured one.
 
    **Refresh:** all three probes again, in full, whatever the diff says. None of them is written in a commit: a remote
@@ -453,7 +452,7 @@ offer to go deeper on any one of them instead of expanding all six.
    synced, so verifying against it proves nothing about the branch that will merge:
 
    ```bash
-   git remote add upstream https://github.com/Krzysztof318/MailFathom.git
+   git remote add upstream https://github.com/fathomise/MailFathom.git
    git fetch upstream main
    ```
 
@@ -491,11 +490,11 @@ offer to go deeper on any one of them instead of expanding all six.
 
    ```markdown
    I am an external contributor to MailFathom. `origin` is my fork and `upstream` is
-   `Krzysztof318/MailFathom`, so the fork role in `AGENTS.md` governs every session in this
+   `fathomise/MailFathom`, so the fork role in `AGENTS.md` governs every session in this
    checkout. My branch keeps the name I gave it, and nothing is ever pushed to
-   `Krzysztof318/MailFathom`.
+   `fathomise/MailFathom`.
 
-   The roadmap board, project `4`, is private to the maintainer and I have no access to it.
+   The roadmap board, project `1`, is private to the maintainer and I have no access to it.
    Do not read it, do not write it, and do not treat that as a step that failed: an issue I
    open carries no `type:*` label, no stack label, no milestone, and no `Area`, `Queue`, or
    `Size` value by design, and the maintainer's triage supplies them. `$start-task` opens the issue and stops
@@ -508,9 +507,9 @@ offer to go deeper on any one of them instead of expanding all six.
    ```
 
    The board paragraph is the one the probe in step 3 decides, so write the outcome it returned rather than the common
-   case. On `viewerCanUpdate: false` it becomes *the maintainer has granted me read access to project `4`: read it for
+   case. On `viewerCanUpdate: false` it becomes *the maintainer has granted me read access to project `1`: read it for
    context, and report every write as unavailable rather than attempting it*, and on `true` it becomes *the maintainer
-   has granted me write access to project `4`, so the board steps in `$start-task` and `$finish-change` apply to me as
+   has granted me write access to project `1`, so the board steps in `$start-task` and `$finish-change` apply to me as
    written*. Both keep the rest of the block unchanged: the branch is still the contributor's, the push still goes to
    the fork, and access to a board is not authority over a repository.
 
@@ -518,14 +517,14 @@ offer to go deeper on any one of them instead of expanding all six.
    change either and change both.
 
    **Owner's checkout:** the file is unnecessary, because every rule in `AGENTS.md` applies and there is nothing an
-   agent would get wrong. **What decides that is `origin` naming `Krzysztof318/MailFathom`** — the same test step 4
+   agent would get wrong. **What decides that is `origin` naming `fathomise/MailFathom`** — the same test step 4
    uses, and the one root `AGENTS.md` § *The two roles this contract is written for* defines the role by.
 
    **`permissions.push` does not decide it, and this is the one place the two answers must not be swapped.** A
    collaborator the maintainer granted write to, whose `origin` is still their own fork, probes as push-capable and is
    the *fork role* all the same: their branch keeps the name they gave it, their push goes to the fork, and the base
    the gates measure against is `upstream/main`. Skipping the file there would leave a session that never invokes
-   `start-task` assuming it may push to `Krzysztof318/MailFathom` directly and name a branch `agent/<short-description>`,
+   `start-task` assuming it may push to `fathomise/MailFathom` directly and name a branch `agent/<short-description>`,
    which is exactly the guess this file exists to prevent — so that state gets the block above like any other
    contributor. The other direction resolves through step 4 rather than here: a clone of MailFathom whose probe said
    `push: false` has already repointed `origin` at a fork by the time this step runs, and is then an ordinary
@@ -705,7 +704,7 @@ Client extras: <the Playwright browser and ImageMagick — installed, already pr
 Role: <which repository origin is, and what resolved it>
 May and may not: <what the repository probe and the board probe answered, and the rows of the table each one decided>
 Base remote: <name and URL, or the command that added it>
-Local role file: <path written, left unchanged, or not applicable because origin names Krzysztof318/MailFathom>
+Local role file: <path written, left unchanged, or not applicable because origin names fathomise/MailFathom>
 Harness permissions: <what was allowed, and where — or what was added to what was already there>
 Verification: <the result of both stacks' commands, or skipped with the reason>
 Setup record: <path written, and the base commit it now names>

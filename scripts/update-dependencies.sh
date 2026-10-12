@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Copyright © 2026 Krzysztof Kasprowicz
 # Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-# Project repository: https://github.com/Krzysztof318/MailFathom
+# Project repository: https://github.com/fathomise/MailFathom
 
 set -euo pipefail
 
@@ -244,7 +244,7 @@ npm_latest() {
 crate_latest() {
   local crate_name="$1" document version
 
-  document="$(fetch --user-agent 'mailfathom-update-dependencies (https://github.com/Krzysztof318/MailFathom)' \
+  document="$(fetch --user-agent 'mailfathom-update-dependencies (https://github.com/fathomise/MailFathom)' \
     "https://crates.io/api/v1/crates/$crate_name")" || true
   [[ -n "$document" ]] || { printf 'unresolved\tunresolved'; return; }
 

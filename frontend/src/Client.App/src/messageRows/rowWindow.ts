@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 // Which rows of a list of mail are in the document, which is the whole of what keeps a mailbox of two hundred thousand
 // messages costing what a screenful costs. It is arithmetic over four numbers rather than a package, and the

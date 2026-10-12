@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Reflection;
 
@@ -16,7 +16,7 @@ namespace MailFathom.Versioning;
 /// MCP client compares against a tool contract it knows; <see cref="Revision" /> is build provenance, which is what
 /// turns a bug report from a deployment the reader did not build into something reproducible, and which is reported in
 /// the abbreviated form a nightly identifier and a Git log already use rather than as the whole object name. See
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md">ADR 0004</see> for where the number comes
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md">ADR 0004</see> for where the number comes
 /// from.
 /// </para>
 /// <para>

@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.EmailContent.Move;
 using MailFathom.Application.EmailContent.Storage;
@@ -13,7 +13,7 @@ namespace MailFathom.Application.EmailContent.Release;
 /// A payload the move has carried leaves its bytes where they were. The row points at the object and is read from it,
 /// and the <c>bytea</c> column beside it is a retained duplicate held so that a read still works while the endpoint is
 /// being trusted for the first time — which is the one duplicated state
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md">ADR 0017</see> § 6
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md">ADR 0017</see> § 6
 /// admits. This is what ends that state.
 /// </para>
 /// <para>

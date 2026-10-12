@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Chat;
 
@@ -28,7 +28,7 @@ namespace MailFathom.Application.Retrieval.AskMail;
 /// It is in this layer rather than beside the agent that first used it because a Discover run is orchestrated here and
 /// spends at two ports it reaches the model through, so one ledger for the run has to be a thing this layer can hold.
 /// What the run reports about what it spent is <see cref="Read" />, which is
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0022-what-an-ai-run-reports-about-cost-cancellation-and-the-model.md">ADR 0022</see>'s
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0022-what-an-ai-run-reports-about-cost-cancellation-and-the-model.md">ADR 0022</see>'s
 /// unit: the run's own consumption against the ceilings that will stop it.
 /// </para>
 /// </remarks>

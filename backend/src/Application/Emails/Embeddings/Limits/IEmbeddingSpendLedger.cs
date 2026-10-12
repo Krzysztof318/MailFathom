@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Access;
@@ -24,11 +24,11 @@ namespace MailFathom.Application.Emails.Embeddings.Limits;
 /// Every spend names the users it was incurred for, because a deployment serving several people bounds each of them
 /// as well as itself and a ledger keyed by the period alone could say only what was spent and never by whom. What the
 /// deployment spent is counted separately from them rather than summed out of them, because
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md">ADR 0014</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md">ADR 0014</see>
 /// counts a shared mailbox in full against each of its users: the per-user figures deliberately add up to more than
 /// was sent, and a deployment ceiling read off their sum would stop a shared mailbox at a fraction of what an
 /// operator declared. The user outlives its own record here on purpose:
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md">ADR 0014</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md">ADR 0014</see>
 /// keeps a spend row as a cost record rather than erasing it with the mail it paid to index.
 /// </para>
 /// </remarks>

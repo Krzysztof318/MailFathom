@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 namespace MailFathom.Application.Persistence;
 
@@ -8,7 +8,7 @@ namespace MailFathom.Application.Persistence;
 /// <remarks>
 /// EF Core opens a transaction only through the <c>Database</c> facade of a concrete <c>DbContext</c>, which
 /// <c>Application</c> must not see, so the seam has no published interface to take.
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0001-application-owned-repositories-for-persistence-ports.md">ADR 0001</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0001-application-owned-repositories-for-persistence-ports.md">ADR 0001</see>
 /// chose an explicit session over an ambient one, and this contract is what keeps the transaction boundary visible in
 /// the signature of the write that spans it rather than hidden in asynchronous flow state.
 /// </remarks>

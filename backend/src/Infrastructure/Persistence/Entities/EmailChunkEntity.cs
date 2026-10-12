@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.CodeCoverage;
@@ -40,7 +40,7 @@ internal sealed class EmailChunkEntity
     /// </summary>
     /// <remarks>
     /// The one column
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.md">ADR 0029</see>
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.md">ADR 0029</see>
     /// adds, and it is what makes <see cref="StartOffset" /> mean anything: a message with attachments has several
     /// texts, and an offset that did not say which one it indexed would name a different span in each. Nullable and
     /// additive, which is the only migration shape the schema permits, and the reason the ordinals of an attachment's

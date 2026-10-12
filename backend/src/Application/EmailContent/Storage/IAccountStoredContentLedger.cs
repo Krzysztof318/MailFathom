@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Domain.Accounts;
 
@@ -18,7 +18,7 @@ namespace MailFathom.Application.EmailContent.Storage;
 /// <para>
 /// The counter is the account's rather than a user's because the mail is one copy however many users are assigned the
 /// mailbox. A user's figure is the sum over the accounts assigned to them, which is what
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md">ADR 0014</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md">ADR 0014</see>
 /// requires of a shared mailbox: it counts in full against every user assigned to it, and an assignment moves the
 /// figure without rewriting a row.
 /// </para>

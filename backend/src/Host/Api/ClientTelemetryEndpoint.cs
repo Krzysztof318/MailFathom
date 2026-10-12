@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Globalization;
 using System.Text.Json;
@@ -69,7 +69,7 @@ namespace MailFathom.Host.Api;
 /// is enforced rather than trusted to a client — and from somebody this replica holds no composition of, whose force
 /// it therefore cannot know. A policy forcing it on takes what a client sends whatever its holder stored, and compels
 /// nothing: a client that sends no batch is refused none.
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0037-a-settings-policy-at-the-deployment-and-at-each-organization.md">ADR 0037</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0037-a-settings-policy-at-the-deployment-and-at-each-organization.md">ADR 0037</see>
 /// § <em>Client preferences, and what forcing telemetry costs a person</em> holds what a deployment owes somebody it
 /// does that to.
 /// </para>

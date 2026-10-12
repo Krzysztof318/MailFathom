@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Rules;
 using MailFathom.Application.Rules.Actions;
@@ -57,7 +57,7 @@ public sealed class MailRuleActionPlanTests
     /// On a held account a copy writes a second stored message from a payload placed before the batch's transaction,
     /// one payload per honored copy. A plan carrying two copies of one message would be a plan a caller could answer
     /// with one payload for both rows, which is the sharing
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md">ADR 0017</see>
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md">ADR 0017</see>
     /// refuses. This is where that cannot happen.
     /// </remarks>
     [Fact]

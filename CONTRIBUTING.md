@@ -48,7 +48,7 @@ MailFathom is developed and run on Linux.
 ```bash
 git clone https://github.com/<you>/MailFathom.git
 cd MailFathom
-git remote add upstream https://github.com/Krzysztof318/MailFathom.git
+git remote add upstream https://github.com/fathomise/MailFathom.git
 git fetch upstream main
 dotnet restore backend/MailFathom.slnx
 dotnet build backend/MailFathom.slnx --no-restore
@@ -62,7 +62,7 @@ pnpm --dir frontend run test
 
 **Type these rather than reaching for the fast loop**, which is the next section: both gates pick their stack from the paths your branch changed, so on a clean clone they reach neither and say so. That is a true statement about a diff and no statement at all about whether your machine can build MailFathom.
 
-**The `upstream` remote is not optional.** Every gate here verifies your branch against the base it will actually merge into, and in your fork `origin/main` is whatever you last synced. The scripts find that base by looking for the remote that points at `Krzysztof318/MailFathom` — under any name, `upstream` is just the convention — and the full gate refuses to run rather than measure your work against the wrong base. Its refusal prints the two commands above.
+**The `upstream` remote is not optional.** Every gate here verifies your branch against the base it will actually merge into, and in your fork `origin/main` is whatever you last synced. The scripts find that base by looking for the remote that points at `fathomise/MailFathom` — under any name, `upstream` is just the convention — and the full gate refuses to run rather than measure your work against the wrong base. Its refusal prints the two commands above.
 
 ## Tell your agent it is working in a fork
 
@@ -72,11 +72,11 @@ Say it once instead, in a file your agent loads before you type anything. **Clau
 
 ```markdown
 I am an external contributor to MailFathom. `origin` is my fork and `upstream` is
-`Krzysztof318/MailFathom`, so the fork role in `AGENTS.md` governs every session in this
+`fathomise/MailFathom`, so the fork role in `AGENTS.md` governs every session in this
 checkout. My branch keeps the name I gave it, and nothing is ever pushed to
-`Krzysztof318/MailFathom`.
+`fathomise/MailFathom`.
 
-The roadmap board, project `4`, is private to the maintainer and I have no access to it.
+The roadmap board, project `1`, is private to the maintainer and I have no access to it.
 Do not read it, do not write it, and do not treat that as a step that failed: an issue I
 open carries no `type:*` label, no stack label, no milestone, and no `Area`, `Queue`, or `Size`
 value by design, and the maintainer's triage supplies them. `$start-task` opens the issue and stops
@@ -91,22 +91,22 @@ pushes never start one.
 **Ask what your credentials may actually do here before you copy any of it**, because a remote is evidence about that and not the answer. One call says what you may do in this repository:
 
 ```bash
-gh api repos/Krzysztof318/MailFathom --jq '.permissions'
+gh api repos/fathomise/MailFathom --jq '.permissions'
 ```
 
 `push` and `triage` both `false` with `pull` alone `true` is the ordinary contributor's answer, and it is what decides the three things the block above is about: the `type:*` and stack labels, the milestone, and pushing a branch here. Your pull request still crosses from your fork, so nothing about contributing is closed by it. A `null` means the call went out unauthenticated — a public repository answers a read for anybody — so that is `gh` to fix rather than an answer to write down.
 
-The board paragraph is the other one worth checking rather than copying, because the maintainer grants read or write on project `4` whenever they decide to, and a fork is no evidence either way. Ask, once, with the `project` scope on your `gh` credentials:
+The board paragraph is the other one worth checking rather than copying, because the maintainer grants read or write on project `1` whenever they decide to, and a fork is no evidence either way. Ask, once, with the `project` scope on your `gh` credentials:
 
 ```bash
-gh api graphql -f query='{ user(login: "Krzysztof318") { projectV2(number: 4) { viewerCanUpdate } } }'
+gh api graphql -f query='{ organization(login: "fathomise") { projectV2(number: 1) { viewerCanUpdate } } }'
 ```
 
-No access prints the response body with `"projectV2": null` and a `NOT_FOUND` error, adds its own line on standard error — `gh: Could not resolve to a ProjectV2 with the number 4` — and exits `1`. That is not a wrong number and not a deleted board: GitHub hides a project you cannot see rather than telling you that you cannot see it, so the answer to *no permission* is worded as *does not exist*, and the one line `gh` puts in front of you is the half that says so least clearly.
+No access prints the response body with `"projectV2": null` and a `NOT_FOUND` error, adds its own line on standard error — `gh: Could not resolve to a ProjectV2 with the number 1` — and exits `1`. That is not a wrong number and not a deleted board: GitHub hides a project you cannot see rather than telling you that you cannot see it, so the answer to *no permission* is worded as *does not exist*, and the one line `gh` puts in front of you is the half that says so least clearly.
 
-If that is what you got, check your credentials before believing it: your account's access and your token's access are different things, and only the second is what the call sees. `gh auth status` has to list the `project` scope — `gh auth refresh -s project` adds it — and a `GH_TOKEN` or `GITHUB_TOKEN` in your environment displaces the credential `gh` stored, without `gh auth status` being able to show you its scopes. A fine-grained token never reaches a user-owned project at all, whatever it was configured with; a classic token with `project`, or a plain `gh auth login`, is what does.
+If that is what you got, check your credentials before believing it: your account's access and your token's access are different things, and only the second is what the call sees. `gh auth status` has to list the `project` scope — `gh auth refresh -s project` adds it — and a `GH_TOKEN` or `GITHUB_TOKEN` in your environment displaces the credential `gh` stored, without `gh auth status` being able to show you its scopes. A fine-grained token issued for your own account never reaches the organization's board, whatever it was configured with; a classic token with `project`, or a plain `gh auth login`, is what does.
 
-A `NOT_FOUND` from a credential that does carry the scope is the paragraph as written above. `viewerCanUpdate: false` makes it *the maintainer has granted me read access to project `4`: read it for context, and report every write as unavailable rather than attempting it*, and `true` makes it *the maintainer has granted me write access to project `4`, so the board steps in `start-task` and `finish-change` apply to me as written*. Nothing else in the block changes: your branch is still yours, your push still goes to your fork, and access to a board is not authority over a repository.
+A `NOT_FOUND` from a credential that does carry the scope is the paragraph as written above. `viewerCanUpdate: false` makes it *the maintainer has granted me read access to project `1`: read it for context, and report every write as unavailable rather than attempting it*, and `true` makes it *the maintainer has granted me write access to project `1`, so the board steps in `start-task` and `finish-change` apply to me as written*. Nothing else in the block changes: your branch is still yours, your push still goes to your fork, and access to a board is not authority over a repository.
 
 `.gitignore` covers `*.local.md`, so a file written that way cannot reach a commit by accident. Do not put any of this in `AGENTS.md` or `CLAUDE.md` themselves: both are protected paths, so the change would fail a check before anyone read it, and it would be telling every other contributor's agent something true only of your machine.
 
@@ -219,7 +219,7 @@ Accepting is one comment on your pull request, from the account that opened it:
 I have read the MailFathom Contributor Licence Agreement and I accept it.
 ```
 
-Post it as the whole of your comment — casing, surrounding whitespace, and a trailing full stop are ignored, but nothing else is, because the sentence quoted inside a question about whether to accept is not an acceptance. The `Contributor licence` workflow reads it, records the acceptance, and turns the `license/cla` status green. What it records — your GitHub account and its numeric id, the pull request and the comment, the version of the agreement, and the exact revision of `CLA.md` you accepted — is written to the [`cla-signatures`](https://github.com/Krzysztof318/MailFathom/tree/cla-signatures) branch of this repository, in the open. Nothing is sent to a third-party service, and the record holds no more about you than the pull request already does. You are asked once, not per pull request; a bot, the owner, and anyone with write access here are not asked at all. The one thing that asks again is a revision of the agreement itself, because a later version is a new acceptance — the comment then opens by saying so, and nothing you already accepted is withdrawn by it. [ADR 0015](docs/decisions/0015-contributor-licence-agreement-and-where-assent-is-recorded.md) records why the agreement exists and why the register lives where it does.
+Post it as the whole of your comment — casing, surrounding whitespace, and a trailing full stop are ignored, but nothing else is, because the sentence quoted inside a question about whether to accept is not an acceptance. The `Contributor licence` workflow reads it, records the acceptance, and turns the `license/cla` status green. What it records — your GitHub account and its numeric id, the pull request and the comment, the version of the agreement, and the exact revision of `CLA.md` you accepted — is written to the [`cla-signatures`](https://github.com/fathomise/MailFathom/tree/cla-signatures) branch of this repository, in the open. Nothing is sent to a third-party service, and the record holds no more about you than the pull request already does. You are asked once, not per pull request; a bot, the owner, and anyone with write access here are not asked at all. The one thing that asks again is a revision of the agreement itself, because a later version is a new acceptance — the comment then opens by saying so, and nothing you already accepted is withdrawn by it. [ADR 0015](docs/decisions/0015-contributor-licence-agreement-and-where-assent-is-recorded.md) records why the agreement exists and why the register lives where it does.
 
 Clause 2.2 of the agreement is the patent grant that travels with your contribution. It matches section 11 of the licence and is stated in its own right so that it survives a change of licence made under clause 2.1.
 
@@ -241,7 +241,7 @@ Every file in this repository carries the same three lines, and a new file is no
 ```csharp
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 ```
 
 **In a C# file you never type it.** `IDE0073` fails the build on a file that is missing it, and `scripts/verify-fast.sh` inserts it for you — which is one more reason to run the fast loop after adding a file rather than before pushing.
@@ -291,4 +291,4 @@ Those files are written for the autonomous agents that do most of the work here,
 
 ## Questions
 
-Use [Discussions](https://github.com/Krzysztof318/MailFathom/discussions) — `Q&A` for questions, `Ideas` for proposals that are not yet scope. A question is not a unit of work and does not become one by arriving as an issue; one that turns out to be work gets converted.
+Use [Discussions](https://github.com/fathomise/MailFathom/discussions) — `Q&A` for questions, `Ideas` for proposals that are not yet scope. A question is not a unit of work and does not become one by arriving as an issue; one that turns out to be work gets converted.

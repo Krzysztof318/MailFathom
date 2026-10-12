@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 namespace MailFathom.AI.Embeddings;
 
@@ -8,10 +8,10 @@ namespace MailFathom.AI.Embeddings;
 /// <remarks>
 /// pgvector stores far more than it indexes. MailFathom builds no vector index — every profile is searched exactly,
 /// measured rather than assumed, and
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/architecture/semantic-ranking-cost.md">What a
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/architecture/semantic-ranking-cost.md">What a
 /// semantic search costs</see> holds what decided that — so what a width above <see cref="GreatestIndexable" /> costs
 /// is storage and scan time rather than a search that never becomes fast.
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
 /// keeps the ceiling an explicit declaration regardless: a declared width above it is refused unless the deployment
 /// says it accepts a narrowed one.
 /// </remarks>

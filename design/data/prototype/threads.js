@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 // The inbox, newest first. `meta` is the sender's address, when the newest message arrived, and how long the thread is;
 // `state` is what the thread has settled so far, and `body` the newest message as plain or Markdown paragraphs.

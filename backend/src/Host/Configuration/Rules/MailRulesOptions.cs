@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
@@ -13,7 +13,7 @@ namespace MailFathom.Host.Configuration.Rules;
 /// <remarks>
 /// <para>
 /// A configuration section rather than a table, which is the decision
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0010-rule-authoring-in-configuration-and-ncalc-conditions.md">ADR 0010</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0010-rule-authoring-in-configuration-and-ncalc-conditions.md">ADR 0010</see>
 /// records: what an instance will do to a mailbox is the most consequential thing it declares, and configuration is
 /// what makes that reviewable in a diff before it runs and reproducible from a repository afterwards. Nothing creates,
 /// edits, or deletes a rule at run time.

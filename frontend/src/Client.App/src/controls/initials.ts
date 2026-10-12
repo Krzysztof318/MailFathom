@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 // The letters somebody is recognised by where there is no picture of them. Two circles draw them — the one a sender is
 // recognised by on every row of the list, and the one the signed-in person is drawn by in the account menu and on the

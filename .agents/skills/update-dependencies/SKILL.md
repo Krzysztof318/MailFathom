@@ -4,7 +4,7 @@ description: Use when the task in front of you is to move dependency pins — pa
 license: AGPL-3.0-only
 metadata:
   author: Krzysztof Kasprowicz
-  repository: https://github.com/Krzysztof318/MailFathom
+  repository: https://github.com/fathomise/MailFathom
 ---
 
 # Update Dependencies

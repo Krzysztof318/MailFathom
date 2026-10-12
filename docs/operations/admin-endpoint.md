@@ -397,7 +397,7 @@ holding 'mailfathom.admin.roles.write' over an organization or a user is not eno
 ```
 
 Naming the permission is a deliberate difference from the MCP surface, which discloses nothing to a refused caller.
-[ADR 0012](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0012-authorization-model-named-permissions-and-where-they-are-enforced.md)
+[ADR 0012](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0012-authorization-model-named-permissions-and-where-they-are-enforced.md)
 records why: the caller here is an operator at their own terminal, and a refusal they can act on is worth more than a
 refusal that says nothing.
 
@@ -943,7 +943,7 @@ Take it as a deliberate administrative act on a database you have a backup of.
 
 Three commands, and none of them takes a model, a provider, or a vector width as an argument. Configuration declares
 what this deployment embeds with and [ADR
-0006](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md)
+0006](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md)
 leaves these the imperative half: the act that takes a declaration up, the act that stops it, and the reading that says
 where it got to. Editing a configuration file costs nothing; activating is the first thing MailFathom does that costs
 money per unit of mail.
@@ -1870,7 +1870,7 @@ done while a run was still writing is the failure this exists to prevent.
 
 **A user is minted with an identifier that says nothing about who they are.** It is a version 7 UUID, like every
 identifier MailFathom mints under [ADR
-0036](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0036-minting-every-identifier-as-a-version-7-uuid-and-never-treating-one-as-a-secret.md):
+0036](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0036-minting-every-identifier-as-a-version-7-uuid-and-never-treating-one-as-a-secret.md):
 its leading bits are the moment it was recorded and the rest is random, and nothing in it is derived from a name or an
 address. An identifier appearing in a URL, a log line, or a support conversation therefore discloses when this
 deployment began serving somebody but never who they are, and it grants nothing to whoever holds it. The display name
@@ -2519,7 +2519,7 @@ is one account with one copy of its mail rather than a mailbox each. The assignm
 account to somebody who already holds it writes nothing rather than failing. An account is assigned only to users of
 its own organization, and an account in none to one user in none: [a second assignment of
 it](#organizations) is refused, because sharing a mailbox is something an organization does. [ADR
-0014](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md)
+0014](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md)
 is the decision, and what it costs a user is stated under the per-user ceilings there: a shared account counts in full
 against every assigned user's ceiling, and work on it proceeds only while every one of them is under theirs.
 
@@ -2900,7 +2900,7 @@ Everything above as one command. It resolves the newest release, downloads the b
 running on, checks it against that release's own checksum file, and installs it as `~/.local/bin/mfctl`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Krzysztof318/MailFathom/main/scripts/install-mfctl.sh | bash
+curl -fsSL https://raw.githubusercontent.com/fathomise/MailFathom/main/scripts/install-mfctl.sh | bash
 ```
 
 **Pass the version when the deployment is not on the newest release**, because the two have to agree on `major.minor`
@@ -2908,7 +2908,7 @@ curl -fsSL https://raw.githubusercontent.com/Krzysztof318/MailFathom/main/script
 two things, so a shell profile can carry the answer instead of the command line, and an argument wins over either:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Krzysztof318/MailFathom/main/scripts/install-mfctl.sh \
+curl -fsSL https://raw.githubusercontent.com/fathomise/MailFathom/main/scripts/install-mfctl.sh \
   | bash -s -- --version 0.5.0 --directory ~/bin
 ```
 
@@ -2943,7 +2943,7 @@ command that would have started a provider bill starts none.
 
 The rule follows the version's own promise rather than adding one. Within `0.x` a minor release may change any public
 surface and a patch may change none, so the release line is the whole of what the two builds have to share —
-[ADR 0004](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md)
+[ADR 0004](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md)
 records that policy.
 
 Everything below the line is a difference the command reports and carries on past:
@@ -3269,7 +3269,7 @@ $ mfctl status --endpoint production
 Signed in as Alice Example (3f1d...).
 The user holds Administrator over the deployment.
 It holds mailfathom.admin.read, mailfathom.admin.operate.
-Documentation for that version: https://krzysztof318.github.io/MailFathom/docs/v0.2.0/
+Documentation for that version: https://fathomise.github.io/MailFathom/docs/v0.2.0/
 ```
 
 The order is the option, then `MAILFATHOM_ENDPOINT`, then the profile last switched to: what you typed beats what your
@@ -3410,7 +3410,7 @@ screenshot of a directory listing — still discloses nothing on its own, becaus
 from anything about the machine; but someone already able to read your files on your machine reads the key as easily as
 the store, and on Linux nothing prevents that. Neither arrangement defends against code running as you: a keyring
 answers whoever can ask it. That is the threat model this accepts, and packaging the command so it can be installed is
-tracked as [#318](https://github.com/Krzysztof318/MailFathom/issues/318).
+tracked as [#318](https://github.com/fathomise/MailFathom/issues/318).
 
 ## What the command records about itself
 

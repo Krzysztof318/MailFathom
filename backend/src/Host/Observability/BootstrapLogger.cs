@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Host.Configuration.Provisioning;
 using OpenTelemetry;
@@ -71,7 +71,7 @@ internal sealed partial class BootstrapLogger : IDisposable
     /// <remarks>
     /// The version and the revision are both reported because they answer different questions. The version states what
     /// the process promises across the four surfaces
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md">ADR 0004</see> versions; the revision
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md">ADR 0004</see> versions; the revision
     /// names the commit it was built from, which is what makes a report from a deployment the reader did not build
     /// reproducible. A build with neither a repository beside it nor a revision supplied to it reports <c>unknown</c>.
     /// </remarks>

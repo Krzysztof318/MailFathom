@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -17,7 +17,7 @@ namespace MailFathom.Application.Preferences;
 /// <para>
 /// Three members rather than the two this preference carried before. The reduced document and the sender's own markup are
 /// what
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0024-rendering-mail-in-the-client-as-a-closed-document-tree.md">ADR 0024</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0024-rendering-mail-in-the-client-as-a-closed-document-tree.md">ADR 0024</see>
 /// named; the cleaned one is the reduced document with what the sender wrapped it in dropped, derived per open by a model
 /// that answers in block indices and never in text. It is a choice beside the other two rather than a switch on top of one,
 /// because a reader picks one rendering and the screen draws it.

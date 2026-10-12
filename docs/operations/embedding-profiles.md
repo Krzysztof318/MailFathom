@@ -13,7 +13,7 @@ costs, and what stopping or reversing it means.
 ## A generation is a profile row
 
 There is no counter and no second record. [ADR
-0006](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md)
+0006](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md)
 makes the profile the generation, so an instance in the middle of a model change holds two rows in
 `embedding_profiles`, and every stored vector names the one it belongs to. Each row is in one of three states:
 

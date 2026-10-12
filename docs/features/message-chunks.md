@@ -154,7 +154,7 @@ unchanged message still writes nothing — the value it would be given is the va
 A deployment that sets `Embeddings:AttachmentText:Enabled` gains a second source of passages: the words a document
 attachment yielded, and the words a model transcribed from a picture or used to describe one. They are **the same kind of passage in the same
 vector space**, distinguished by the text they are a span of and by nothing else — which is what
-[ADR 0029](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.md)
+[ADR 0029](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.md)
 decides and what keeps a single search over a message and its attachment one ranking rather than two fused.
 
 - **A body passage's digest does not move.** The attachment encoding is a hash domain of its own rather than a field
@@ -182,7 +182,7 @@ decides and what keeps a single search over a message and its attachment one ran
   produced are all stored, so cutting an attachment's passages again is a computation over rows the deployment already
   holds rather than a second parse or a second vision call. Nothing performs that re-cut today: the walk offers a
   message whose attachments nothing has read yet and no other pass reaches one, and the backfill that re-cuts a changed
-  rule set narrows to a message's body passages. [#1698](https://github.com/Krzysztof318/MailFathom/issues/1698) is
+  rule set narrows to a message's body passages. [#1698](https://github.com/fathomise/MailFathom/issues/1698) is
   where the attachment half of it is tracked.
 
 An attachment reading is offered for embedding only where it produced words, and a message is stamped as read whether

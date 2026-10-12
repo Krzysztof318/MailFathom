@@ -49,7 +49,7 @@ and give up the analyzer verdict `EnforceCodeStyleInBuild` and
 answering for the files the change did not open.
 
 Which suites run is
-[`scripts/resolve-changed-unit-suites.sh`](https://github.com/Krzysztof318/MailFathom/blob/main/scripts/resolve-changed-unit-suites.sh)'s
+[`scripts/resolve-changed-unit-suites.sh`](https://github.com/fathomise/MailFathom/blob/main/scripts/resolve-changed-unit-suites.sh)'s
 answer, read out of what each test project names in its own `Include`
 attributes — a `ProjectReference` to the project under test, or a `Compile`
 linking one of its files in, which is how `AppHost.UnitTests` reaches its subject
@@ -134,7 +134,7 @@ bash scripts/compare-captures.sh "$WORK_DIR/pairs"
 
 The first serves `design/` to a browser, the second serves the client from
 the fixture corpus, and both read one manifest —
-[`frontend/design-parity/screens.json`](https://github.com/Krzysztof318/MailFathom/blob/main/frontend/design-parity/screens.json) —
+[`frontend/design-parity/screens.json`](https://github.com/fathomise/MailFathom/blob/main/frontend/design-parity/screens.json) —
 so a pair cannot differ in size, state or device pixel ratio. The third compares
 each pair and answers in text: how many pixels differ, and where, as regions with
 the crop that opens one. `frontend/AGENTS.md` § _Holding a screen against the
@@ -167,7 +167,7 @@ verifying formatting pass; the client's is its own workspace restored, the bundl
 built, its unit suite run, and its own verifying formatting pass. The bundle is
 the whole of what it builds, because no native head is built by either gate —
 which the desktop head's own page states as a cost and which
-[ADR 0027](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0027-an-android-head-built-every-night-and-supported-by-nothing.md)
+[ADR 0027](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0027-an-android-head-built-every-night-and-supported-by-nothing.md)
 accepts for the Android one. The client's
 suite reports its own coverage as it runs and no threshold is enforced on it, so
 the service's is the one figure either gate can fail on. Whichever ran, it then
@@ -362,7 +362,7 @@ invoked by hand, because both already run where they belong.
 
 Both gates fetch the base branch and refuse a branch that does not contain it,
 through one implementation in
-[`scripts/resolve-base-remote.sh`](https://github.com/Krzysztof318/MailFathom/blob/main/scripts/resolve-base-remote.sh):
+[`scripts/resolve-base-remote.sh`](https://github.com/fathomise/MailFathom/blob/main/scripts/resolve-base-remote.sh):
 a base check that existed twice is a base check that can disagree with itself.
 The explicit destination refspec is what makes the ancestor test mean anything —
 a bare `git fetch <remote> main` writes only `FETCH_HEAD`, so a repository whose
@@ -634,7 +634,7 @@ convention every Git host documents is a second remote named `upstream`.
 `scripts/resolve-base-remote.sh` is that one answer, sourced by
 `inspect-workspace.sh`, `verify-fast.sh`, and `verify-full.sh` rather than
 reimplemented in each. It identifies the remote by the repository it points at,
-not by its name: a URL whose trailing `owner/name` is `Krzysztof318/MailFathom`,
+not by its name: a URL whose trailing `owner/name` is `fathomise/MailFathom`,
 with an optional `.git` suffix, in any of the forms Git accepts. `upstream` and
 `origin` are preferred in that order so a fork configuring both gets a stable
 answer, and a remote under any other name still resolves.
@@ -647,7 +647,7 @@ MailFathom, the full gate refuses before any `dotnet` invocation and prints the
 two commands that fix it:
 
 ```bash
-git remote add upstream https://github.com/Krzysztof318/MailFathom.git
+git remote add upstream https://github.com/fathomise/MailFathom.git
 git fetch upstream main
 ```
 
@@ -669,9 +669,9 @@ states which rules belong to only one; this is how the skills tell them apart.
 `Base branch: origin/main` means `origin` is MailFathom, which is the owner's
 checkout; anything else means `origin` is a fork. That settles which repository
 this is, and it deliberately does not settle what the session may do with the
-board, because the owner grants read or write on project `4` to a contributor
+board, because the owner grants read or write on project `1` to a contributor
 whenever they decide to. So the skill asks separately, in either role, with
-`{ user(login: "Krzysztof318") { projectV2(number: 4) { viewerCanUpdate } } }`:
+`{ organization(login: "fathomise") { projectV2(number: 1) { viewerCanUpdate } } }`:
 `true` is write, `false` is read, and neither of them is a `null` project beside
 a `NOT_FOUND` error, which is how GitHub reports a project the viewer cannot see
 — it hides one rather than refusing it, so the answer for *no permission* is
@@ -711,7 +711,7 @@ more places than the fork's, because those are the steps that need writing down.
 What a wrong inference costs is a turn each time, and every one of them is
 visible only after it fails: a board write that returns a permission error, a
 `type:*` label assigned where nothing can assign one, a push refused by
-`Krzysztof318/MailFathom`, a branch renamed to `agent/<short-description>` for
+`fathomise/MailFathom`, a branch renamed to `agent/<short-description>` for
 nothing. So a contributor settles it once, in a file their harness loads before
 the first message and this repository ignores.
 
@@ -734,9 +734,9 @@ copied, which is what lets the pattern be exactly as wide as the ignore rule it
 mirrors.
 
 Four sentences are enough, and what earns a place in one is what an agent would
-otherwise get wrong: which remote is which, that project `4` is unreachable and
+otherwise get wrong: which remote is which, that project `1` is unreachable and
 its label, milestone, and board fields belong to triage, that nothing is pushed
-to `Krzysztof318/MailFathom`, and that the branch keeps the name it was given.
+to `fathomise/MailFathom`, and that the branch keeps the name it was given.
 The wording itself is written once, in
 `.agents/skills/get-started-contributors/SKILL.md`, and repeated once where a
 contributor reads it, in `CONTRIBUTING.md` § *Tell your agent it is working in a
@@ -874,8 +874,8 @@ set `Status` and nothing else.
 
 That same limit is why `Queue: Next` is written by a skill rather than by an
 automation. No project workflow can set a custom single-select field, and the
-board is user-owned, which leaves only a classic account-wide token as a
-credential a GitHub Actions run could use — so the write stays where a token
+workflow token reaches no project at all, which leaves an account-wide token as
+the credential a GitHub Actions run would use — so the write stays where a token
 that already exists is already in use, and a pull request opened by neither
 `finish-change` nor `prepare-release` moves nothing.
 
@@ -1154,7 +1154,7 @@ looks right: with `cancel-in-progress: false` the platform keeps one run queued 
 older pending ones, so two acceptances in the same minute would lose one silently. The
 branch carries a ruleset of its own admitting the `Fathom license` App and nothing else,
 which is what makes the register evidence rather than a file the party it speaks about can
-edit. [ADR 0015](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0015-contributor-licence-agreement-and-where-assent-is-recorded.md)
+edit. [ADR 0015](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0015-contributor-licence-agreement-and-where-assent-is-recorded.md)
 holds the decision and `CLA.md` the agreement.
 
 ## Review on the pull request
@@ -2342,9 +2342,9 @@ finished item back into review, and a review starting on one must not either.
 something outside the project — a question neither a verdict nor a review in
 flight answers, so neither gets to erase the answer.
 
-The write is a job of its own for the credential. Writing a field on a
-user-owned project needs a classic token with the `project` scope: no GitHub App
-permission covers one and no fine-grained token carries the scope, which
+The write is a job of its own for the credential. The workflow token is scoped
+to the repository and reaches no project, so writing a field on the board takes
+a classic token with the `project` scope, which
 [Issue tracking and the roadmap board](issue-tracking.md#status-transitions)
 records along with what that costs. The job checks out only the base commit, runs
 no model, and receives its input as a string, so the account-wide credential
@@ -2494,9 +2494,9 @@ token the run never spent matches nothing, passes every review, and is green.
 The board write is a third credential, `BOARD_PROJECT_TOKEN`, and it is optional:
 without it the review is published exactly as before and only the `Status` write
 is skipped. It is a **classic** personal access token with the `project` scope and
-no other, created at <https://github.com/settings/tokens>, because that is the
-only kind of credential that reaches a user-owned project — the App above cannot
-be granted one and a fine-grained token has no such scope. Give it an expiry and
+no other, created at <https://github.com/settings/tokens> by an account that can
+write to the organization's board, because the workflow token is scoped to the
+repository and reaches no project. Give it an expiry and
 replace it there when it lapses: a token the board refuses fails that job and
 says so, rather than leaving the board quietly behind. Nothing else reads it,
 and it is held by a job that runs no model and checks out nothing from the branch

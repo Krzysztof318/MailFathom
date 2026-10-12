@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Signals;
 using MailFathom.Domain.Access;
@@ -13,7 +13,7 @@ namespace MailFathom.Application.Discovery.Streaming;
 /// A run outlives the request that asked the question, and above one replica it outlives the process too: the client
 /// reading it is routed wherever the load balancer likes. So the run's output is written into PostgreSQL where it is
 /// produced and read back from there over an ordinary route, which is
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0035-delivering-a-running-ai-answer-from-a-persisted-run-by-cursor-signal-and-re-read.md">ADR 0035</see>.
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0035-delivering-a-running-ai-answer-from-a-persisted-run-by-cursor-signal-and-re-read.md">ADR 0035</see>.
 /// This is the writing half: the execution holds one of these and appends to it, and nothing about the reading half
 /// passes through here.
 /// </para>

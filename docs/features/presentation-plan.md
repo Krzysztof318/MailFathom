@@ -168,7 +168,7 @@ A citation also says two things about the source itself rather than about where 
 
 A source is `Written` where somebody wrote it — a message body, a quoted passage, a document's own text — and
 `Depicted` where it is this deployment's description of a picture rather than words anybody typed.
-[ADR 0030](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md)
+[ADR 0030](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md)
 makes a depicted source corroborating rather than a headline, and that ranking has to survive the journey to a screen:
 a fact resting on a described photograph of an invoice rests on a machine's account of what an image shows, and
 presenting it like a quotation is how an answer quietly promotes a guess.
@@ -268,4 +268,4 @@ the deployment at all.
 - **Rendering one.** The client's canvas and its block renderers are separate work again.
 - **What a run spent.** Cost, cancellation, and the events a run streams are properties of the run rather than of the
   plan it produced. What a run reports about each, and what a person is told when a spend ceiling refuses one, is
-  decided in [ADR 0022](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0022-what-an-ai-run-reports-about-cost-cancellation-and-the-model.md).
+  decided in [ADR 0022](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0022-what-an-ai-run-reports-about-cost-cancellation-and-the-model.md).

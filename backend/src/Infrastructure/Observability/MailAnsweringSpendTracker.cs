@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Diagnostics.Metrics;
 using MailFathom.Application.Chat;
@@ -23,7 +23,7 @@ namespace MailFathom.Infrastructure.Observability;
 /// <para>
 /// Deployment-wide and durable, through <see cref="IMailAnsweringSpendPeriodStore" />. It is where this diverges from
 /// what it used to be, and the reason is the one
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md">ADR 0031</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md">ADR 0031</see>
 /// records: a ceiling worded as the deployment's and counted in each process is multiplied by the replica count, and
 /// the two ceilings here are the two that cost money. What that costs is two writes for a run that would not otherwise
 /// have opened one — the admission, and the charge as the run ends — beside a run that is already about to spend a

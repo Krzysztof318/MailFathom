@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Discovery.Presentation;
 using MailFathom.Application.Discovery.Runs;
@@ -38,7 +38,7 @@ namespace MailFathom.Application.Discovery.Streaming;
 /// <para>
 /// <strong>What it records about cost is the run's own consumption and never a price.</strong> The three counts and
 /// the ceilings they are read against are what
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0022-what-an-ai-run-reports-about-cost-cancellation-and-the-model.md">ADR 0022</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0022-what-an-ai-run-reports-about-cost-cancellation-and-the-model.md">ADR 0022</see>
 /// settles on: the envelope goes out with the start, the counts accrue on the events the run already writes, and the
 /// final ones stay with the ending whichever ending it was. Every one of them is a number or a name an operator chose.
 /// </para>
@@ -242,7 +242,7 @@ public sealed class WatchedDiscoveryRun
     /// difference between them: waiting answers one and never the other. The instant is computed from the clock and the
     /// configured period rather than from what has been spent, so publishing it discloses nothing about the deployment's
     /// activity — and neither state names a consumed amount, for the reason
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0022-what-an-ai-run-reports-about-cost-cancellation-and-the-model.md">ADR 0022</see>
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0022-what-an-ai-run-reports-about-cost-cancellation-and-the-model.md">ADR 0022</see>
     /// gives: on a deployment serving several users the remaining allowance is a report of what the others have been
     /// doing.
     /// </remarks>

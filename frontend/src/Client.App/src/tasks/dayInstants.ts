@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 // The three places this screen has to turn a reader's day into the instants the wire takes. Every calendar route states
 // two instants and the day layout states two more, so which moments are somebody's day is the client's to say.

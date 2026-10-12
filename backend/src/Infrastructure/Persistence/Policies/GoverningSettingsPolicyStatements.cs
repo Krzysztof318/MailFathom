@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.CodeCoverage;
 using Npgsql;
@@ -16,7 +16,7 @@ namespace MailFathom.Infrastructure.Persistence.Policies;
 /// write had just replaced, so every such writer reads the policies inside its own transaction and under one lock:
 /// shared between the writes of records, which have nothing to wait for in each other, and exclusive for a policy
 /// write, which waits for the record writes in flight and holds the next ones until it has committed.
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0037-a-settings-policy-at-the-deployment-and-at-each-organization.md">ADR 0037</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0037-a-settings-policy-at-the-deployment-and-at-each-organization.md">ADR 0037</see>
 /// § <em>A policy that would leave a record invalid is refused</em> holds the rule this upholds.
 /// </para>
 /// <para>

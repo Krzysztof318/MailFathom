@@ -171,7 +171,7 @@ AppHost provisions its synthetic credential after the service reports ready;
 | `POST /api/client/telemetry/v1/logs` | none |
 
 No path here carries a version segment MailFathom chose: the major version is `0` and
-[ADR 0004](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md)
+[ADR 0004](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md)
 permits breaking the contract outright, so `/v1` would be scaffolding for a promise this project has not made. The
 `/v1` in the three [telemetry routes](#the-telemetry-routes) is not one: those paths are fixed by the OTLP
 specification, so a client points its exporter at the prefix above them and appends nothing itself.
@@ -396,14 +396,14 @@ revocation, so the endpoint needs no session affinity at any replica count and a
 And the deployment holds at most ten thousand live sessions, counted by the statement that writes one rather than by
 each replica separately, so raising the replica count does not multiply it: reaching that sweeps what has expired and,
 where that frees nothing, refuses a new sign-in with `503` rather than signing somebody else out.
-[ADR 0033](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0033-where-a-signed-in-session-lives-so-every-replica-accepts-it.md)
+[ADR 0033](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0033-where-a-signed-in-session-lives-so-every-replica-accepts-it.md)
 is where that is recorded.
 
 **The token is unguessable and it is not a password.** It is a sixteen-byte identifier and a thirty-two-byte secret,
 both from the platform's cryptographically secure generator, written together after an `mfs_` prefix — the same shape a
 minted API key carries, so a secret scanner recognises one and an operator who finds an unexpected value can tell which
 of the two it is. Only the identifier is looked up; the secret is compared in fixed time.
-[ADR 0023](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0023-where-the-client-keeps-the-credential-it-signs-in-with.md)
+[ADR 0023](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0023-where-the-client-keeps-the-credential-it-signs-in-with.md)
 is where what each head keeps, and the threat model that follows, is recorded.
 
 ### The accounts route
@@ -614,9 +614,9 @@ These are the one surface a person's folder acts go through, for every account. 
 an answer returns says where the account's mail is kept: an act is asked for the same way whether the mailbox is the
 mail server's or MailFathom's own, and which of the two carries it is the service's to decide. On an account whose
 mailbox MailFathom holds, an act is a local commit reaching no server, under
-[ADR 0034](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md);
+[ADR 0034](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md);
 on a mirrored account it runs on the account's mail server, under
-[ADR 0007](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md),
+[ADR 0007](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md),
 axes L, M, and N. They are a different reading from [the folders route](#the-folders-route), which is the tree a mail
 screen is drawn from and carries each folder's counts and how current it is; this one carries what may be done to each
 folder.
@@ -999,7 +999,7 @@ the description itself rather than fragments cut around the query. `isDepictedMa
 is the entire reason the message is in the list: every such result sits below every result a query word or written text
 reached, so a picture never displaces a written match and only ever adds a message that would not have been in the list
 at all. A screen showing one owes the reader that distinction — the source is a guess about an image.
-[ADR 0030](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md)
+[ADR 0030](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md)
 is the decision, and the same partition serves the MCP tools.
 
 **`hasAttachments` is unchanged by any of this.** It constrains by attachment *presence* — mail carrying a file — and
@@ -1835,7 +1835,7 @@ taking one back, or saying a delete need wait no longer.
 
 **Nothing here reaches a mail server, and that is the design rather than a limitation.** A submission writes a durable
 record and answers; the account's own reconciliation pass is what issues the IMAP command, which is
-[ADR 0007](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md)'s
+[ADR 0007](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md)'s
 write session and the same path a rule, a spam verdict, and an MCP tool go down. So a screen never waits on somebody
 else's mail server to redraw, a change asked for while the account is unreachable is kept rather than lost, and a
 process that dies between a copy and a delete leaves a record saying what was half done.
@@ -1902,7 +1902,7 @@ list destructive.
 **Nothing on this surface sets `\Seen` implicitly.** Reading a message does not mark it read anywhere — not the message
 route, not the body route, not the attachment route. Marking a message read is a flag change submitted here and nothing
 else. What MailFathom's own client does with that is
-[ADR 0026](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0026-marking-a-message-read-when-a-person-opens-it-in-the-client.md)'s
+[ADR 0026](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0026-marking-a-message-read-when-a-person-opens-it-in-the-client.md)'s
 answer rather than this route's: a person opening a message has the client submit one change here, unless they turned
 [`markReadOnOpen`](#the-preferences-routes) off or the credential was never granted `mailfathom.mail.flags.write`.
 
@@ -2191,7 +2191,7 @@ its own and no longer follows the default.
 server.** Each is a change to the mapping the record declares: a declaration adds one and lets the account's next run
 create the folder its own configuration names, a replacement states that mapping afresh in the position the old one
 held, and a removal takes the mapping out. Renaming, deleting, subscribing, and unsubscribing a folder *on the server*
-are refused outright by [ADR 0007](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md), which is why a removal here
+are refused outright by [ADR 0007](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md), which is why a removal here
 stops the deployment reading a folder rather than removing one — the mail already stored stays where it is, and so does
 the folder on the server. That is unlike an administrator ending the last assignment to a whole mailbox, which erases its stored mail. A removal withdraws only the alias
 it names: a folder sitting beneath it stays declared and is read as a folder of its own from then on.
@@ -2431,7 +2431,7 @@ value rather than one per mailbox because read state is what must not differ bet
 a client whose user has turned it off shows what their mail server last reported and remembers no reading of its own.
 It governs opening a message and nothing else: marking a message read or unread deliberately, through the flag
 mutations above, is unaffected by it.
-[ADR 0026](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0026-marking-a-message-read-when-a-person-opens-it-in-the-client.md)
+[ADR 0026](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0026-marking-a-message-read-when-a-person-opens-it-in-the-client.md)
 holds the reasoning, including why an operator's lever here is
 [`mailfathom.mail.flags.write`](permissions.md#the-published-set) rather than a key of their own.
 
@@ -2446,7 +2446,7 @@ the switch changes the next conversation rather than the one being read, and the
 rather than being translated: a switch that was on says nothing about which of the two other renderings it now means.
 
 - **`reduced`**, which is what an unset document answers, is the closed document tree
-  [ADR 0024](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0024-rendering-mail-in-the-client-as-a-closed-document-tree.md)
+  [ADR 0024](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0024-rendering-mail-in-the-client-as-a-closed-document-tree.md)
   takes. The other two are each one control away — the cleaned one in the settings, the sender's own markup on the
   message head.
 - **`cleaned`** is that same tree with the blocks a model decided were the sender's frame rather than their message
@@ -2527,7 +2527,7 @@ a sentence saying so in place of the switch — a control over a client that is 
 [settings policy](admin-endpoint.md#settings-policies), or the policy of the organization a person belongs to, may
 force it on or off for everybody it governs. Nothing else here is ever governed: the other seven take no default, no
 forced value, and no editing restriction, and the switch itself takes a forced value and nothing else.
-[ADR 0037](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0037-a-settings-policy-at-the-deployment-and-at-each-organization.md)
+[ADR 0037](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0037-a-settings-policy-at-the-deployment-and-at-each-organization.md)
 holds why this one, and what forcing it on takes from the person it is about.
 
 | While a policy forces the switch | What these routes do |
@@ -3786,7 +3786,7 @@ by. Nothing archives a conversation on its own.
 the run where the write belongs to one, and the place reached — never the question, a block, a status line, or a
 title. A client reads the conversation from its cursor when it hears one, on mount, and after every reconnect, so a
 client with no channel loses latency rather than any of the conversation.
-[ADR 0035](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0035-delivering-a-running-ai-answer-from-a-persisted-run-by-cursor-signal-and-re-read.md) is why
+[ADR 0035](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0035-delivering-a-running-ai-answer-from-a-persisted-run-by-cursor-signal-and-re-read.md) is why
 it is delivered this way, and [the schema](../architecture/stored-email-schema.md#an-agent-conversation-and-what-was-said-in-it)
 what the record holds.
 
@@ -4010,7 +4010,7 @@ answer leaves what is drawn in place for the next to try again.
 
 **One replica's hub reaches one replica's connections.** A signal is published to the connections the process that
 raised it is holding, so above one replica the arithmetic is unkind: the replica that synchronized an account is the
-one [#1290](https://github.com/Krzysztof318/MailFathom/issues/1290) gave the account to, the connection that has to
+one [#1290](https://github.com/fathomise/MailFathom/issues/1290) gave the account to, the connection that has to
 hear about it is wherever the browser's socket landed, and those are the same process only by chance. What the client
 sees is a channel that stands open and says almost nothing, which is worse than one that is plainly down: the client
 falls back to its five-minute refresh either way, but nothing an operator reads says the fan-out is the reason.
@@ -4238,7 +4238,7 @@ rather than re-authorized; a refused refresh ends the sign-in, while a server th
 retried. Signing out clears the session and the grant together, on the head's own terms, and asks the authorization
 server's revocation endpoint to withdraw the refresh token — asked without waiting on the answer, and asked of nothing
 where the server publishes no such endpoint.
-[ADR 0023](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0023-where-the-client-keeps-the-credential-it-signs-in-with.md)
+[ADR 0023](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0023-where-the-client-keeps-the-credential-it-signs-in-with.md)
 is where a grant is kept and what clears it.
 
 ## Browser origins

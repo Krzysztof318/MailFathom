@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using Npgsql;
 
@@ -25,7 +25,7 @@ namespace MailFathom.Infrastructure.Persistence.Connections;
 /// <b>Nothing here routes a read to a standby.</b> Every session MailFathom opens reaches the primary, whichever
 /// instance that currently is. Serving a query from a replica is a decision about read-your-writes and replication lag
 /// that
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0001-application-owned-repositories-for-persistence-ports.md">ADR 0001</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0001-application-owned-repositories-for-persistence-ports.md">ADR 0001</see>
 /// would have to be amended for, rather than a keyword to accept here.
 /// </para>
 /// </remarks>

@@ -26,7 +26,7 @@ Editing that value starts nothing: it says what this deployment intends, and an 
 the profile identity from it, states the estimate, takes the confirmation, and begins producing vectors.
 
 That split is deliberate and is the whole of [ADR
-0006](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md)'s
+0006](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md)'s
 answer to a hazard worth naming: embedding is the first thing MailFathom does that costs money per unit of mail. A
 configuration edit that re-embedded a mailbox at the next restart would be an invoice arriving a month later for a
 decision nobody was shown.
@@ -121,7 +121,7 @@ bound. It is off by default: with it off, a declared dimension above 2000 is ref
 and the ceiling; with it on, the declared width is what the profile records and what the stored vectors have — because
 a trimmed vector occupies a different space than the full one, and a profile claiming the model's nominal width would
 be describing vectors that do not exist. The ceiling is
-[ADR 0006](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md)'s,
+[ADR 0006](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md)'s,
 and what a wider model costs is storage and scan time rather than a search that never becomes fast.
 
 Where the endpoint can produce the narrower vector itself, that is used in preference to cutting one down:
@@ -424,7 +424,7 @@ one leaves every stored vector exactly as comparable as it was.
   answers both questions from one key without a second count. Mail belongs to the mailbox rather than to a person, so
   spend on a mailbox several people are assigned is charged to each of them in full and admitted only while every one
   of them is under the ceiling; a shared mailbox is wholly each assigned user's mail, and
-  [ADR 0014](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md)
+  [ADR 0014](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md)
   states that rather than dividing the window between them.
 
 A fifth block sits beside those four in the same section and counts something else. `Embeddings:AttachmentText` bounds
@@ -469,7 +469,7 @@ One walk serves every user at once, in identifier order, so a cursor per user wo
 over and the run would still visit every message to decide which cursor to move; what a user's ceiling costs is their
 messages being stepped over for the rest of the period, which the walk already does without remembering anything. The
 profile is deployment-wide because [ADR
-0006](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md)
+0006](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md)
 makes it the meaning of a stored vector, and two users' vectors sharing an index have to mean the same thing.
 
 **Concurrency is not one of these keys.** How many provider calls may be in flight at once is

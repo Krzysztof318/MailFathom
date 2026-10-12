@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.AI.Chat;
 using MailFathom.AI.ProviderAdapters;
@@ -199,7 +199,7 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
         var endpoint = model.Endpoint;
 
         // Rewritten per attempt so the run's record names the model that answered it, which is what
-        // <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0022-what-an-ai-run-reports-about-cost-cancellation-and-the-model.md">ADR 0022</see>
+        // <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0022-what-an-ai-run-reports-about-cost-cancellation-and-the-model.md">ADR 0022</see>
         // publishes to a client: a run the fallback served is attributable to the fallback rather than to the model it
         // was asked for first.
         observation.RecordComposition(endpoint.Alias, MailAnsweringInstructions.Version);

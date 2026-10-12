@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 namespace MailFathom.Application.Retrieval.AskMail;
 
@@ -12,7 +12,7 @@ namespace MailFathom.Application.Retrieval.AskMail;
 /// <remarks>
 /// <para>
 /// Three counts and the message count beside the third, which is the figure
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0022-what-an-ai-run-reports-about-cost-cancellation-and-the-model.md">ADR 0022</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0022-what-an-ai-run-reports-about-cost-cancellation-and-the-model.md">ADR 0022</see>
 /// settles on: each of the three is the same quantity that will stop the run rather than a second measure invented for
 /// display, and a character total is the bound while a message count is what a person has an intuition about.
 /// </para>

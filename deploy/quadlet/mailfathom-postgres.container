@@ -1,6 +1,6 @@
 # Copyright © 2026 Krzysztof Kasprowicz
 # Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-# Project repository: https://github.com/Krzysztof318/MailFathom
+# Project repository: https://github.com/fathomise/MailFathom
 
 # PostgreSQL for the Podman Quadlet deployment. Copy this file, the other four beside it, and the configuration example
 # under config/ as docs/operations/deployment-quadlet.md describes; nothing here is read from the repository at run

@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Access;
 using MailFathom.Application.Coordination;
@@ -27,7 +27,7 @@ namespace MailFathom.Application.Accounts.Custody;
 /// It refuses what can be known when it is issued and nothing else. What the source advertises about <c>UIDPLUS</c>
 /// cannot be known without a connection the account's own supervision already holds, so a source without it holds the
 /// account in <c>Mirrored</c> and reports why rather than being refused here. See
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
 /// </para>
 /// </remarks>
 public sealed class MailAccountCustodySwitch

@@ -41,15 +41,18 @@ modification to an existing work. Submission means any form of communication sen
 to this repository for the purpose of having the work included, whether by pull request, patch, issue, or
 otherwise. Communication you conspicuously mark **"Not a Contribution"** is excluded.
 
-**"MailFathom"** means the project hosted at <https://github.com/Krzysztof318/MailFathom> and the works
+**"MailFathom"** means the project hosted at <https://github.com/fathomise/MailFathom> and the works
 distributed from it.
 
 **"Owner"** means Krzysztof Kasprowicz, a sole trader established in the Republic of Poland and trading
-as **IMPE**, who is the copyright holder of record named in [`NOTICE`](NOTICE) and who publishes
-MailFathom from the GitHub account [`Krzysztof318`](https://github.com/Krzysztof318); and any successor
-the agreement is assigned to under clause 2.4. Where the Owner has to be identified beyond that — in a
-transaction, or in a dispute — the business registration behind the trading name is what identifies
-them, and it is supplied on request rather than published here.
+as **IMPE**, who is the copyright holder of record named in [`NOTICE`](NOTICE) and whose GitHub account
+is [`Krzysztof318`](https://github.com/Krzysztof318); and any successor the agreement is assigned to
+under clause 2.4. MailFathom is hosted under the GitHub organization
+[`fathomise`](https://github.com/fathomise), which the Owner administers. That organization is where the
+project is published and nothing more: it is not a party to this agreement, hosting the project there
+transfers no right in it, and the Owner remains its owner. Where the Owner has to be identified beyond
+that — in a transaction, or in a dispute — the business registration behind the trading name is what
+identifies them, and it is supplied on request rather than published here.
 
 ## 2. Grants
 

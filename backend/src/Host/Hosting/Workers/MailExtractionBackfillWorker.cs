@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
@@ -22,7 +22,7 @@ namespace MailFathom.Host.Hosting.Workers;
 /// interval would only be a query per interval.
 /// </para>
 /// <para>
-/// A run happens on one replica at a time, as <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md">ADR 0031</see>
+/// A run happens on one replica at a time, as <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md">ADR 0031</see>
 /// decides. Each run takes the walk's lease before it reads the position and gives it back when it ends, so a replica
 /// refused it reads nothing and asks again on its next interval, and a replica that ends itself leaves the walk free for
 /// every other replica to find the same answer on its own.

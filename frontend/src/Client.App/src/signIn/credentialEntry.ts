@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 // The one place in the client that turns what somebody typed, or what a deployment minted, into a credential, and
 // nothing outside this module composes, inspects, or takes apart the value it produces. `Client.Backend` receives it

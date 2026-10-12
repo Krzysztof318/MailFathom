@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 namespace MailFathom.Domain.Accounts;
 
@@ -9,7 +9,7 @@ namespace MailFathom.Domain.Accounts;
 /// Every value here is something the command can know when it is issued, which is what makes the refusal a refusal
 /// rather than a drain that pauses later. What cannot be known until a connection is open — whether the source
 /// advertises <c>UIDPLUS</c> — is not one of them and holds the account in its current phase instead. See
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
 /// </remarks>
 public enum MailAccountCustodySwitchRefusal
 {

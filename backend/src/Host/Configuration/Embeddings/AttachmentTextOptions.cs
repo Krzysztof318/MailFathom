@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.ComponentModel.DataAnnotations;
 using MailFathom.Application.Emails.AttachmentText;
@@ -12,7 +12,7 @@ namespace MailFathom.Host.Configuration.Embeddings;
 /// <remarks>
 /// <para>
 /// It sits under <c>Embeddings</c> rather than beside the synchronization bounds because
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.md">ADR 0029</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.md">ADR 0029</see>
 /// put the extraction ceilings there: what an attachment costs to parse is a different quantity from what a passage
 /// costs to embed, and the record keeps the two beside each other rather than inside one another.
 /// </para>
@@ -37,7 +37,7 @@ internal sealed class AttachmentTextOptions : IValidatableObject
     /// <summary>Gets or sets whether this deployment reads its mail's attachments at all.</summary>
     /// <remarks>
     /// Off by default, which is the whole of what
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.md">ADR 0029</see>
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.md">ADR 0029</see>
     /// decides about what an instance does when it upgrades into this: an embedding is derived from message text
     /// always, and from attachment text only where a deployment turns it on. Turning it on narrows the current
     /// undertaking to parse nothing a stranger composed rather than reversing it — what is read is the allow-list

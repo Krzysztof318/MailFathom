@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Copyright © 2026 Krzysztof Kasprowicz
 # Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-# Project repository: https://github.com/Krzysztof318/MailFathom
+# Project repository: https://github.com/fathomise/MailFathom
 
 set -euo pipefail
 
 ### Installs the released `mfctl` command on Linux, verified against the checksum file the release attaches.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/Krzysztof318/MailFathom/main/scripts/install-mfctl.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/fathomise/MailFathom/main/scripts/install-mfctl.sh | bash
 #   bash scripts/install-mfctl.sh --version 0.5.0 --directory /usr/local/bin
 #
 # This is the only script in the repository written to run on somebody else's machine, which decides most of its shape.
@@ -20,7 +20,7 @@ set -euo pipefail
 # checksum file attached beside them is the whole of what tells a genuine download from a tampered one, and a script
 # that skipped it would be a worse path than the manual one it replaces rather than a shorter one.
 
-readonly repository='Krzysztof318/MailFathom'
+readonly repository='fathomise/MailFathom'
 readonly release_base="https://github.com/$repository/releases"
 
 usage() {

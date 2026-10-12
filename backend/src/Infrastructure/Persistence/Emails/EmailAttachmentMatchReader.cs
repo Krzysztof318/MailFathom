@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Text.Json;
 using MailFathom.Application.Emails.AttachmentText;
@@ -33,7 +33,7 @@ namespace MailFathom.Infrastructure.Persistence.Emails;
 /// <para>
 /// A description is read by identity rather than by matching: it never entered the lexical index, so there is nothing to
 /// cut an extract around, and
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md">ADR 0030</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md">ADR 0030</see>
 /// says what a depicted result shows instead — the description itself, whole, being the only readable account of why the
 /// picture matched.
 /// </para>

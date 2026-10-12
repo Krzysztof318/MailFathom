@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Text.Json;
 using MailFathom.Application.Access;
@@ -24,7 +24,7 @@ namespace MailFathom.Host.Api;
 /// delete are committed to stored state in the request's own transaction and answered <c>applied</c>, with no record to
 /// follow. Otherwise every route writes a durable record per change and answers with it, and the
 /// account's own convergence pass issues the IMAP command later — which is
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md">ADR 0007</see>'s
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md">ADR 0007</see>'s
 /// arrangement rather than a second one. So a screen never waits on IMAP, a crash between the record and the command
 /// leaves a change that converges rather than a mailbox that quietly disagrees, and an account nobody can connect to
 /// produces pending changes rather than failures.
@@ -70,7 +70,7 @@ namespace MailFathom.Host.Api;
 /// <para>
 /// Nothing on this surface sets <c>\Seen</c> as a consequence of anything. Marking a message read is a change a caller
 /// asks for here like any other, which is what
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0026-marking-a-message-read-when-a-person-opens-it-in-the-client.md">ADR 0026</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0026-marking-a-message-read-when-a-person-opens-it-in-the-client.md">ADR 0026</see>
 /// settled; the routes that serve mail hold no write session and cannot reach one.
 /// </para>
 /// <para>

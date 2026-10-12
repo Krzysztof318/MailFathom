@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 import { HttpTransportType, HubConnectionBuilder, LogLevel } from '@microsoft/signalr';
 import { signalMethod, type MailFathomSignalChannel, type SignalStreamSchedule } from '@mailfathom/client-backend';

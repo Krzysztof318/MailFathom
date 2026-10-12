@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Folders.Local;
@@ -282,7 +282,7 @@ public sealed class MailboxMutationConverger
     /// exactly. A copy and a fallback relocation both leave the source in place, so nothing about it distinguishes a
     /// command that landed from one that never arrived, and the only way to tell would be to search the destination
     /// folder for a message that looks like the right one — a guess about identity, which
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md">ADR 0007</see>
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md">ADR 0007</see>
     /// refuses.
     /// </para>
     /// <para>

@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Infrastructure.Observability;
 using Microsoft.Extensions.Logging;
@@ -19,7 +19,7 @@ namespace MailFathom.Infrastructure.ObjectStorage;
 /// <b>After the commit, never before it.</b> Deleting an object first would destroy mail whose deletion then rolled
 /// back, which is irreversible loss on a transient failure; deleting it afterwards can leave an object behind, which is
 /// an orphan the sweep removes.
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md">ADR 0017</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md">ADR 0017</see>
 /// § 7 records that choice.
 /// </para>
 /// <para>

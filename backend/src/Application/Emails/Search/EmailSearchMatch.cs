@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Emails.Search.Attachments;
 using MailFathom.Application.Emails.Summaries;
@@ -49,7 +49,7 @@ public sealed record EmailSearchMatch(
     /// <remarks>
     /// Never true of a message any word of the query or any passage somebody wrote reached, because such a message is
     /// placed by that passage and the picture contributes nothing to where it sits — which is the guarantee
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md">ADR 0030</see>
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md">ADR 0030</see>
     /// states as a partition of the result rather than as a weight inside it.
     /// </remarks>
     public bool IsDepictedMatch { get; init; }

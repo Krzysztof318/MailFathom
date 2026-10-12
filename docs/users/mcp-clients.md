@@ -367,5 +367,5 @@ third-party logo, icon, wordmark, or screenshot.
 OpenAI and ChatGPT are trademarks of OpenAI, Inc. Anthropic, Claude, and Claude Code are trademarks of Anthropic, PBC.
 Microsoft, Visual Studio Code, GitHub, and GitHub Copilot are trademarks of the Microsoft group of companies. Cursor is
 a trademark of Anysphere, Inc.
-[`THIRD_PARTY_LICENSES.md`](https://github.com/Krzysztof318/MailFathom/blob/main/THIRD_PARTY_LICENSES.md#trademark-and-brand-use)
+[`THIRD_PARTY_LICENSES.md`](https://github.com/fathomise/MailFathom/blob/main/THIRD_PARTY_LICENSES.md#trademark-and-brand-use)
 records the per-user review this statement comes out of, and why it sits here rather than in `NOTICE`.

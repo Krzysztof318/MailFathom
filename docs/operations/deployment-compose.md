@@ -49,7 +49,7 @@ for. Until then the deployment reads nothing, which is an ordinary
 first-run state rather than a failure.
 
 **It also relaxes the platform's TLS policy for this deployment**, by copying
-[`deploy/openssl/legacy-mail-server.cnf.example`](https://github.com/Krzysztof318/MailFathom/blob/main/deploy/openssl/legacy-mail-server.cnf.example)
+[`deploy/openssl/legacy-mail-server.cnf.example`](https://github.com/fathomise/MailFathom/blob/main/deploy/openssl/legacy-mail-server.cnf.example)
 to `openssl-legacy.cnf` beside `compose.yaml` and naming it in `OPENSSL_CONF` through a generated
 `compose.override.yaml`. That is what makes a mailbox on a server offering
 only a 1024-bit group, a 1024-bit key, or a SHA-1 signature reachable from a first run instead of failing it with a
@@ -187,7 +187,7 @@ The administrative endpoint — the one every mailbox is recorded through, serve
 publishes on loopback — takes no file here. The first start records
 [the default administrator](admin-endpoint.md#the-default-administrator), `admin`, with the password
 `MAILFATHOM_ADMIN_PASSWORD` carries: `compose.yaml` passes `admin` unless `.env` sets another value, and
-[`.env.example`](https://github.com/Krzysztof318/MailFathom/blob/main/deploy/compose/.env.example) documents the
+[`.env.example`](https://github.com/fathomise/MailFathom/blob/main/deploy/compose/.env.example) documents the
 variable. It is read on the first start alone, and any value but `admin` has to meet the password policy — twelve
 characters at least — or the start stops and says so. Every start warns while `admin` still signs in with the shipped
 value, so change it with `mfctl credential rotate` once you have signed in.
@@ -843,7 +843,7 @@ two tags before moving one: Silo's release line is a MinIO one, named by timesta
 
 **Nothing of Silo is in MailFathom's image or in this repository.** `compose.yaml` names an image your host pulls from
 PGSTY's own registry. Silo is AGPL-3.0-or-later, which
-[`THIRD_PARTY_LICENSES.md`](https://github.com/Krzysztof318/MailFathom/blob/main/THIRD_PARTY_LICENSES.md) records
+[`THIRD_PARTY_LICENSES.md`](https://github.com/fathomise/MailFathom/blob/main/THIRD_PARTY_LICENSES.md) records
 together with the reading it is used under. Its own lifecycle — upgrades, its configuration, its users beyond the one
 above — is yours; MailFathom manages none of it.
 
@@ -924,7 +924,7 @@ states the order that takes.
 **Nothing of Valkey is in MailFathom's image or in this repository.** `compose.yaml` names an image your host pulls from
 Docker Hub, pinned by the same digest the chart renders — Valkey publishes its release tags beside moving
 `9`, `9.1`, and `latest` ones, so a digest is the only reference that names one artifact. Valkey is BSD-3-Clause, which
-[`THIRD_PARTY_LICENSES.md`](https://github.com/Krzysztof318/MailFathom/blob/main/THIRD_PARTY_LICENSES.md) records
+[`THIRD_PARTY_LICENSES.md`](https://github.com/fathomise/MailFathom/blob/main/THIRD_PARTY_LICENSES.md) records
 together with the base image it is built on.
 
 ## Bounds

@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 // What a downloaded file is named on somebody's machine. It sits apart from the row that offers the download because a
 // module Vite hot-reloads may export components alone, which is the same reason `localization/useLocalization.ts` sits

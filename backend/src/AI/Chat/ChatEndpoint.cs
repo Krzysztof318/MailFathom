@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 namespace MailFathom.AI.Chat;
 
@@ -15,7 +15,7 @@ namespace MailFathom.AI.Chat;
 /// The alias exists because the other two members are an address and a routing name, and an address may not be written
 /// down: it identifies a tenant and a resource, so a failure that named one would put it in every log line. The alias is
 /// a name the operator chose, which is exactly what
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0003-first-party-exception-hierarchy-and-stable-error-codes.md">ADR 0003</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0003-first-party-exception-hierarchy-and-stable-error-codes.md">ADR 0003</see>
 /// permits a message to carry. It is unique across every AI endpoint the deployment declares, embedding endpoints
 /// included, because a credential, a circuit, and a log line are all keyed by it.
 /// </para>
@@ -29,7 +29,7 @@ namespace MailFathom.AI.Chat;
 /// What the published name adds is not that identity either. It is the operator's own statement of what a person should
 /// be told answered them — <c>gpt-4o</c> while the request routes to <c>prod-eu-4o-2</c> — because the routed name is a
 /// resource name that can carry a tenant, a project, or an environment in it, and
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0022-what-an-ai-run-reports-about-cost-cancellation-and-the-model.md">ADR 0022</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0022-what-an-ai-run-reports-about-cost-cancellation-and-the-model.md">ADR 0022</see>
 /// refuses to publish that. Nothing reads it but what a client is shown, and empty means a run names the alias alone.
 /// </para>
 /// <para>

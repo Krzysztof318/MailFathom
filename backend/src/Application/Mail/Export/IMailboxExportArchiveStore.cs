@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Domain.Exports;
 
@@ -10,7 +10,7 @@ namespace MailFathom.Application.Mail.Export;
 /// <remarks>
 /// <para>
 /// A port of its own beside <c>IEmailContentStore</c>, and the one content write in MailFathom that is not byte-based.
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md">ADR 0017</see> § 4
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md">ADR 0017</see> § 4
 /// keeps every mail payload whole in memory because a message arrives whole and its digest is computed over all of it;
 /// an archive is neither — it is produced a message at a time and is as large as a mailbox, which is past what a
 /// <c>bytea</c> column holds and far past what a process should. So the archive alone is written as a stream, and the

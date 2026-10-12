@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 // What this client holds between starts when somebody signed in with an authorization server, beside what
 // `keptSession.ts` holds when they signed in with a password. Two documents rather than one shape with a discriminator,

@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Coordination;
@@ -13,7 +13,7 @@ namespace MailFathom.Host.Hosting.Workers;
 /// <para>
 /// The work a hold guards is cancelled through <see cref="Lost" />, and the only thing that cancels it is a renewal that
 /// did not complete — refused because another replica took the scope, failed, or not answered in time. That is the
-/// ordering <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md">ADR 0031</see>
+/// ordering <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md">ADR 0031</see>
 /// settles: a holder stops on the first renewal it fails to complete rather than when the lease's clock says it expired.
 /// </para>
 /// <para>

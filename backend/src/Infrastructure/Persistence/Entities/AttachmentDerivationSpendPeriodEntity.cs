@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Emails.AttachmentText.Limits;
 using MailFathom.CodeCoverage;
@@ -25,14 +25,14 @@ namespace MailFathom.Infrastructure.Persistence.Entities;
 /// <para>
 /// One further row per period and step carries the deployment's own total, under the user identity that names nobody,
 /// exactly as the embedding spend row does and for the same reason:
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md">ADR 0014</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md">ADR 0014</see>
 /// charges a shared mailbox in full to each of its assigned users, so the per-user rows are meant to add up to more
 /// than was read and a deployment ceiling taken off their sum would stop a shared mailbox early. No user row ever
 /// carries that identity — every write of one names a specified user.
 /// </para>
 /// <para>
 /// The user is a plain column with no foreign key onto the user record, exactly as the embedding spend row's is.
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md">ADR 0014</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md">ADR 0014</see>
 /// keeps a row recording a cost that was incurred as a cost record rather than erasing it with the mail it paid to
 /// read, so erasing a user leaves what reading their attachments cost this deployment standing.
 /// </para>

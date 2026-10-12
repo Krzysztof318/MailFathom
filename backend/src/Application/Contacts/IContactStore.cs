@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Accounts;
@@ -12,7 +12,7 @@ namespace MailFathom.Application.Contacts;
 /// <remarks>
 /// <para>
 /// The two staging operations write through the caller's session and commit nothing, as
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0001-application-owned-repositories-for-persistence-ports.md">ADR 0001</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0001-application-owned-repositories-for-persistence-ports.md">ADR 0001</see>
 /// requires of a write port: the caller decides the transaction, and the retry policy above it decides what a lost race
 /// means. Which addresses one contact may hold is the domain's rule; which contact may hold an address is this store's,
 /// enforced by a unique constraint rather than by a check before the insert, because two callers claiming one address

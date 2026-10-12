@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Calendar;
@@ -97,7 +97,7 @@ internal sealed class CalendarEventEntity
     /// <summary>Gets or sets PostgreSQL's own row version, which is what a write over a row somebody else moved fails on.</summary>
     /// <remarks>
     /// An event is amended in place — retitled, moved, accepted — so it is exactly the mutable record
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0001-application-owned-repositories-for-persistence-ports.md">ADR 0001</see>
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0001-application-owned-repositories-for-persistence-ports.md">ADR 0001</see>
     /// requires a token on. What it settles above all is an event deleted while an amendment was in flight: the write
     /// then affects no row, which the token turns into a conflict, so the retry reads a calendar holding nothing and
     /// answers so rather than putting the event back.

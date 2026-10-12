@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Buffers.Binary;
 using System.Security.Cryptography;
@@ -15,7 +15,7 @@ namespace MailFathom.AI.Embeddings;
 /// Almost everything this feature needs proved is a property of the schema, the worker, or the switch rather than of a
 /// model: the dimension check, the uniqueness constraint, the per-profile index, the idempotent write, two generations
 /// coexisting, the bounded removal. All of it is provable against a real database and this generator, which is why
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
 /// requires it to exist: embedding is the first thing MailFathom does that costs money per unit of mail, and a
 /// verification suite that spends the maintainer's credit on every run is one nobody can afford to run.
 /// </para>

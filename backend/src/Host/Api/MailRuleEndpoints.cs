@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
@@ -22,7 +22,7 @@ namespace MailFathom.Host.Api;
 /// <para>
 /// Reading which rules are loaded, asking for them to be run over a whole mailbox, and reading what they did. Nothing
 /// here creates, edits, enables, disables, or deletes a rule, and nothing ever will:
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0010-rule-authoring-in-configuration-and-ncalc-conditions.md">ADR 0010</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0010-rule-authoring-in-configuration-and-ncalc-conditions.md">ADR 0010</see>
 /// makes configuration the place a rule is authored so that what an instance will do to a mailbox is reviewable in a
 /// diff before it runs, and a write here would be the one path around that.
 /// </para>

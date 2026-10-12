@@ -218,7 +218,7 @@ With both on, **the flag is set before the move**. On a server without RFC 6851 
 new UID, so a flag stored afterwards would be aimed at an occurrence the source folder no longer holds.
 
 Nothing else is ever done. No delete, no flag other than `\Seen`, no folder created, nothing sent —
-[ADR 0007](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md)
+[ADR 0007](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md)
 refuses the rest and this feature does not reopen that record.
 
 **On an account whose mailbox MailFathom holds itself**, there is no server to write to, so both acts are made to the

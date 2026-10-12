@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 namespace MailFathom.Domain.Delivery.Governance;
 
@@ -16,7 +16,7 @@ namespace MailFathom.Domain.Delivery.Governance;
 /// <para>
 /// It is an operator's answer rather than a caller's, and it names one of two acts rather than a degree of suspicion.
 /// A third value — requiring the confirmation
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0013-what-a-caller-must-do-before-mail-leaves.md">ADR 0013</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0013-what-a-caller-must-do-before-mail-leaves.md">ADR 0013</see>
 /// makes an operator's choice — belongs beside these two and arrives with the contract that carries it; nothing here is
 /// shaped to exclude it.
 /// </para>

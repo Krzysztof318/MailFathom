@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.EmailContent.Storage;
 
@@ -16,7 +16,7 @@ namespace MailFathom.Application.EmailContent.Move;
 /// <para>
 /// One move per deployment, which the store makes structural rather than checking. The backend is one setting for the
 /// whole instance under
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md">ADR 0017</see> § 1,
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md">ADR 0017</see> § 1,
 /// so there is no second scope a second move could cover, and two operators asking together are asking for one thing.
 /// </para>
 /// <para>

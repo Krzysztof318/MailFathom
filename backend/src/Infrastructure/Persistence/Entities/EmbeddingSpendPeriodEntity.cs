@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.CodeCoverage;
 
@@ -16,7 +16,7 @@ namespace MailFathom.Infrastructure.Persistence.Entities;
 /// <para>
 /// One further row per period carries the deployment's own total, under the user identity that names nobody. It is a
 /// row of its own rather than the sum of the others because
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md">ADR 0014</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md">ADR 0014</see>
 /// counts a shared mailbox in full against each of its assigned users: the per-user rows are meant to add up to more
 /// than was sent, so a deployment ceiling read off their sum would stop a mailbox two people share at half of what
 /// the operator declared. No user row ever carries that identity — every write of one names a specified user.
@@ -28,7 +28,7 @@ namespace MailFathom.Infrastructure.Persistence.Entities;
 /// <para>
 /// The user is a plain column with no foreign key onto the user record, and that is the one place in the mail graph
 /// where the cascade is deliberately absent.
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md">ADR 0014</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md">ADR 0014</see>
 /// keeps a row recording spend a user incurred as a cost record rather than erasing it with the vectors it paid for,
 /// so erasing a user leaves what their embedding cost this deployment standing.
 /// </para>

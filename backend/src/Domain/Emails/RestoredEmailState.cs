@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 namespace MailFathom.Domain.Emails;
 
@@ -23,11 +23,11 @@ namespace MailFathom.Domain.Emails;
 /// source asserting less than was taken off it. <c>\Deleted</c> is not an observation about the message but a
 /// request that the folder stop holding it, and a restore carrying it would ask the source to expunge the copy it is
 /// being handed. See
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
 /// </para>
 /// <para>
 /// None of this reopens the closed mutation surface
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md">ADR 0007</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md">ADR 0007</see>
 /// defines: these travel on one <c>APPEND</c> stating what the message was, never as a <c>STORE</c> changing what it
 /// is.
 /// </para>

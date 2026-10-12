@@ -580,7 +580,7 @@ the artifact rather than a rule somebody has to remember. It is also the wrong r
 with are not the ones that may create the `vector` extension or run DDL, and a second entry point in an image that
 otherwise stands and listens would put them in the same place. A turnkey path is a **separate** artifact the operator
 invokes, whose credentials exist for one run;
-[issue #259](https://github.com/Krzysztof318/MailFathom/issues/259) owns it, and the manual path above stays supported
+[issue #259](https://github.com/fathomise/MailFathom/issues/259) owns it, and the manual path above stays supported
 whatever it produces.
 
 **A migration bundle.** `PublishAsMigrationBundle` produces a self-contained executable, and an executable cannot be

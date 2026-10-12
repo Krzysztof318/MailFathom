@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.AI.Chat;
 using MailFathom.AI.ProviderAdapters;
@@ -18,7 +18,7 @@ namespace MailFathom.AI.Orchestration;
 /// where each is placed; the tool set <em>is</em> the capability, so an operation that only reads composes no mutating
 /// tool; every call passes through whichever client the caller wrapped, which is where a run's spend is counted; and
 /// what a run reports about cost, cancellation, and the model is what
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0022-what-an-ai-run-reports-about-cost-cancellation-and-the-model.md">ADR 0022</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0022-what-an-ai-run-reports-about-cost-cancellation-and-the-model.md">ADR 0022</see>
 /// says. A feature composing its own call would re-decide all four in silence, once per feature.
 /// </para>
 /// <para>

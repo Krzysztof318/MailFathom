@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 // How long this client waits before reaching for a deployment that did not answer. It is stated once for the package
 // because two things reach: the polling the shell does when a deployment stops answering, and the signal channel

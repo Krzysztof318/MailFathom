@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 // The three secrets one authorization request is started with, and the one place in the client that generates any of
 // them. They are here rather than in `Client.Backend` because every one of them comes out of the platform's

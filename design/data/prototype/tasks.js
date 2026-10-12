@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 MailFathomDesign.data.tasks = [
   { id: "t1", t: "Send the 5% CPI cap counter-proposal", when: "today", day: "27", group: "Today", src: "Contract addendum - signatures", tid: "contoso", ai: true, est: "45 min" },

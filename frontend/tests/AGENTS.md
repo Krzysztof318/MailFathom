@@ -500,7 +500,7 @@ changing. `pnpm test:desktop` is the whole of how it runs.
   graphics stack writes a cache under the profile afterwards, so a removal as each case closes either races that write
   or waits out a duration nobody measured.
 - **What it owns is what the platform answers, and nothing else.** Two rules qualify today and both are
-  [#1462](https://github.com/Krzysztof318/MailFathom/issues/1462)'s: that an instant is placed against the zone the
+  [#1462](https://github.com/fathomise/MailFathom/issues/1462)'s: that an instant is placed against the zone the
   runtime reports, and that a first run opens in the language the platform states. A check belongs here by being
   unanswerable in the other three — a component, a label, a layout, a journey, a request on the wire, or anything about
   the accessibility tree belongs above, and a copy of one here buys a slower answer and a second thing to keep in step.

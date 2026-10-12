@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 namespace MailFathom.Application.Emails.Search;
 
@@ -9,7 +9,7 @@ namespace MailFathom.Application.Emails.Search;
 /// <para>
 /// Three states, and the profile is what separates the first from the other two. An instance that has activated none
 /// does not embed at all, which
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
 /// makes a supported deployment rather than an unfinished one; an instance that has activated one either can place a
 /// query in that profile's space or currently cannot.
 /// </para>

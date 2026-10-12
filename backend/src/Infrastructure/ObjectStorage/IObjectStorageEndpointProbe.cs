@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 namespace MailFathom.Infrastructure.ObjectStorage;
 
@@ -11,7 +11,7 @@ namespace MailFathom.Infrastructure.ObjectStorage;
 /// credential may be rotated out from under a running deployment, and a policy change can leave it readable and no
 /// longer writable. None of that is a fact about start-up, which is why the question is asked on a readiness scrape
 /// rather than by a gate asking once — and why
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md">ADR 0017</see> § 1
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md">ADR 0017</see> § 1
 /// makes the endpoint being taken away a readiness condition rather than a configuration error a binder could catch.
 /// </para>
 /// <para>

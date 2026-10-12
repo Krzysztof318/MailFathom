@@ -625,7 +625,7 @@ would leave as somebody else rather than merely be shown to the wrong reader.
 **Nothing here transmits, and no configuration makes it.** The use case holds no delivery session and no factory for
 one, so there is nothing in it that could open a submission channel; what it answers with is the record, at the stage a
 delivery pass reads and continues from.
-[ADR 0013](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0013-what-a-caller-must-do-before-mail-leaves.md) is the decision that fixes this, and it fixes
+[ADR 0013](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0013-what-a-caller-must-do-before-mail-leaves.md) is the decision that fixes this, and it fixes
 the wording a caller is given with it — queued, never sent.
 
 **The message is composed before any submission server has spoken**, because the record has to exist before a connection
@@ -1081,9 +1081,9 @@ copy of that send is already filed with its payload stored, the occurrence is ca
 no second payload are written, and the payload is not fetched. Taking the provider's copy off the server is the drain's
 work, like any other message the source still holds.
 
-[ADR 0007](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md)
+[ADR 0007](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md)
 is where appending became something MailFathom may do at all, and holds the authorization review that admitted it.
-[ADR 0034](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md)
+[ADR 0034](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md)
 is where a held account's copies stopped being appended.
 
 ## A message that is written and not sent

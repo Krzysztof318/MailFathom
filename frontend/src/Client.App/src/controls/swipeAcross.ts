@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 // What a swipe across a surface is, in one place, because more than one surface answers to one: a message row is
 // carried aside by it and a toast is dismissed by it. The four numbers and the rule between them live here rather than

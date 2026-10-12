@@ -3,7 +3,7 @@
 <!-- describes: docfx/**, docs/toc.yml, docs/*/toc.yml, docs/index.md, docs/api/index.md, context7.json, scripts/build-docs-site.sh, scripts/compose-docs-site.sh, scripts/compose-pages-site.sh, scripts/list-documented-versions.sh, scripts/write-docs-agent-artifacts.sh, scripts/rebase-markdown-links.sh, .github/workflows/publish-documentation.yml -->
 
 The pages under `docs/` are published as a browsable site at
-<https://krzysztof318.github.io/MailFathom/docs/>. The site is generated from this repository by
+<https://fathomise.github.io/MailFathom/docs/>. The site is generated from this repository by
 [docfx](https://dotnet.github.io/docfx/), deployed by GitHub Pages, and rebuilt in full by two pushes: a merge to
 `main`, which moves `latest`, and a release tag, which adds that release's version to the selector. It is the tag
 rather than the release, because the version list below is read from the tags in the checkout rather than from GitHub's
@@ -12,7 +12,7 @@ with `GITHUB_TOKEN` and GitHub starting no workflow from an event that token gen
 
 The documentation is one of two things on the repository's Pages site, which is why it sits under `docs/` rather than
 at the root: [the design](#the-design-beside-it) is published beside it under `design/`, and the bare address
-<https://krzysztof318.github.io/MailFathom/> redirects to `docs/`.
+<https://fathomise.github.io/MailFathom/> redirects to `docs/`.
 
 Nothing is authored on the site. A page is written here, reviewed in the same pull request as the behavior it
 describes, and published by the merge — which is the whole reason the site is generated from `docs/` rather than kept
@@ -180,7 +180,7 @@ Two forms, and which one to use is decided by whether the target is on the site:
 
 - **A link to another published page stays relative**, as `../operations/mcp-endpoint.md`. docfx rewrites it to the
   published page, and GitHub resolves it to the file, so one link works in both renderings.
-- **A link to anything the site does not carry is written as an absolute `https://github.com/Krzysztof318/MailFathom`
+- **A link to anything the site does not carry is written as an absolute `https://github.com/fathomise/MailFathom`
   URL** — an ADR, a deployment asset, a source file. A relative link to one of those resolves on GitHub and reaches a
   404 on the site.
 - **A link into the API reference is a `xref:`**, naming the type or namespace rather than the generated file, as
@@ -312,8 +312,8 @@ exactly the kind of credential this workflow is built not to hold.
 
 ### The design beside it
 
-The same deployment carries [`design/`](https://github.com/Krzysztof318/MailFathom/tree/main/design) at
-<https://krzysztof318.github.io/MailFathom/design/>. GitHub Pages serves one tree per repository and a deployment
+The same deployment carries [`design/`](https://github.com/fathomise/MailFathom/tree/main/design) at
+<https://fathomise.github.io/MailFathom/design/>. GitHub Pages serves one tree per repository and a deployment
 replaces all of it, so the design cannot be published by a workflow of its own without each publish erasing the other's
 half; it rides on this one instead. Every push to `main` publishes, so a merge that changes the design is live once that
 run deploys, and a release tag publishes the design of the tagged commit — the same commit `latest` is built from.

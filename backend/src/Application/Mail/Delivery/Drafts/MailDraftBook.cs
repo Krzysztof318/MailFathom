@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Access;
 using MailFathom.Application.EmailContent.Storage;
@@ -40,7 +40,7 @@ namespace MailFathom.Application.Mail.Delivery.Drafts;
 /// </para>
 /// <para>
 /// <b>The author term bounds the draft record and the three acts on it, not the message the mailbox holds.</b>
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md">ADR 0014</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md">ADR 0014</see>
 /// keeps the author beside the account so a draft is read, revised, discarded, and promoted by its author alone among
 /// the account's assigned users, and that is what is enforced here. What the filer then puts into the account's drafts
 /// folder is the mailbox's own mail: a folder read and a message read narrow by assigned accounts and carry no author

@@ -190,7 +190,7 @@ from recording a pass nothing would ever reach. The log says the same at `Debug`
 One, and only for as long as a pass lasts. Every replica of a deployment runs this walk's worker, and the walk is one
 walk over one position, so a pass takes the lease `stored-email-embedding` — the name of the position row it resumes
 from — before it reads that position, and gives it back when the pass ends, as
-[ADR 0031](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md)
+[ADR 0031](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md)
 decides. Completing a generation and removing a superseded one ride the same pass and so the same lease: none of the
 three runs on two replicas at once, and no passage is embedded, or paid for, twice because two replicas read the same
 position.

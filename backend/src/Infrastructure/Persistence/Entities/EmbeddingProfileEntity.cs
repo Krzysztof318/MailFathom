@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.CodeCoverage;
@@ -20,7 +20,7 @@ namespace MailFathom.Infrastructure.Persistence.Entities;
 /// columns are the only thing that moves. Everything operational — the endpoint address, the credential, the batch
 /// size, the request rate, the concurrency, the ceilings — is configuration and reaches no column here, which is what
 /// makes rotating a key or raising a rate limit an edit rather than a re-embed. See
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>.
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>.
 /// </para>
 /// <para>
 /// Nothing here is personal data or a secret. A profile describes a model, and the credential that reaches it is

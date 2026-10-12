@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 MailFathomDesign.data.notifications = [
   { id: "n1", kind: "mail", unread: true, mins: 3, title: "Anna Kowalska replied", body: "CPI cap counter-proposal - she asks for approval by tomorrow.", src: "Mail · Contoso", go: { screen: "mail", thread: "contoso" } },

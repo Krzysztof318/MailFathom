@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Net;
 using System.Text;
@@ -623,7 +623,7 @@ public sealed class LoginCommandTests : IDisposable
         Assert.Contains(
             this.console.Lines,
             line => line.Contains(
-                "https://krzysztof318.github.io/MailFathom/docs/latest/",
+                "https://fathomise.github.io/MailFathom/docs/latest/",
                 StringComparison.Ordinal));
     }
 
@@ -646,7 +646,7 @@ public sealed class LoginCommandTests : IDisposable
         Assert.Equal(0, exitCode);
         Assert.DoesNotContain(
             this.console.Lines,
-            line => line.Contains("krzysztof318.github.io", StringComparison.Ordinal));
+            line => line.Contains("fathomise.github.io", StringComparison.Ordinal));
     }
 
     /// <summary>The whole point of the override: one invocation goes elsewhere without changing what the next one does.</summary>

@@ -1,6 +1,6 @@
 # Copyright © 2026 Krzysztof Kasprowicz
 # Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-# Project repository: https://github.com/Krzysztof318/MailFathom
+# Project repository: https://github.com/fathomise/MailFathom
 
 name: Fathom review
 
@@ -789,8 +789,8 @@ jobs:
           BOARD_TOKEN: ${{ secrets.BOARD_PROJECT_TOKEN }}
           REPOSITORY: ${{ github.repository }}
           PULL_REQUEST_NUMBER: ${{ needs.decide.outputs.pull_request_number }}
-          BOARD_OWNER: Krzysztof318
-          BOARD_NUMBER: '4'
+          BOARD_OWNER: fathomise
+          BOARD_NUMBER: '1'
           STATUS_FIELD: Status
           CLOSING_ISSUES_SCRIPT: ${{ github.workspace }}/.github/pull-request/collect-closing-issues.sh
           CLOSING_ISSUE_LIMIT: '5'

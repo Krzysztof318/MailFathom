@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 namespace MailFathom.Application.Synchronization.Drain;
 
@@ -10,7 +10,7 @@ namespace MailFathom.Application.Synchronization.Drain;
 /// MailFathom verifiably holds it, so every value here is the gate working. They are reported apart from each other
 /// because the futures differ — one clears when an operator raises a limit, one when the ceiling has headroom again,
 /// and two are storage defects found while the source still has the mail. See
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
 /// </remarks>
 public enum MailboxDrainHoldBack
 {

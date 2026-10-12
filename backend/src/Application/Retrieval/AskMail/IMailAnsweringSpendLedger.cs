@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Chat;
 
@@ -17,7 +17,7 @@ namespace MailFathom.Application.Retrieval.AskMail;
 /// It is the deployment's and it is durable, because the ceiling is worded as the deployment's: several replicas each
 /// counting their own would admit the replica count times what their operator agreed to, at a provider that bills for
 /// it, and a restart would begin every period again with nothing spent.
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md">ADR 0031</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md">ADR 0031</see>
 /// records the trade that was reversed to get there: a write per provider call was refused on the grounds that a
 /// question opens none of its own, and a write per admitted run was not, because a run is already about to spend a
 /// provider's tokens.

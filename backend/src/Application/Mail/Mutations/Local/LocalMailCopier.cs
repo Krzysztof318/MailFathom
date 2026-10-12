@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction;
@@ -18,9 +18,9 @@ namespace MailFathom.Application.Mail.Mutations.Local;
 /// <para>
 /// A copy is the one local act that creates mail rather than changing it, so it is the one that cannot be a single
 /// write inside the caller's transaction:
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0008-copied-message-local-identity.md">ADR 0008</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0008-copied-message-local-identity.md">ADR 0008</see>
 /// makes the copy a second stored message with a payload of its own, and
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md">ADR 0017</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md">ADR 0017</see>
 /// refuses to share one payload between two rows, while a payload has to be placed with no transaction open across the
 /// placement. The act is therefore two-phase, exactly as filing a draft or a sent copy is: <see cref="PrepareAsync" />
 /// reads the message and places its payload before the transaction, and <see cref="CommitAsync" /> writes the row,

@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
@@ -48,7 +48,7 @@ internal sealed class ChatModelDeclarationOptions : IProviderEndpointReachDeclar
     /// cloud deployment it is whatever the operator called the resource, and it can carry a tenant, a project, or an
     /// environment in it. Publishing it to every signed-in client would disclose deployment topology to answer a
     /// question about model quality, so
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0022-what-an-ai-run-reports-about-cost-cancellation-and-the-model.md">ADR 0022</see>
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0022-what-an-ai-run-reports-about-cost-cancellation-and-the-model.md">ADR 0022</see>
     /// makes the disclosure a declaration: write the vendor's identifier as you wish it stated — <c>gpt-4o</c> while
     /// requests route to <c>prod-eu-4o-2</c> — or leave it empty and a run names the alias alone.
     /// </remarks>

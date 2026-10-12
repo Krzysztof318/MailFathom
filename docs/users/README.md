@@ -3,7 +3,7 @@
 This is the documentation for people who install, configure, operate, and use MailFathom. It is a guided path rather
 than a second copy of the reference material: each step links into the operations and feature pages where the full
 contract lives, so nothing here goes stale on its own. Contributor and agent documentation is separate, under the
-repository root and [`docs/`](https://github.com/Krzysztof318/MailFathom/blob/main/docs/README.md) generally.
+repository root and [`docs/`](https://github.com/fathomise/MailFathom/blob/main/docs/README.md) generally.
 
 ## What MailFathom is
 
@@ -78,7 +78,7 @@ published site carries three artifacts written for exactly that, under whichever
 - **`llms-mailbox-user.txt`** is the other path in one file: connecting the chat client you already use, and what each
   tool returns and bounds.
 
-The version-agnostic address `https://krzysztof318.github.io/MailFathom/docs/llms.txt` is the map of the release the
+The version-agnostic address `https://fathomise.github.io/MailFathom/docs/llms.txt` is the map of the release the
 site opens on; the same file sits under each version's own directory. [The documentation
 site](../operations/documentation-site.md#what-an-agent-reads) records how they are produced and what they
 deliberately leave out.

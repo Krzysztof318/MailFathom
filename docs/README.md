@@ -2,7 +2,7 @@
 
 This documentation set explains the durable design and operating model for MailFathom.
 
-**These pages are also published as a site**, at <https://krzysztof318.github.io/MailFathom/docs/>, with search, an API
+**These pages are also published as a site**, at <https://fathomise.github.io/MailFathom/docs/>, with search, an API
 reference generated from the source, and one version per release. This file is the index for reading them here in the
 repository; [the documentation site](operations/documentation-site.md) records what the site carries, which versions
 it publishes, and what a new page owes it.
@@ -53,4 +53,4 @@ below for depth instead of duplicating them.
 
 ## Planned work
 
-This documentation set describes behavior that exists. What MailFathom is still being built into is decomposed into [issues](https://github.com/Krzysztof318/MailFathom/issues), and where a decision has been taken ahead of the code that answers it, the record under [`docs/decisions/`](https://github.com/Krzysztof318/MailFathom/tree/main/docs/decisions) is where it is stated. Intent lives in those two places; a page here is a statement of fact.
+This documentation set describes behavior that exists. What MailFathom is still being built into is decomposed into [issues](https://github.com/fathomise/MailFathom/issues), and where a decision has been taken ahead of the code that answers it, the record under [`docs/decisions/`](https://github.com/fathomise/MailFathom/tree/main/docs/decisions) is where it is stated. Intent lives in those two places; a page here is a statement of fact.

@@ -201,7 +201,7 @@ $ mfctl status
 Signed in as Alice Example (3f1d...).
 The user holds Administrator over the deployment.
 It holds mailfathom.admin.read, mailfathom.admin.operate.
-Documentation for that version: https://krzysztof318.github.io/MailFathom/docs/v0.2.0/
+Documentation for that version: https://fathomise.github.io/MailFathom/docs/v0.2.0/
 ```
 
 What you hold is what the roles assigned to your user grant, and each command needs the one permission its operation is

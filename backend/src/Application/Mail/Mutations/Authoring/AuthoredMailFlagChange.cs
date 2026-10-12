@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Mail.Mutations.Authoring.Failures;
 using MailFathom.Domain.Emails;
@@ -67,7 +67,7 @@ public sealed record AuthoredMailFlagChange
     /// </exception>
     /// <remarks>
     /// The keyword list is validated here rather than dropped, which is the rule
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md">ADR 0007</see>
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md">ADR 0007</see>
     /// states for anything authored: reading a server's answer drops a keyword it cannot use, and writing refuses one,
     /// because a caller that asked for a label needs to learn it was unusable rather than to be told the change
     /// succeeded without it.

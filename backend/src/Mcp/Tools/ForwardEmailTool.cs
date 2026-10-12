@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
@@ -33,7 +33,7 @@ namespace MailFathom.Mcp.Tools;
 /// </para>
 /// <para>
 /// The annotations are <c>send_email</c>'s, for <c>send_email</c>'s reasons, and
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0013-what-a-caller-must-do-before-mail-leaves.md">ADR 0013</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0013-what-a-caller-must-do-before-mail-leaves.md">ADR 0013</see>
 /// settles all four. <b>The call never transmits</b>: it writes a durable record the account's delivery pass offers to
 /// a submission server afterwards, so the result says <c>queued</c> and never that anything arrived.
 /// </para>

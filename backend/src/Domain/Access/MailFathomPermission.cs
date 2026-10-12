@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
@@ -88,7 +88,7 @@ public readonly record struct MailFathomPermission
     /// </para>
     /// <para>
     /// It is not a grant over folders. Creating, renaming, and deleting a folder are refused outright by
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md">ADR 0007</see>,
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md">ADR 0007</see>,
     /// so what this name reaches is one message changing folders and nothing about the shape of the mailbox. The
     /// destination is one the caller may already read, which is why it widens nothing: a folder withheld from the
     /// caller is no more a destination than it is a source.
@@ -181,14 +181,14 @@ public readonly record struct MailFathomPermission
     /// <para>
     /// It reaches only an account whose mailbox MailFathom holds, where the folders are MailFathom's own and no act on
     /// them reaches a mail server. On a mirrored account every one of these acts is refused whatever the grant, because
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md">ADR 0007</see>
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md">ADR 0007</see>
     /// still governs a mailbox a server holds.
     /// </para>
     /// <para>
     /// It is apart from <see cref="MailMove" /> and <see cref="MailDelete" /> because it changes the shape of the
     /// mailbox rather than where one message is: deleting a folder moves everything beneath it into the trash, and
     /// deleting one already in the trash erases all of its mail. Reading mail confers none of it. See
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
     /// </para>
     /// </remarks>
     public static MailFathomPermission MailFoldersWrite { get; } =
@@ -338,14 +338,14 @@ public readonly record struct MailFathomPermission
     /// different acts with different consequences: the second produces one file holding every message an account has,
     /// on whatever disk the caller runs on, outside every retention and erasure path this deployment has. It is on the
     /// administrative surface because that is the surface the routes are served on, and
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0012-authorization-model-named-permissions-and-where-they-are-enforced.md">ADR 0012</see>
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0012-authorization-model-named-permissions-and-where-they-are-enforced.md">ADR 0012</see>
     /// refuses a <c>mailfathom.mail.*</c> name written there.
     /// </para>
     /// <para>
     /// One name covers all six acts. Measuring reports how many messages and bytes an account holds, which is already
     /// the shape of what the archive would carry; and a caller who may download an archive is not meaningfully withheld
     /// the count of what is in it. See
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
     /// </para>
     /// </remarks>
     public static MailFathomPermission AdminExport { get; } = new("mailfathom.admin.export", ProtectedSurface.Administration);
@@ -371,12 +371,12 @@ public readonly record struct MailFathomPermission
     /// </para>
     /// <para>
     /// It is on the administrative surface because the route is served there, and
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0012-authorization-model-named-permissions-and-where-they-are-enforced.md">ADR 0012</see>
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0012-authorization-model-named-permissions-and-where-they-are-enforced.md">ADR 0012</see>
     /// refuses a <c>mailfathom.mail.*</c> name written there. Its default posture holds like every other name's: an
     /// administrative entry stating no <c>Permissions</c> key, and one writing a pattern that covers this name, both
     /// gain it on the release that publishes it, which the changelog entry says. An operator who wants it held apart
     /// writes a list naming only what that entry needs. See
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
     /// </para>
     /// </remarks>
     public static MailFathomPermission AdminCustodyWrite { get; } =
@@ -392,7 +392,7 @@ public readonly record struct MailFathomPermission
     /// it from its last holder at the deployment scope — revoking the assignment, narrowing the role, removing the
     /// member — is admitted; erasing that holder, or moving them out of the organization whose group gives it to them,
     /// is another permission's act and is not refused over it — see
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0012-authorization-model-named-permissions-and-where-they-are-enforced.md">ADR 0012</see>.
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0012-authorization-model-named-permissions-and-where-they-are-enforced.md">ADR 0012</see>.
     /// </para>
     /// <para>
     /// The built-in <c>Organization administrator</c> and <c>Administrator</c> roles were seeded listing it before any
@@ -452,7 +452,7 @@ public readonly record struct MailFathomPermission
     /// every organization pays. A role carrying it may still be assigned at an organization or a user, and the other
     /// names it lists act there, so the assignment is accepted and this name is reported as inert at that scope rather
     /// than refused — see
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0012-authorization-model-named-permissions-and-where-they-are-enforced.md">ADR 0012</see>.
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0012-authorization-model-named-permissions-and-where-they-are-enforced.md">ADR 0012</see>.
     /// </remarks>
     public bool IsDeploymentScopeOnly => this == AdminSpend;
 

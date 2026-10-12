@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 // Where the client keeps what belongs to this machine rather than to the person reading on it: the theme it is painted
 // in, the language it reads in, whether this machine may raise a notification of its own, and how the Mail space

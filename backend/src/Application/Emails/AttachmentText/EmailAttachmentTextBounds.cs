@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 namespace MailFathom.Application.Emails.AttachmentText;
 
@@ -8,7 +8,7 @@ namespace MailFathom.Application.Emails.AttachmentText;
 /// <remarks>
 /// <para>
 /// The third and fourth of the four ceilings
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.md">ADR 0029</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.md">ADR 0029</see>
 /// names. <see cref="Extraction.Attachments.AttachmentTextExtractionOptions" /> bounds one attachment; these bound the
 /// message it arrived on and the run that met it, because the cost of a message stopped being predictable from its text
 /// length the moment attachments were parsed at all — a ten-line covering note with a two-hundred-page report attached

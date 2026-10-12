@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 // The surface for the two failures a boundary cannot contain: one thrown while the last-resort boundary itself is
 // drawn, which unmounts the root and leaves an empty document, and one raised before there is a root to render into at

@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Access.Grants;
 using MailFathom.Application.Access.Organizations;
@@ -25,7 +25,7 @@ namespace MailFathom.Infrastructure.Persistence.Users;
 /// </para>
 /// <para>
 /// A move locks the user row before it touches their credentials, which is the order
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0033-where-a-signed-in-session-lives-so-every-replica-accepts-it.md">ADR 0033</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0033-where-a-signed-in-session-lives-so-every-replica-accepts-it.md">ADR 0033</see>
 /// requires of every path, and it is the same lock provisioning a credential takes — so a password provisioned while the
 /// user moves lands in exactly one of the two scopes.
 /// </para>

@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 namespace MailFathom.Domain.Delivery.Filing;
 
@@ -16,7 +16,7 @@ namespace MailFathom.Domain.Delivery.Filing;
 /// </para>
 /// <para>
 /// The set is closed rather than a general flag bag, for the reason
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md">ADR 0007</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md">ADR 0007</see>
 /// keeps the mutations closed: a flag MailFathom writes is an assertion it has to be able to stand behind, and these
 /// two are the ones the filing itself establishes. Nothing else is expressible, so no caller can widen it.
 /// </para>

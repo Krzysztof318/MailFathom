@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Domain.Access;
 
@@ -12,7 +12,7 @@ namespace MailFathom.Application.Discovery.Streaming;
 /// A run's output is durable rather than held in the process that composed it, which is what makes it reachable from
 /// every replica: the client reading it is routed wherever the load balancer likes, its screen may be a second one the
 /// same person opened, and a rolling upgrade moves it between builds.
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0035-delivering-a-running-ai-answer-from-a-persisted-run-by-cursor-signal-and-re-read.md">ADR 0035</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0035-delivering-a-running-ai-answer-from-a-persisted-run-by-cursor-signal-and-re-read.md">ADR 0035</see>
 /// is that decision, and this is the seam it is applied through.
 /// </para>
 /// <para>

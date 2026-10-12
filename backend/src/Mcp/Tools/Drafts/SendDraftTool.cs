@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
@@ -19,7 +19,7 @@ namespace MailFathom.Mcp.Tools.Drafts;
 /// <para>
 /// This is the tool the other three exist to be safe without. It sends real mail, so it carries every requirement a
 /// sending tool carries and is annotated exactly as <c>send_email</c> is:
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0013-what-a-caller-must-do-before-mail-leaves.md">ADR 0013</see>
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0013-what-a-caller-must-do-before-mail-leaves.md">ADR 0013</see>
 /// settles all four values, and the description says what leaves and that it cannot be recalled. It is admitted under
 /// the sending grant rather than the drafting one, which is what makes an agent granted only the drafting half unable
 /// to reach it and unable to see it in a listing.

@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Domain.Emails;
@@ -11,7 +11,7 @@ namespace MailFathom.Application.Emails.ReplyDrafts;
 /// <remarks>
 /// <para>
 /// The port is read-only and joins no transaction, per
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0001-application-owned-repositories-for-persistence-ports.md">ADR 0001</see>.
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0001-application-owned-repositories-for-persistence-ports.md">ADR 0001</see>.
 /// </para>
 /// <para>
 /// One read rather than two, and that is the control rather than a convenience: the style is derived from the sent mail

@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Common;
 using MailFathom.Mcp.Observability;
@@ -142,7 +142,7 @@ public static class McpServiceCollectionExtensions
     /// </para>
     /// <para>
     /// Only the semantic version is reported, without the source revision that
-    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md">ADR 0004</see> also stamps. This value
+    /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md">ADR 0004</see> also stamps. This value
     /// answers a compatibility question — which tool contract a client is bound to — and the commit a build came from
     /// is provenance an operator reads from the startup record and the artifact's own labels.
     /// </para>

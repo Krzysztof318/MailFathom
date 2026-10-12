@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
@@ -21,7 +21,7 @@ namespace MailFathom.Host.Api;
 /// <remarks>
 /// <para>
 /// It is an administrative command rather than a configuration key, which is
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>'s
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>'s
 /// option J2 and the one decision here that could not be a setting: the switch on is a point of no return for
 /// somebody's mail, so what makes it happen has to be an act with an author, a moment, and an audit line, not a value
 /// that arrives with a file.

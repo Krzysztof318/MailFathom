@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
-// Project repository: https://github.com/Krzysztof318/MailFathom
+// Project repository: https://github.com/fathomise/MailFathom
 
 namespace MailFathom.IntegrationTests.ProviderAdapters;
 
@@ -18,7 +18,7 @@ namespace MailFathom.IntegrationTests.ProviderAdapters;
 /// developer's machine and on an ordinary pipeline run, which is what makes the tests reading it skip and cost nothing;
 /// the `Integration tests` workflow turns it on through an input that defaults to off and supplies the credentials with
 /// it. See
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>.
+/// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>.
 /// </para>
 /// <para>
 /// Asking for the run without what it needs fails rather than skips, and that asymmetry is the point: a run somebody
