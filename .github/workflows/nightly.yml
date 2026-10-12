@@ -33,6 +33,12 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  # The Docker Hub repository `publish-container-image.yml` mirrors the image to. This workflow prunes it afterwards,
+  # so it names the same value; a Docker Hub account is no part of GitHub, which is why neither workflow reads it off
+  # the repository running it, and the contract suite fails when the two disagree.
+  DOCKER_HUB_REPOSITORY: krzysztof318/mailfathom
+
 jobs:
   decide:
     name: Decide whether to publish
@@ -352,13 +358,16 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GHCR_RETENTION_TOKEN || secrets.GITHUB_TOKEN }}
           PACKAGE_OWNER: ${{ github.repository_owner }}
+          # An organization's packages answer under `/orgs/` and a personal account's under `/users/`, and asking the
+          # wrong one is a 404 this step would report as a token that cannot list.
+          PACKAGE_OWNER_PATH: ${{ github.event.repository.owner.type == 'Organization' && 'orgs' || 'users' }}
           PACKAGE_NAME: ${{ github.event.repository.name }}
           RETAINED_NIGHTLY_COUNT: '30'
         run: |
           set -euo pipefail
 
           package_name="$(printf '%s' "$PACKAGE_NAME" | tr '[:upper:]' '[:lower:]')"
-          package_path="/users/${PACKAGE_OWNER}/packages/container/${package_name}"
+          package_path="/${PACKAGE_OWNER_PATH}/${PACKAGE_OWNER}/packages/container/${package_name}"
 
           if ! versions="$(gh api --paginate "${package_path}/versions" 2>/dev/null)"; then
             echo "::warning::The package's versions could not be listed with this token, so nothing was pruned. Supply a GHCR_RETENTION_TOKEN with read:packages and delete:packages to enable retention."
@@ -395,14 +404,12 @@ jobs:
       - name: Delete nightly tags beyond the retained window on Docker Hub
         env:
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-          REPOSITORY: ${{ github.repository }}
           RETAINED_NIGHTLY_COUNT: '30'
         run: |
           set -euo pipefail
 
-          repository="$(printf '%s' "$REPOSITORY" | tr '[:upper:]' '[:lower:]')"
-          namespace="${repository%%/*}"
-          name="${repository##*/}"
+          namespace="${DOCKER_HUB_REPOSITORY%%/*}"
+          name="${DOCKER_HUB_REPOSITORY##*/}"
           tags_path="https://hub.docker.com/v2/namespaces/${namespace}/repositories/${name}/tags"
 
           access_token="$(curl --silent --fail --show-error \

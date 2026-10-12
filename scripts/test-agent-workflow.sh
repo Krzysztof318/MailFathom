@@ -6543,8 +6543,15 @@ extract_publish_reference_step() {
   bash -n "$step_script"
 }
 
+# What a workflow states as the Docker Hub repository the mirror lives in, read out of its
+# workflow-level `env` the way the runner reads it.
+read_docker_hub_repository() {
+  sed -n 's/^  DOCKER_HUB_REPOSITORY: //p' "$source_repository_root/.github/workflows/$1"
+}
+
 # The step reads the committed timestamp of the checkout it runs in, so it runs inside the fixture
-# repository rather than in the temporary directory beside it.
+# repository rather than in the temporary directory beside it. `PUBLISHING_REPOSITORY` names the
+# GitHub repository the step believes it runs in, for the contract that moves it.
 run_publish_reference_step() {
   local image_tags="$1"
   local output_file="$2"
@@ -6557,7 +6564,9 @@ run_publish_reference_step() {
   : > "$step_output_file"
 
   (
-    export REPOSITORY='Krzysztof318/MailFathom'
+    export REPOSITORY="${PUBLISHING_REPOSITORY:-Krzysztof318/MailFathom}"
+    DOCKER_HUB_REPOSITORY="$(read_docker_hub_repository publish-container-image.yml)"
+    export DOCKER_HUB_REPOSITORY
     export IMAGE_TAGS="$image_tags"
     export IMAGE_CHANNEL="$image_channel"
     export IMAGE_VERSION="$image_version"
@@ -6598,10 +6607,10 @@ publish_qualifies_every_nightly_tag_with_the_repository_it_resolves() {
     "$references_file"
 }
 
-# The Docker Hub account is this owner's login, and a registry namespace is lowercase where a GitHub
-# login need not be. One fold produces both, so a mirror cannot come to point at a namespace that is
-# somebody else's or at none at all.
-publish_folds_the_owner_login_into_the_docker_hub_namespace() {
+# The Docker Hub account and the repository the overview is written to are both read off the one
+# statement of where the mirror lives, so a login cannot come to name a different account than the
+# repository it pushes to.
+publish_reads_the_docker_hub_account_off_the_stated_repository() {
   local output_file="$test_directory/publish-reference-namespace-output"
   local step_output_file="$test_directory/publish-reference-namespace-step-output"
 
@@ -6612,6 +6621,36 @@ publish_folds_the_owner_login_into_the_docker_hub_namespace() {
 
   assert_contains 'docker-hub-namespace=krzysztof318' "$step_output_file"
   assert_contains 'docker-hub-repository=krzysztof318/mailfathom' "$step_output_file"
+}
+
+# A GHCR package belongs to the repository that publishes it and a Docker Hub repository belongs to a
+# Docker Hub account, so the two references part ways the moment the GitHub repository is somebody
+# else's: GHCR follows it, folded to the lowercase an OCI name requires, and the mirror stays where
+# it was stated to be. The nightly prunes that mirror, so its statement is held to the publisher's —
+# a nightly naming another repository would prune nothing and report success doing it.
+publish_moves_ghcr_with_the_repository_and_leaves_the_mirror_where_it_is() {
+  local output_file="$test_directory/publish-reference-moved-output"
+  local step_output_file="$test_directory/publish-reference-moved-step-output"
+  local docker_hub_repository
+
+  if ! PUBLISHING_REPOSITORY='Another-Owner/MailFathom' \
+    run_publish_reference_step $'0.1.0\n' "$output_file" "$step_output_file"; then
+    printf 'The publish workflow failed to resolve its references from another repository\n' >&2
+    return 1
+  fi
+
+  assert_contains 'image=ghcr.io/another-owner/mailfathom' "$step_output_file"
+  assert_contains 'docker-hub-image=docker.io/krzysztof318/mailfathom' "$step_output_file"
+  assert_contains 'docker-hub-namespace=krzysztof318' "$step_output_file"
+  assert_contains 'docker-hub-repository=krzysztof318/mailfathom' "$step_output_file"
+
+  docker_hub_repository="$(read_docker_hub_repository publish-container-image.yml)"
+
+  if [[ "$(read_docker_hub_repository nightly.yml)" != "$docker_hub_repository" ]]; then
+    printf 'nightly.yml prunes another Docker Hub repository than %s, which the publisher mirrors to\n' \
+      "$docker_hub_repository" >&2
+    return 1
+  fi
 }
 
 # The release channel's own tag list, and the blank line a heredoc-built list carries. `latest` is the
@@ -10303,7 +10342,8 @@ run_test fathom_review_substitutes_every_placeholder_its_prompts_carry
 run_test fathom_review_schemas_keep_coverage_with_the_readers
 run_test publish_qualifies_every_nightly_tag_with_the_repository_it_resolves
 run_test publish_qualifies_the_release_tags_and_ignores_a_blank_line
-run_test publish_folds_the_owner_login_into_the_docker_hub_namespace
+run_test publish_reads_the_docker_hub_account_off_the_stated_repository
+run_test publish_moves_ghcr_with_the_repository_and_leaves_the_mirror_where_it_is
 run_test publish_sends_a_release_to_its_own_documentation_directory
 run_test publish_sends_a_nightly_to_the_default_branch_documentation
 run_test publish_refuses_a_tag_list_with_nothing_to_publish

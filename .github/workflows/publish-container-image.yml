@@ -70,6 +70,10 @@ env:
   # standing failure: a finding with no fixed version available cannot be answered by rebuilding, so blocking on one
   # would block every release until an upstream base image moves.
   TRIVY_SEVERITY: 'HIGH,CRITICAL'
+  # The Docker Hub repository the mirror is published under, and through its first segment the account that logs in.
+  # `nightly.yml` names the same value, because it prunes what this workflow writes there, and the contract suite
+  # fails when the two disagree.
+  DOCKER_HUB_REPOSITORY: krzysztof318/mailfathom
 
 jobs:
   # **The gates this publication stands on are the caller's, and none of them is here.** `Release` and `Nightly` each
@@ -103,10 +107,12 @@ jobs:
           ref: ${{ inputs.ref }}
           persist-credentials: false
 
-      # An OCI repository name is lowercase, and this owner's login is not, so both references are folded once here
-      # rather than written as literals that a rename would leave pointing at nothing. The same fold produces the Docker
-      # Hub account name, because that account is this owner's login: one identity, spelled the way each registry
-      # requires, so a mirror cannot come to point at somebody else's namespace.
+      # The two registries are named differently because they belong to different things. A GHCR package belongs to
+      # the repository that publishes it, so its reference is this repository's own name — folded to lowercase, which
+      # an OCI repository name is and a GitHub login need not be — rather than a literal a rename would leave pointing
+      # at nothing. A Docker Hub repository belongs to a Docker Hub account, which is no part of GitHub and does not
+      # move when this repository does, so the mirror is stated in `DOCKER_HUB_REPOSITORY` and its first segment is
+      # the account that logs in.
       #
       # Qualifying the caller's tags is part of the same resolution, because a tag on its own is not a tag to a registry
       # client: an unqualified name is an image on the default registry, so pushing a bare `nightly` would reach
@@ -125,7 +131,7 @@ jobs:
 
           repository="$(printf '%s' "$REPOSITORY" | tr '[:upper:]' '[:lower:]')"
           image="ghcr.io/${repository}"
-          docker_hub_image="docker.io/${repository}"
+          docker_hub_image="docker.io/${DOCKER_HUB_REPOSITORY}"
           tags="$(printf '%s\n' "$IMAGE_TAGS" | sed '/^[[:space:]]*$/d')"
           primary_tag="$(printf '%s\n' "$tags" | head -n 1)"
 
@@ -137,8 +143,8 @@ jobs:
           {
             printf 'image=%s\n' "$image"
             printf 'docker-hub-image=%s\n' "$docker_hub_image"
-            printf 'docker-hub-namespace=%s\n' "${repository%%/*}"
-            printf 'docker-hub-repository=%s\n' "$repository"
+            printf 'docker-hub-namespace=%s\n' "${DOCKER_HUB_REPOSITORY%%/*}"
+            printf 'docker-hub-repository=%s\n' "$DOCKER_HUB_REPOSITORY"
             printf 'primary-tag=%s\n' "$primary_tag"
             printf 'primary-reference=%s:%s\n' "$image" "$primary_tag"
             printf 'docker-hub-primary-reference=%s:%s\n' "$docker_hub_image" "$primary_tag"
