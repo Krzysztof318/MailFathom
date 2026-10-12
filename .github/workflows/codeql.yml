@@ -29,12 +29,13 @@ name: CodeQL
 # **Build mode `manual`, not `none` and not `autobuild`.** `none` resolves dependencies itself, which
 # is guesswork against a repository whose entire closure is pinned centrally and fixed by fifteen
 # committed lock files; it would analyse a graph nothing else here builds. `autobuild` guesses the
-# build. The restore and build below are the ones `build-test-format-and-migrations.yml` runs, so the
+# build. The restore below is the one `build-test-format-and-migrations.yml` runs and the build is
+# that workflow's own, in the same configuration, over the projects under `backend/src/` — so the
 # analysis sees the graph the compiler saw and the one a release is built from. The cost of that
-# choice is a full Release build under extraction, which is the most expensive check in this
-# repository; Actions minutes are free for a public repository on standard GitHub-hosted runners, so
-# what it spends is wall-clock rather than money. The build step spends no more of it than
-# extraction needs, and says what it leaves out and why.
+# choice is a Release build under extraction, which is the most expensive check in this repository;
+# Actions minutes are free for a public repository on standard GitHub-hosted runners, so what it
+# spends is wall-clock rather than money. The build step spends no more of it than the analysis
+# needs, and says what it leaves out and why.
 #
 # **The SDK is verified rather than assumed.** CodeQL support for a language is not support for a
 # runtime: 2.24.0 added basic .NET 10 extraction and left the C# 14 language features unsupported,
@@ -141,21 +142,45 @@ jobs:
           build-mode: manual
           db-location: ${{ runner.temp }}/codeql-databases
 
-      # The build the pull-request gate runs, minus its restore and minus its analyzers. CodeQL injects
-      # the flags manual mode needs, so nothing here has to ask for them, and one of those is what makes
-      # the analyzers worth leaving out: shared compilation is switched off, because the tracer can only
-      # see a compiler that runs as a process of its own. Every project is then compiled from a cold
-      # start instead of by the one compiler server the gate keeps warm, and each of those processes
-      # loads and JIT-compiles the whole analyzer set again before it reads a line of source. Measured
-      # on four cores, that set is three fifths of what the cold build costs, and without it the cold
-      # build takes what the gate's warm one does.
+      # The build the pull-request gate runs, narrowed twice, because a traced build pays for
+      # everything it compiles in a way the gate's does not. CodeQL injects the flags manual mode
+      # needs, so nothing here asks for them, and one of those is the reason for both narrowings:
+      # shared compilation is switched off, since the tracer can only see a compiler that runs as a
+      # process of its own. Every project is then compiled from a cold start instead of by the one
+      # compiler server the gate keeps warm, and the extractor runs over it again afterwards.
       #
-      # Nothing the analysis reads is lost with them. The extractor follows the compiler's arguments
-      # and its sources, never its diagnostics; a source generator is not an analyzer to this switch
-      # and still runs, so generated code reaches the database as before; and what the analyzers have
-      # to say about this commit is the gate's verdict, given on the same commit by the same build.
-      - name: Build solution
-        run: dotnet build backend/MailFathom.slnx --configuration Release --no-restore -p:RunAnalyzers=false
+      # **No analyzers.** Each of those cold processes loads and JIT-compiles the whole analyzer set
+      # before it reads a line of source. Measured on four cores, that set is three fifths of what
+      # the cold build costs, and without it the cold build takes what the gate's warm one does.
+      # Nothing the analysis reads goes with it: the extractor follows the compiler's arguments and
+      # its sources, never its diagnostics; a source generator is not an analyzer to this switch and
+      # still runs, so generated code reaches the database as before; and what the analyzers have to
+      # say about this commit is the gate's verdict, given on the same commit by the same build.
+      #
+      # **The projects under `backend/src/`, and no others.** The solution's test projects and its
+      # tooling are two thirds of its projects, and a taint path that begins and ends in one of them
+      # is not a way into a running service: nothing under `backend/tests/` or `backend/tools/` is in
+      # an image, a chart, or a release. Compiling them cold and extracting them costs minutes, and
+      # what it buys is alerts about code nobody deploys.
+      #
+      # The filter is written here from the directory rather than committed, so a project added under
+      # `backend/src/` is analysed without anybody remembering this file. It names the solution by an
+      # absolute path because a filter resolves it against its own location, which is outside the
+      # checkout. One build over a filter rather than one per project keeps the projects building
+      # beside each other, which is where a four-core runner gets its time back.
+      - name: Build the production projects
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          solution_filter="${RUNNER_TEMP}/production.slnf"
+
+          printf '%s\n' backend/src/*/*.csproj \
+            | jq --raw-input --slurp --arg solution "${GITHUB_WORKSPACE}/backend/MailFathom.slnx" \
+                '{solution: {path: $solution, projects: (split("\n") | map(select(length > 0) | ltrimstr("backend/")))}}' \
+            > "$solution_filter"
+
+          dotnet build "$solution_filter" --configuration Release --no-restore -p:RunAnalyzers=false
 
       - name: Analyze
         uses: github/codeql-action/analyze@v4
@@ -167,9 +192,9 @@ jobs:
       # of the source is not, and it produces the same green check as a clean analysis. The source
       # archive is compared against what `backend/src/` actually contains, so a partial extraction — a new SDK
       # the bundle cannot read, a project that stopped compiling into the traced window — fails here
-      # instead of being reported as no findings. The bound is `backend/src/` alone even though a solution
-      # build extracts the test projects and the generated sources as well, which is the headroom that
-      # keeps a true statement from becoming a brittle one.
+      # instead of being reported as no findings. The bound is what `backend/src/` tracks, and the build
+      # above compiles every file of it; the sources its generators write are extracted on top, which is
+      # the headroom that keeps a true statement from becoming a brittle one.
       - name: Verify the database holds this repository's source
         shell: bash
         env:
