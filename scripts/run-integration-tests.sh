@@ -94,8 +94,14 @@ report_foreign_ephemeral_resources() {
 
 trap remove_ephemeral_resources EXIT
 
-raw_results_directory='artifacts/integration-tests/raw'
-coverage_report_directory='artifacts/integration-tests/report'
+# Absolute, because `--coverlet` decides which directory a relative one is read against. With the
+# collector on, the test host writes its TRX against the test assembly's own directory rather than the
+# one this script runs in, so the report lands under the project's `bin`, where neither the workflow's
+# upload nor a reader looking under `artifacts/` finds it. The collector writes its own file from outside
+# that process and against this directory, which is why a run could report coverage and no results at
+# once.
+raw_results_directory="$repository_root/artifacts/integration-tests/raw"
+coverage_report_directory="$repository_root/artifacts/integration-tests/report"
 
 # Removed rather than added to. Report generation globs the raw directory, so a Cobertura file from an
 # earlier run would silently merge into this run's numbers and report coverage nothing just produced.

@@ -8267,6 +8267,35 @@ a_paid_provider_run_is_never_the_default() {
   fi
 }
 
+# The integration suite's TRX is the only record of which test failed and why, and the workflow uploads
+# it from `artifacts/integration-tests/raw`. With the coverage collector on, the test host reads a
+# relative results directory against the test assembly's own directory rather than the one the script
+# runs in: the report then lands under the project's `bin`, the upload finds nothing, and a failing run
+# keeps its failures in sixty thousand lines of console output. Nothing else reports that — the script
+# still exits on the suite's code and the coverage report still appears — so the path is held here.
+the_integration_suite_writes_its_results_where_the_workflow_uploads_them() {
+  local script="$source_repository_root/scripts/run-integration-tests.sh"
+  local workflow="$source_repository_root/.github/workflows/integration-tests.yml"
+  local failures=''
+
+  if ! grep -qF 'raw_results_directory="$repository_root/artifacts/integration-tests/raw"' "$script"; then
+    failures+='run-integration-tests.sh does not anchor its results directory at the repository root, so the test process resolves it against its own directory. '
+  fi
+
+  if ! grep -qF -- '--results-directory "$raw_results_directory"' "$script"; then
+    failures+='run-integration-tests.sh does not hand the suite the anchored results directory. '
+  fi
+
+  if ! grep -qF "path: 'artifacts/integration-tests/raw/**/*.trx'" "$workflow"; then
+    failures+='integration-tests.yml does not upload the TRX from the directory the script writes it to. '
+  fi
+
+  if [[ -n "$failures" ]]; then
+    printf '%s\n' "$failures" >&2
+    return 1
+  fi
+}
+
 # `pull_request_target` runs the base branch's workflow with the repository's secrets against a
 # contribution nobody has reviewed. Two workflows use it deliberately and
 # `docs/operations/agent-workflow.md` argues each case separately: `fathom-review.yml` since #189,
@@ -10410,6 +10439,7 @@ run_test the_desktop_publication_is_stamped_with_the_version_its_caller_resolved
 run_test the_android_artifact_is_debug_signed_and_stamped_from_its_caller
 run_test the_mutation_score_is_reported_and_never_gated
 run_test a_paid_provider_run_is_never_the_default
+run_test the_integration_suite_writes_its_results_where_the_workflow_uploads_them
 run_test only_the_recorded_workflows_use_pull_request_target
 run_test a_comment_never_cancels_a_review_in_flight
 run_test a_comment_never_cancels_a_queued_review
