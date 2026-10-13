@@ -331,6 +331,24 @@ The same declaration, with the same rules, is what a chat model carries, as [cha
 headers of its own](chat-generation.md#a-model-may-declare-headers-of-its-own) describes. One reading of what a header
 may be governs both, because that question does not depend on whether the request asks for a vector or for an answer.
 
+## What a request says about the deployment that sent it
+
+Nothing about where it runs. The OpenAI client library every request goes through describes its process by default: six
+`X-Stainless-*` headers and its share of the `User-Agent`, naming the library's version, the .NET runtime and its
+version, the operating system, and the processor architecture. One client construction reaches every endpoint a
+deployment declares, in this chain and under `Chat` alike, so left alone that description would go to a gateway, a
+self-hosted model server, and every hosted provider — none of which needs it to answer. MailFathom switches it off
+through the library's own `OpenAI.DisableTelemetry` switch, set in code before the first client is built, and the
+library reads its `OPENAI_DISABLE_TELEMETRY` environment variable only where that switch was never set, so nothing in a
+deployment's environment turns the description back on.
+
+The headers a request carries are therefore the credential, whatever the endpoint declared under `ExtraHeaders`, the
+session header a chat model declaring `StickySessions` sends to OpenRouter, the framing the transport writes, and a
+`User-Agent` of one token — `MEAI/` followed by a version — which names the adapter that publishes the client library
+as a provider-neutral one and says nothing about the platform. What the switch costs is the rest of that header: a
+provider no longer sees which client library and which version of it sent a request, so say so yourself when you ask a
+provider's support about a failing call.
+
 ## What a failing call is classified as
 
 A provider that fails says six different things, and collapsing them into "the call failed" gets the next two

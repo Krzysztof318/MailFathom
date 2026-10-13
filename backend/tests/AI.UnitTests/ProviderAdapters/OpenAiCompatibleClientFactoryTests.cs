@@ -26,6 +26,9 @@ public sealed class OpenAiCompatibleClientFactoryTests
     /// <summary>The variable the telemetry decorators read prompt and completion capture from when nothing sets it.</summary>
     private const string MessageCaptureVariable = "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT";
 
+    /// <summary>The product the adapter above the client library names itself as in a request's <c>User-Agent</c>.</summary>
+    private const string AdapterProductName = "MEAI";
+
     private readonly OpenAiCompatibleClientFactory factory = new();
 
     [Fact]
@@ -168,9 +171,36 @@ public sealed class OpenAiCompatibleClientFactoryTests
         Assert.Equal("a-resolved-key", sentHeaders.Authorization?.Parameter);
     }
 
-    /// <summary>A model declaring none is the ordinary deployment, and it must reach the provider carrying nothing extra.</summary>
+    /// <summary>
+    /// A model declaring none is the ordinary deployment, and it must reach the provider carrying nothing extra — which
+    /// includes what the client library would write about the process on its own: the <c>X-Stainless-*</c> headers
+    /// naming the runtime, the operating system, and the architecture, and the part of the <c>User-Agent</c> that names
+    /// the first two as well. What is left of that header is the one token the adapter above the client library adds,
+    /// which names that adapter and its version and nothing about where it runs.
+    /// </summary>
+    [Theory]
+    [InlineData(ChatProviderApi.ChatCompletions)]
+    [InlineData(ChatProviderApi.Responses)]
+    public async Task OpenChatClient_AnEndpointDeclaringNoExtraHeaders_SendsNoneOfItsOwn(ChatProviderApi api)
+    {
+        // Arrange
+        using var provider = new HeaderRecordingProvider(api);
+        using var credential = ProviderEndpointCredential.FromApiKey("a-resolved-key", resolvedMaterial: null);
+
+        using var client = this.factory.OpenChatClient(ChatDeclarations.Endpoint(api: api), credential, provider.Transport);
+
+        // Act
+        await client.GetResponseAsync("a question", cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotNull(provider.SentHeaders);
+        Assert.DoesNotContain(provider.SentHeaders, header => header.Key.StartsWith("X-", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(AdapterProductName, Assert.Single(provider.SentHeaders.UserAgent).Product?.Name);
+    }
+
+    /// <summary>An embedding request is built by the same construction, so it describes the process no more than a chat request does.</summary>
     [Fact]
-    public async Task OpenChatClient_AnEndpointDeclaringNoExtraHeaders_SendsNoneOfItsOwn()
+    public async Task OpenEmbeddingGenerator_AnEndpointDeclaringNoExtraHeaders_SendsNoneOfItsOwn()
     {
         // Arrange
         HttpRequestHeaders? sentHeaders = null;
@@ -180,20 +210,21 @@ public sealed class OpenAiCompatibleClientFactoryTests
 
             return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
             {
-                Content = new StringContent(OneChatCompletion(), Encoding.UTF8, "application/json"),
+                Content = new StringContent(OneVectorOfWidth(4), Encoding.UTF8, "application/json"),
             });
         });
         using var transport = new HttpClient(handler, disposeHandler: false);
         using var credential = ProviderEndpointCredential.FromApiKey("a-resolved-key", resolvedMaterial: null);
 
-        using var client = this.factory.OpenChatClient(ChatDeclarations.Endpoint(), credential, transport);
+        using var generator = this.factory.OpenEmbeddingGenerator(EmbeddingDeclarations.Endpoint(), credential, transport);
 
         // Act
-        await client.GetResponseAsync("a question", cancellationToken: TestContext.Current.CancellationToken);
+        await generator.GenerateAsync(["a passage"], cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
         Assert.NotNull(sentHeaders);
         Assert.DoesNotContain(sentHeaders, header => header.Key.StartsWith("X-", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(AdapterProductName, Assert.Single(sentHeaders.UserAgent).Product?.Name);
     }
 
     /// <summary>OpenRouter keeps every request carrying one session on one upstream provider, on both APIs.</summary>

@@ -316,6 +316,11 @@ configuration file, and found by the same secret discovery that finds every othe
 reference nothing provisions takes the model out of service rather than sending the request without the header, because
 a gateway reading that header would route the call somewhere else.
 
+A model declaring none sends none, and nothing describing the platform either:
+[Embedding generation § What a request says about the deployment that sent it](embedding-generation.md#what-a-request-says-about-the-deployment-that-sent-it)
+holds what the client library would add on its own and why every request, to a chat model as to an embedding endpoint,
+goes out without it.
+
 **What a header may be called is bounded.** It has to be a field name as RFC 9110 defines one, and it may not be one the
 request writes for itself: `Authorization` is the credential's own, and `Host`, `Content-Length`, `Content-Type`, and
 `Transfer-Encoding` frame the message. One name declared twice is refused as well, because a field name is sent once and
