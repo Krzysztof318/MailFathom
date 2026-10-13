@@ -7553,6 +7553,12 @@ quick_start_says_it_is_an_evaluation_rather_than_a_recommended_deployment() {
   run_quick_start "$checkout_root" --provider fastmail > "$output_file" 2>&1
 
   assert_contains 'Not the recommended way to run one' "$help_file"
+
+  # An example that names a release is one that goes stale at the next, so the usage text shows the shape instead.
+  if grep -Eq '[0-9]+\.[0-9]+\.[0-9]+' "$help_file"; then
+    printf 'The usage text names a release, which the next release makes wrong.\n' >&2
+    return 1
+  fi
   assert_contains 'evaluate MailFathom with' "$output_file"
 
   local missing_decision
@@ -7594,9 +7600,10 @@ quick_start_serves_the_administrative_endpoint_on_a_port_of_its_own() {
 # image, so serving it is the page setting in .env and the surface it is served on in the configuration file — the two
 # together, because the page is served on that surface's listeners and enabling one without the other is refused at
 # startup naming both. The surface takes `password` rather than nothing, because it reads mail. No credential is
-# generated for it, and that is the shape of a password rather than an omission: it is a record beside a user in the
-# running deployment, so what the run owes somebody is the command that mints one, which is asserted here beside the
-# absence of a file.
+# written for it, and that is the shape of a password rather than an omission: it is a record beside a user in the
+# running deployment, provisioned once that deployment answers. A run that started nothing therefore owes somebody the
+# whole sequence that ends in a sign-in — the role included, since a recorded user holds nothing without one — which
+# is asserted here beside the absence of a file.
 quick_start_prepares_the_client_it_can_serve() {
   local checkout_root compose_directory
   local without_client_root
@@ -7617,13 +7624,33 @@ quick_start_prepares_the_client_it_can_serve() {
   fi
 
   # The address is what somebody is looking for at the end of a run, beside the MCP endpoint the run is also for.
-  assert_contains 'The MailFathom client answers at' "$output_file"
+  assert_contains 'The MailFathom client answers at http://127.0.0.1:8080/app/' "$output_file"
   assert_contains '/mcp' "$output_file"
 
   # And the command that mints what the page asks for, since the run writes no credential and a sign-in screen with
   # nothing to present at it is what this assertion exists to keep the report from producing.
-  assert_contains 'mfctl credential create --method password --username' "$output_file"
+  assert_contains 'mfctl credential create --method password --username you@example.test' "$output_file"
+  assert_contains 'mfctl assignment add --role <role> --user <user> --scope-user <user>' "$output_file"
   assert_excludes 'sample data' "$output_file"
+
+  # Every mail account states the language MailFathom writes about its mail in, and a declaration without one is
+  # refused only once the deployment is up — so it is written, and a value the deployment would refuse stops the run.
+  assert_contains '"Language": "English"' "$compose_directory/mailbox.json"
+
+  local refused_language_root
+  refused_language_root="$(stage_quick_start_checkout 'quick-start-client-language')"
+  if run_quick_start "$refused_language_root" --provider fastmail --language Klingon > /dev/null 2>&1; then
+    printf 'A language no mail account can state was accepted instead of refused.\n' >&2
+    return 1
+  fi
+
+  # The name somebody signs in as is the mailbox's address unless the run was told another.
+  local named_root
+  local named_log="$test_directory/quick-start-client-named-log"
+  named_root="$(stage_quick_start_checkout 'quick-start-client-named')"
+  run_quick_start "$named_root" --provider fastmail --sign-in-name alex > "$named_log" 2>&1
+
+  assert_contains 'mfctl credential create --method password --username alex' "$named_log"
 
   # And declining it leaves the deployment the run would otherwise have produced: neither the page nor the surface,
   # because publishing a mail-reading endpoint for nobody is what --no-client is for.

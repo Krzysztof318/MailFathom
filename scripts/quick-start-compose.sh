@@ -14,13 +14,14 @@ set -euo pipefail
 # belongs to the record of the user whose mail it is, and a record is written while the deployment runs. So the answers
 # collected here become mailbox.json, which is declared in the record of the user the deployment serves through the
 # administrative endpoint — which is why that endpoint is served rather than optional. A fresh database holds nobody,
-# and a user is the operator's to record first, so the run prints the commands that do both.
+# so where this run started the deployment it records the person as well: one user, the built-in Mail user role at
+# their own scope, the mailbox, and the credentials their clients present. Where it started nothing, it prints the
+# commands that do the same.
 #
-# It provisions no credential to sign in to that page with, and that is the shape of a password rather than a gap in
-# the run: a username and password is a record beside a user in the running deployment, so there is nothing to write
-# into a file before anything is up. The page opens on its sign-in screen and reads this deployment's mail with the
-# session it is given, so the run prints the command that mints one — mfctl credential create --method password — for
-# the same reason it prints the one that mints the MCP key, and for the same endpoint.
+# A password to sign in to that page with is a record beside a user in the running deployment, so there is nothing to
+# write into a file before anything is up. The run generates one once the deployment answers, provisions it, and
+# prints it once beside the address of the page — and mints and prints the MCP key the same way, through the same
+# endpoint. Neither is written to a file or passed on a command line.
 #
 # Usage:
 #   scripts/quick-start-compose.sh
@@ -86,6 +87,10 @@ prepares has no TLS, no backup, and credentials in files under this checkout.
                            The address the mailbox receives mail at. Defaults to the user name
                            where that is an address.
   --password-file <path>   Where to read the mailbox password from, instead of asking for it.
+  --language <language>    English or Polish: the language MailFathom writes about this mailbox's
+                           mail in. Defaults to English.
+  --sign-in-name <name>    What the person this deployment serves signs in to the client as. Defaults
+                           to the mailbox's address.
   --mcp-authentication <api-key|none>
                            Whether the MCP endpoint requires a generated key. Defaults to api-key.
   --admin-endpoint <password|none>
@@ -97,7 +102,7 @@ prepares has no TLS, no backup, and credentials in files under this checkout.
                            is served on.
   --no-legacy-tls          Leave the platform's own TLS policy in force, instead of the relaxation
                            that reaches a mail server offering only weak parameters.
-  --version <version>      The release to deploy, for example 0.6.0. Defaults to the newest.
+  --version <version>      The release to deploy, as <major>.<minor>.<patch>. Defaults to the newest.
   --no-start               Write the files and stop, without starting anything or applying a schema.
   --non-interactive        Ask nothing. Every answer above has to be given, and no schema is applied.
   --help                   Print this and exit.
@@ -116,6 +121,8 @@ user_name=''
 display_name=''
 email_address=''
 password_file=''
+sign_in_name=''
+language='English'
 mcp_authentication='api-key'
 admin_endpoint='password'
 serve_client='yes'
@@ -126,7 +133,7 @@ interactive='yes'
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --provider | --host | --port | --user-name | --display-name | --email-address | --password-file | \
+    --provider | --host | --port | --user-name | --display-name | --email-address | --password-file | --sign-in-name | --language | \
       --mcp-authentication | --admin-endpoint | --version)
       [[ $# -ge 2 ]] || { printf '%s takes a value.\n' "$1" >&2; exit 1; }
       case "$1" in
@@ -137,6 +144,8 @@ while [[ $# -gt 0 ]]; do
         --display-name) display_name="$2" ;;
         --email-address) email_address="$2" ;;
         --password-file) password_file="$2" ;;
+        --sign-in-name) sign_in_name="$2" ;;
+        --language) language="$2" ;;
         --mcp-authentication) mcp_authentication="$2" ;;
         --admin-endpoint) admin_endpoint="$2" ;;
         --version) requested_version="$2" ;;
@@ -369,6 +378,16 @@ if [[ ! "$email_address" =~ ^[^[:space:]@]+@[^[:space:]@]+$ ]]; then
   exit 1
 fi
 
+# A username takes an address as it stands, so the one the person already knows is the one they sign in with.
+sign_in_name="${sign_in_name:-$email_address}"
+
+# Every mail account states it, and a declaration without one is refused when it is added rather than when it is
+# written, which is after the deployment is already up.
+case "$language" in
+  English | Polish) ;;
+  *) printf 'The language is English or Polish, not %s.\n' "$language" >&2; exit 1 ;;
+esac
+
 case "$mcp_authentication" in
   api-key | none) ;;
   *) printf 'The MCP endpoint takes api-key or none, not %s.\n' "$mcp_authentication" >&2; exit 1 ;;
@@ -406,12 +425,11 @@ if [[ "$interactive" == 'yes' ]]; then
 
 The MailFathom client is the web interface onto the same mailbox, and it travels inside the image —
 so preparing it is two settings rather than anything to install. It is served at
-http://127.0.0.1:$published_port/, on the port above.
+http://127.0.0.1:$published_port/app/, on the port above.
 
-The page opens on a sign-in screen and reads this deployment's mail with the session it is given, so
-somebody needs a credential before it shows them anything. None is prepared here: a password is a
-record beside a user in the running deployment rather than a file, so what this run gives you at the
-end is the command that mints one. Pass --no-client to prepare neither the page nor the surface.
+The page opens on a sign-in screen and reads this deployment's mail with the session it is given.
+You sign in as $sign_in_name, with a password this run generates once the deployment is up and
+prints once when it finishes. Pass --no-client to prepare neither the page nor the surface.
 
 Everything the page and that surface exchange crosses the same plain-HTTP hop everything else here
 does. On a port published to 127.0.0.1 that hop is this machine; it is reported at every startup, and
@@ -431,8 +449,9 @@ operation, so its password is as sensitive as the mail it can dispose of.
 
 It is served either way, because it is the only thing that records a user at all: a deployment
 declares no mail account in its own file, so the person this one serves and the mailbox it reads are
-written through this endpoint once it is running. What is decided here is whether it takes the
-password of the default administrator, `admin`, which the first start records.
+written through this endpoint once it is running — by this run, where it starts the deployment. What
+is decided here is whether it takes the password of the default administrator, \`admin\`, which the
+first start records.
 
 TEXT
 
@@ -484,7 +503,7 @@ fi
 
 version="${requested_version#v}"
 if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
-  printf 'Not a release version: %s. It looks like 0.6.0, and %s lists the ones there are.\n' \
+  printf 'Not a release version: %s. It looks like <major>.<minor>.<patch>, and %s lists the ones there are.\n' \
     "$requested_version" "$release_base" >&2
   exit 1
 fi
@@ -492,7 +511,7 @@ fi
 # json_string below runs inside a command substitution, and an exit there is the substitution's rather than the script's,
 # so a value carrying a control character would reach the file as broken JSON instead of stopping the run. The check
 # therefore happens here, where it stops it.
-for written_value in "$email_address" "$display_name" "$imap_host" "$user_name"; do
+for written_value in "$email_address" "$display_name" "$imap_host" "$user_name" "$sign_in_name"; do
   if [[ "$written_value" == *[$'\x01'-$'\x1f']* ]]; then
     printf 'A control character cannot be part of a value written into the configuration: %s\n' "$written_value" >&2
     exit 1
@@ -541,6 +560,13 @@ mkdir -p secrets/mailfathom config
 chmod 700 secrets
 chmod 711 secrets/mailfathom
 chmod 755 config
+
+# The same umask reaches the script PostgreSQL's own entrypoint runs on a first start, which is what creates the role
+# and the database. Unreadable to the container's account, it is skipped with one line in a log nobody is reading yet,
+# and the server then reports healthy over a database that does not exist.
+if [[ -f postgres/10-create-mailfathom-database.sh ]]; then
+  chmod 755 postgres postgres/10-create-mailfathom-database.sh
+fi
 
 write_secret 'secrets/postgres-superuser-password' "$(openssl rand -base64 33 | tr -d '\n')"
 write_secret 'secrets/mailfathom-database-password' "$(openssl rand -base64 33 | tr -d '\n')"
@@ -651,6 +677,7 @@ cat > mailbox.json << JSON
 {
   "EmailAddress": $(json_string "$email_address"),
   "DisplayName": $(json_string "$display_name"),
+  "Language": "$language",
   "Host": $(json_string "$imap_host"),
   "Port": $imap_port,
   "UserName": $(json_string "$user_name"),
@@ -742,29 +769,50 @@ if [[ "$relax_tls_policy" == 'yes' ]]; then
   printf 'Wrote openssl-legacy.cnf, which this deployment reads its TLS parameters from.\n' >&2
 fi
 
+# Set by record_the_deployment where it provisioned them, and read by report_connection, which prints each one once.
+client_password=''
+mcp_key=''
+
 report_connection() {
   printf '\nThe MCP endpoint answers at http://127.0.0.1:%s/mcp, over the Streamable HTTP transport.\n' \
     "$published_port" >&2
 
-  if [[ "$mcp_authentication" == 'api-key' ]]; then
+  if [[ "$mcp_authentication" != 'api-key' ]]; then
+    printf 'It requires no credential, so a client needs the address alone.\n' >&2
+  elif [[ -n "$mcp_key" ]]; then
+    printf 'It accepts this key, which the deployment minted for %s:\n\n' "$sign_in_name" >&2
+    printf '  %s\n\n' "$mcp_key" >&2
+    printf 'It is stored only as a digest, so nothing here or in the deployment can report it again. Copy\n' >&2
+    printf 'it now, and give the client an Authorization header of `Bearer <key>`.\n' >&2
+  else
     printf 'It accepts a key, which the deployment mints for its user once you have recorded them:\n\n' >&2
     printf '  mfctl credential create --method api-key\n\n' >&2
     printf 'That prints the key once and keeps only a digest of it. Give the client an Authorization\n' >&2
     printf 'header of `Bearer <key>` with what it printed.\n' >&2
-  else
-    printf 'It requires no credential, so a client needs the address alone.\n' >&2
   fi
 
   printf '\nWhich clients take which of those, by name: %s/users/mcp-clients.html\n' "$documentation_base" >&2
 
   if [[ "$serve_client" == 'yes' ]]; then
-    printf '\nThe MailFathom client answers at http://127.0.0.1:%s/ — open it in a browser.\n' "$published_port" >&2
-    printf 'It opens on a sign-in screen and reads this mailbox with the session it is given, so somebody\n' >&2
-    printf 'needs a credential before it shows them anything. Mint one for the user this deployment serves,\n' >&2
-    printf 'through the same administrative endpoint below that records them:\n\n' >&2
-    printf '  mfctl credential create --method password --username <name>\n\n' >&2
-    printf 'It reads the password without echo, and nothing here or in the deployment can report it back\n' >&2
-    printf 'afterwards. %s/operations/client-endpoint.html\n' "$documentation_base" >&2
+    printf '\nThe MailFathom client answers at http://127.0.0.1:%s/app/ — open it in a browser.\n' \
+      "$published_port" >&2
+
+    if [[ -n "$client_password" ]]; then
+      printf 'Sign in with:\n\n' >&2
+      printf '  User name  %s\n' "$sign_in_name" >&2
+      printf '  Password   %s\n\n' "$client_password" >&2
+      printf 'The password was generated for this run and is kept nowhere: nothing here or in the\n' >&2
+      printf 'deployment can report it again, and `mfctl credential rotate` replaces it.\n' >&2
+    else
+      printf 'It opens on a sign-in screen and reads this mailbox with the session it is given, so somebody\n' >&2
+      printf 'needs a credential before it shows them anything. Mint one for the user this deployment serves,\n' >&2
+      printf 'through the same administrative endpoint below that records them:\n\n' >&2
+      printf '  mfctl credential create --method password --username %s\n\n' "$sign_in_name" >&2
+      printf 'It reads the password without echo, and nothing here or in the deployment can report it back\n' >&2
+      printf 'afterwards.\n' >&2
+    fi
+
+    printf '%s/operations/client-endpoint.html\n' "$documentation_base" >&2
   fi
 
   printf '\nThe administrative endpoint answers at http://127.0.0.1:%s/api/admin.\n' "$admin_port" >&2
@@ -779,70 +827,100 @@ report_connection() {
   printf 'Getting the command: %s/operations/admin-endpoint.html\n' "$documentation_base" >&2
 }
 
-# Printed wherever this script did not record the mailbox itself, which is every path that leaves the deployment not
-# running and every fresh database, which serves no user to record it for. Nothing is synchronized until this record
-# exists, so it is a step rather than an afterthought.
+# Printed wherever this script did not record the deployment itself, which is every path that leaves it not running and
+# any step the deployment refused. The role is part of the sequence rather than a refinement of it: a recorded user
+# holds nothing until one is assigned, so without that line the sign-in works and the client offers no mail.
 report_recording_commands() {
-  printf '\nThen record the user it serves, unless it holds one already, and add the mailbox it reads for\n' >&2
-  printf 'them:\n\n' >&2
+  printf '\nThen record the person it serves, give them the Mail user role, and add the mailbox it reads\n' >&2
+  printf 'for them, skipping whatever is already recorded:\n\n' >&2
   if [[ "$admin_endpoint" == 'password' ]]; then
     printf '  mfctl login --endpoint http://127.0.0.1:%s --mode password\n' "$admin_port" >&2
   else
     printf '  mfctl login --endpoint http://127.0.0.1:%s\n' "$admin_port" >&2
   fi
   printf '  mfctl user add --display-name <name>\n' >&2
+  printf '  mfctl role list                      # the identifier of the Mail user role\n' >&2
+  printf '  mfctl user list                      # the identifier of the person just recorded\n' >&2
+  printf '  mfctl assignment add --role <role> --user <user> --scope-user <user>\n' >&2
   printf '  mfctl account add --from-file %s/mailbox.json\n\n' "$compose_directory" >&2
   printf 'A deployment declares no mail account in its own file, so until one is added it reads\n' >&2
-  printf 'nothing. %s/users/administering.html\n' "$documentation_base" >&2
+  printf 'nothing, and a person holding no role reaches no mail. %s/users/administering.html\n' \
+    "$documentation_base" >&2
 }
 
 # One scalar out of a small administrative answer. A JSON parser is not a prerequisite of an evaluation, and every value
-# read here is a string or a number at the top of an object this deployment composed a moment ago — a record's own
-# document travels escaped, so nothing inside it can be matched by mistake.
+# read here is a string at the top of an object this deployment composed a moment ago.
 read_json_text() {
   grep --only-matching "\"$1\":\"[^\"]*\"" | head -n 1 | cut -d '"' -f 4
 }
 
-# The mailbox this deployment reads is a row it keeps rather than a setting it reads, so it is written through the
-# administrative endpoint once the deployment is up, assigned to the one user it serves. A user is recorded by an
-# operator before anything is added for them, and never by this script, so a fresh database — which holds nobody —
-# leaves the commands to the operator. Adding it after the start is what the product does rather than a way around a
-# missing setting: the write publishes the account to the running roster, so this mailbox is synchronized without a
-# restart. A refusal answers with what it refused rather than with a failing status, which is why the outcome is read
-# out of the body.
-record_the_mailbox() {
-  local origin="http://127.0.0.1:$admin_port" roster served user outcome declaration
+# Everything a deployment keeps about who it serves is a row rather than a setting, so it is written through the
+# administrative endpoint once the deployment is up: the person, the role that lets them reach mail at all, the mailbox,
+# and the credentials their clients present. This runs against a database the script itself just gave its schema, which
+# holds the default administrator and nobody else, so there is nobody to find and nothing to guess. Each write publishes
+# to the running roster, so the mailbox is synchronized and the sign-in works without a restart. `recording_step` names
+# the write in flight, which is what a failure reports.
+recording_step=''
+
+record_the_deployment() {
+  local origin="http://127.0.0.1:$admin_port" user role outcome declaration generated_password
   local -a authorization=()
 
   if [[ "$admin_endpoint" == 'password' ]]; then
     authorization=(--header "Authorization: Basic $(printf 'admin:%s' "$admin_password" | base64 -w0)")
   fi
 
-  # Who a mailbox belongs to is the operator's answer rather than this script's guess, so anything but exactly one user
-  # served on an endpoint — nobody yet, or several — leaves the commands to them. The default administrator is on the
-  # roster too, with both switches off, and is never who a mailbox is for. Each entry is a flat object, so splitting on
-  # braces separates them.
-  roster="$(curl -fsS "${authorization[@]}" "$origin/api/admin/users")" || return 1
-  served="$(printf '%s' "$roster" | grep --only-matching '{[^{}]*}' | grep -E '"(mcpEndpoint|clientEndpoint)":true')" \
-    || return 1
-  [[ "$served" != *$'\n'* ]] || return 1
-  user="$(printf '%s' "$served" | read_json_text 'id')"
+  # A body travels on standard input rather than as an argument, because two of them carry a password and an argument
+  # is readable in the process list for as long as the request takes.
+  post_to_the_deployment() {
+    printf '%s' "$2" | curl -fsS "${authorization[@]}" --header 'Content-Type: application/json' --data @- "$origin$1"
+  }
+
+  recording_step='recording the person'
+  user="$(post_to_the_deployment '/api/admin/users' "{ \"displayName\": $(json_string "$sign_in_name") }" \
+    | read_json_text 'id')"
   [[ -n "$user" ]] || return 1
 
-  # The declaration travels as the JSON object a file states it in, so it is the file's own text on one line rather
-  # than a body composed a second time here.
-  declaration="$(tr '\n' ' ' < mailbox.json)"
+  # The role is one of the three every database is seeded with. Its identifier is minted per deployment, so it is read
+  # rather than known, from the entry that carries the name.
+  recording_step='reading the Mail user role'
+  role="$(curl -fsS "${authorization[@]}" "$origin/api/admin/roles" \
+    | grep --only-matching '"id":"[^"]*","name":"Mail user"' | read_json_text 'id')"
+  [[ -n "$role" ]] || return 1
 
-  outcome="$(
-    curl -fsS "${authorization[@]}" \
-      --header 'Content-Type: application/json' \
-      --data "{ \"userId\": \"$user\", \"account\": $(json_string "$declaration") }" \
-      "$origin/api/admin/mail-accounts"
-  )" || return 1
+  recording_step='assigning the Mail user role'
+  post_to_the_deployment '/api/admin/role-assignments' \
+    "{ \"roleId\": \"$role\", \"principalKind\": \"user\", \"principalId\": \"$user\", \"scopeKind\": \"user\", \"scopeId\": \"$user\" }" \
+    > /dev/null || return 1
+
+  # The declaration travels as the JSON object a file states it in, so it is the file's own text on one line rather
+  # than a body composed a second time here. A refusal answers with what it refused rather than with a failing status,
+  # which is why the outcome is read out of the body.
+  recording_step='adding the mailbox'
+  declaration="$(tr '\n' ' ' < mailbox.json)"
+  outcome="$(post_to_the_deployment '/api/admin/mail-accounts' \
+    "{ \"userId\": \"$user\", \"account\": $(json_string "$declaration") }")" || return 1
 
   if [[ "$outcome" != *'"committed":true'* ]]; then
     printf '\nThe deployment refused the declaration in mailbox.json:\n%s\n' "$outcome" >&2
     return 1
+  fi
+
+  if [[ "$serve_client" == 'yes' ]]; then
+    recording_step='provisioning the password the client signs in with'
+    generated_password="$(openssl rand -base64 18 | tr -d '\n')"
+    post_to_the_deployment "/api/admin/users/$user/credentials" \
+      "{ \"method\": \"password\", \"username\": $(json_string "$sign_in_name"), \"password\": \"$generated_password\", \"publicKey\": null, \"issuer\": null, \"subject\": null, \"permissions\": null }" \
+      > /dev/null || return 1
+    client_password="$generated_password"
+  fi
+
+  if [[ "$mcp_authentication" == 'api-key' ]]; then
+    recording_step='minting the key an MCP client presents'
+    mcp_key="$(post_to_the_deployment "/api/admin/users/$user/credentials" \
+      '{ "method": "api-key", "username": null, "password": null, "publicKey": null, "issuer": null, "subject": null, "permissions": null }' \
+      | read_json_text 'key')"
+    [[ -n "$mcp_key" ]] || return 1
   fi
 }
 
@@ -853,7 +931,7 @@ report_what_an_evaluation_is_missing() {
 
 This is a deployment to evaluate MailFathom with. Before it is one anybody depends on:
 
-  Transport   Both ports are published on 127.0.0.1 and MailFathom terminates no TLS, so a client on
+  Transport   Every port is published on 127.0.0.1 and MailFathom terminates no TLS, so a client on
               another machine has nothing to connect to and nothing protecting it if it did. Every
               credential presented crosses that hop readable, which the host says at every startup.
 TEXT
@@ -1014,15 +1092,15 @@ if [[ "$started" != 'yes' ]]; then
   exit 1
 fi
 
-printf '\nMailFathom %s started, reading no mailbox yet.\n' "$version" >&2
-printf 'Declaring the mailbox it reads, where it holds one user to declare it for.\n' >&2
+printf '\nMailFathom %s started, serving nobody yet.\n' "$version" >&2
+printf 'Recording the person it serves, their role, and the mailbox it reads for them.\n' >&2
 
-if record_the_mailbox; then
-  printf 'Added the mailbox %s for them. It is served from now on, without a restart, and the\n' \
-    "$email_address" >&2
-  printf 'first synchronization starts on the next run.\n' >&2
+if record_the_deployment; then
+  printf 'Recorded %s with the Mail user role and the mailbox %s. Both are served from now on,\n' \
+    "$sign_in_name" "$email_address" >&2
+  printf 'without a restart, and the first synchronization starts on the next run.\n' >&2
 else
-  printf '\nThe deployment is running and reads no mailbox yet, so nothing is synchronized.\n' >&2
+  printf '\nThe deployment is running, and it stopped at %s.\n' "$recording_step" >&2
   report_recording_commands
 fi
 

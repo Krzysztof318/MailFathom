@@ -24,29 +24,30 @@ knowing before you start, because neither announces itself:
 
 `scripts/quick-start-compose.sh` performs everything on this page that is typed rather than decided: it asks where the
 mailbox lives, generates the credentials, writes the configuration, sets the modes, starts the stack, offers the schema
-step, prints the `mfctl` commands that record the user this deployment serves and the mailbox it reads, and reports the
-two probes.
+step, records the person this deployment serves and the mailbox it reads for them, and reports the two probes.
 
 ```bash
 scripts/quick-start-compose.sh
 ```
 
-**It ends with an address for a chat client and an address for a browser.** The client travels inside the image, so
-the script writes the two settings that serve it and pulls nothing extra; `--no-client` prepares the MCP endpoint alone.
-What it does not write is the credential the page asks for: a password is a record beside a user in the running
-deployment rather than a file, so the closing report names the command that mints one —
-`mfctl credential create --method password --username <name>`, over the administrative endpoint this run already
-serves — exactly as it names the command for the MCP key.
+**It ends with an address for a chat client, and an address for a browser with a sign-in that works.** The client
+travels inside the image, so the script writes the two settings that serve it and pulls nothing extra; `--no-client`
+prepares the MCP endpoint alone. The page is served at `/app/` on the published port. A password is a record beside a
+user in the running deployment rather than a file, so the script generates one once the deployment answers, provisions
+it over the administrative endpoint, and prints it once in the closing report beside the name it signs in under —
+`--sign-in-name`, which defaults to the mailbox's address. The MCP key is minted and printed the same way. Neither is
+written to a file, and nothing can report either again: `mfctl credential rotate` is how one is replaced.
 
 **The mailbox it asked about is not written into the configuration**, because no configuration source declares one:
 the answers become `mailbox.json` beside `compose.yaml`, and a mailbox is a mail account created for a user the
-deployment holds. Its address is `--email-address`, which defaults to the login when that is an address. A fresh
-database holds nobody, and the script never records a user for you — who the deployment serves is yours to say first —
-so it leaves the file and prints the `mfctl` commands that record the user and then create the mailbox. Only a run that
-finds exactly one user served on the MCP or client endpoint creates it itself, through the administrative endpoint once
-the deployment is up — the default administrator is on the roster too, served on neither, and is never who a mailbox is
-for. Until then the deployment reads nothing, which is an ordinary
-first-run state rather than a failure.
+deployment holds. Its address is `--email-address`, which defaults to the login when that is an address, and its
+`Language` is `--language`, English unless stated. A fresh database holds nobody, so where the script started the
+deployment it records what a first sign-in needs, through the administrative endpoint and in this order: one user, the
+built-in `Mail user` role assigned to them at their own scope, the mailbox, and their credentials. The role is not
+optional — a recorded user holds nothing until one is assigned. A step the deployment refuses stops the recording,
+is named, and is followed by the `mfctl` commands that finish it by hand; a run that started nothing prints the same
+commands. Until the mailbox is recorded the deployment reads nothing, which is an ordinary first-run state rather than
+a failure.
 
 **It also relaxes the platform's TLS policy for this deployment**, by copying
 [`deploy/openssl/legacy-mail-server.cnf.example`](https://github.com/fathomise/MailFathom/blob/main/deploy/openssl/legacy-mail-server.cnf.example)
@@ -76,9 +77,9 @@ Four things it will not decide for you, because each is a decision rather than a
 
 **The MCP endpoint is the answer it asks for**, and it is the one with a cost worth stating before it is given. The
 endpoint accepts an API key unless you ask for none, which is legal, announced with a startup warning, and the only
-shape the chat clients with no field for a static header can connect to. The key itself is not written here: what a
-client presents to that endpoint is a record beside the user whose mail it reaches, minted with
-`mfctl credential create` once the deployment is running, and the script prints that command when it finishes.
+shape the chat clients with no field for a static header can connect to. The key itself is written to no file: what a
+client presents to that endpoint is a record beside the user whose mail it reaches, which the script mints once the
+deployment is running and prints once, and which `mfctl credential create` mints where the script started nothing.
 
 The administrative endpoint comes with what the deployment needs rather than from an answer, and every run serves it.
 Declaring a mailbox is an administrative operation and there is no other way to reach one, so a deployment without that
@@ -97,7 +98,8 @@ scheme of its own socket and nothing beyond it, so it cannot tell this deploymen
 
 `--non-interactive` takes every answer as an argument instead, with `--password-file` for the mailbox credential, and
 `--no-start` writes the files and stops. Both end before the schema — an unattended run declines that question the same
-way it declines every other — so what either leaves is a prepared deployment nothing has been told about yet.
+way it declines every other — so what either leaves is a prepared deployment nothing has been told about yet, and the
+commands that record its user, role, mailbox, and credentials.
 `scripts/quick-start-compose.sh --help` lists all of them.
 
 ## Before the first start
