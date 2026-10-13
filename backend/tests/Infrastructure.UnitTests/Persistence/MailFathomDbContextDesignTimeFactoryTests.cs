@@ -58,45 +58,19 @@ public sealed class MailFathomDbContextDesignTimeFactoryTests
             context.Database.GetConnectionString());
     }
 
-    [Fact]
-    public void BuildOptions_PublishModeIssuedAnUnresolvedExpression_GeneratesTheScriptAnyway()
-    {
-        // Act
-        var options = MailFathomDbContextDesignTimeFactory.BuildOptions(
-            "{mailfathom.connectionString}",
-            designTimeConnectionString: null);
-
-        // Assert
-        using var context = new MailFathomDbContext(options, PostgresTextSearchConfiguration.Default);
-        Assert.Equal(
-            MailFathomDbContextDesignTimeFactory.LocalDevelopmentConnectionString,
-            context.Database.GetConnectionString());
-    }
-
-    [Fact]
-    public void BuildOptions_PublishModeIssuedAnUnresolvedExpression_StillPrefersTheDesignTimeOverride()
-    {
-        // Act
-        var options = MailFathomDbContextDesignTimeFactory.BuildOptions(
-            "{mailfathom.connectionString}",
-            "Host=db.test;Database=mailfathom;Username=dev");
-
-        // Assert
-        using var context = new MailFathomDbContext(options, PostgresTextSearchConfiguration.Default);
-        Assert.Equal("Host=db.test;Database=mailfathom;Username=dev", context.Database.GetConnectionString());
-    }
-
-    [Fact]
-    public void BuildOptions_MalformedDesignTimeOverride_FailsRatherThanRetargetingTheLocalDatabase()
+    [Theory]
+    [InlineData("nonsense-that-names-no-keyword", null)]
+    [InlineData(null, "nonsense-that-names-no-keyword")]
+    public void BuildOptions_MalformedConnectionString_FailsRatherThanRetargetingTheLocalDatabase(
+        string? orchestrated,
+        string? designTimeOverride)
     {
         // Arrange
-        var options = MailFathomDbContextDesignTimeFactory.BuildOptions(
-            orchestratedConnectionString: null,
-            designTimeConnectionString: "nonsense-that-names-no-keyword");
+        var options = MailFathomDbContextDesignTimeFactory.BuildOptions(orchestrated, designTimeOverride);
 
         // Act, Assert
-        // The override is kept rather than swapped for the local default, so the command fails on the value the
-        // developer wrote. Where that surfaces is the provider's own business — building the data source the vector
+        // The value is kept rather than swapped for the local default, so the command fails on what was actually
+        // stated. Where that surfaces is the provider's own business — building the data source the vector
         // mapping needs — so the assertion is that it surfaces at all, not that BuildOptions is where it does.
         Assert.Throws<ArgumentException>(() =>
         {

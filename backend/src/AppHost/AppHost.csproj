@@ -6,8 +6,16 @@
          the app model, which is what keeps a password and a data volume that outlives it from ever diverging. The value
          is a fixed identifier, and what Aspire writes under it lives in the developer's own profile. -->
     <UserSecretsId>aspire-apphost-6f1c0a24-8a2c-4f5c-9d3a-4c2d0f8b71e5</UserSecretsId>
+    <!-- The dashboard and the orchestrator come from the NuGet packages the SDK below selects, at the version this
+         repository pins and its licence register reviewed, rather than from whichever Aspire CLI the machine has
+         installed. The bundle would make both a property of the machine: a developer and a runner could then start the
+         same commit against different builds of each, and the integration suite, which starts this app model through
+         `dotnet test` and needs no CLI at all, would start needing one. Aspire reports that choice as ASPIRE010 on every
+         build, and the warning is suppressed here alone because this is the only project it is raised for. -->
+    <AspireUseCliBundle>false</AspireUseCliBundle>
+    <NoWarn>$(NoWarn);ASPIRE010</NoWarn>
   </PropertyGroup>
-  <Sdk Name="Aspire.AppHost.Sdk" Version="13.4.6" />
+  <Sdk Name="Aspire.AppHost.Sdk" Version="13.6.1" />
 
   <ItemGroup>
     <PackageReference Include="Aspire.Hosting.AppHost" />

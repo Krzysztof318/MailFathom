@@ -1971,7 +1971,10 @@ resilience events and the Npgsql instruments.
 Two properties keep this arrangement honest:
 
 - **It is per run and in memory.** The dashboard retains nothing across restarts. Telemetry produced from a developer's
-  own synchronized mail never lands in a store that outlives the session.
+  own synchronized mail never lands in a store that outlives the session. That is the app model's statement rather than
+  the dashboard's default, which is to file each run on disk: the app host sets `Aspire:Dashboard:PersistenceMode` to
+  `None`, and [the local development page](local-development.md#running-locally-with-aspire) covers what stating
+  another mode writes.
 - **It is local.** The OTLP endpoint Aspire injects is a loopback address with a per-run key, so nothing is exported
   off the machine.
 

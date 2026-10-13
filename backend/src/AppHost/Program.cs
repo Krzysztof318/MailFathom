@@ -4,10 +4,25 @@
 
 using System.Globalization;
 using MailFathom.AppHost;
+using Microsoft.Extensions.Configuration.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 var builder = DistributedApplication.CreateBuilder(args);
+
+// What the dashboard keeps is decided here rather than inherited. Left alone, the dashboard an app host starts files
+// every run in a database under the developer's profile — resource snapshots with their environment, structured logs,
+// traces, and console logs, neither redacted nor encrypted — and keeps the last ten. This app model hands its host a
+// mailbox password and an administrator password as environment, and the telemetry of a developer's run is telemetry
+// about the mail that run synchronized, so that default would write both to disk on every start. The dashboard is
+// therefore told to keep a run in memory and nothing after it.
+//
+// Added beneath every other source rather than assigned, so it is a default and nothing more: a developer who wants
+// earlier runs back states the mode under the same key, in user secrets or in the environment, and theirs is the value
+// the dashboard is started with.
+builder.Configuration.Sources.Insert(
+    0,
+    new MemoryConfigurationSource { InitialData = OrchestrationContract.DashboardDefaults });
 
 // The integration-test suite starts this same app model, so the two shapes are selected here rather than duplicated in
 // a second app host: a developer's orchestration keeps its data across restarts, and a test run keeps nothing.
@@ -134,13 +149,25 @@ else
     // Aspire publishes it on the loopback address, so the server a developer reaches is not one anything else on their
     // network can.
     //
+    // The endpoint is proxied because it is stated to be, which a persistent container no longer is by default. Left
+    // to that default the orchestrator publishes the container's own port, allocates the number once, and files it in
+    // user secrets so the container is not recreated on the next run — and this app host's user secrets are one store
+    // for every clone and worktree on the machine. Every checkout would then ask for the port the first one was given,
+    // and the second to start while the first was running would fail to create its container. Behind the proxy the
+    // number a run publishes is found per run and filed nowhere, and the container's own port is whichever one its
+    // runtime hands it, which no two running containers share.
+    //
     // The volume keeps the name WithDataVolume would have given it, which is what makes it still one volume per
     // checkout: the generated name carries a hash of the app host's path, so a clone and a worktree own different
     // databases instead of racing for one. Only the path it is mounted at is stated here, for the reason above.
     postgres
         .WithVolume(VolumeNameGenerator.Generate(postgres, "data"), postgresDataDirectory)
         .WithLifetime(ContainerLifetime.Persistent)
-        .WithHostPort(PinnedPort(OrchestrationContract.PinnedPostgresPortKey));
+        .WithHostPort(PinnedPort(OrchestrationContract.PinnedPostgresPortKey))
+        .WithEndpoint(
+            OrchestrationContract.PostgresEndpointName,
+            endpoint => endpoint.IsProxied = true,
+            createIfNotExists: false);
 
     // Registered last, which is what makes its shutdown run first: a hosted service stops in reverse registration
     // order, and the orchestrator that carries out the stop is registered while the builder is created.
@@ -489,9 +516,10 @@ if (runsIntegrationTests)
 else
 {
     // The four host sockets and the client's own, each stated by the section that owns it and each on a free port this
-    // run found unless this checkout pinned one. Found here rather than left to the orchestrator, which allocates a
-    // port for the proxy it would put in front of a resource and refuses an endpoint that declares none while asking
-    // for no proxy — and no proxy is what keeps the socket a client reaches the socket Kestrel opened.
+    // run found unless this checkout pinned one, with no proxy in front of any of them — which is what keeps the socket
+    // a client reaches the socket Kestrel opened. Found here rather than left to the orchestrator, which does allocate
+    // a number for an unproxied endpoint that states none, but only once the application starts: the client's command
+    // line and the service address it is handed are composed from these numbers while the model is still being built.
     //
     // All five are found in one call whether or not any is pinned, because that is what makes them different from each
     // other; a pinned value then replaces the one it was found for and the others stay where they were put. The last

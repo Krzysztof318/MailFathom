@@ -400,6 +400,19 @@ because Aspire injects `OTEL_EXPORTER_OTLP_ENDPOINT` into the resources it start
 only place telemetry export is configured at all — a deployment exports nothing until an operator sets the variable
 themselves. [Telemetry](telemetry.md) records what the host emits and where it goes.
 
+What the dashboard shows lasts as long as the run and no longer. Left to its own default, the dashboard an app host
+starts files every run in a SQLite database under `~/.aspire/dashboard/` — each resource's snapshot with its
+environment, the structured logs, the traces, and the console logs, neither redacted nor encrypted — and keeps the last
+ten. This app model hands its host a mailbox password and the administrator password as environment, and the telemetry
+of a local run is telemetry about the mail that run synchronized, so the app host states
+`Aspire:Dashboard:PersistenceMode` as `None` beneath every other configuration source and the dashboard keeps a run in
+memory. A developer who wants an earlier run back states the mode themselves, as `Run` to keep each run or `Resume` to
+reopen the last one, and takes what that writes to their disk with it:
+
+```bash
+dotnet user-secrets --project backend/src/AppHost/AppHost.csproj set "Aspire:Dashboard:PersistenceMode" "Run"
+```
+
 A freshly started normal orchestration synchronizes the mailbox supplied through its required parameters. Its MCP and
 administrative endpoints accept unauthenticated local requests, and the client endpoint accepts the synthetic Basic
 credential above. These are AppHost development choices rather than changed product defaults: starting `Host.csproj`
@@ -447,6 +460,14 @@ orchestration should leave behind, and the lifetime has no third value between t
 rather than a PostgreSQL process and the port it holds. A shutdown that runs — `aspire stop`, or an ordinary
 termination — stops it; a process killed outright runs nothing and leaves the container up, which is then stopped with
 `docker stop` like any other.
+
+The server's port is proxied, and it is proxied because the app model says so. Aspire publishes a
+persistent container's own port unless the endpoint says otherwise, allocates that number once, and files it in user
+secrets so the container is not recreated on the next run — and the app host's user secrets are one store for every
+checkout on the machine, so each of them would ask for the port the first was given and the second to run beside it
+would fail to create its container. Behind the proxy the number a run publishes is taken per run and filed nowhere,
+while each checkout's container sits on whichever port the container runtime hands it, which no two running containers
+share.
 
 The server is reached with conventional credentials, so a database tool needs nothing this repository has to tell it
 beyond the port this run published:
@@ -1086,7 +1107,7 @@ The repository provisions no development environment, so install the SDK and any
 Two tools are installed globally when their workflows are needed:
 
 ```bash
-dotnet tool install --global Aspire.Cli --version 13.4.6
+dotnet tool install --global Aspire.Cli --version 13.6.1
 dotnet tool install --global csharp-ls --version 0.26.0
 ```
 
@@ -1120,9 +1141,9 @@ That split is why generating a migration needs no Docker and takes seconds, whil
 
 `MailFathomDbContextDesignTimeFactory` gives EF Core a context without starting the host, which matters because the host composes its connection string during startup and design-time tooling never runs that. It reads `ConnectionStrings__mailfathom` when the orchestration supplies it, then `MAILFATHOM_DESIGN_TIME_CONNECTION_STRING` for a command run outside it, and falls back to `Host=localhost;Database=mailfathom;Username=mailfathom`. The orchestrated value wins so a stale override left in a shell cannot point a migration at a different database than the one being migrated.
 
-It is used only when it is a connection string. Under `aspire publish` there is no database to name, so that variable carries the unresolved manifest expression `{mailfathom.connectionString}` — non-empty, and therefore not caught by an emptiness check — and the schema artifact the release attaches is generated in exactly that mode. A value the Npgsql parser rejects is skipped as though the variable were unset, because no connection could be opened from it and a command that opens none should not fail on it. The vector mapping is what made this observable: it needs a data source, which the provider builds while the options are constructed, so the string is parsed by every command rather than only by one that connects.
+Neither variable has to be set. Under `aspire publish` there is no database to name, so the migration resource withholds the connection string from `dotnet-ef` rather than handing it an unresolved manifest expression, and the schema artifact the release attaches is generated in exactly that mode: the factory falls through to the local default, which is parsed — the vector mapping needs a data source, and the provider builds one while the options are constructed — and never dialled, because generating a script opens no connection. The publish also leaves the build to `dotnet-ef`, which compiles `Host` and `Infrastructure` itself before it reads the migrations, where a migration command run from the dashboard passes `--no-build` over what the orchestration already built.
 
-`MAILFATHOM_DESIGN_TIME_CONNECTION_STRING` is deliberately not covered by that tolerance. It is written by hand for a command that usually does reach a database, so a malformed one fails rather than quietly sending `ef-database-update` to `localhost`.
+A value that is set and malformed fails, whichever of the two variables carried it. Each is written for a command that usually does reach a database, so a typo stops the command rather than quietly sending `ef-database-update` to `localhost`.
 
 Every migration in the repository is permanent. A model change appends one with `scripts/add-migration.sh <MigrationName>` and never regenerates, renames, reorders, or deletes an existing one, because a migration identifier that a database has written into its `__EFMigrationsHistory` can never be reached again once it is regenerated: that database can then only be recreated, destroying whatever it held. Nothing in the repository deletes a migration, and no command offers to.
 
@@ -1207,7 +1228,7 @@ Then read the resulting diff before committing it. A bump that moves one direct 
 
 ## Reading every pin against its upstream
 
-A version reaches a run from one of eight files, in seven syntaxes: the `PackageVersion` entries in `backend/Directory.Packages.props`, the exact versions the client's `frontend/package.json` and `frontend/src/*/package.json` declare, the six crate pins in `frontend/src-tauri/Cargo.toml`, the tool versions in `.config/dotnet-tools.json`, the SDK floor and any `msbuild-sdks` entries in `global.json`, the `uses:` references in `.github/workflows/`, and the container image tags and digests the deployment assets and the AppHost carry. `scripts/update-dependencies.sh` reads all of them in one pass, against the upstream that publishes each — nuget.org, registry.npmjs.org, crates.io, GitHub, the .NET release index, and the image registries — and against the terms `THIRD_PARTY_LICENSES.md` recorded when that version was reviewed.
+A version reaches a run from one of nine files, in eight syntaxes: the `PackageVersion` entries in `backend/Directory.Packages.props`, the exact versions the client's `frontend/package.json` and `frontend/src/*/package.json` declare, the six crate pins in `frontend/src-tauri/Cargo.toml`, the tool versions in `.config/dotnet-tools.json`, the SDK floor and any `msbuild-sdks` entries in `global.json`, the `<Sdk Name="…" Version="…" />` line a project file names an MSBuild SDK on — `backend/src/AppHost/AppHost.csproj` and its `Aspire.AppHost.Sdk` today — the `uses:` references in `.github/workflows/`, and the container image tags and digests the deployment assets and the AppHost carry. `scripts/update-dependencies.sh` reads all of them in one pass, against the upstream that publishes each — nuget.org, registry.npmjs.org, crates.io, GitHub, the .NET release index, and the image registries — and against the terms `THIRD_PARTY_LICENSES.md` recorded when that version was reviewed.
 
 ```bash
 scripts/update-dependencies.sh                      # survey every pin and report; writes nothing
@@ -1219,7 +1240,7 @@ scripts/update-dependencies.sh --only nuget         # one family at a time: nuge
 
 Each pin comes back as `current`, `behind`, `ahead`, `moved`, or `unknown`, beside the licence identifier its upstream declares *now* and the identifiers the register records for it. A disagreement between those two is printed as a line to read rather than as a failure, which is the same contract [`scripts/review-obligations.sh`](agent-workflow.md#entry-points) carries: the licence is read from the upstream's own metadata and the register side is read out of prose by pattern, so a flag is a place to look and never a conclusion. A `behind` row whose leading version segment moved also carries a `MAJOR` line, because that is the bump SemVer stops promising compatibility across — and under `0.y.z`, where it makes that promise about the minor instead, a moving minor is marked the same way. The line says where a break is *permitted* rather than that one happened, which is why it ends by pointing at the upstream's release notes: nothing here fetches them, and reading them is [the first of the four questions](agent-workflow.md#dependency-update-pull-requests) a bump answers. A reference outside version ordering carries no such line rather than a guessed one — a digest, and the timestamp naming a MinIO-derived release, are both that case. `moved` belongs to a digest pin alone: two digests are either equal or they are not, and which of them is newer is not a question a digest can answer, so a difference is reported as a difference rather than ranked. The whole run exits zero whatever it found, and a family whose host does not answer is reported as `unresolved` rather than ending the survey.
 
-`--apply` rewrites five of the seven: `backend/Directory.Packages.props`, the client's `package.json` manifests, `frontend/src-tauri/Cargo.toml`, `.config/dotnet-tools.json`, and the workflow references, along with `global.json`'s `msbuild-sdks` whenever it declares any — it declares none today, the Uno SDK having left with the client it belonged to. It then regenerates whichever lock files the pins it actually wrote belong to, and only those: the `--force-evaluate` restore above for a NuGet or MSBuild SDK pin, `pnpm install --lockfile-only` for a client package pin, and `cargo update --package <crate>` for each crate pin it moved — named crate by crate rather than as one bare `cargo update`, which would re-resolve the whole five-hundred-crate graph instead of the pin that changed. A tool manifest and an action reference reach no project graph, so neither obliges a lock file at all. Each ecosystem's tool is needed only when that ecosystem moved, which is why a survey runs on a machine that has never built either stack.
+`--apply` rewrites six of the eight: `backend/Directory.Packages.props`, the client's `package.json` manifests, `frontend/src-tauri/Cargo.toml`, `.config/dotnet-tools.json`, the workflow references, and a project file's `<Sdk>` line, along with `global.json`'s `msbuild-sdks` whenever it declares any — it declares none today, the Uno SDK having left with the client it belonged to. The `<Sdk>` line is read because central package management has no say over it: `Aspire.AppHost.Sdk` is released as one line with the hosting packages `backend/Directory.Packages.props` pins, and a sweep that moved those and could not see the SDK would leave the app host built by one Aspire generation against the packages of another. It then regenerates whichever lock files the pins it actually wrote belong to, and only those: the `--force-evaluate` restore above for a NuGet or MSBuild SDK pin, `pnpm install --lockfile-only` for a client package pin, and `cargo update --package <crate>` for each crate pin it moved — named crate by crate rather than as one bare `cargo update`, which would re-resolve the whole five-hundred-crate graph instead of the pin that changed. A tool manifest and an action reference reach no project graph, so neither obliges a lock file at all. Each ecosystem's tool is needed only when that ecosystem moved, which is why a survey runs on a machine that has never built either stack.
 
 Two families are surveyed and never rewritten:
 
