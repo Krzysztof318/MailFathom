@@ -216,8 +216,9 @@ public sealed class OrchestrationContractTests
 
     /// <summary>A port nothing pinned is one the host can actually bind, which is the whole of what the run needs from it.</summary>
     /// <remarks>
-    /// The orchestrator refuses an unproxied endpoint that states no port, so this is what stands in for its allocation.
-    /// A value the operating system reported free and immediately refuses to bind would be no allocation at all.
+    /// The orchestrator would allocate a number for an unproxied endpoint that states none, but only once the application
+    /// starts, so this is what stands in for the allocation the app model needs while it is still being built. A value
+    /// the operating system reported free and immediately refuses to bind would be no allocation at all.
     /// </remarks>
     [Fact]
     public void FindFreePorts_APortNothingPinned_IsOneAListenerCanBind()
