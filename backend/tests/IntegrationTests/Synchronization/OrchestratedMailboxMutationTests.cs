@@ -40,7 +40,7 @@ namespace MailFathom.IntegrationTests.Synchronization;
 /// </para>
 /// </remarks>
 [Collection(OrchestratedInfrastructureCollectionDefinition.Name)]
-[TestCaseOrderer(typeof(MailboxStateSequenceOrderer))]
+[TestMethodOrderer(typeof(MailboxStateSequenceOrderer))]
 public sealed class OrchestratedMailboxMutationTests(MailFathomOrchestrationFixture orchestration)
 {
     private const string ArchiveFolderName = "MutationArchive";

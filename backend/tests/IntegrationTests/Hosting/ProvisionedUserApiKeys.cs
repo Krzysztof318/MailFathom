@@ -65,6 +65,7 @@ internal static class ProvisionedUserApiKeys
             builder.Services.AddSingleton<IUserApiKeyMinter>(new KeyIsItsOwnLookup());
             builder.Services.RemoveAll<IUserCredentialStore>();
             builder.Services.AddSingleton(credentials);
+            UserGrantsHeldInProcess.GrantEveryUserEverything(builder.Services);
         };
     }
 

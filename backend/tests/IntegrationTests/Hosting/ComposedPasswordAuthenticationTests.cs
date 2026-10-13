@@ -267,6 +267,7 @@ public sealed class ComposedPasswordAuthenticationTests
                 builder.Services.RemoveAll<IUserCredentialStore>();
                 builder.Services.AddScoped(static _ => OneProvisionedCredential());
                 builder.Services.AddSingleton<IPasswordHasher>(new OneKnownPasswordHasher());
+                UserGrantsHeldInProcess.GrantEveryUserEverything(builder.Services);
             });
 
     /// <summary>The store as a deployment holding exactly one enabled credential answers.</summary>

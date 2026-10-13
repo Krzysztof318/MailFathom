@@ -25,7 +25,7 @@ namespace MailFathom.IntegrationTests.Synchronization;
 /// an order, whichever ran first would decide what the other found in the folder.
 /// </remarks>
 [Collection(OrchestratedInfrastructureCollectionDefinition.Name)]
-[TestCaseOrderer(typeof(MailboxStateSequenceOrderer))]
+[TestMethodOrderer(typeof(MailboxStateSequenceOrderer))]
 public sealed class OrchestratedMailboxSynchronizationTests(MailFathomOrchestrationFixture orchestration)
 {
     /// <summary>The folder this class owns, so its two runs are not disturbed by mail another test delivers to the inbox.</summary>
