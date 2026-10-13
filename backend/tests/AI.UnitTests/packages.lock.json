@@ -525,8 +525,8 @@
         "type": "Project",
         "dependencies": {
           "Azure.Identity": "[1.21.0, )",
-          "MailFathom.Application": "[0.8.0, )",
-          "MailFathom.Domain": "[0.8.0, )",
+          "MailFathom.Application": "[0.9.0, )",
+          "MailFathom.Domain": "[0.9.0, )",
           "Microsoft.Agents.AI": "[1.24.0, )",
           "Microsoft.Extensions.AI": "[10.10.0, )",
           "Microsoft.Extensions.AI.Abstractions": "[10.10.1, )",
@@ -539,7 +539,7 @@
       "MailFathom.Application": {
         "type": "Project",
         "dependencies": {
-          "MailFathom.Domain": "[0.8.0, )"
+          "MailFathom.Domain": "[0.9.0, )"
         }
       },
       "MailFathom.Domain": {

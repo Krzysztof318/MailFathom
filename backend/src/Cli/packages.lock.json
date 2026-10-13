@@ -73,7 +73,7 @@
       "MailFathom.Common": {
         "type": "Project",
         "dependencies": {
-          "MailFathom.Domain": "[0.8.0, )"
+          "MailFathom.Domain": "[0.9.0, )"
         }
       },
       "MailFathom.Domain": {
