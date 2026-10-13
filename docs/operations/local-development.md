@@ -1493,11 +1493,12 @@ which reads counters the runtime already keeps rather than instrumenting the mod
 rather than a slower suite. A text summary is printed where the run is read, and the HTML report is written to
 `artifacts/coverage/client/`.
 
-The measured scope is both packages' `src/` whether or not a test imported the file, so a module nobody covers sits at
-zero rather than going missing from the report. Three things are excluded: declaration files, `Client.App/src/main.tsx`
-— which mounts React into the document and decides nothing, the argument that excludes `Host` and `AppHost` above — and
-a `*.harness.tsx` module, which is the doubles and the render a family of test files shares and so runs only under a
-test. Vitest drops the suite's own test files.
+The measured scope is everything both packages wrote under `frontend/src/` whether or not a test imported the file, so
+a module nobody covers sits at zero rather than going missing from the report. Five things are excluded: declaration
+files, `Client.App/src/main.tsx` — which mounts React into the document and decides nothing, the argument that excludes
+`Host` and `AppHost` above — a `*.harness.tsx` module, which is the doubles and the render a family of test files shares
+and so runs only under a test, and `Client.App`'s `vite.config.ts` and `vitest.setup.ts`, which are that package's
+build configuration and the suite's own setup. Vitest drops the suite's own test files.
 
 **Nothing enforces it**, in either verification script or any workflow, and the 85% above stays the repository's only
 coverage threshold. `frontend/tests/AGENTS.md` § *Coverage* holds why a second one was refused rather than defaulted

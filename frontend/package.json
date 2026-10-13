@@ -31,7 +31,7 @@
     "@playwright/test": "1.64.0",
     "@tauri-apps/cli": "2.11.4",
     "@types/node": "26.6.5",
-    "@vitest/coverage-v8": "4.1.11",
+    "@vitest/coverage-v8": "5.0.4",
     "eslint": "10.12.0",
     "eslint-config-prettier": "10.1.8",
     "eslint-plugin-react-hooks": "7.1.1",
@@ -41,6 +41,6 @@
     "prettier": "3.9.10",
     "typescript": "6.0.3",
     "typescript-eslint": "8.71.1",
-    "vitest": "4.1.11"
+    "vitest": "5.0.4"
   }
 }
