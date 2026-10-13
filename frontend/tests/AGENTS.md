@@ -271,7 +271,7 @@ owns. Reaching a populated screen is most of the work in a client task, and it i
 - A file that reassigns a module-level double sets it back to its default in a `beforeEach`, so the order tests run in
   cannot decide what one of them sees.
 - **The runner empties every double's recorded calls in front of each test**, so a count or a last argument read in one
-  test is that test's own and no file clears one itself. What it does not touch is what a double answers: an
+  test is that test's own, and a file that still clears one itself is doing something already done for it. What it does not touch is what a double answers: an
   implementation a test gave one, and a spy placed over a real function, both outlive the test — which is what the
   bullet above and the `vi.restoreAllMocks()` a file calls on its way out are for. The other side of it is that calls
   recorded while a module loads are gone before the first test reads them, so a double is asserted on for what a test
