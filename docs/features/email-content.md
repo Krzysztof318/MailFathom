@@ -695,9 +695,10 @@ A font face is decided address by address, like everything else. Every address i
 filter, and a face has no declaration that can be dropped on its own, so one refused address removes the whole rule. A
 read without consent therefore loses every face that names a host and keeps one that names only a typeface already
 installed on the reader's machine; a consented read keeps both, and still loses a face whose `src` carries a scheme
-that runs or a `data:` URI that is not a picture. A face is kept only where each of its descriptors is one the policy
-names — the family, style, weight, stretch, range, display, and source — so a face declared with anything else is
-removed whole rather than served in part.
+that runs or a `data:` URI that is not a picture. A face is kept only where each of its descriptors is on the policy's
+CSS property allow-list, which is the sanitizer's own default list with `font-display` and `src` added to it. A face
+carrying a descriptor that list lacks — `size-adjust`, an `*-override`, or `font-variation-settings` — is removed whole
+rather than served in part.
 
 Two forms of remote address stay refused under consent as well, each for a reason of its own. An `@import` names a
 stylesheet this pass never read: the address itself is judged, but every rule and address in what it returns would reach
