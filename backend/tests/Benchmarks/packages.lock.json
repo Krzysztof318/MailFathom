@@ -40,11 +40,11 @@
       },
       "MimeKit": {
         "type": "Direct",
-        "requested": "[4.17.0, )",
-        "resolved": "4.17.0",
-        "contentHash": "h/KXsCreJf8RpR/PSAtlbvYtZFndp9N8Wn1Bs248AL7ITyhn+AiIY5bLTvt60tbN2mu6g8KadtBNWygTji2lqg==",
+        "requested": "[4.18.1, )",
+        "resolved": "4.18.1",
+        "contentHash": "D8AfFVMFVJldWmhQWCziC9nWUN/zayFFBAKpyjVyCeh0tqBiI9jtUVuMrKgWw1EGnCp09msDZldbRvp2jfUehQ==",
         "dependencies": {
-          "BouncyCastle.Cryptography": "2.6.2",
+          "BouncyCastle.Cryptography": "2.7.0",
           "System.Security.Cryptography.Pkcs": "10.0.0"
         }
       },
@@ -657,14 +657,14 @@
           "AngleSharp": "[1.8.4, )",
           "AngleSharp.Css": "[1.1.2, )",
           "Aspire.Npgsql.EntityFrameworkCore.PostgreSQL": "[13.6.1, )",
-          "BouncyCastle.Cryptography": "[2.6.2, )",
+          "BouncyCastle.Cryptography": "[2.7.0, )",
           "DnsClient": "[1.8.0, )",
           "HtmlSanitizer": "[9.2.1039, )",
           "Ical.Net": "[5.2.3, )",
           "MailFathom.Application": "[0.8.0, )",
           "MailFathom.Common": "[0.8.0, )",
           "MailFathom.Domain": "[0.8.0, )",
-          "MailKit": "[4.17.0, )",
+          "MailKit": "[4.18.1, )",
           "Microsoft.EntityFrameworkCore": "[10.0.12, )",
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.12, )",
           "Microsoft.Extensions.Hosting.Abstractions": "[10.0.12, )",
@@ -672,7 +672,7 @@
           "Microsoft.Extensions.Options.ConfigurationExtensions": "[10.0.12, )",
           "Microsoft.Extensions.Options.DataAnnotations": "[10.0.12, )",
           "Microsoft.Security.Utilities.Core": "[1.21.0, )",
-          "MimeKit": "[4.17.0, )",
+          "MimeKit": "[4.18.1, )",
           "NCalc": "[7.2.0, )",
           "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, )",
           "PdfPig": "[0.1.16, )",
@@ -686,8 +686,8 @@
       "MailFathom.SyntheticMail": {
         "type": "Project",
         "dependencies": {
-          "MailKit": "[4.17.0, )",
-          "MimeKit": "[4.17.0, )",
+          "MailKit": "[4.18.1, )",
+          "MimeKit": "[4.18.1, )",
           "OpenAI": "[2.12.0, )",
           "System.CommandLine": "[2.0.12, )"
         }
@@ -757,9 +757,9 @@
       },
       "BouncyCastle.Cryptography": {
         "type": "CentralTransitive",
-        "requested": "[2.6.2, )",
-        "resolved": "2.6.2",
-        "contentHash": "7oWOcvnntmMKNzDLsdxAYqApt+AjpRpP2CShjMfIa3umZ42UQMvH0tl1qAliYPNYO6vTdcGMqnRrCPmsfzTI1w=="
+        "requested": "[2.7.0, )",
+        "resolved": "2.7.0",
+        "contentHash": "U+12df8UEWHgBi04YVf/Lgi2dy3SItlIYvHjjEVa/BngCQIzDCDRBk50DDByCfDvSbe5pRNFr3b7UrVK2kMcLw=="
       },
       "DnsClient": {
         "type": "CentralTransitive",
@@ -788,11 +788,11 @@
       },
       "MailKit": {
         "type": "CentralTransitive",
-        "requested": "[4.17.0, )",
-        "resolved": "4.17.0",
-        "contentHash": "1nUAVLxM9fhT/78we6/AGsCesnpn5dRNLLeRqOfr52Wnk87pzVwo5YMTMyqnmoXrYc7piGhmayiMA/OgDluIjg==",
+        "requested": "[4.18.1, )",
+        "resolved": "4.18.1",
+        "contentHash": "EssBsnKHvIcH1QpqqsVUEWAlAHI3dkGXJpKAzSNJ8PGjClNynSo9bRkT68jVZkxhREm0Z51Dwu3127f4WfIiRg==",
         "dependencies": {
-          "MimeKit": "4.17.0"
+          "MimeKit": "4.18.1"
         }
       },
       "Microsoft.Agents.AI": {

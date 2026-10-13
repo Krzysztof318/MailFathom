@@ -86,9 +86,9 @@
     <!-- MimeKit brings this in transitively and the DKIM key locator names one of its types, because that is what
          MimeKit's locator contract returns. Pinned directly for the reason MimeKit itself is: a version the code
          compiles against is decided here rather than inherited from another package's dependency range. -->
-    <PackageVersion Include="BouncyCastle.Cryptography" Version="2.6.2" />
-    <PackageVersion Include="MailKit" Version="4.17.0" />
-    <PackageVersion Include="MimeKit" Version="4.17.0" />
+    <PackageVersion Include="BouncyCastle.Cryptography" Version="2.7.0" />
+    <PackageVersion Include="MailKit" Version="4.18.1" />
+    <PackageVersion Include="MimeKit" Version="4.18.1" />
     <!-- The iCalendar (RFC 5545) reader an imported `.ics` file is parsed by. The base class library carries none, and
          the format is exactly the kind nobody hand-rolls safely: lines are folded at 75 octets, values escape their own
          separators, every property carries parameters, and a date names a zone, a UTC instant, or neither. Referenced
