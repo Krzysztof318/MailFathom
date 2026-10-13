@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/fathomise/MailFathom
 
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 import { useScreenLayer } from '../shell/screenLayers';
 
 // The other shape the two surfaces opened from a message take, and the one `useOpenTabs.ts` describes as standing *in
@@ -54,7 +54,7 @@ export function SurfaceWindow({
 }) {
     // The element is held as state rather than in a ref because the way out of this window is handed *to* the surface
     // inside it, which happens while this component renders — and a ref is a value a render may not read. What that
-    // costs is one further render as the element arrives, which is the render that then opens it.
+    // costs is one further render as the element arrives.
     const [standing, setStanding] = useState<HTMLDialogElement | null>(null);
 
     // The one way out, and every other one leads here: the surface's own close control, Escape, and the back gesture
@@ -63,11 +63,19 @@ export function SurfaceWindow({
         standing?.close();
     }, [standing]);
 
-    // The one imperative browser API this surface synchronizes with, which is the whole of what an effect is for. It
-    // runs when the element arrives, and the element is in the document exactly as long as the window is open.
-    useEffect(() => {
-        standing?.showModal();
-    }, [standing]);
+    // The window is opened as its element arrives rather than in an effect of this component's, because the surface
+    // inside places focus at its own start in an effect of its own, and a child's effect runs before its parent's.
+    // Opened any later, that focus is asked of a region inside a dialog the platform is not drawing yet — which a
+    // browser refuses, so the reader would be left wherever the platform's own opening steps happened to land. A
+    // window already open is never opened again: `showModal` on one throws rather than doing nothing, and StrictMode
+    // hands the element over twice.
+    const arrived = useCallback((dialog: HTMLDialogElement | null) => {
+        if (dialog !== null && !dialog.open) {
+            dialog.showModal();
+        }
+
+        setStanding(dialog);
+    }, []);
 
     // It stands over the message, so the back gesture closes it before it navigates anywhere, and going to another
     // destination leaves it behind rather than over the screen somebody arrives at.
@@ -75,7 +83,7 @@ export function SurfaceWindow({
 
     return (
         <dialog
-            ref={setStanding}
+            ref={arrived}
             aria-label={label}
             onClose={onClosed}
             // The insets are the screen's here rather than the frame's, exactly as they are for the settings surface: a

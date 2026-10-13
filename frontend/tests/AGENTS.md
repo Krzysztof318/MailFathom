@@ -146,6 +146,16 @@ under a second gate running beside them, passing alone, and passing on the re-ru
   behaviour and has no test is a gap to justify, not a default. What jsdom cannot answer is anything about layout: it
   computes no geometry, so element size, position, overflow, scrolling, focus rings, and anything visual are outside
   what a test here may claim.
+- **Whether something is drawn at all is the one visual fact jsdom does answer, and focus depends on it.** It reads
+  `display` out of its own stylesheet and out of an inline style, and `focus()` there does what a browser's does: an
+  element hidden by `display`, and a disabled control, take no focus and the call says nothing. So an assertion on
+  `document.activeElement` is only ever about an element somebody could be looking at, which makes two things part of
+  the test rather than of its setup. A `dialog` is open before anything inside it is focused — `showModal` as
+  `src/Client.App/vitest.setup.ts` puts it back marks the element open, and jsdom hides a closed one. And a popover is
+  shown, which that file's stand-ins do not do: a test about focus inside one records, on that element, the pair of
+  methods as drawing it and hiding it again, the way `src/Client.App/src/shell/AccountMenu.test.tsx` does. A focus
+  assertion that fails for this reason is answered by which of the two it is — the component focused something not yet
+  drawn, which is a defect in the component, or the test pressed something nobody could have reached.
 
 ## What is faked, and where
 

@@ -193,6 +193,38 @@ function theMenuIsOpened(): ReturnType<typeof vi.fn> {
     return hidden;
 }
 
+/**
+ * The menu drawn for as long as the platform would be showing it, which jsdom shows for no popover at all.
+ *
+ * jsdom hides every popover from its own stylesheet and declares neither method that would change that, so the pair
+ * the menu would have is recorded as the one thing a document can carry of them: being drawn or not. That is what
+ * decides whether a row inside may take focus, in jsdom as in a browser. The menu is handed back so that a test opens
+ * it by the method the control at the foot of the rail comes to, jsdom implementing no invoker either.
+ */
+function theMenuIsDrawnWhileShown(): HTMLElement {
+    const menu = document.getElementById('account-menu');
+
+    if (menu === null) {
+        throw new Error('The menu was not drawn.');
+    }
+
+    Object.defineProperty(menu, 'showPopover', {
+        configurable: true,
+        value: () => {
+            menu.style.display = 'block';
+        },
+    });
+
+    Object.defineProperty(menu, 'hidePopover', {
+        configurable: true,
+        value: () => {
+            menu.style.removeProperty('display');
+        },
+    });
+
+    return menu;
+}
+
 // jsdom draws a popover closed and never opens one — it implements neither the invoker nor `showPopover` — so what is
 // inside the menu is read as hidden, which is what a browser reports of a closed popover too. The tests below read
 // through that rather than pretending it is open, because opening it is the platform's and not this component's.
@@ -269,10 +301,14 @@ describe('AccountMenu', () => {
         expect(screen.getByRole('dialog', { name: 'Settings' })).toBeDefined();
     });
 
+    // Read without `hidden: true`, unlike the rows above: somebody presses this row in a menu that is open, and the
+    // focus it is handed afterwards is only ever taken by a row that is drawn — a browser focuses nothing inside a
+    // closed popover, so the assertion at the end holds only if the menu was put back before the row was focused.
     it('hands focus back to the row that opened the screen once it closes', () => {
         renderMenu({ profile: { ...nobody, displayName: 'Ada Lovelace' } });
+        theMenuIsDrawnWhileShown().showPopover();
 
-        const row = screen.getByRole('button', { name: 'Settings', hidden: true });
+        const row = screen.getByRole('button', { name: 'Settings' });
         fireEvent.click(row);
         fireEvent.click(screen.getByRole('button', { name: 'Close settings' }));
 

@@ -3,6 +3,7 @@
 // Project repository: https://github.com/fathomise/MailFathom
 
 import { fireEvent, render, renderHook, screen, within } from '@testing-library/react';
+import { useEffect, useRef } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { ScreenLayersContext, useScreenLayerStack } from '../shell/screenLayers';
 import { SurfaceWindow } from './SurfaceWindow';
@@ -45,11 +46,39 @@ function theWindow(): HTMLElement {
     return screen.getByRole('dialog', { name: named });
 }
 
+// What both real surfaces do as they are drawn: opening one is a view change, so each places focus at its own start
+// in an effect of its own. Only that is stood in for, because when the window is open relative to it is the window's.
+function SurfacePlacingFocusAtItsStart() {
+    const start = useRef<HTMLElement>(null);
+
+    useEffect(() => {
+        start.current?.focus();
+    }, []);
+
+    return <section ref={start} tabIndex={-1} aria-label={named} />;
+}
+
 describe('SurfaceWindow', () => {
     it('opens as a modal dialog named for what stands in it, rather than as a panel drawn to look like one', () => {
         drawWindow(vi.fn());
 
         expect(theWindow().hasAttribute('open')).toBe(true);
+    });
+
+    // A browser focuses nothing inside a dialog it is not drawing, so a window opened after the surface asked would
+    // leave the reader wherever the platform's own opening steps landed rather than at the start of what was opened.
+    it('is open by the time the surface inside it places focus at its own start', () => {
+        const { result } = renderHook(() => useScreenLayerStack());
+
+        render(
+            <ScreenLayersContext value={result.current}>
+                <SurfaceWindow label={named} drawn="markup" onClosed={vi.fn()}>
+                    {() => <SurfacePlacingFocusAtItsStart />}
+                </SurfaceWindow>
+            </ScreenLayersContext>,
+        );
+
+        expect(document.activeElement).toBe(within(theWindow()).getByRole('region', { name: named }));
     });
 
     it('draws the surface it was given inside that window', () => {
