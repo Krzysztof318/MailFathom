@@ -3,19 +3,19 @@
   "isRoot": true,
   "tools": {
     "dotnet-reportgenerator-globaltool": {
-      "version": "5.5.10",
+      "version": "5.5.11",
       "commands": [
         "reportgenerator"
       ]
     },
     "dotnet-ef": {
-      "version": "10.0.10",
+      "version": "10.0.12",
       "commands": [
         "dotnet-ef"
       ]
     },
     "docfx": {
-      "version": "2.78.5",
+      "version": "2.81.0",
       "commands": [
         "docfx"
       ]
@@ -27,7 +27,7 @@
       ]
     },
     "dotnet-stryker": {
-      "version": "4.16.0",
+      "version": "5.0.0",
       "commands": [
         "dotnet-stryker"
       ]

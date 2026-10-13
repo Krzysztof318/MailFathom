@@ -20,7 +20,7 @@ set -euo pipefail
 #
 # The runner is Microsoft Testing Platform rather than VSTest, because that is the only one that
 # reaches xUnit v3: `xunit.v3.mtp-v2` carries no VSTest adapter, so Stryker's default runner finds no
-# tests at all here. It is preview in Stryker 4.16 and says so on every run.
+# tests at all here. Stryker calls it preview and says so on every run.
 
 if ! repository_root="$(git rev-parse --show-toplevel 2> /dev/null)"; then
   printf 'mutation-score.sh must run inside a Git repository.\n' >&2
