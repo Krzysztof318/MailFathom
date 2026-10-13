@@ -251,6 +251,50 @@ public sealed class MailKitImapSessionResilienceTests
         Assert.All(FetchRequestsOf(recoveredFolder), request => Assert.Equal(MessageSummaryItems.None, request.Items & MessageSummaryItems.Envelope));
     }
 
+    /// <summary>
+    /// The pass the fallback is given outside the pipeline answers a refused envelope and nothing else. A session that
+    /// remembers one from an earlier batch must not read an unreachable server as another, or every outage would cost
+    /// the attempt budget twice with no backoff between the two.
+    /// </summary>
+    [Fact]
+    public async Task GetEmailBatchAfterAsync_ServerUnreachableAfterAnEarlierRefusedEnvelope_SpendsTheAttemptBudgetOnce()
+    {
+        // Arrange
+        using var resilience = OutboundResilienceTestHost.WithConfiguredSettings();
+        var refusingClient = new FakeImapClient();
+        var recoveredClient = new FakeImapClient();
+        refusingClient.AuthenticationMechanisms.Add("PLAIN");
+        refusingClient.Folder = CreateFolderRefusingEnvelopes(new UniqueId(10));
+        recoveredClient.AuthenticationMechanisms.Add("PLAIN");
+        recoveredClient.Folder = CreateFolderRefusingEnvelopes(new UniqueId(10));
+        var reachableConnections = new Queue<FakeImapClient>([refusingClient, recoveredClient]);
+        var unreachableConnections = new List<FakeImapClient>();
+        var factory = CreateFactory(
+            resilience,
+            () => reachableConnections.Count > 0
+                ? reachableConnections.Dequeue().Client
+                : CreateUnreachableConnection(unreachableConnections),
+            CreateSettingsProvider());
+        await using var session = await factory.OpenReadOnlyAsync(
+            PrimaryAccount,
+            InboxFolder,
+            TlsOnConnectWithPlainPolicy,
+            CancellationToken.None);
+        await resilience.CompleteOnVirtualTimeAsync(
+            session.GetEmailBatchAfterAsync(null, 100, MailSynchronizationWindow.Unbounded, CancellationToken.None),
+            BackoffAdvanceStep);
+        recoveredClient.DropConnection(new IOException("the server closed the connection"));
+
+        // Act
+        await Assert.ThrowsAsync<MailboxUnavailableException>(
+            () => resilience.CompleteOnVirtualTimeAsync(
+                session.GetEmailBatchAfterAsync(null, 100, MailSynchronizationWindow.Unbounded, CancellationToken.None),
+                BackoffAdvanceStep));
+
+        // Assert
+        Assert.Equal(3, unreachableConnections.Count);
+    }
+
     /// <summary>An exhausted retry budget rethrows the last transient failure, which must still reach the worker as mailbox unavailability.</summary>
     [Fact]
     public async Task GetEmailBatchAfterAsync_EveryAttemptFailsTransiently_ReportsTheMailboxUnavailableRatherThanTheMailLibraryFailure()
@@ -406,6 +450,16 @@ public sealed class MailKitImapSessionResilienceTests
         client.AuthenticationMechanisms.Add("PLAIN");
         client.Folder = folder;
         establishedClients.Add(client);
+
+        return client.Client;
+    }
+
+    /// <summary>Builds a fresh connection whose server never accepts it, and records it so a test can count the attempts an outage cost.</summary>
+    private static IImapClient CreateUnreachableConnection(List<FakeImapClient> attemptedConnections)
+    {
+        var client = new FakeImapClient();
+        client.ConnectBehavior = _ => throw new IOException("the server refused the connection");
+        attemptedConnections.Add(client);
 
         return client.Client;
     }

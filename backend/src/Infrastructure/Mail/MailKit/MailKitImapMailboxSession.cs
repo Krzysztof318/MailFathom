@@ -93,13 +93,18 @@ internal sealed class MailKitImapMailboxSession(
     internal const MessageSummaryItems ReconciliationSummaryItems =
         MessageSummaryItems.Flags | MessageSummaryItems.UniqueId;
 
-    /// <summary>The only items the discovery fetch may ever ask for.</summary>
+    /// <summary>The only summary items the discovery fetch may ever ask for.</summary>
     /// <remarks>
     /// It is bound by the same read-only invariant as <see cref="ReconciliationSummaryItems" /> and named for the same
     /// reason: every item here is answered out of the envelope and the folder's own state, so the command IMAP receives
     /// cannot set <c>\Seen</c> on the messages a run is discovering. <c>FLAGS</c> rides the fetch that was already being
     /// issued, which is what lets a run know whether the server had marked a message read without a second round trip
     /// and without touching it.
+    /// <para>
+    /// The one thing a discovery fetch asks for beyond this set is <see cref="DiscoveryHeaders" />, which replaces the
+    /// envelope item once a session has met an envelope it could not read. That is a peek at three header fields, so it
+    /// retrieves header content and still sets no flag.
+    /// </para>
     /// </remarks>
     internal const MessageSummaryItems DiscoverySummaryItems =
         MessageSummaryItems.Envelope | MessageSummaryItems.UniqueId | MessageSummaryItems.Size | MessageSummaryItems.Flags;
@@ -149,19 +154,30 @@ internal sealed class MailKitImapMailboxSession(
             return new RemoteEmailMetadataBatch([], checkpointUid, HasMore: false);
         }
 
+        var envelopeWasRefusedHere = false;
         var headersWereAttempted = false;
 
         Task<RemoteEmailMetadataBatch> ReadBatchAsync() => connection.ExecuteFolderReadAsync(
-            (_, openFolder, attemptToken) =>
+            async (_, openFolder, attemptToken) =>
             {
-                headersWereAttempted |= this.envelopesAreUnreadable;
+                var describesFromHeaders = this.envelopesAreUnreadable;
+                headersWereAttempted |= describesFromHeaders;
 
-                return this.SearchAndFetchBatchAsync(
-                    openFolder,
-                    lastSeenUid,
-                    maxEmailCount,
-                    synchronizationWindow,
-                    attemptToken);
+                try
+                {
+                    return await this.SearchAndFetchBatchAsync(
+                        openFolder,
+                        lastSeenUid,
+                        maxEmailCount,
+                        synchronizationWindow,
+                        attemptToken);
+                }
+                catch (ImapProtocolException) when (!describesFromHeaders && this.envelopesAreUnreadable)
+                {
+                    envelopeWasRefusedHere = true;
+
+                    throw;
+                }
             },
             cancellationToken);
 
@@ -169,11 +185,13 @@ internal sealed class MailKitImapMailboxSession(
         {
             return await ReadBatchAsync();
         }
-        catch (MailboxUnavailableException) when (this.envelopesAreUnreadable && !headersWereAttempted)
+        catch (MailboxUnavailableException) when (envelopeWasRefusedHere && !headersWereAttempted)
         {
             // The pipeline's next attempt is what ordinarily reads the batch from its headers. An operator may have
             // configured a single attempt, though, and a folder must advance past such a message under that
-            // configuration as well, so the fallback is given the attempt the pipeline had none left for.
+            // configuration as well, so the fallback is given the attempt the pipeline had none left for. The
+            // condition is this call's own refused envelope and never the session's memory of an earlier one: a
+            // server that is merely unreachable has spent the pipeline's whole budget already and earns no second.
             return await ReadBatchAsync();
         }
     }
