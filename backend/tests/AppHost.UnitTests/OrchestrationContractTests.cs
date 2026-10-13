@@ -606,6 +606,64 @@ public sealed class OrchestrationContractTests
         Assert.Equal(1, switches);
     }
 
+    /// <summary>A run that stated nothing keeps its dashboard in memory, so no credential and no mail telemetry is filed on disk.</summary>
+    [Fact]
+    public void DashboardDefaults_NothingStated_KeepTheDashboardInMemory()
+    {
+        // Act
+        var defaults = OrchestrationContract.DashboardDefaults;
+
+        // Assert
+        var setting = Assert.Single(defaults);
+
+        Assert.Equal("Aspire:Dashboard:PersistenceMode", setting.Key);
+        Assert.Equal("None", setting.Value);
+    }
+
+    /// <summary>The dashboard defaults sit beneath every other source, so a developer's own value is the one that holds.</summary>
+    /// <remarks>
+    /// Nothing in the type system separates a default from an override here: the same entries added last would win over
+    /// user secrets and the environment, and a developer asking for earlier runs back would be ignored without a word.
+    /// </remarks>
+    [Fact]
+    public void Program_TheDashboardDefaults_AreAddedBeneathEveryOtherSource()
+    {
+        // Arrange
+        var program = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Build", "Program.cs"));
+
+        // Act
+        var statements = program.Split(nameof(OrchestrationContract.DashboardDefaults)).Length - 1;
+        var statement = program.IndexOf(
+            $"new MemoryConfigurationSource {{ InitialData = OrchestrationContract.{nameof(OrchestrationContract.DashboardDefaults)} }}",
+            StringComparison.Ordinal);
+        var insertion = program.LastIndexOf("builder.Configuration.Sources.Insert(", statement, StringComparison.Ordinal);
+
+        // Assert
+        Assert.Equal(1, statements);
+        Assert.True(statement >= 0);
+        Assert.Matches(@"^builder\.Configuration\.Sources\.Insert\(\s*0,\s*$", program[insertion..statement]);
+    }
+
+    /// <summary>The developer's PostgreSQL is reached through a proxy, so no checkout files its port where another reads it.</summary>
+    /// <remarks>
+    /// A persistent container is unproxied unless its endpoint says otherwise, and an unproxied port is allocated once
+    /// and kept in user secrets — one store for every checkout of this repository on a machine.
+    /// </remarks>
+    [Fact]
+    public void Program_ThePersistentPostgresEndpoint_IsStatedAsProxied()
+    {
+        // Arrange
+        var program = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Build", "Program.cs"));
+
+        // Act
+        var lifetime = program.IndexOf(".WithLifetime(ContainerLifetime.Persistent)", StringComparison.Ordinal);
+        var declaration = program[lifetime..program.IndexOf(';', lifetime)];
+
+        // Assert
+        Assert.Contains(nameof(OrchestrationContract.PostgresEndpointName), declaration, StringComparison.Ordinal);
+        Assert.Contains("endpoint.IsProxied = true", declaration, StringComparison.Ordinal);
+    }
+
     private static string IdentifierOf(string prefix) =>
         prefix[(OrchestrationContract.EphemeralResourceNamePrefix.Length + GeneratedIdentifierSeparator.Length)..];
 }

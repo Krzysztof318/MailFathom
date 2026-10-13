@@ -89,59 +89,30 @@ internal sealed class MailFathomDbContextDesignTimeFactory : IDesignTimeDbContex
     /// different database than the one the resource being migrated is running against.
     /// </para>
     /// <para>
-    /// An orchestrated value that is not a connection string at all is ignored rather than used. Under
-    /// <c>aspire publish</c> there is no database to name, so the variable carries the unresolved manifest expression
-    /// <c>{mailfathom.connectionString}</c> — non-empty, and therefore past the emptiness check above. Nothing had to
-    /// notice until the vector mapping arrived: it needs an <see cref="NpgsqlDataSource" />, which the provider
-    /// builds while the options are constructed, so the string is now parsed by every command rather than only by one
-    /// that opens a connection. Generating a migration script opens none, and refusing to produce the release's schema
-    /// artifact over an address nobody was going to dial is the failure this avoids.
+    /// Neither has to be present. <c>aspire publish</c> issues no orchestrated value at all — there is no database to
+    /// name while a release's schema artifact is generated, so the migration resource withholds the connection string
+    /// from <c>dotnet-ef</c> rather than hand it an unresolved manifest expression — and the options then name
+    /// <see cref="LocalDevelopmentConnectionString" />. That address is parsed and never dialled: the vector mapping
+    /// needs an <see cref="NpgsqlDataSource" />, which the provider builds while the options are constructed, and
+    /// generating a migration script opens no connection.
     /// </para>
     /// <para>
-    /// The developer's own override is deliberately not covered by that tolerance. It is written by hand for a command
-    /// that usually does connect, so a malformed one is a typo worth failing on rather than a reason to quietly apply a
-    /// migration to <see cref="LocalDevelopmentConnectionString" /> instead of to the database that was meant.
+    /// A value that is present and malformed is kept and fails, whichever variable carried it. Each of them is written
+    /// for a command that usually does connect, so quietly applying a migration to
+    /// <see cref="LocalDevelopmentConnectionString" /> instead of to the database that was meant is the outcome worth
+    /// refusing.
     /// </para>
     /// </remarks>
     internal static DbContextOptions<MailFathomDbContext> BuildOptions(
         string? orchestratedConnectionString,
         string? designTimeConnectionString)
     {
-        var usableOrchestratedConnectionString =
-            IsConnectionString(orchestratedConnectionString) ? orchestratedConnectionString : null;
-
-        var connectionString = new[] { usableOrchestratedConnectionString, designTimeConnectionString }
+        var connectionString = new[] { orchestratedConnectionString, designTimeConnectionString }
             .FirstOrDefault(candidate => !string.IsNullOrWhiteSpace(candidate))
             ?? LocalDevelopmentConnectionString;
 
         return new DbContextOptionsBuilder<MailFathomDbContext>()
             .UseNpgsql(connectionString, npgsql => npgsql.UseVector())
             .Options;
-    }
-
-    /// <summary>Reports whether a candidate is a connection string Npgsql can parse.</summary>
-    /// <param name="candidate">The value read from the environment, or <see langword="null" /> when unset.</param>
-    /// <returns><see langword="true" /> when the candidate parses; otherwise <see langword="false" />.</returns>
-    /// <remarks>
-    /// Parsing is the test rather than a pattern match on the manifest expression's braces, because what makes a value
-    /// unusable is that no connection could be opened from it, and that is exactly what the parser decides.
-    /// </remarks>
-    private static bool IsConnectionString(string? candidate)
-    {
-        if (string.IsNullOrWhiteSpace(candidate))
-        {
-            return false;
-        }
-
-        try
-        {
-            _ = new NpgsqlConnectionStringBuilder(candidate);
-
-            return true;
-        }
-        catch (ArgumentException)
-        {
-            return false;
-        }
     }
 }

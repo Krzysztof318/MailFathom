@@ -4,18 +4,18 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageVersion Include="Aspire.Hosting.AppHost" Version="13.4.6" />
+    <PackageVersion Include="Aspire.Hosting.AppHost" Version="13.6.1" />
     <!-- The only prerelease pin in the repository. AddEFMigrations is the sole supported way to run dotnet-ef against
          the orchestration on Aspire 13: the aspire exec command that earlier versions offered no longer exists, and the
          package ships no stable build. It is referenced by AppHost alone, so nothing it carries reaches a deployed
          assembly. -->
-    <PackageVersion Include="Aspire.Hosting.EntityFrameworkCore" Version="13.4.6-preview.1.26319.6" />
-    <PackageVersion Include="Aspire.Hosting.PostgreSQL" Version="13.4.6" />
-    <PackageVersion Include="Aspire.Hosting.Testing" Version="13.4.6" />
+    <PackageVersion Include="Aspire.Hosting.EntityFrameworkCore" Version="13.6.1-preview.1.26506.6" />
+    <PackageVersion Include="Aspire.Hosting.PostgreSQL" Version="13.6.1" />
+    <PackageVersion Include="Aspire.Hosting.Testing" Version="13.6.1" />
     <!-- The Valkey hosting integration, which is what lets a developer's orchestration and the integration suite start
          the RESP server the client signal backplane crosses. Referenced by AppHost alone, so nothing it carries reaches
          a deployed assembly; what a deployment runs beside MailFathom is the server rather than this package. -->
-    <PackageVersion Include="Aspire.Hosting.Valkey" Version="13.4.6" />
+    <PackageVersion Include="Aspire.Hosting.Valkey" Version="13.6.1" />
     <PackageVersion Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.6.1" />
     <!-- The non-interactive Microsoft Entra credentials an Azure OpenAI endpoint is reached with where no key exists to
          provision. Referenced by AI alone, and only for the four credential types a background service can hold; the

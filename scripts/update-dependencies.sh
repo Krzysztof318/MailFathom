@@ -15,7 +15,7 @@ set -euo pipefail
 #   scripts/update-dependencies.sh --only <family>      restrict to one of: nuget, npm, crates, tools, sdk, actions,
 #                                                       images
 #
-# A version reaches a run from one of eight files, in seven syntaxes, and nothing until now read them together. The
+# A version reaches a run from one of nine files, in eight syntaxes, and nothing until now read them together. The
 # question this answers is the one no tooling here answers otherwise: which pins are behind, and did any of them change
 # licence since somebody reviewed it. Dependabot version updates were removed deliberately in #304/#305 and are not
 # coming back — the pull request they produced carried a version number while the work that costs something, reading
@@ -404,8 +404,34 @@ survey_tool_manifest() {
   done < <(jq -r '.tools | to_entries[] | "\(.key)\t\(.value.version)"' "$tool_manifest")
 }
 
+# An MSBuild SDK a project names on a line of its own, `<Sdk Name="…" Version="…" />`, which is the one place a version
+# is written inside a project file rather than in a pin file: central package management governs `PackageReference` and
+# has no say over an SDK. `Aspire.AppHost.Sdk` is the worked example, and it is released as one line with the hosting
+# packages `Directory.Packages.props` pins — so a sweep that moved those and could not see this left an app host built
+# by one Aspire generation against the packages of another.
+survey_project_sdk_pins() {
+  local project sdk_id pinned latest licence recorded
+
+  while IFS= read -r project; do
+    [[ -f "$project" ]] || continue
+
+    while IFS=$'\t' read -r sdk_id pinned; do
+      [[ -n "$sdk_id" ]] || continue
+
+      latest="$(nuget_latest_version "$sdk_id" 'false')"
+      licence="$(nuget_licence "$sdk_id" "$latest")"
+      recorded="$(register_recorded_licences "$sdk_id")"
+
+      record 'sdk' "$sdk_id" "$pinned" "$latest" "$licence" "$recorded" "$project (<Sdk> line)" "$project"
+    done < <(grep -oE '<Sdk Name="[^"]+" Version="[^"]+"' "$project" \
+      | sed -E 's|<Sdk Name="([^"]+)" Version="([^"]+)"|\1\t\2|')
+  done < <(git ls-files -- '*.csproj' '*.props' '*.targets')
+}
+
 survey_sdk_pins() {
   local sdk_pin channel latest_sdk sdk_id pinned latest licence recorded
+
+  survey_project_sdk_pins
 
   [[ -f "$global_json" ]] || return 0
 
@@ -894,9 +920,14 @@ rewrite_pin() {
       mv "$temporary" "$source"
       ;;
     sdk)
-      temporary="$work_directory/global.json"
-      jq --indent 2 --arg sdk "$component" --arg version "$latest" '."msbuild-sdks"[$sdk] = $version' "$source" > "$temporary"
-      mv "$temporary" "$source"
+      # Two homes for one family: `global.json` names an SDK as a key, and a project file names it as an element.
+      if [[ "$source" == *.json ]]; then
+        temporary="$work_directory/global.json"
+        jq --indent 2 --arg sdk "$component" --arg version "$latest" '."msbuild-sdks"[$sdk] = $version' "$source" > "$temporary"
+        mv "$temporary" "$source"
+      else
+        sed -i -E "s#(<Sdk Name=\"$(as_pattern "$component")\" Version=\")$(as_pattern "$pinned")(\")#\1$(as_replacement "$latest")\2#" "$source"
+      fi
       ;;
     actions)
       # Two expressions rather than one anchored pattern: a reference at the end of its line, and a reference followed by

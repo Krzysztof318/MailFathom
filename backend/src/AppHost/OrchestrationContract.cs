@@ -22,6 +22,10 @@ public static class OrchestrationContract
     /// <summary>The PostgreSQL server resource.</summary>
     public const string PostgresResourceName = "postgres";
 
+    /// <summary>The endpoint the PostgreSQL server resource publishes its port under.</summary>
+    /// <remarks>The name the hosting package gives it, restated because the app model configures that endpoint after the package declared it.</remarks>
+    public const string PostgresEndpointName = "tcp";
+
     /// <summary>The login the orchestrated PostgreSQL server is created with.</summary>
     /// <remarks>
     /// The conventional one, so a <c>psql</c> invocation or a database tool needs nothing beyond the host and the port.
@@ -741,6 +745,30 @@ public static class OrchestrationContract
     /// </remarks>
     public const string EphemeralRunIdentifierVariable = "MAILFATHOM_INTEGRATIONTESTS_RUN_ID";
 
+    /// <summary>The configuration key the dashboard's persistence mode is read from.</summary>
+    /// <remarks>
+    /// Aspire's own key rather than one this app model declares: the hosting package reads it when it starts the
+    /// dashboard, so a developer changes the mode with the name Aspire documents. <c>Run</c> files each run on disk and
+    /// <c>Resume</c> reopens the last one; the dashboard's environment form of the same setting,
+    /// <c>ASPIRE_DASHBOARD_PERSISTENCE_MODE</c>, outranks this key.
+    /// </remarks>
+    public const string DashboardPersistenceModeKey = "Aspire:Dashboard:PersistenceMode";
+
+    /// <summary>The persistence mode under which the dashboard writes nothing to disk.</summary>
+    public const string DashboardPersistenceModeInMemory = "None";
+
+    /// <summary>What the app model states about the dashboard where a developer stated nothing.</summary>
+    /// <remarks>
+    /// One entry, and it is a privacy decision rather than a preference: the dashboard an app host starts otherwise
+    /// persists every run — resource environment, logs, and traces, unredacted and unencrypted — and a run of this app
+    /// model carries credentials in its environment and mail in its telemetry.
+    /// </remarks>
+    public static IReadOnlyDictionary<string, string?> DashboardDefaults { get; } =
+        new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+        {
+            [DashboardPersistenceModeKey] = DashboardPersistenceModeInMemory,
+        }.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>The configuration key a developer states the MCP endpoint's port under to pin it.</summary>
     /// <remarks>
     /// <para>
@@ -1011,10 +1039,10 @@ public static class OrchestrationContract
     /// <returns>That many ports, each free when it was asked for and none equal to another.</returns>
     /// <remarks>
     /// <para>
-    /// An unproxied endpoint has to state its number: the orchestrator allocates a port for the proxy it would put in
-    /// front of the resource, and there is no proxy here, so it refuses the endpoint rather than choosing for it. What
-    /// keeps a run off another run's port is therefore this — the operating system's own answer to which port is free,
-    /// which is the same answer it gives a proxy.
+    /// The orchestrator allocates a number for an unproxied endpoint that states none, but it does so when the
+    /// application starts, and the app model needs these while it is still being built: the client's command line and
+    /// the service address it is handed are composed from them. What keeps a run off another run's port is therefore
+    /// this — the operating system's own answer to which port is free.
     /// </para>
     /// <para>
     /// Every port is asked for before any is released, which is what makes them different from one another. Asking one

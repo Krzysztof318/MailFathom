@@ -8850,6 +8850,15 @@ WORKFLOW
 }
 MANIFEST
 
+  # A project file naming two MSBuild SDKs on lines of their own, which share a prefix for the reason the package
+  # identifiers above do. It is the one pin written inside a project rather than in a pin file.
+  cat > "$fixture/AppHost.csproj" << 'PROJECT'
+<Project Sdk="Microsoft.NET.Sdk">
+  <Sdk Name="Some.Sdk" Version="1.0.0" />
+  <Sdk Name="Some.Sdk.Extras" Version="1.0.0" />
+</Project>
+PROJECT
+
   cat > "$fixture/Cargo.toml" << 'CARGO'
 [build-dependencies]
 some-crate-build = "=1.0.0"
@@ -8879,6 +8888,8 @@ CARGO
       && printf 'npm-moved\n'
     rewrite_pin crates 'some-crate' '1.0.0' "$hostile" "$fixture/Cargo.toml" \
       && printf 'crates-moved\n'
+    rewrite_pin sdk 'Some.Sdk' '1.0.0' "$hostile" "$fixture/AppHost.csproj" \
+      && printf 'sdk-moved\n'
     # The same rewrite a second time changes nothing, and the answer has to be that nothing moved rather than that
     # `sed` opened the file.
     rewrite_pin nuget 'Some.Package' '1.0.0' "$hostile" "$fixture/Directory.Packages.props" \
@@ -8889,6 +8900,7 @@ CARGO
 actions-moved
 npm-moved
 crates-moved
+sdk-moved
 nuget-refused-a-second-time'
 
   if [[ "$outcome" != "$expected" ]]; then
@@ -8951,6 +8963,17 @@ nuget-refused-a-second-time'
   if ! grep -qF 'some-crate-build = "=1.0.0"' "$fixture/Cargo.toml"; then
     printf 'a crate sharing the rewritten one'"'"'s prefix was rewritten too:\n%s\n' \
       "$(cat "$fixture/Cargo.toml")" >&2
+    return 1
+  fi
+
+  if ! grep -qF "<Sdk Name=\"Some.Sdk\" Version=\"$hostile\" />" "$fixture/AppHost.csproj"; then
+    printf 'the project SDK version was not written back verbatim:\n%s\n' "$(cat "$fixture/AppHost.csproj")" >&2
+    return 1
+  fi
+
+  if ! grep -qF '<Sdk Name="Some.Sdk.Extras" Version="1.0.0" />' "$fixture/AppHost.csproj"; then
+    printf 'an SDK sharing the rewritten one'"'"'s prefix was rewritten too:\n%s\n' \
+      "$(cat "$fixture/AppHost.csproj")" >&2
     return 1
   fi
 }
