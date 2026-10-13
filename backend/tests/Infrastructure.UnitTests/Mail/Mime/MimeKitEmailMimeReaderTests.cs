@@ -59,6 +59,35 @@ public sealed class MimeKitEmailMimeReaderTests
         Assert.False(metadata.Attachments.HasAttachments);
     }
 
+    /// <summary>
+    /// An identifier is compared with the ones other messages and the server's envelope report, so it is kept exactly as
+    /// its author wrote it. Decoding an internationalized domain would store a spelling no <c>In-Reply-To</c> written
+    /// by another client carries, and the reply would never find the message it answers.
+    /// </summary>
+    [Fact]
+    public async Task ReadMetadataAsync_IdentifiersWithAnInternationalizedDomain_KeepsTheSpellingEveryHeaderWroteThemIn()
+    {
+        // Arrange
+        var content = MimeFixtures.Message(
+            "From: anna@example.test",
+            "Subject: Re: Rechnung",
+            "Message-Id: <reply@xn--bcher-kva.example>",
+            "In-Reply-To: <original@xn--bcher-kva.example>",
+            "References: <root@xn--bcher-kva.example> <original@xn--bcher-kva.example>",
+            "Content-Type: text/plain",
+            string.Empty,
+            "Body");
+
+        // Act
+        var result = await CreateReader().ReadMetadataAsync(MimeFixtures.Account, content.RawMime, CancellationToken.None);
+
+        // Assert
+        var references = AssertExtracted(result).ThreadReferences;
+        Assert.Equal("reply@xn--bcher-kva.example", references.MessageId);
+        Assert.Equal("original@xn--bcher-kva.example", references.InReplyTo);
+        Assert.Equal(["root@xn--bcher-kva.example", "original@xn--bcher-kva.example"], references.References);
+    }
+
     /// <summary>A message that wrote no <c>Date</c> header has no sent timestamp rather than a guessed one.</summary>
     [Fact]
     public async Task ReadMetadataAsync_MessageWithoutDateHeader_RecordsNoSentTimestamp()

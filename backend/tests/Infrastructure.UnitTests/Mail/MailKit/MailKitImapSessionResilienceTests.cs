@@ -10,6 +10,7 @@ using MailFathom.Infrastructure.UnitTests.TestDoubles;
 using MailKit;
 using MailKit.Net.Imap;
 using MailKit.Search;
+using MimeKit;
 using NSubstitute;
 using Xunit;
 using static MailFathom.Infrastructure.UnitTests.TestDoubles.MailKitImapSessionTestContext;
@@ -150,6 +151,104 @@ public sealed class MailKitImapSessionResilienceTests
         // Assert
         Assert.Equal(0, desynchronizedClient.DisconnectCount);
         Assert.Equal(1, desynchronizedClient.DisposeCount);
+    }
+
+    /// <summary>
+    /// The mail library ends the connection on an envelope string sent as a literal longer than it accepts, and the
+    /// message that carried it is still in the folder on every later attempt. Repeating the same fetch would hold the
+    /// folder at that message forever, so the attempt that follows reads the batch from its headers instead.
+    /// </summary>
+    [Fact]
+    public async Task GetEmailBatchAfterAsync_EnvelopeCarriesALiteralTheLibraryRefuses_DescribesTheBatchFromItsHeadersAndAdvancesPastIt()
+    {
+        // Arrange
+        using var resilience = OutboundResilienceTestHost.WithConfiguredSettings();
+        var refusingClient = new FakeImapClient();
+        var recoveredClient = new FakeImapClient();
+        var refusingFolder = CreateFolderRefusingEnvelopes(new UniqueId(10), new UniqueId(11));
+        var recoveredFolder = CreateFolderRefusingEnvelopes(new UniqueId(10), new UniqueId(11));
+        await using var session = await OpenScriptedSessionAsync(resilience, refusingClient, refusingFolder, recoveredClient, recoveredFolder);
+
+        // Act
+        var batch = await resilience.CompleteOnVirtualTimeAsync(
+            session.GetEmailBatchAfterAsync(null, 100, MailSynchronizationWindow.Unbounded, CancellationToken.None),
+            BackoffAdvanceStep);
+
+        // Assert
+        Assert.Equal([10U, 11U], batch.Emails.Select(email => email.OccurrenceId.Uid.Value));
+        Assert.Equal(11U, batch.InspectedThroughUid!.Value.Value);
+        Assert.False(batch.HasMore);
+        Assert.All(batch.Emails, email =>
+        {
+            Assert.Equal($"message-{email.OccurrenceId.Uid.Value}@example.test", email.InternetMessageId);
+            Assert.Equal(OverlongSubject, email.Subject);
+            Assert.Equal(new DateTimeOffset(2026, 7, 24, 6, 30, 0, TimeSpan.Zero), email.SentAt);
+            Assert.Equal(128, email.SizeOctets);
+        });
+        var headerRequest = Assert.Single(FetchRequestsOf(recoveredFolder));
+        Assert.Equal(
+            MessageSummaryItems.UniqueId | MessageSummaryItems.Size | MessageSummaryItems.Flags,
+            headerRequest.Items);
+        var requestedHeaders = headerRequest.Headers;
+        Assert.NotNull(requestedHeaders);
+        Assert.Equal(
+            ["DATE", "MESSAGE-ID", "SUBJECT"],
+            requestedHeaders.Order(StringComparer.OrdinalIgnoreCase),
+            StringComparer.OrdinalIgnoreCase);
+        Assert.False(requestedHeaders.Exclude);
+        await recoveredFolder.DidNotReceive().OpenAsync(FolderAccess.ReadWrite, Arg.Any<CancellationToken>());
+        await recoveredFolder.DidNotReceive().StoreAsync(Arg.Any<IList<UniqueId>>(), Arg.Any<IStoreFlagsRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// An operator may configure one attempt, and a folder has to advance past such a message under that configuration
+    /// as well — otherwise every run would spend its single attempt on the envelope and stop at the same message.
+    /// </summary>
+    [Fact]
+    public async Task GetEmailBatchAfterAsync_EnvelopeRefusedUnderASingleAttempt_StillDescribesTheBatchFromItsHeaders()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var refusingClient = new FakeImapClient();
+        var recoveredClient = new FakeImapClient();
+        var refusingFolder = CreateFolderRefusingEnvelopes(new UniqueId(10));
+        var recoveredFolder = CreateFolderRefusingEnvelopes(new UniqueId(10));
+        await using var session = await OpenScriptedSessionAsync(resilience, refusingClient, refusingFolder, recoveredClient, recoveredFolder);
+
+        // Act
+        var batch = await session.GetEmailBatchAfterAsync(null, 100, MailSynchronizationWindow.Unbounded, CancellationToken.None);
+
+        // Assert
+        Assert.Equal([10U], batch.Emails.Select(email => email.OccurrenceId.Uid.Value));
+        Assert.Equal(10U, batch.InspectedThroughUid!.Value.Value);
+        Assert.Equal(MessageSummaryItems.None, Assert.Single(FetchRequestsOf(recoveredFolder)).Items & MessageSummaryItems.Envelope);
+    }
+
+    /// <summary>
+    /// A folder holding one such message may hold more, and each rediscovery costs a connection, so a session that met
+    /// one stops asking for envelopes rather than failing once per batch.
+    /// </summary>
+    [Fact]
+    public async Task GetEmailBatchAfterAsync_BatchAfterARefusedEnvelope_IsDescribedFromHeadersWithoutAnotherFailure()
+    {
+        // Arrange
+        using var resilience = OutboundResilienceTestHost.WithConfiguredSettings();
+        var refusingClient = new FakeImapClient();
+        var recoveredClient = new FakeImapClient();
+        var refusingFolder = CreateFolderRefusingEnvelopes(new UniqueId(10));
+        var recoveredFolder = CreateFolderRefusingEnvelopes(new UniqueId(10));
+        await using var session = await OpenScriptedSessionAsync(resilience, refusingClient, refusingFolder, recoveredClient, recoveredFolder);
+        await resilience.CompleteOnVirtualTimeAsync(
+            session.GetEmailBatchAfterAsync(null, 100, MailSynchronizationWindow.Unbounded, CancellationToken.None),
+            BackoffAdvanceStep);
+
+        // Act
+        var batch = await session.GetEmailBatchAfterAsync(null, 100, MailSynchronizationWindow.Unbounded, CancellationToken.None);
+
+        // Assert
+        Assert.Equal([10U], batch.Emails.Select(email => email.OccurrenceId.Uid.Value));
+        Assert.Equal(1, recoveredClient.ConnectCount);
+        Assert.All(FetchRequestsOf(recoveredFolder), request => Assert.Equal(MessageSummaryItems.None, request.Items & MessageSummaryItems.Envelope));
     }
 
     /// <summary>An exhausted retry budget rethrows the last transient failure, which must still reach the worker as mailbox unavailability.</summary>
@@ -310,6 +409,58 @@ public sealed class MailKitImapSessionResilienceTests
 
         return client.Client;
     }
+
+    /// <summary>A subject longer than the literal the mail library accepts where an envelope string is expected.</summary>
+    private static readonly string OverlongSubject = new('s', 5000);
+
+    /// <summary>
+    /// Builds a folder whose server answers an envelope fetch with a literal the library refuses and a header fetch
+    /// with the headers themselves — which is what one server does on every connection, the message being still there.
+    /// </summary>
+    private static IMailFolder CreateFolderRefusingEnvelopes(params UniqueId[] uids)
+    {
+        var folder = CreateSelectedFolder();
+        folder.UidNext.Returns(new UniqueId(uids[^1].Id + 1));
+        folder.SearchAsync(Arg.Any<SearchQuery>(), Arg.Any<CancellationToken>()).Returns(uids);
+        folder.FetchAsync(
+            Arg.Any<IList<UniqueId>>(),
+            Arg.Is<IFetchRequest>(request => request.Items.HasFlag(MessageSummaryItems.Envelope)),
+            Arg.Any<CancellationToken>())
+            .Returns<IList<IMessageSummary>>(_ => throw new ImapProtocolException(
+                "Literal token length (5000 bytes) exceeds the maximum allowed size (4096 bytes)."));
+
+        IMessageSummary[] describedFromHeaders = [.. uids.Select(CreateHeaderSummary)];
+        folder.FetchAsync(
+            Arg.Any<IList<UniqueId>>(),
+            Arg.Is<IFetchRequest>(request => !request.Items.HasFlag(MessageSummaryItems.Envelope)),
+            Arg.Any<CancellationToken>()).Returns(describedFromHeaders);
+
+        return folder;
+    }
+
+    private static IMessageSummary CreateHeaderSummary(UniqueId uid)
+    {
+        var summary = Substitute.For<IMessageSummary>();
+        summary.UniqueId.Returns(uid);
+        summary.Envelope.Returns((Envelope?)null);
+        summary.Headers.Returns(new HeaderList
+        {
+            { HeaderId.MessageId, $"<message-{uid.Id}@example.test>" },
+            { HeaderId.Subject, OverlongSubject },
+            { HeaderId.Date, "Fri, 24 Jul 2026 08:30:00 +0200" },
+        });
+        summary.Size.Returns(128U);
+
+        return summary;
+    }
+
+    private static IFetchRequest[] FetchRequestsOf(IMailFolder folder) =>
+    [
+        .. folder
+            .ReceivedCalls()
+            .Where(call => call.GetMethodInfo().Name == nameof(IMailFolder.FetchAsync))
+            .Select(call => (IFetchRequest)call.GetArguments()[1]!),
+    ];
 
     private static IMessageSummary CreateSummary(UniqueId uid)
     {

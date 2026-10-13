@@ -19,6 +19,8 @@ using MailFathom.Infrastructure.Resilience;
 using MailKit;
 using MailKit.Net.Imap;
 using MailKit.Search;
+using MimeKit;
+using MimeKit.Utils;
 
 namespace MailFathom.Infrastructure.Mail.MailKit;
 
@@ -102,6 +104,26 @@ internal sealed class MailKitImapMailboxSession(
     internal const MessageSummaryItems DiscoverySummaryItems =
         MessageSummaryItems.Envelope | MessageSummaryItems.UniqueId | MessageSummaryItems.Size | MessageSummaryItems.Flags;
 
+    /// <summary>The headers a discovery is described from once the server's envelopes have proved unreadable.</summary>
+    /// <remarks>
+    /// They are the three envelope fields a discovery carries, asked for as <c>BODY.PEEK[HEADER.FIELDS (...)]</c> —
+    /// which the read-only invariant admits because a peek sets no flag — and nothing wider, so the fallback retrieves
+    /// no more of a message than the envelope it stands in for would have described.
+    /// </remarks>
+    internal static readonly IReadOnlyList<HeaderId> DiscoveryHeaders = [HeaderId.MessageId, HeaderId.Subject, HeaderId.Date];
+
+    /// <summary>Whether this session has met an envelope the mail library refused to read.</summary>
+    /// <remarks>
+    /// The library ends the connection on an envelope it cannot parse — a string sent as a literal longer than it
+    /// accepts where a token is expected is the ordinary case, and a long subject is all that takes — and nothing in
+    /// the failure names the message. Repeating the same fetch would fail on the same message for as long as it is in
+    /// the folder, so the folder would never advance past it. The session therefore stops asking for envelopes once one
+    /// has failed and reads the same fields from the headers instead, which the library streams rather than tokenizes.
+    /// It is the session's rather than the batch's because a folder holding one such message may hold more, and each
+    /// rediscovery costs a connection.
+    /// </remarks>
+    private bool envelopesAreUnreadable;
+
     /// <inheritdoc />
     public ValueTask DisposeAsync() => connection.DisposeAsync();
 
@@ -114,7 +136,7 @@ internal sealed class MailKitImapMailboxSession(
     }
 
     /// <inheritdoc />
-    public Task<RemoteEmailMetadataBatch> GetEmailBatchAfterAsync(
+    public async Task<RemoteEmailMetadataBatch> GetEmailBatchAfterAsync(
         ImapUid? lastSeenUid,
         int maxEmailCount,
         MailSynchronizationWindow synchronizationWindow,
@@ -124,17 +146,36 @@ internal sealed class MailKitImapMailboxSession(
 
         if (lastSeenUid is { } checkpointUid && checkpointUid.Value >= UniqueId.MaxValue.Id)
         {
-            return Task.FromResult(new RemoteEmailMetadataBatch([], checkpointUid, HasMore: false));
+            return new RemoteEmailMetadataBatch([], checkpointUid, HasMore: false);
         }
 
-        return connection.ExecuteFolderReadAsync(
-            (_, openFolder, attemptToken) => this.SearchAndFetchBatchAsync(
-                openFolder,
-                lastSeenUid,
-                maxEmailCount,
-                synchronizationWindow,
-                attemptToken),
+        var headersWereAttempted = false;
+
+        Task<RemoteEmailMetadataBatch> ReadBatchAsync() => connection.ExecuteFolderReadAsync(
+            (_, openFolder, attemptToken) =>
+            {
+                headersWereAttempted |= this.envelopesAreUnreadable;
+
+                return this.SearchAndFetchBatchAsync(
+                    openFolder,
+                    lastSeenUid,
+                    maxEmailCount,
+                    synchronizationWindow,
+                    attemptToken);
+            },
             cancellationToken);
+
+        try
+        {
+            return await ReadBatchAsync();
+        }
+        catch (MailboxUnavailableException) when (this.envelopesAreUnreadable && !headersWereAttempted)
+        {
+            // The pipeline's next attempt is what ordinarily reads the batch from its headers. An operator may have
+            // configured a single attempt, though, and a folder must advance past such a message under that
+            // configuration as well, so the fallback is given the attempt the pipeline had none left for.
+            return await ReadBatchAsync();
+        }
     }
 
     /// <inheritdoc />
@@ -207,7 +248,7 @@ internal sealed class MailKitImapMailboxSession(
         var inspectedThroughUid = hasMore ? batchedUids[^1].Id : highestAssignedUid.Value;
         var summaries = batchedUids.Length == 0
             ? []
-            : await openFolder.FetchAsync(batchedUids, DiscoverySummaryItems, cancellationToken);
+            : await this.DescribeDiscoveriesAsync(openFolder, batchedUids, cancellationToken);
 
         var uidValidity = ImapUidValidity.Create(openFolder.UidValidity);
 
@@ -216,14 +257,47 @@ internal sealed class MailKitImapMailboxSession(
         // mail the person had already read is the defect this flag exists to remove.
         var messages = summaries.Select(summary => new RemoteEmailMetadata(
             EmailOccurrenceId.Create(accountId, folder.Id, uidValidity, ImapUid.Create(summary.UniqueId.Id)),
-            summary.Envelope?.MessageId,
-            summary.Envelope?.Subject,
-            summary.Envelope?.Date?.ToUniversalTime(),
+            summary.Envelope?.MessageId ?? MessageIdIn(summary.Headers),
+            summary.Envelope?.Subject ?? summary.Headers?[HeaderId.Subject],
+            (summary.Envelope?.Date ?? DateIn(summary.Headers))?.ToUniversalTime(),
             summary.Size ?? 0,
             summary.Flags?.HasFlag(MessageFlags.Seen) ?? true)).ToArray();
 
         return new RemoteEmailMetadataBatch(messages, ImapUid.Create(inspectedThroughUid), hasMore);
     }
+
+    /// <summary>Asks the server to describe one batch, from its envelopes until one of them has proved unreadable.</summary>
+    private async Task<IList<IMessageSummary>> DescribeDiscoveriesAsync(
+        IMailFolder openFolder,
+        IList<UniqueId> uids,
+        CancellationToken cancellationToken)
+    {
+        if (this.envelopesAreUnreadable)
+        {
+            return await openFolder.FetchAsync(
+                uids,
+                new FetchRequest(DiscoverySummaryItems & ~MessageSummaryItems.Envelope, DiscoveryHeaders),
+                cancellationToken);
+        }
+
+        try
+        {
+            return await openFolder.FetchAsync(uids, DiscoverySummaryItems, cancellationToken);
+        }
+        catch (ImapProtocolException)
+        {
+            this.envelopesAreUnreadable = true;
+
+            throw;
+        }
+    }
+
+    /// <summary>Reads a message identifier the way an envelope reports one, so both descriptions of a message agree on it.</summary>
+    private static string? MessageIdIn(HeaderList? headers) =>
+        headers?[HeaderId.MessageId] is { } written ? MimeUtils.ParseMessageId(written) ?? written : null;
+
+    private static DateTimeOffset? DateIn(HeaderList? headers) =>
+        DateUtils.TryParse(headers?[HeaderId.Date] ?? string.Empty, out var sentAt) ? sentAt : null;
 
     /// <summary>Chooses how much of the window the server has to describe, from what this connection advertises.</summary>
     /// <remarks>
