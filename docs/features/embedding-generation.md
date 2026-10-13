@@ -314,6 +314,24 @@ It is not part of a profile. A header decides where a request is routed, never w
 changes where a vector is bought and not what it means — which is why the chain's agreement rule reads the geometry and
 says nothing about these.
 
+## What a request says about the deployment that sent it
+
+Nothing about where it runs. The OpenAI client library every request goes through describes its process by default: six
+`X-Stainless-*` headers and its share of the `User-Agent`, naming the library's version, the .NET runtime and its
+version, the operating system, and the processor architecture. One client construction reaches every endpoint a
+deployment declares, in this chain and under `Chat` alike, so left alone that description would go to a gateway, a
+self-hosted model server, and every hosted provider — none of which needs it to answer. MailFathom switches it off
+through the library's own `OpenAI.DisableTelemetry` switch, set in code before the first client is built, and the
+library reads its `OPENAI_DISABLE_TELEMETRY` environment variable only where that switch was never set, so nothing in a
+deployment's environment turns the description back on.
+
+The headers a request carries are therefore the credential, whatever the endpoint declared under `ExtraHeaders`, the
+session header a chat model declaring `StickySessions` sends to OpenRouter, the framing the transport writes, and a
+`User-Agent` of one token — `MEAI/` followed by a version — which names the adapter that publishes the client library
+as a provider-neutral one and says nothing about the platform. What the switch costs is the rest of that header: a
+provider no longer sees which client library and which version of it sent a request, so say so yourself when you ask a
+provider's support about a failing call.
+
 **The value is a secret reference rather than a string.** What goes in one of these is a routing token or a tenant
 identifier — material of the same kind as the key beside it — so it is resolved per request and kept out of the
 configuration file. A reference nothing provisions takes the endpoint out of service rather than sending the request

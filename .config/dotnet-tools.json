@@ -21,7 +21,7 @@
       ]
     },
     "microsoft.extensions.ai.evaluation.console": {
-      "version": "10.8.0",
+      "version": "10.10.0",
       "commands": [
         "aieval"
       ]

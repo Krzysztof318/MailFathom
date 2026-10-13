@@ -45,7 +45,37 @@ internal sealed class OpenAiCompatibleClientFactory
     /// <summary>The header OpenRouter reads a sticky session from.</summary>
     private const string StickySessionHeader = "x-session-id";
 
+    /// <summary>The switch the client library reads to decide whether a request describes the process that sent it.</summary>
+    private const string ClientLibraryTelemetrySwitch = "OpenAI.DisableTelemetry";
+
     private readonly ConcurrentDictionary<string, TokenCredential> entraCredentials = new(StringComparer.Ordinal);
+
+    /// <summary>Takes the client library's own description of this process off every request, before the first client is built.</summary>
+    /// <remarks>
+    /// <para>
+    /// Left alone, the library writes six <c>X-Stainless-*</c> headers and a <c>User-Agent</c> on every request, naming
+    /// its own version, the .NET runtime and its version, the operating system, and the processor architecture. Every
+    /// OpenAI-compatible endpoint a deployment names is reached through this one construction, so those would tell an
+    /// operator's gateway, a self-hosted model server, and every hosted provider alike what the deployment runs on —
+    /// which no provider needs in order to answer and no operator was asked about.
+    /// </para>
+    /// <para>
+    /// The library offers one opt-out and it removes both together, so what this costs is the library's share of the
+    /// <c>User-Agent</c>: a provider reading that header no longer learns which client library and which version of it
+    /// sent a request, which is what its support would ask for first. The header itself survives, because the adapter
+    /// that publishes the client as a provider-neutral one appends a token naming itself and its own version, and that
+    /// token says nothing about where the process runs — so a gateway refusing a request with no <c>User-Agent</c> is
+    /// still answered.
+    /// </para>
+    /// <para>
+    /// A process-wide switch rather than an option, because that is the only form the library publishes, and set here
+    /// rather than at the host's composition so that every process building a client through this type — the host, the
+    /// evaluation suite, the provider-contract tests — is covered by construction. The library reads the switch each time
+    /// it builds a client's pipeline and reads its environment variable only where the switch was never set, so nothing
+    /// in a deployment's environment turns the description back on.
+    /// </para>
+    /// </remarks>
+    static OpenAiCompatibleClientFactory() => AppContext.SetSwitch(ClientLibraryTelemetrySwitch, true);
 
     /// <summary>Opens an embedding generator over one endpoint for the duration of one request.</summary>
     /// <param name="endpoint">Where the request goes and what it is routed to.</param>
