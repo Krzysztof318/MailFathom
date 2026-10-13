@@ -2,17 +2,17 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/fathomise/MailFathom
 
-// Raising the system notification, and the half of it a plugin cannot do: hearing that somebody clicked one.
+// Raising the system notification, and answering a click on one.
 //
-// `tauri-plugin-notification` stays registered beside this and still answers the permission question, because that is
-// the one part of the operation whose answer differs between heads and the part the phone will need. What it cannot do
-// is report a click on a desktop: its `notify` hands the notification to `notify_rust` on a spawned task and drops the
-// handle, and the crate emits no event of any kind on Windows, macOS, or Linux — the `onAction` channel its JavaScript
-// binding publishes belongs to the mobile plugin. A click therefore arrives nowhere, and nothing above the shell can
-// fix that, because the handle a click arrives on lives and dies inside that one call.
+// Both halves are `tauri-plugin-notification`'s. It raises the notification, and it reports a click on one to whatever
+// registered with its `on_action` — on Windows, macOS, and Linux as on the phone — so this module holds no handle,
+// starts no thread, and names no notification crate of its own. What is left here is the one thing a plugin cannot
+// know: what this application does about a click, which is to bring its window forward and tell the bundle.
 //
-// So this module raises the notification itself, keeps the handle, and waits on it. It is the same crate the plugin
-// would have used, reached directly, which is why the client's notification looks no different for it.
+// It stays a command of this shell rather than the plugin's own `notify` reached from the bundle, because the answer to
+// a click is given here either way. A window is raised from Rust or through core window permissions granted to the
+// webview, and `capabilities/` grants no core permission at all — so the bundle keeps asking this shell for one thing
+// and the capability keeps naming the two permission commands and nothing else.
 //
 // **What is said is still a count and a kind and nothing else.** Nothing here composes a sentence: the application
 // hands over one line that `notifications/arrivalCounts.ts` already reduced, and a click changes what happens after a
@@ -29,69 +29,41 @@ pub const ACTED_ON: &str = "system-notification-acted-on";
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 const WINDOW: &str = "main";
 
-/// Raises one notification saying the sentence given, and answers a click on it by bringing the window forward.
+/// Starts answering a click on a notification, which has to happen before the first one is raised.
 ///
-/// It returns as soon as the notification is on its way, exactly as the plugin's own command did, because raising
-/// answers nothing a caller could act on: what the application learns from this operation is that permission stood.
-///
-/// The waiting runs on a thread of this shell's own rather than on the async runtime. `wait_for_response` blocks from
-/// the moment the notification is shown until somebody acts on it or the operating system closes it, which is minutes
-/// rather than milliseconds — long enough that occupying one of a bounded pool's workers with it would eventually
-/// starve every other blocking call the process makes. A thread per notification is bounded by the same thing that
-/// bounds the notifications themselves: the client raises one per arrival and only while nobody is looking at the
-/// window.
+/// The order is the plugin's rule rather than a preference: it tracks a notification only where something was
+/// listening when it was shown, and one raised before that reports nothing however it is clicked. So this is called
+/// once while the shell is set up, and every notification `raise` below shows is one whose click arrives here. Every
+/// action is answered alike, because this application registers no action of its own — the only one a notification
+/// carries is the click on its body.
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub fn raise(app: tauri::AppHandle, said: String) {
-    std::thread::spawn(move || {
-        let mut notification = notify_rust::Notification::new();
+pub fn answer_clicks(app: &tauri::AppHandle) {
+    use tauri_plugin_notification::NotificationExt;
 
-        notification.summary(&said).auto_icon();
+    let shell = app.clone();
 
-        // What makes a click reportable on Linux at all. The Freedesktop specification treats `default` as the
-        // notification itself rather than a button drawn on it, and a server invokes it only where the notification
-        // declared it — so a notification without this line is dismissed silently however it is clicked. The other two
-        // platforms report a click on the body without being asked and ignore this.
-        notification.action("default", "default");
+    let _ = app.notification().on_action(move |_| bring_forward(&shell));
+}
 
-        // Both of these are the plugin's own, and they are here for the reason the rest of this module is: replacing
-        // `notify` means replacing everything it did. A packaged Windows application's toast is delivered against the
-        // identity its installer registered, and an unpackaged one has none to name; macOS delivers against a bundle
-        // identifier, and a development run has the terminal's rather than this application's.
-        #[cfg(windows)]
-        if !tauri::is_dev() {
-            notification.app_id(&app.config().identifier);
-        }
+/// Raises one notification saying the sentence given.
+///
+/// It returns as soon as the notification is on its way, because raising answers nothing a caller could act on: the
+/// plugin dispatches it on a task of its own, and what the application learns from this operation is that permission
+/// stood. A notification the operating system would not show is dropped for the same reason.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn raise(app: &tauri::AppHandle, said: String) {
+    use tauri_plugin_notification::NotificationExt;
 
-        #[cfg(target_os = "macos")]
-        let _ = notify_rust::set_application(if tauri::is_dev() {
-            "com.apple.Terminal"
-        } else {
-            &app.config().identifier
-        });
-
-        let Ok(shown) = notification.show() else {
-            return;
-        };
-
-        let _ = shown.wait_for_response(|answered: &notify_rust::NotificationResponse| {
-            // Everything that is not the notification closing is somebody acting on it, which is the way round that
-            // keeps a dismissal from raising a window: a close reason is the only answer the operating system gives
-            // for a notification nobody chose, and each platform spells activation differently — the body click XDG
-            // reports as its `default` action, the activation Windows reports as an action of its own name.
-            if !matches!(answered, notify_rust::NotificationResponse::Closed(_)) {
-                bring_forward(&app);
-            }
-        });
-    });
+    let _ = app.notification().builder().title(said).show();
 }
 
 /// What a head linking nothing to raise one does, which is nothing at all.
 ///
 /// The phone is that head today and the application above knows it: no notification plugin is linked on a mobile
 /// target, so the operation reports itself unoffered and nothing ever reaches this. #1616 is where the phone raises its
-/// own, through the plugin's mobile channel, which reports a click already and needs none of the above.
+/// own, through the same plugin's mobile side.
 #[cfg(any(target_os = "android", target_os = "ios"))]
-pub fn raise(_app: tauri::AppHandle, _said: String) {}
+pub fn raise(_app: &tauri::AppHandle, _said: String) {}
 
 /// Puts the window in front of whatever was covering it, and tells the bundle a notification was acted on.
 ///

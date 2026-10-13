@@ -43,12 +43,13 @@ import { isPermissionGranted, requestPermission } from '@tauri-apps/plugin-notif
 // and is kept nowhere. Conflating them is how a head with no notification plugin — the Android one until #1616 — would
 // write *off* on a machine whose user was never asked anything.
 //
-// **Raising one and being permitted to are two different bridges, and the split is not arbitrary.** Permission is the
-// plugin's, because it is the half whose answer differs between heads and the half the phone will need. Raising is
-// this shell's own command, because the plugin's desktop path reports no click: it hands the notification to
-// `notify_rust` and drops the handle, so a person who clicks the thing the client showed them lands nowhere.
-// `src-tauri/src/notifications.rs` keeps that handle instead, which is what makes `whenActedOn` below possible —
-// somebody acting on a notification is an event the shell says out loud, and a head that raises none says nothing.
+// **Raising one and being permitted to are two different bridges, and the split is not arbitrary.** Permission is
+// asked of the plugin directly, because it is the half whose answer differs between heads and the half the phone will
+// need. Raising is asked of this shell's own command, because what a click on one does is the shell's to decide: the
+// plugin raises the notification and reports the click, and `src-tauri/src/notifications.rs` answers that report by
+// bringing the window forward, which the page could only do with core window permissions no capability here grants.
+// That is what makes `whenActedOn` below possible — somebody acting on a notification is an event the shell says out
+// loud once the window is in front, and a head that raises none says nothing.
 // A browser needs no such split: `Notification.onclick` is the platform's own, so the web head satisfies that same
 // member out of the notifications it raised rather than out of a bridge.
 

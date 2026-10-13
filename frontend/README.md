@@ -115,10 +115,16 @@ The plugins are `tauri-plugin-opener` and `tauri-plugin-notification`, and they 
 link outside the application and raising a system notification while nobody is looking at the window are the two things
 the desktop head cannot do from the page. Their commands are a plugin's rather than this repository's, so they are gated
 where the commands above are not: `capabilities/open-a-link.json` grants the webview the first over `http`, `https`, and
-`mailto`, and `capabilities/raise-a-notification.json` grants the second as the three commands the application calls —
-asking whether permission stands, asking for it, and raising one — rather than either plugin's own default permission
-set. A capability is reach handed to whatever runs in the page, so it names the operation the application actually makes
-and nothing beside it, and a third permission is added the same way, by the change that needs it.
+`mailto`, and `capabilities/raise-a-notification.json` grants the second as the two commands the application calls —
+asking whether permission stands and asking for it — rather than either plugin's own default permission set. A
+capability is reach handed to whatever runs in the page, so it names the operation the application actually makes and
+nothing beside it, and a third permission is added the same way, by the change that needs it.
+
+Raising one is not among them, and neither is hearing that somebody clicked one, because the page asks the shell for
+both rather than the plugin: `raise_notification` is this crate's own command, and `src/notifications.rs` behind it is
+where the plugin is asked to show the notification and where its report of a click is answered by bringing the window
+forward. The plugin does the raising and the reporting on every desktop target; what the shell keeps is the answer,
+which needs a window raised from Rust or a core permission handed to the page, and no capability here grants one.
 
 The notification plugin is also the one pin this crate states **per target**, and the target list is what keeps it off
 the phone. A Tauri plugin with an Android side is a Gradle subproject the CLI adds to the generated settings file at
@@ -184,7 +190,7 @@ Everything else under `gen/` is ignored; this one is tracked, because the decisi
 | The application identifier          | `bundle.identifier` in `tauri.conf.json`, and nowhere else                                              | `io.github.fathomise.mailfathom` — the same one the desktop head carries, because it is one application                                                                                                                                                                          |
 | The oldest release it installs on   | `bundle.android.minSdkVersion` in `tauri.conf.json`, and `minSdk` in `gen/android/app/build.gradle.kts` | 24, which is Tauri's own floor for the target. Gradle reads the second; the first is what a regeneration would render into it, and the two move together or the key is fiction                                                                                                   |
 | What it asks the platform for       | `uses-permission` in `AndroidManifest.xml`                                                              | `INTERNET`, and nothing else. A notification permission arrives with the notification                                                                                                                                                                                            |
-| What the APK's libraries resolve to | `dependencyLocking` in `gen/android/build.gradle.kts`, and `gen/android/app/gradle.lockfile` beside it  | The 80 artifacts behind the five declarations, fixed rather than resolved afresh on every build — `./gradlew :app:dependencies --write-locks` is what rewrites it                                                                                                                |
+| What the APK's libraries resolve to | `dependencyLocking` in `gen/android/build.gradle.kts`, and `gen/android/app/gradle.lockfile` beside it  | The 81 artifacts behind the five declarations, fixed rather than resolved afresh on every build — `./gradlew :app:dependencies --write-locks` is what rewrites it                                                                                                                |
 | What it refuses to let leave        | `android:allowBackup` and `res/xml/data_extraction_rules.xml`                                           | Both halves off: the cloud backup, and the device-to-device transfer that the attribute alone stops governing at API 31                                                                                                                                                          |
 | Where the back gesture goes         | `handleBackNavigation` in `MainActivity.kt`                                                             | Turned back on, which Tauri's own activity turns off: the gesture reaches the page as `popstate`, so all three heads answer it with the one mechanism the frame above carries and nothing in the client asks which head it is on                                                 |
 | What the system bars leave the page | The window-insets listener in `MainActivity.kt`                                                         | The status bar, the navigation bar, a display cutout and the keyboard are padded off the content view. Android's WebView answers `env(safe-area-inset-*)` for a cutout alone, so the tokens the page already reads report nothing for the bars a full-bleed window puts it under |

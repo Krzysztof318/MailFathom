@@ -1391,8 +1391,8 @@ export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
 ```
 
 **The JDK is the one worth naming a version for.** Gradle refuses a JDK newer than the release it was built against, so
-the newest one a machine happens to have is the wrong default — the wrapper this project generated runs Gradle 8.14.3,
-and JDK 21 is the safe answer for it. A JDK too new fails inside Gradle's own startup rather than in anything named
+the newest one a machine happens to have is the wrong default — the wrapper this project generated runs Gradle 9.6.1,
+which will not start on anything older than JDK 17, and JDK 21 is the safe answer for it. A JDK too new fails inside Gradle's own startup rather than in anything named
 after Android, which is the confusing half.
 
 **The APK the build produces is a debug build signed with the debug certificate**, which is the decision rather than a

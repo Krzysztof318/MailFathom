@@ -29,7 +29,7 @@
     "@eslint/js": "10.0.1",
     "@playwright/cli": "0.1.22",
     "@playwright/test": "1.64.0",
-    "@tauri-apps/cli": "2.11.4",
+    "@tauri-apps/cli": "2.12.2",
     "@types/node": "26.6.5",
     "@vitest/coverage-v8": "5.0.4",
     "eslint": "10.12.0",
