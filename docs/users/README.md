@@ -34,18 +34,22 @@ Two properties hold everywhere and are worth knowing before anything is installe
   off until you turn them on; the tool and the drafts need grants that reading mail does not carry, and so does the
   client, which marks nothing where its credential was not granted one. What the client does is a preference of yours
   rather than the deployment's, held with the rest of your client settings and covering every mailbox it reads; it is
-  on unless you turn it off, and the control that turns it off arrives with the client's settings screen. A fifth path
+  on unless you turn it off, and the control that turns it off is on the client's settings screen. A fifth path
   leaves your deployment altogether rather than writing to your mailbox: `send_email`,
   `reply_to_email`, `forward_email`, and `send_draft`, behind
   a grant of its own, and they are the acts here nothing can take back.
 
 ## The state of the release
 
-`0.7.0` is the current release, and the first one in which MailFathom sends mail as well as reading it. The container
+`0.8.0` is the current release, and the first one in which a deployment records the people it serves, their mail
+accounts, and their credentials in its database rather than reading them from a configuration file. The container
 image is published to both registries, the Helm chart is published, and the schema file you apply and the `mfctl`
 binaries are attached to the GitHub release — so an installation starts from a versioned artifact rather than from a
-checkout. Where a page describes something that arrives later than `0.7.0`, it says so and names the release, rather
+checkout. Where a page describes something that arrives later than `0.8.0`, it says so and names the release, rather
 than describing it as though you could already download it.
+
+MailFathom's own client — the web page a deployment can serve and the desktop application attached to the release —
+is an alpha in `0.8.0`: it is there to be tried, it is incomplete, and it changes from one release to the next.
 
 ## The path
 
