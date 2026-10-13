@@ -1562,8 +1562,9 @@ the one bound that leaves the words whole and the pictures short.
 
 Both queries compose. `remoteImages=true` widens this representation further than it widens the tree — a background and
 a web font are restored beside the pictures, because a layout served without them is the reduction the surface was
-opened to escape — while an `@import` and the candidates of a `srcset` stay refused, because neither reaches the pass
-that decides a URL, and nothing executable is restored by either query.
+opened to escape — while an `@import` and the candidates of a `srcset` stay refused, because the first names a
+stylesheet the service never read and the second is a list the check behind the pass reads as one address, and nothing
+executable is restored by either query.
 
 **A link carries where it actually goes, and what the deployment made of how it was written.** `target` is the resolved
 absolute address, carrying only `http`, `https`, or `mailto` — a `javascript:`, `data:`, `vbscript:`, or `file:` target

@@ -67,14 +67,14 @@ internal static partial class SelfContainedHtmlProjection
     /// the same mechanism that removes an attribute nobody thought of.
     /// </para>
     /// <para>
-    /// <c>srcset</c> and <c>sizes</c> are deliberately absent, and admitting them is not a choice this file is free to
-    /// make: a candidate list is several addresses in one attribute value, and the sanitizer hands none of them to
-    /// <see cref="Resolved" /> — measured against the pinned version, an <c>img</c> keeps its whole <c>srcset</c>
-    /// verbatim while its <c>src</c> is filtered. So the attribute cannot be admitted even for a message's own
-    /// pictures, because admitting it would carry a remote address through the read that asked for none. Dropping it
-    /// costs the reader the alternative resolutions and keeps the <c>src</c> beside it, which is the picture the
-    /// message would have drawn anyway. <c>source</c> falls with them for the same reason, while <c>picture</c> stays
-    /// so the <c>img</c> inside it survives.
+    /// <c>srcset</c> and <c>sizes</c> are deliberately absent. A candidate list is several addresses in one attribute
+    /// value, and the sanitizer does hand each of them to <see cref="Resolved" />, so the pass itself would judge one.
+    /// What would not is <see cref="NothingRunsIn" />, which reads an attribute's value as a single address: a list
+    /// whose second candidate named a scripting scheme would pass the check that exists to catch what the pass got
+    /// wrong. Admitting the attribute therefore means teaching that check to read candidates first. Dropping it costs
+    /// the reader the alternative resolutions and keeps the <c>src</c> beside it, which is the picture the message
+    /// would have drawn anyway. <c>source</c> falls with them for the same reason, while <c>picture</c> stays so the
+    /// <c>img</c> inside it survives.
     /// </para>
     /// </remarks>
     private static readonly string[] AllowedAttributes =
@@ -84,6 +84,16 @@ internal static partial class SelfContainedHtmlProjection
         "nowrap", "rowspan", "scope", "size", "span", "src", "start", "style", "summary", "title", "type", "valign",
         "vspace", "width",
     ];
+
+    /// <summary>The descriptors a font face is written with that the sanitizer's own property list does not hold.</summary>
+    /// <remarks>
+    /// The sanitizer holds a font face to the same property allow-list as a style rule and removes the whole rule over
+    /// one name it does not find there, so a face is kept only where every descriptor it carries is named. The list it
+    /// ships with already holds the family, the style, the weight, the stretch, and the range; these two are the rest
+    /// of what a hosted typeface is declared with. Neither means anything inside a style rule, where the CSS parser
+    /// drops it as an unknown property before the allow-list is asked.
+    /// </remarks>
+    private static readonly string[] FontFaceDescriptors = ["font-display", "src"];
 
     /// <summary>Produces the representation for one message, or reports that the message displays no markup.</summary>
     /// <param name="message">The parsed message, which the pictures are resolved out of.</param>
@@ -283,19 +293,18 @@ internal static partial class SelfContainedHtmlProjection
     /// already inside.
     /// </para>
     /// <para>
-    /// <c>@import</c> is refused whatever the reader asked for, and the reason is measured rather than preferred: the
-    /// address inside it never reaches <see cref="Resolved" />. Admitting the rule would therefore leave an address in
-    /// the output that nothing judged — which is a scripting scheme surviving as readily as a host, since the only
-    /// thing that reads a scheme here is the filter the rule bypasses. Consent widens what that filter decides and
-    /// cannot widen what it is never asked about, which is why this one refusal outlives the reader's answer. What it
-    /// would have fetched is a stylesheet nothing here parsed, and that is the second reason rather than the first.
+    /// <c>@import</c> is refused whatever the reader asked for. The sanitizer does hand the rule's own address to
+    /// <see cref="Resolved" />, so the address is not what is left unjudged; what it names is. An imported stylesheet
+    /// is a document this pass never read, and every rule, at-rule, and address in it would reach the frame having met
+    /// neither allow-list. Consent widens what <see cref="Resolved" /> decides about an address and cannot stand in
+    /// for reading what the address returns, which is why this one refusal outlives the reader's answer.
     /// </para>
     /// <para>
-    /// <c>@font-face</c> is refused on the same terms as any other remote reference, but by removing the rule rather
-    /// than the address inside it: the sanitizer resolves a declaration's URL through <see cref="Resolved" /> in a
-    /// style attribute and inside <c>@media</c>, and does not reach the <c>src</c> of a font face — so the only place
-    /// the removal can be made is the rule. A consented read admits it, which is what puts the sender's own typeface
-    /// back on the same footing as the sender's own pictures.
+    /// <c>@font-face</c> is admitted and decided on the same terms as any other reference, because the sanitizer hands
+    /// every address in a face's <c>src</c> to <see cref="Resolved" />. A font face has no declaration that can be
+    /// dropped on its own, so one refused address removes the whole rule: a read that asked for no remote content
+    /// loses every face naming a host and keeps one naming only a typeface already installed, and a consented read
+    /// keeps both, which is what puts the sender's own typeface back on the same footing as the sender's own pictures.
     /// </para>
     /// </remarks>
     private static HtmlSanitizer PolicyFor(MailInlineImages images, bool retainRemoteReferences)
@@ -313,15 +322,8 @@ internal static partial class SelfContainedHtmlProjection
         // Narrowed rather than replaced, because the set the sanitizer ships with holds the ordinary style rule every
         // declaration lives in: a list written from scratch here would keep the at-rules and drop the stylesheet.
         policy.AllowedAtRules.Remove(CssRuleType.Import);
-
-        if (retainRemoteReferences)
-        {
-            policy.AllowedAtRules.Add(CssRuleType.FontFace);
-        }
-        else
-        {
-            policy.AllowedAtRules.Remove(CssRuleType.FontFace);
-        }
+        policy.AllowedAtRules.Add(CssRuleType.FontFace);
+        policy.AllowedCssProperties.UnionWith(FontFaceDescriptors);
 
         policy.AllowDataAttributes = false;
 

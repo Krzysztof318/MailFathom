@@ -59,8 +59,9 @@ public sealed record EmailContentRenderingBounds(
     /// nowhere else. A link's target is unaffected because it was never fetched, and no other reference exists in the
     /// tree to widen. The self-contained markup has more that a renderer resolves unasked — a background and a web
     /// font — so there it widens those as well, which is the same consent applied to everything that would have acted
-    /// on it. It restores no executable construct in either, and it restores no address the pass deciding a URL is
-    /// never asked about, which is what leaves an <c>@import</c> and a <c>srcset</c> refused in every read.
+    /// on it. It restores no executable construct in either, and it restores nothing the pass deciding a URL cannot
+    /// answer for — the stylesheet an <c>@import</c> names, which that pass never read, and a <c>srcset</c>, which the
+    /// check behind it reads as one address — which is what leaves both refused in every read.
     /// </para>
     /// </remarks>
     public bool RetainRemoteImageReferences { get; init; }

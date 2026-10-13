@@ -77,6 +77,13 @@ public sealed class SelfContainedHtmlProjectionTests
     [InlineData("<xmp><img src=x onerror=fetch(1)></xmp><p>Readable</p>")]
     [InlineData("<p unheardof=\"javascript:fetch(1)\">Readable</p>")]
     [InlineData("<p data-go=\"javascript:fetch(1)\">Readable</p>")]
+    [InlineData("<svg><style>&lt;/style>&lt;img src=x onerror=fetch(1)></style></svg><p>Readable</p>")]
+    [InlineData(
+        "<svg><annotation-xml encoding=\"text/html\"><style><img src=x onerror=fetch(1)></style></annotation-xml></svg>"
+            + "<p>Readable</p>")]
+    [InlineData(
+        "<math><annotation-xml encoding=\"text/html\"><title><a encoding=\"</title><img src=x onerror=fetch(1)>\">"
+            + "</annotation-xml></math><p>Readable</p>")]
     public async Task ProduceAsync_ExecutableConstruct_LeavesNothingARendererWouldRun(string markup)
     {
         // Act
@@ -103,6 +110,10 @@ public sealed class SelfContainedHtmlProjectionTests
     [InlineData("<img longdesc=\"https://evil.test/beacon\" src=\"cid:none\"><p>Readable</p>")]
     [InlineData("<video poster=\"https://evil.test/beacon.png\"></video><p>Readable</p>")]
     [InlineData("<blockquote cite=\"https://evil.test/beacon\">Readable</blockquote>")]
+    [InlineData("<style type=\"\">p{background-image:url(https://evil.test/bg.png)}</style><p>Readable</p>")]
+    [InlineData("<style type=\"\">@import url(https://evil.test/x.css);</style><p>Readable</p>")]
+    [InlineData("<style type=\"text/plain\">p{background-image:url(https://evil.test/bg.png)}</style><p>Readable</p>")]
+    [InlineData("<style>@font-face{font-family:x;src:local(Arial),url(//evil.test/x.woff2)}</style><p>Readable</p>")]
     public async Task ProduceAsync_RemoteAddressInAnyForm_LeavesNoneOfIt(string markup)
     {
         // Act
@@ -228,12 +239,55 @@ public sealed class SelfContainedHtmlProjectionTests
         Assert.Empty(RemoteAddresses(html));
     }
 
+    /// <summary>A font face that names no host is kept without consent, because nothing in it is fetched.</summary>
+    [Fact]
+    public async Task ProduceAsync_FontFaceNamingOnlyAnInstalledTypeface_IsKept()
+    {
+        // Act
+        var html = await HtmlOf("<style>@font-face{font-family:x;src:local(Arial)}</style><p>Readable</p>");
+
+        // Assert
+        Assert.Contains("@font-face", html, StringComparison.Ordinal);
+    }
+
+    /// <summary>A font face is judged address by address, so consent to remote content does not admit a scheme that runs.</summary>
+    [Fact]
+    public async Task ProduceAsync_ConsentedRead_LeavesNoScriptingSchemeInAFontFace()
+    {
+        // Act
+        var html = await HtmlOf(
+            "<style>@font-face{font-family:x;src:url(https://cdn.example.test/x.woff2),url(javascript:fetch(1))}</style>"
+                + "<p>Readable</p>",
+            retainRemoteReferences: true);
+
+        // Assert
+        Assert.DoesNotContain("javascript", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>A candidate list stays refused under consent, because the check behind the pass reads one address per attribute.</summary>
+    [Fact]
+    public async Task ProduceAsync_ConsentedRead_StillDropsACandidateList()
+    {
+        // Act
+        var html = await HtmlOf(
+            "<img src=\"https://cdn.example.test/a.png\" srcset=\"https://cdn.example.test/b.png 2x\"><p>Readable</p>",
+            retainRemoteReferences: true);
+
+        // Assert
+        Assert.DoesNotContain("srcset", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("https://cdn.example.test/a.png", html, StringComparison.Ordinal);
+    }
+
     /// <summary>The reader's consent restores every address, because a layout missing its fonts is the reduction it was opened to escape.</summary>
     [Theory]
     [InlineData("<img src=\"https://cdn.example.test/hero.png\"><p>Readable</p>", "https://cdn.example.test/hero.png")]
     [InlineData(
         "<style>@font-face{font-family:x;src:url(https://cdn.example.test/x.woff2)}</style><p>Readable</p>",
         "https://cdn.example.test/x.woff2")]
+    [InlineData(
+        "<style>@font-face{font-family:x;font-style:normal;font-weight:400;font-display:swap;"
+            + "src:url(https://cdn.example.test/y.woff2) format('woff2');unicode-range:U+0000-00FF}</style><p>Readable</p>",
+        "https://cdn.example.test/y.woff2")]
     [InlineData(
         "<p style=\"background-image:url(https://cdn.example.test/bg.png)\">Readable</p>",
         "https://cdn.example.test/bg.png")]

@@ -691,13 +691,24 @@ fetch would reveal the same thing through, so the consent restores both — a la
 background pictures is exactly the reduction this surface was opened to escape. It restores addresses and nothing else:
 an executable construct stays gone whether or not it was asked for.
 
-Two forms of remote address stay refused under consent as well, and for one reason rather than two: the pass that
-decides a URL never sees them. An `@import` and the candidates of a `srcset` are both resolved by the CSS and markup
-parsers without reaching the policy's URL filter, so admitting either would leave an address in the output that nothing
-judged — which would also leave a scripting scheme in it, on the one path where a scheme can arrive without being
-read. The consent widens what the filter decides; it cannot widen what the filter is not asked about. `srcset`, `sizes`,
-and the `source` element are therefore absent from the allow-lists in every read, consented or not, and a `<picture>`
-draws from the `img` it encloses.
+A font face is decided address by address, like everything else. Every address in its `src` reaches the policy's URL
+filter, and a face has no declaration that can be dropped on its own, so one refused address removes the whole rule. A
+read without consent therefore loses every face that names a host and keeps one that names only a typeface already
+installed on the reader's machine; a consented read keeps both, and still loses a face whose `src` carries a scheme
+that runs or a `data:` URI that is not a picture. A face is kept only where each of its descriptors is one the policy
+names — the family, style, weight, stretch, range, display, and source — so a face declared with anything else is
+removed whole rather than served in part.
+
+Two forms of remote address stay refused under consent as well, each for a reason of its own. An `@import` names a
+stylesheet this pass never read: the address itself is judged, but every rule and address in what it returns would reach
+the frame having met neither allow-list, and consent to an address is not a reading of what the address returns. The
+candidates of a `srcset` are judged one by one as well, and what they would outrun is the second reading described
+above, which takes an attribute's value as one address and would pass a list whose later candidate named a scripting
+scheme. `srcset`, `sizes`, and the `source` element are therefore absent from the allow-lists in every read, consented
+or not, and a `<picture>` draws from the `img` it encloses.
+
+A `<style>` element is filtered whatever its `type` attribute says, including an empty one, which a browser applies as
+CSS exactly as it applies an element with none.
 
 ## When the local copy is unusable
 
