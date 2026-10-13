@@ -23,13 +23,16 @@ import { defineConfig } from 'vitest/config';
  * with another gate is the case the default was reporting as a failure of whatever change happened to be in the tree.
  *
  * It is a ceiling on a test that has stopped rather than a budget to spend: nothing is slower for it being large, a
- * test that approaches it is one to look at, and one that reaches it is stuck. It is written on each project rather
- * than beside `coverage` above because a project inherits none of the root's own test options.
+ * test that approaches it is one to look at, and one that reaches it is stuck. It is written twice because a project
+ * inherits its options from exactly one place: the configuration that declares it unless it names another to extend,
+ * and then that one instead. So `Client.Backend` takes the number from the root below, and `Client.App`, which extends
+ * its package's own Vite configuration, inherits nothing written here and states it again.
  */
 const eachTestGets = 60_000;
 
 export default defineConfig({
     test: {
+        testTimeout: eachTestGets,
         // Coverage is collected on every run rather than behind a flag, because `pnpm test` is the whole of how this
         // suite runs and a second invocation is exactly the drift that rule exists to refuse. The v8 provider is what
         // makes that affordable: it reads the counters the runtime already keeps instead of instrumenting the module
@@ -44,17 +47,27 @@ export default defineConfig({
             // Beside the service's own reports under the repository-root `artifacts/`, which `.gitignore` already
             // covers. Vitest resolves this against the root project, which is `frontend/`.
             reportsDirectory: '../artifacts/coverage/client',
-            // Relative to each project's root, so one pattern reaches both packages' sources. Without it the report
-            // would name only the files a test happened to import, and a module nobody covers — the thing worth
-            // seeing — would be missing from it rather than sitting at zero.
+            // Both lists are matched against a file's path from the root project, which is `frontend/`, and never
+            // from the package a file belongs to — so `src/` here is the directory holding both packages, and one
+            // pattern reaches everything either of them wrote. Without it the report would name only the files a
+            // test happened to import, and a module nobody covers — the thing worth seeing — would be missing from
+            // it rather than sitting at zero.
             include: ['src/**/*.{ts,tsx}'],
             // Everything the pattern above reaches that is not code somebody wrote a behaviour into. Vitest
-            // drops the suite's own test files, and its default exclusion list is empty, so these three are the
+            // drops the suite's own test files, and its default exclusion list is empty, so these five are the
             // whole of it: a declaration file states types and runs nothing, `main.tsx` is the composition
             // root that mounts React into the document — the client's counterpart to `Host` and `AppHost`, left
-            // out of the service's measurement for the same reason — and a `.harness.tsx` module is the doubles and
-            // the render a family of test files shares, which runs only under a test and asserts nothing itself.
-            exclude: ['src/**/*.d.ts', 'src/main.tsx', 'src/**/*.harness.tsx'],
+            // out of the service's measurement for the same reason — a `.harness.tsx` module is the doubles and
+            // the render a family of test files shares, which runs only under a test and asserts nothing itself,
+            // and the last two are that package's build configuration and this suite's own setup file, which sit
+            // above its `src/` and are reached only because the pattern starts one directory higher than they do.
+            exclude: [
+                'src/**/*.d.ts',
+                'src/Client.App/src/main.tsx',
+                'src/**/*.harness.tsx',
+                'src/Client.App/vite.config.ts',
+                'src/Client.App/vitest.setup.ts',
+            ],
         },
         projects: [
             {
@@ -66,7 +79,6 @@ export default defineConfig({
                     name: 'Client.Backend',
                     root: 'src/Client.Backend',
                     environment: 'node',
-                    testTimeout: eachTestGets,
                 },
             },
             {

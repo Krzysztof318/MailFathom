@@ -270,6 +270,12 @@ owns. Reaching a populated screen is most of the work in a client task, and it i
   second document and jsdom having one.
 - A file that reassigns a module-level double sets it back to its default in a `beforeEach`, so the order tests run in
   cannot decide what one of them sees.
+- **The runner empties every double's recorded calls in front of each test**, so a count or a last argument read in one
+  test is that test's own, and a file that still clears one itself is doing something already done for it. What it does not touch is what a double answers: an
+  implementation a test gave one, and a spy placed over a real function, both outlive the test — which is what the
+  bullet above and the `vi.restoreAllMocks()` a file calls on its way out are for. The other side of it is that calls
+  recorded while a module loads are gone before the first test reads them, so a double is asserted on for what a test
+  caused.
 - Vitest runs files in parallel workers, so a test shares nothing with another file: no fixture written at module
   scope and read across files, no temporary directory, no port, and no environment variable.
 
@@ -538,12 +544,16 @@ to remember — the same rule that makes `pnpm test` the whole of how this suite
 summary goes to the terminal, where a verification gate and a CI job both print it, and an HTML report to
 `artifacts/coverage/client/` at the repository root, which `.gitignore` covers along with everything else written there.
 
-**What is measured is both packages' `src/`, whether or not a test imported it.** A module nobody covers is the one the
-number exists to show, so it sits at zero in the report instead of being absent from it. Three things are left out and
-none of them is a gap: a declaration file states types and runs nothing, `main.tsx` mounts React into the document and
-decides nothing — the client's counterpart to `Host` and `AppHost`, which the service excludes for the same reason —
-and a `<Subject>.harness.tsx` module is the arrangement a family of test files shares, which runs only under a test and
-asserts nothing itself. Vitest drops this suite's own test files.
+**What is measured is everything both packages wrote under `frontend/src/`, whether or not a test imported it.** A
+module nobody covers is the one the number exists to show, so it sits at zero in the report instead of being absent
+from it. Five things are left out and none of them is a gap: a declaration file states types and runs nothing,
+`main.tsx` mounts React into the document and decides nothing — the client's counterpart to `Host` and `AppHost`, which
+the service excludes for the same reason — a `<Subject>.harness.tsx` module is the arrangement a family of test files
+shares, which runs only under a test and asserts nothing itself, and `Client.App`'s `vite.config.ts` and
+`vitest.setup.ts` are that package's build configuration and this suite's own setup. Vitest drops this suite's own test
+files. **A pattern in either list is a path from `frontend/`, never from a package**: Vitest matches both against the
+root project, so an exclusion written the way a package would read it matches nothing and says so nowhere — the file it
+was meant to leave out simply joins the report.
 
 **Nothing gates on the figure, in either verification script or any workflow**, and the value that would be easiest to
 add is the one deliberately absent: a threshold. The service enforces 85% and `docs/operations/agent-workflow.md`
