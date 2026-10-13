@@ -406,8 +406,9 @@ way — MailFathom terminates no TLS of its own — so what this decides is whet
 present a key.
 
   api-key  The endpoint accepts a key the running deployment mints for the user, and the client
-           sends it as a bearer credential. This run mints it once the deployment is up and
-           prints it once when it finishes. Two popular chat
+           sends it as a bearer credential. Where this run starts the deployment, it mints the
+           key and prints it once when it finishes; where it does not, it prints the command
+           that does. Two popular chat
            clients offer no field for a key, and cannot connect to an endpoint configured this way.
   none     Anything that can reach 127.0.0.1:8080 reads your mail. Legal, announced with a startup
            warning, and reasonable only because the port is published on loopback alone.
@@ -428,8 +429,10 @@ so preparing it is two settings rather than anything to install. It is served at
 http://127.0.0.1:$published_port/app/, on the port above.
 
 The page opens on a sign-in screen and reads this deployment's mail with the session it is given.
-You sign in as $sign_in_name, with a password this run generates once the deployment is up and
-prints once when it finishes. Pass --no-client to prepare neither the page nor the surface.
+You sign in as $sign_in_name. Where this run starts the deployment and applies the schema, it
+generates the password once the deployment is up and prints it once when it finishes; where it
+does not, it prints the command that mints one. Pass --no-client to prepare neither the page nor
+the surface.
 
 Everything the page and that surface exchange crosses the same plain-HTTP hop everything else here
 does. On a port published to 127.0.0.1 that hop is this machine; it is reported at every startup, and
@@ -881,8 +884,10 @@ record_the_deployment() {
     | read_json_text 'id')"
   [[ -n "$user" ]] || return 1
 
-  # The role is one of the three every database is seeded with. Its identifier is minted per deployment, so it is read
-  # rather than known, from the entry that carries the name.
+  # The role is one of the three every database is seeded with, and it is a row an administrator can rename or remove,
+  # so it is found by the name it is seeded under rather than assumed by the identifier it was seeded with. The match
+  # rests on the answer writing each role's `id` immediately before its `name`; a deployment that orders them
+  # otherwise fails here by name, which is the step the report then prints.
   recording_step='reading the Mail user role'
   role="$(curl -fsS "${authorization[@]}" "$origin/api/admin/roles" \
     | grep --only-matching '"id":"[^"]*","name":"Mail user"' | read_json_text 'id')"
