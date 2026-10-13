@@ -55,6 +55,7 @@ internal static class ComposedHostMailbox
         using var client = ComposedHostAdministration.Open(adminAddress);
 
         var user = await ReadOrRecordSuiteUserAsync(client, cancellationToken);
+        await ComposedHostAdministration.AssignMailRoleAsync(client, user, cancellationToken);
 
         if (await FindAssignedAccountAsync(client, user, cancellationToken) is { } recorded)
         {
