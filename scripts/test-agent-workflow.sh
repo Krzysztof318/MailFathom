@@ -7332,7 +7332,13 @@ stage_quick_start_checkout() {
   local checkout_root="$test_directory/$case_name-checkout"
 
   mkdir -p "$checkout_root/deploy/compose/config" "$checkout_root/deploy/compose/secrets/mailfathom" \
-    "$checkout_root/deploy/openssl"
+    "$checkout_root/deploy/compose/postgres" "$checkout_root/deploy/openssl"
+
+  # The script PostgreSQL's entrypoint runs on a first start, staged for its mode alone and as a strict umask leaves it:
+  # unreadable to the container's account, which skips it and reports a healthy server over no database.
+  printf '#!/usr/bin/env bash\n' > "$checkout_root/deploy/compose/postgres/10-create-mailfathom-database.sh"
+  chmod 700 "$checkout_root/deploy/compose/postgres" \
+    "$checkout_root/deploy/compose/postgres/10-create-mailfathom-database.sh"
 
   # Only its existence is read, which is what says this checkout carries the Compose deployment at all.
   printf 'name: mailfathom\n' > "$checkout_root/deploy/compose/compose.yaml"
@@ -7399,7 +7405,9 @@ quick_start_prepares_the_deployment_the_documentation_describes() {
 444 secrets/mailfathom-database-password
 444 secrets/mailfathom/imap-password
 644 config/10-mailfathom.json
-600 mailbox.json'
+600 mailbox.json
+755 postgres
+755 postgres/10-create-mailfathom-database.sh'
   local actual_modes
 
   actual_modes="$(
@@ -7407,7 +7415,8 @@ quick_start_prepares_the_deployment_the_documentation_describes() {
     stat --format '%a %n' \
       secrets secrets/mailfathom config \
       secrets/postgres-superuser-password secrets/mailfathom-database-password \
-      secrets/mailfathom/imap-password config/10-mailfathom.json mailbox.json
+      secrets/mailfathom/imap-password config/10-mailfathom.json mailbox.json \
+      postgres postgres/10-create-mailfathom-database.sh
   )"
 
   if [[ "$actual_modes" != "$expected_modes" ]]; then
@@ -7638,11 +7647,15 @@ quick_start_prepares_the_client_it_can_serve() {
   assert_contains '"Language": "English"' "$compose_directory/mailbox.json"
 
   local refused_language_root
+  local refused_language_log="$test_directory/quick-start-client-language-log"
   refused_language_root="$(stage_quick_start_checkout 'quick-start-client-language')"
-  if run_quick_start "$refused_language_root" --provider fastmail --language Klingon > /dev/null 2>&1; then
+  if run_quick_start "$refused_language_root" --provider fastmail --language Klingon \
+    > "$refused_language_log" 2>&1; then
     printf 'A language no mail account can state was accepted instead of refused.\n' >&2
     return 1
   fi
+
+  assert_contains 'The language is English or Polish, not Klingon.' "$refused_language_log"
 
   # The name somebody signs in as is the mailbox's address unless the run was told another.
   local named_root

@@ -406,8 +406,8 @@ way — MailFathom terminates no TLS of its own — so what this decides is whet
 present a key.
 
   api-key  The endpoint accepts a key the running deployment mints for the user, and the client
-           sends it as a bearer credential. Minting it is one mfctl command against the
-           administrative endpoint, which this deployment serves either way. Two popular chat
+           sends it as a bearer credential. This run mints it once the deployment is up and
+           prints it once when it finishes. Two popular chat
            clients offer no field for a key, and cannot connect to an endpoint configured this way.
   none     Anything that can reach 127.0.0.1:8080 reads your mail. Legal, announced with a startup
            warning, and reasonable only because the port is published on loopback alone.
@@ -589,7 +589,7 @@ fi
 # accepts one method and nothing else: a user's username and password is the one credential a person can present from
 # a browser without an authorization server behind it, and an evaluation has none. The entry names the method and holds
 # no credential — a record is minted over the administrative endpoint once the deployment is up, which is why this
-# script prints that command rather than writing a file. No port is stated, because the endpoints share the container's
+# script provisions one then rather than writing a file now. No port is stated, because the endpoints share the container's
 # 8080 and that is the socket compose.yaml publishes. The origin list is empty for the same reason the endpoint below
 # states one: the page this deployment serves is same-origin, so an absent list — which is every browser origin —
 # would open the mail-reading surface to sites that have no business calling it.
