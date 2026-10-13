@@ -58,9 +58,11 @@ function reinstateJsdomStorage(name: string, jsdomName: string): void {
 // jsdom implements no part of the popover API: not the invoker attribute, and not `showPopover` or `hidePopover`. A
 // component that folds its own popover away while something in front of it is open therefore calls a method that is
 // not there, and the whole test file fails on that rather than on what it was asserting. What is put back is the pair
-// as the platform's own no-op for a popover that is already in the state asked for — nothing here can observe one
-// opening, jsdom drawing every popover closed, so what a test may assert about them stays what the markup declares
-// and never what pressing one did. Anything more would be a second implementation of the platform inside the suite.
+// as the platform's own no-op for a popover that is already in the state asked for — jsdom draws every popover
+// closed, so what a test may assert about one stays what the markup declares and never what pressing it did. The one
+// thing a closed popover does decide here is focus, which jsdom gives to nothing it is not drawing: a test about
+// focus inside one records the pair on that element as drawing it and hiding it again, and says so where it does.
+// Anything more, for every popover at once, would be a second implementation of the platform inside the suite.
 for (const method of ['showPopover', 'hidePopover'] as const) {
     if (typeof HTMLElement.prototype[method] !== 'function') {
         Object.defineProperty(HTMLElement.prototype, method, {
