@@ -23,8 +23,9 @@ namespace MailFathom.IntegrationTests.Orchestration;
 /// project process is starting, which is a slower machine than the one the limit was chosen for.
 /// </para>
 /// <para>
-/// Ordering collections is the only lever that reaches this, because xUnit orders test cases within a class and
-/// collections within an assembly, but not classes within a collection. All three collections disable parallelization,
+/// Ordering collections is the lever that reaches this, because what has to come last is a collection: the orderers
+/// xUnit offers below that level arrange the classes of one collection and the methods of one class, and neither can
+/// move a class past a collection it does not belong to. All three collections disable parallelization,
 /// so xUnit already runs them one after another; this decides in which order.
 /// </para>
 /// <para>

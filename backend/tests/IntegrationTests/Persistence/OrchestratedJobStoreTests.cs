@@ -791,6 +791,13 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
             cancellationToken);
 
     /// <summary>Takes everything claimable and completes it, so a test acts on a queue holding only its own work.</summary>
+    /// <remarks>
+    /// What no claim can reach is removed as well. Two tests here leave a job waiting on an instant that has not come —
+    /// the one a retry named, and the one an enqueue was scheduled for — and a waiting row counts against the queue's
+    /// depth whether or not it is due. Left behind, they spend the depth of whichever test xUnit happens to run after
+    /// them, which then meets a refusal it did not arrange. Only this class's own rows go, told apart by the key every
+    /// one of them is enqueued under.
+    /// </remarks>
     private static async Task DrainAsync(
         OrchestratedMailFathomServices services,
         CancellationToken cancellationToken)
@@ -803,7 +810,7 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
 
             if (claimed.Count == 0)
             {
-                return;
+                break;
             }
 
             foreach (var job in claimed)
@@ -811,6 +818,14 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
                 await CompleteAsync(services, job.JobId, job.Lease.User, cancellationToken);
             }
         }
+
+        var heldBackKeys = $"{FolderAlias}/";
+
+        await services.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<MailFathomDbContext>().Jobs
+                .Where(job => job.State == JobState.Pending && job.IdempotencyKey.StartsWith(heldBackKeys))
+                .ExecuteDeleteAsync(token),
+            cancellationToken);
     }
 
     private static Task<string?> ReadStateAsync(

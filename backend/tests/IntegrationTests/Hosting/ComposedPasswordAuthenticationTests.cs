@@ -39,7 +39,10 @@ namespace MailFathom.IntegrationTests.Hosting;
 /// <para>
 /// The credential store is replaced after the composition and before the container is built, because everything else in
 /// this class is about the pipeline: the real store reaches a database this host does not have, so leaving it in would
-/// turn every one of these claims into a connection failure. Nothing else is substituted — the hasher, the limiter, the
+/// turn every one of these claims into a connection failure. The rows a request reads about the user that credential
+/// names are substituted beside it for the same reason, by <see cref="UsersHeldInProcess" />: the record they are
+/// served from, and a grant holding every permission, which leaves the credential's own list as what narrows a
+/// request. So is the hasher, so the one password this class knows verifies without the real cost. The limiter, the
 /// handler, the scheme registration, and the challenge are all the deployment's own.
 /// </para>
 /// <para>
@@ -267,6 +270,7 @@ public sealed class ComposedPasswordAuthenticationTests
                 builder.Services.RemoveAll<IUserCredentialStore>();
                 builder.Services.AddScoped(static _ => OneProvisionedCredential());
                 builder.Services.AddSingleton<IPasswordHasher>(new OneKnownPasswordHasher());
+                UsersHeldInProcess.Hold(builder.Services, [User]);
             });
 
     /// <summary>The store as a deployment holding exactly one enabled credential answers.</summary>

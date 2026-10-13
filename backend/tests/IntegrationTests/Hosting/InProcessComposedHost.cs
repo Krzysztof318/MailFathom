@@ -132,7 +132,9 @@ internal sealed class InProcessComposedHost : IAsyncDisposable
         // answers a fault says why in its log and nowhere else, so a shape whose host writes nowhere fails as a bare
         // status code with the exception behind it lost — which is a failure nobody can read without running the suite
         // again with a patch applied.
-        builder.Logging.Services.AddSingleton<ILoggerProvider, ShapeLogsToTestOutput>();
+        var startedBy = TestContext.Current.TestOutputHelper;
+
+        builder.Logging.Services.AddSingleton<ILoggerProvider>(_ => new ShapeLogsToTestOutput(startedBy));
         builder.Services.Configure<KeyManagementOptions>(
             keyManagement => keyManagement.XmlRepository = new KeysHeldInMemory());
 
@@ -276,18 +278,19 @@ internal sealed class InProcessComposedHost : IAsyncDisposable
     /// code rather than a record of the requests a shape answered. The helper is read per entry rather than held,
     /// since one shape is driven by one test and a host that logs after its test has finished has nowhere to write;
     /// that case is swallowed rather than thrown, because a logger that fails a test by logging would report the
-    /// diagnosis as the defect.
+    /// diagnosis as the defect. The helper of the test that started the host is what an entry falls back to, because a
+    /// shape served over real sockets answers on the server's own threads: the test context does not flow onto them,
+    /// so read per entry alone such a shape logged nowhere and failed as the bare status code this exists to explain.
     /// </remarks>
-    [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The host materializes the provider it resolves from the container.")]
-    private sealed class ShapeLogsToTestOutput : ILoggerProvider
+    private sealed class ShapeLogsToTestOutput(ITestOutputHelper? startedBy) : ILoggerProvider
     {
-        public ILogger CreateLogger(string categoryName) => new ShapeLog(categoryName);
+        public ILogger CreateLogger(string categoryName) => new ShapeLog(categoryName, startedBy);
 
         public void Dispose()
         {
         }
 
-        private sealed class ShapeLog(string category) : ILogger
+        private sealed class ShapeLog(string category, ITestOutputHelper? startedBy) : ILogger
         {
             public IDisposable? BeginScope<TState>(TState state)
                 where TState : notnull => null;
@@ -303,7 +306,7 @@ internal sealed class InProcessComposedHost : IAsyncDisposable
             {
                 ArgumentNullException.ThrowIfNull(formatter);
 
-                if (!this.IsEnabled(logLevel) || TestContext.Current.TestOutputHelper is not { } output)
+                if (!this.IsEnabled(logLevel) || (TestContext.Current.TestOutputHelper ?? startedBy) is not { } output)
                 {
                     return;
                 }

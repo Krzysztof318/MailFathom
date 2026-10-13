@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/fathomise/MailFathom
 
+using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -26,6 +27,9 @@ namespace MailFathom.IntegrationTests.Orchestration;
 /// </remarks>
 internal static class ComposedHostAdministration
 {
+    /// <summary>The role the seeding migration records as holding the whole mail half, by the identifier it seeds it under.</summary>
+    private const string SeededMailUserRole = "01a11deb-3808-7000-8000-000000000001";
+
     /// <summary>Opens a client aimed at the administrative surface, already signed in as the default administrator.</summary>
     /// <param name="adminAddress">The base address of the composed host's administrative endpoint.</param>
     /// <returns>The client, which the caller disposes.</returns>
@@ -64,6 +68,40 @@ internal static class ComposedHostAdministration
         using var provisioned = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
 
         return provisioned.RootElement.GetProperty("id").GetGuid();
+    }
+
+    /// <summary>Gives one user the seeded mail role over their own mail, which is what a credential of theirs can then hold.</summary>
+    /// <param name="client">A client aimed at the administrative surface.</param>
+    /// <param name="user">The user, who is both the principal and the scope.</param>
+    /// <param name="cancellationToken">Cancels the write.</param>
+    /// <remarks>
+    /// A recorded user holds no role, and a credential holds at most what its user holds — so one provisioned for a user
+    /// nobody assigned a role authenticates and reaches nothing: the tool list is empty and every call is refused.
+    /// <c>409</c> is the assignment already standing, which is the answer on a database an earlier run left behind.
+    /// </remarks>
+    internal static async Task AssignMailRoleAsync(
+        HttpClient client,
+        Guid user,
+        CancellationToken cancellationToken)
+    {
+        var assignment = new JsonObject
+        {
+            ["roleId"] = SeededMailUserRole,
+            ["principalKind"] = "user",
+            ["principalId"] = user.ToString("D"),
+            ["scopeKind"] = "user",
+            ["scopeId"] = user.ToString("D"),
+        };
+        using var content = new StringContent(assignment.ToJsonString(), Encoding.UTF8, "application/json");
+        using var response = await client.PostAsync(
+            new Uri("api/admin/role-assignments", UriKind.Relative),
+            content,
+            cancellationToken);
+
+        if (response.StatusCode != HttpStatusCode.Conflict)
+        {
+            response.EnsureSuccessStatusCode();
+        }
     }
 
     /// <summary>Provisions an API key one user's MCP client presents, and reports the key the deployment minted.</summary>

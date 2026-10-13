@@ -10,7 +10,7 @@ using MailFathom.Domain.Accounts;
 
 namespace MailFathom.IntegrationTests.Orchestration;
 
-/// <summary>Adds the mailbox the composed host serves, assigned to the one user that host holds.</summary>
+/// <summary>Adds the mailbox the composed host serves, assigned to the user the suite records its mail under.</summary>
 /// <remarks>
 /// <para>
 /// A deployment reads no mail account from its own file, so the app model cannot configure this one: every account a
@@ -54,7 +54,8 @@ internal static class ComposedHostMailbox
     {
         using var client = ComposedHostAdministration.Open(adminAddress);
 
-        var user = await ReadOrRecordSoleUserAsync(client, cancellationToken);
+        var user = await ReadOrRecordSuiteUserAsync(client, cancellationToken);
+        await ComposedHostAdministration.AssignMailRoleAsync(client, user, cancellationToken);
 
         if (await FindAssignedAccountAsync(client, user, cancellationToken) is { } recorded)
         {
@@ -162,7 +163,13 @@ internal static class ComposedHostMailbox
         },
     };
 
-    private static async Task<Guid> ReadOrRecordSoleUserAsync(HttpClient client, CancellationToken cancellationToken)
+    /// <summary>Finds the user the suite's mail belongs to by the label it is recorded under, and records them where nobody holds it.</summary>
+    /// <remarks>
+    /// By label rather than by being the only user, because the host is never the only writer of that table: its first
+    /// start records a default administrator of its own, so a roster holding the suite's user holds that one beside
+    /// them. Labels are unique across a deployment, which is what makes the match single.
+    /// </remarks>
+    private static async Task<Guid> ReadOrRecordSuiteUserAsync(HttpClient client, CancellationToken cancellationToken)
     {
         using var response = await client.GetAsync(
             new Uri("api/admin/users", UriKind.Relative),
@@ -170,18 +177,14 @@ internal static class ComposedHostMailbox
         response.EnsureSuccessStatusCode();
 
         using var roster = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
-        var users = roster.RootElement
+        var recorded = roster.RootElement
             .GetProperty("users")
             .EnumerateArray()
-            .Select(static user => user.GetProperty("id").GetGuid())
-            .ToArray();
+            .Where(static user => user.GetProperty("displayName").GetString() == RecordedUserDisplayName)
+            .Select(static user => (Guid?)user.GetProperty("id").GetGuid())
+            .FirstOrDefault();
 
-        return users switch
-        {
-            [var only] => only,
-            [] => await ComposedHostAdministration.RecordUserAsync(client, RecordedUserDisplayName, cancellationToken),
-            _ => throw new InvalidOperationException(
-                $"The composed host holds {users.Length} users, and the mailbox this suite reads belongs to one."),
-        };
+        return recorded
+            ?? await ComposedHostAdministration.RecordUserAsync(client, RecordedUserDisplayName, cancellationToken);
     }
 }

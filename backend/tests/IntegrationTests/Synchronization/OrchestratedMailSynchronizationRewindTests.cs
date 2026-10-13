@@ -34,7 +34,7 @@ namespace MailFathom.IntegrationTests.Synchronization;
 /// </para>
 /// </remarks>
 [Collection(OrchestratedInfrastructureCollectionDefinition.Name)]
-[TestCaseOrderer(typeof(MailboxStateSequenceOrderer))]
+[TestMethodOrderer(typeof(MailboxStateSequenceOrderer))]
 public sealed class OrchestratedMailSynchronizationRewindTests(MailFathomOrchestrationFixture orchestration)
 {
     private const string RewoundFolderName = "Rewound";

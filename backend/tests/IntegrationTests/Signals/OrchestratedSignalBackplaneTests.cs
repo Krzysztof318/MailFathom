@@ -178,6 +178,12 @@ public sealed class OrchestratedSignalBackplaneTests(MailFathomOrchestrationFixt
                 new("ClientEndpoint:BindAddress", "127.0.0.1"),
                 new("ClientEndpoint:Port", port.ToString(CultureInfo.InvariantCulture)),
 
+                // A method rather than none, though no request here presents a key: an endpoint requiring no credential
+                // attributes every request to the deployment's sole user, and the orchestration's database holds the
+                // default administrator beside the person the ticket names. Requiring one leaves the ticket as the only
+                // thing that says whose connection this is, which is how any deployment serving several people runs.
+                new("ClientEndpoint:Authentication:0:Method", "api-key"),
+
                 // The probe listener is on by default and binds one fixed port on every interface, which two replicas
                 // in one process cannot both have; neither of them is driven here, and the second would fail to start
                 // on an address already in use before this class reached the signal it exists to follow.

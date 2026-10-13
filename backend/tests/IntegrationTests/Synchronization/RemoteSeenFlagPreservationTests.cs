@@ -22,7 +22,7 @@ namespace MailFathom.IntegrationTests.Synchronization;
 /// adapter under test never touches.
 /// </remarks>
 [Collection(OrchestratedInfrastructureCollectionDefinition.Name)]
-[TestCaseOrderer(typeof(MailboxStateSequenceOrderer))]
+[TestMethodOrderer(typeof(MailboxStateSequenceOrderer))]
 public sealed class RemoteSeenFlagPreservationTests(MailFathomOrchestrationFixture orchestration)
 {
     private static readonly MailFolderResolution Inbox = MailFolderResolution.FirstBindingOf(

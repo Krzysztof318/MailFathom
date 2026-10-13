@@ -42,7 +42,7 @@ namespace MailFathom.IntegrationTests.Synchronization;
 /// </para>
 /// </remarks>
 [Collection(OrchestratedInfrastructureCollectionDefinition.Name)]
-[TestCaseOrderer(typeof(MailboxStateSequenceOrderer))]
+[TestMethodOrderer(typeof(MailboxStateSequenceOrderer))]
 public sealed class OrchestratedRelocationReconciliationTests(MailFathomOrchestrationFixture orchestration)
 {
     private const string SourceFolderName = "RelocationSource";
