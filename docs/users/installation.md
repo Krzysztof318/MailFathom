@@ -41,7 +41,7 @@ cd MailFathom
 **To try MailFathom before choosing any of this, `scripts/quick-start-compose.sh` prepares the Compose shape for you** —
 it asks where the mailbox lives and performs every step
 [deploying with Docker Compose](../operations/deployment-compose.md#trying-it-first-with-one-command) otherwise asks you
-to type, except recording the user it serves, which stays yours. What it produces is a deployment to evaluate with rather than one to depend on: it serves the machine it runs
+to type, down to recording the person it serves and a password they sign in to the client with. What it produces is a deployment to evaluate with rather than one to depend on: it serves the machine it runs
 on over plain HTTP, keeps its credentials in files under the checkout, and backs nothing up. The choice below is the one
 it does not make for you, and it stays yours to make afterwards.
 

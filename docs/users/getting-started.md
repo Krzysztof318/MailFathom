@@ -9,12 +9,11 @@ from [installing MailFathom](installation.md); a developer evaluating from the c
 [Aspire orchestration](../operations/local-development.md#running-locally-with-aspire) instead, which provisions
 PostgreSQL and applies the schema on its own.
 
-**Somebody evaluating MailFathom on the Compose shape can have steps 1 to 5 and 7 performed for them, and the
-`mfctl` commands of step 6 printed.**
-`scripts/quick-start-compose.sh` asks the same questions this page does, writes the same values, prints the `mfctl`
-commands of step 6 — recording the user a deployment serves is yours, so it leaves that step to you — and ends by
-printing the two a client needs in step 8 — plus an address the [MailFathom client](../operations/client-endpoint.md) answers on
-and a generated username and password to sign in to it with, which it provisions for you. [Trying it first, with one
+**Somebody evaluating MailFathom on the Compose shape can have steps 1 to 7 performed for them.**
+`scripts/quick-start-compose.sh` asks the same questions this page does, writes the same values, records the person
+the deployment serves, their role, and their mailbox as step 6 does, and ends by printing the two a client needs in
+step 8 — plus the address the [MailFathom client](../operations/client-endpoint.md) answers on and a user name and a
+generated password to sign in to it with, which it provisions for you. [Trying it first, with one
 command](../operations/deployment-compose.md#trying-it-first-with-one-command) is that path, including what a deployment
 it prepares is missing before anybody depends on it. Read this page anyway, for what each answer means.
 
