@@ -38,18 +38,19 @@
 // the application's, in `shellOperations/configuredConnection.ts` and `deployment/adoptedDeployment.ts`, because they
 // are the same decisions on either head and a rule written twice is a rule two heads eventually disagree about.
 //
-// The ninth is `raise_notification`, and it is the one command here that exists because a plugin could not do the whole
-// of what it is for. It is not `async` and needs nothing from the runtime: it hands the waiting to a thread of its own
-// and returns, which `notifications.rs` beside this file explains along with why the waiting is what this shell had to
-// take over.
+// The ninth is `raise_notification`, and it is the one command here that only passes a request on to a plugin. It is
+// not `async` and needs nothing from the runtime: the plugin dispatches the notification on a task of its own and the
+// command returns. `notifications.rs` beside this file explains why it is this shell's command all the same — what a
+// click on a notification does is decided here, and the plugin is what reports the click.
 //
 // Two plugins are registered beside them. The opener answers the first operation the bundle asks of a shell — handing a
-// link a reader followed to the system browser, per ADR 0024 — and the notification plugin answers half of the second,
-// which is whether raising one is permitted at all. Both are plugins' commands, so both are gated:
-// `capabilities/open-a-link.json` narrows what the webview may ask of the opener to the three schemes a message body
-// may carry, and `capabilities/raise-a-notification.json` narrows the notification plugin to the two permission
-// commands the application still calls, on the desktop targets alone, rather than taking the plugin's own default set.
-// No core capability is granted either.
+// link a reader followed to the system browser, per ADR 0024 — and the notification plugin answers the second: whether
+// raising one is permitted, which the bundle asks it directly, and the raising and the report of a click, which this
+// shell asks it for. Both are plugins' commands, so both are gated: `capabilities/open-a-link.json` narrows what the
+// webview may ask of the opener to the three schemes a message body may carry, and
+// `capabilities/raise-a-notification.json` narrows the notification plugin to the two permission commands the
+// application calls, on the desktop targets alone, rather than taking the plugin's own default set. No core capability
+// is granted either.
 //
 // The notification plugin is also the one thing this crate does not link everywhere. `Cargo.toml` states it per target
 // and `run` below registers it under the same condition, for a reason about the Android project's locked dependency
@@ -234,7 +235,7 @@ fn abandon_sign_in_redirect() {
 /// plugin's own permission commands already told it.
 #[tauri::command]
 fn raise_notification(app: tauri::AppHandle, said: String) {
-    notifications::raise(app, said);
+    notifications::raise(&app, said);
 }
 
 /// Starts the shell. Every head enters here: the desktop binary calls it from `main`, and Android's generated entry
@@ -253,6 +254,15 @@ pub fn run() {
     // unconditional, and the application above asks whether the operation is offered rather than which head answered.
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let shell = shell.plugin(tauri_plugin_notification::init());
+
+    // A click is answered from the moment the shell is set up, because the plugin reports one only for a notification
+    // raised while something was already listening. `notifications.rs` holds what the answer is.
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    let shell = shell.setup(|app| {
+        notifications::answer_clicks(app.handle());
+
+        Ok(())
+    });
 
     shell
         .invoke_handler(tauri::generate_handler![

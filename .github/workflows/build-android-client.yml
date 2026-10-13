@@ -89,7 +89,7 @@ jobs:
 
       # The two of the build's three variables the image leaves no usable value for. `ANDROID_HOME` it already exports;
       # `NDK_HOME` is Tauri's own name for the versioned NDK directory and nothing sets it, and `JAVA_HOME` is the
-      # image's JDK 17 while Gradle 8.14.3 is what the committed wrapper runs — JDK 21 is what this project builds that
+      # image's JDK 17 while Gradle 9.6.1 is what the committed wrapper runs — JDK 21 is what this project builds that
       # with, per
       # `docs/operations/local-development.md`, and a JDK too new fails inside Gradle's own startup rather than in
       # anything named after Android. The image's default NDK is taken rather than its newest, for the same reason the

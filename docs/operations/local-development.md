@@ -1335,7 +1335,9 @@ pnpm desktop:build   # the release application and the installers named in tauri
 ```
 
 **Rust comes from [`rustup`](https://rustup.rs/)**, on the stable channel, and the shell builds on the 2024 edition —
-so a toolchain older than Rust 1.85 refuses `frontend/src-tauri/Cargo.toml` before it reaches a dependency. Nothing
+so a toolchain older than Rust 1.85 refuses `frontend/src-tauri/Cargo.toml` before it reaches a dependency. The floor
+that actually binds is the dependency's own: the `tauri` crate this shell pins declares Rust 1.90 as the oldest
+compiler it builds on, so a toolchain between the two reads the manifest and then stops inside that crate. Nothing
 pins the Rust version the way `global.json` pins the SDK: `Cargo.lock` fixes the crate closure, and the compiler is
 whatever stable a machine has.
 
@@ -1391,8 +1393,8 @@ export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
 ```
 
 **The JDK is the one worth naming a version for.** Gradle refuses a JDK newer than the release it was built against, so
-the newest one a machine happens to have is the wrong default — the wrapper this project generated runs Gradle 8.14.3,
-and JDK 21 is the safe answer for it. A JDK too new fails inside Gradle's own startup rather than in anything named
+the newest one a machine happens to have is the wrong default — the wrapper this project generated runs Gradle 9.6.1,
+which will not start on anything older than JDK 17, and JDK 21 is the safe answer for it. A JDK too new fails inside Gradle's own startup rather than in anything named
 after Android, which is the confusing half.
 
 **The APK the build produces is a debug build signed with the debug certificate**, which is the decision rather than a
