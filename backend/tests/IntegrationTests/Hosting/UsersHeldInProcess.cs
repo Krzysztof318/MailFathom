@@ -49,9 +49,8 @@ internal static class UsersHeldInProcess
         services.RemoveAll<IGrantStore>();
         services.AddSingleton(grants);
 
-        // Registered after the composition's own workers were removed, so it is the one hosted service of MailFathom's
-        // that starts: the users have to be held before the first request, and the container exists only once the host
-        // is built.
+        // A hosted service because the users have to be held before the first request, and the container that holds
+        // them exists only once the host is built.
         services.AddHostedService(provider => new HoldsUsersOnStart(provider.GetRequiredService<ServedUsers>(), users));
     }
 

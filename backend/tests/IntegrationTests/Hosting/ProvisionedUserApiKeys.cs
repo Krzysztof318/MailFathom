@@ -34,8 +34,12 @@ internal sealed record ProvisionedUserApiKey(
 /// <para>
 /// A key a user's client presents is a row rather than a configured value, so a shape that used to write its keys into
 /// the endpoint's section now provisions them here instead. Everything about the pipeline stays the deployment's own:
-/// the scheme registration, the handler, the limiter, and the grant are all composed as they would be, and what is
-/// replaced is the store the handler reads and the minter that reduces a presented key to what resolves one.
+/// the scheme registration, the handler, and the limiter are all composed as they would be, and what is replaced is
+/// the store the handler reads, the minter that reduces a presented key to what resolves one, and — through
+/// <see cref="UsersHeldInProcess" /> — the two rows a request reads about the user a key names: the record they are
+/// served from, and their grant, answered as every permission at the deployment's scope. So what narrows a request in
+/// a shape is the list its key states and nothing a role assignment gives; what a role gives is covered where grants
+/// are resolved.
 /// </para>
 /// <para>
 /// The minter is hand-written rather than substituted, for the reason <c>ComposedPasswordAuthenticationTests</c> gives
