@@ -117,8 +117,9 @@ public sealed record GetEmailContentRequest
     /// picture's source and nothing else, so that is the whole of it there. The self-contained markup carries a
     /// background and a web font besides, and both are addresses the same fetch would reveal the same thing through —
     /// so the consent restores them or the surface would draw a layout missing exactly the parts it was opened to see.
-    /// It restores nothing that runs in either, and nothing whose address the pass deciding a URL never sees, which is
-    /// what leaves an <c>@import</c> and a <c>srcset</c> refused whether or not it was asked for.
+    /// It restores nothing that runs in either, and nothing the pass deciding a URL cannot answer for: an
+    /// <c>@import</c> names a stylesheet that pass never read, and a <c>srcset</c> is a list the check behind it reads
+    /// as one address, which is what leaves both refused whether or not it was asked for.
     /// </para>
     /// </remarks>
     /// <exception cref="InvalidOperationException">Thrown when it is asked for by a request naming other than one email.</exception>
