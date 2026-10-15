@@ -21,7 +21,7 @@ set -euo pipefail
 #   4. the schema artifact applied to that database
 #   5. MailFathom published and started against both servers, serving the bundle from its client endpoint
 #   6. the user this run serves, then their mailbox, recorded through the administrative API
-#   7. a client credential provisioned through the same API
+#   7. the Mail user role at that user's scope, then a client credential, through the same API
 #   8. the corpus replayed into the mailbox over SMTP
 #   9. the account's synchronization run reporting no failed folder
 #  10. the end-to-end specs, in a real browser, against all of it
@@ -408,6 +408,27 @@ mailbox_declaration="$(
 printf '%s' "$mailbox_declaration" \
   | jq --exit-status 'if .committed then true else (("the deployment refused the mailbox: " + (.messages | join(" "))) | halt_error(1)) end' \
   > /dev/null
+
+step 'assigning the Mail user role'
+
+# A recorded user holds no permission until a role is assigned, and the credential below takes the user's own. The role
+# is one of those every database is seeded with and a row an administrator can rename, so it is found by the name it is
+# seeded under rather than by the identifier it was seeded with.
+mail_user_role="$(
+  curl --fail --silent --show-error \
+    --header "Authorization: $admin_authorization" \
+    "$admin_origin/api/admin/roles" \
+    | jq --exit-status --raw-output 'first(.roles[] | select(.name == "Mail user") | .id)'
+)"
+
+curl --fail --silent --show-error --output /dev/null \
+  --header "Authorization: $admin_authorization" \
+  --header 'Content-Type: application/json' \
+  --data "$(
+    jq --null-input --arg role "$mail_user_role" --arg user "$served_user" \
+      '{roleId: $role, principalKind: "user", principalId: $user, scopeKind: "user", scopeId: $user}'
+  )" \
+  "$admin_origin/api/admin/role-assignments"
 
 step 'provisioning the client credential'
 
