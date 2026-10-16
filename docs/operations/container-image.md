@@ -21,7 +21,7 @@ than anything in here. [Applying the database schema](database-schema.md) docume
 
 ## What is inside, and what is not
 
-The runtime image is built on `mcr.microsoft.com/dotnet/aspnet:10.0.12-noble-chiseled-extra` and is about 88 MB
+The runtime image is built on `mcr.microsoft.com/dotnet/aspnet:10.0.13-noble-chiseled-extra` and is about 88 MB
 uncompressed, of which the client bundle described below is about 230 kB — a quarter of one percent, measured with
 `docker image inspect` and `docker history` on a local build of this Dockerfile.
 Chiseled means there is no shell, no package manager, and no HTTP client: a process that reaches the container finds

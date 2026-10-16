@@ -98,7 +98,7 @@ docker compose up -d
 
 | Property | Value |
 | --- | --- |
-| Base | `mcr.microsoft.com/dotnet/aspnet:10.0.12-noble-chiseled-extra`, pinned to an exact patch version |
+| Base | `mcr.microsoft.com/dotnet/aspnet:10.0.13-noble-chiseled-extra`, pinned to an exact patch version |
 | Platforms | `linux/amd64` and `linux/arm64` |
 | User | `1654`, the unprivileged `app` account — never root |
 | Ports | `8080` for `/mcp`, which `McpEndpoint:Port` moves; `8081` for the probes, on a listener of its own, which `HealthEndpoints:Port` moves |
