@@ -19,6 +19,8 @@
   <ItemGroup>
     <PackageReference Include="MailKit" />
     <PackageReference Include="MimeKit" />
+    <!-- Named so the central pin replaces the vulnerable version MimeKit would otherwise resolve. -->
+    <PackageReference Include="System.Security.Cryptography.Pkcs" />
     <!-- The opt-in AI content mode reaches the same single client construction the service's provider adapters use:
          the OpenAI wire protocol, a base address, and a key. No project under backend/src/ is referenced. -->
     <PackageReference Include="OpenAI" />

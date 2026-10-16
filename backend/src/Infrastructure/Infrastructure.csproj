@@ -36,6 +36,8 @@
     <!-- Referenced directly rather than relied on through MailKit, because message parsing uses MimeKit's own API and
          the version that compiles must be pinned here instead of inherited from another package's dependency range. -->
     <PackageReference Include="MimeKit" />
+    <!-- Named so the central pin replaces the vulnerable version MimeKit would otherwise resolve. -->
+    <PackageReference Include="System.Security.Cryptography.Pkcs" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design">

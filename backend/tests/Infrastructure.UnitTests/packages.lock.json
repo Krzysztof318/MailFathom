@@ -552,11 +552,6 @@
         "resolved": "6.0.1",
         "contentHash": "IQ4NXP/B3Ayzvw0rDQzVTYsCKyy0Jp9KI6aYcK7UnGVlR9+Awz++TIPCQtPYfLJfOpm8ajowMR09V7quD3sEHw=="
       },
-      "System.Security.Cryptography.Pkcs": {
-        "type": "Transitive",
-        "resolved": "10.0.0",
-        "contentHash": "UPWqLSygJlFerRi9XNIuM0a1VC8gHUIufyP24xQ0sc+XimqUAEcjpOz9DhKpyDjH+5B/wO3RpC0KpkEeDj/ddg=="
-      },
       "xunit.v3.assert": {
         "type": "Transitive",
         "resolved": "4.0.2",
@@ -656,6 +651,7 @@
           "Polly.Core": "[8.8.0, )",
           "Polly.Extensions": "[8.8.0, )",
           "Polly.RateLimiting": "[8.8.0, )",
+          "System.Security.Cryptography.Pkcs": "[10.0.13, )",
           "System.Threading.RateLimiting": "[10.0.12, )"
         }
       },
@@ -921,6 +917,12 @@
           "Polly.Core": "8.8.0",
           "System.Threading.RateLimiting": "8.0.0"
         }
+      },
+      "System.Security.Cryptography.Pkcs": {
+        "type": "CentralTransitive",
+        "requested": "[10.0.13, )",
+        "resolved": "10.0.13",
+        "contentHash": "a+EovgC1fBnwdlQ6cn3j4JFBfKqiFaFvoAhjisOoSvazLAcIznaBzPQP0oYnvccmeXfqUH1KebVZOxSeH6rMaw=="
       },
       "System.Threading.RateLimiting": {
         "type": "CentralTransitive",

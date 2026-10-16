@@ -89,6 +89,10 @@
     <PackageVersion Include="BouncyCastle.Cryptography" Version="2.7.0" />
     <PackageVersion Include="MailKit" Version="4.18.1" />
     <PackageVersion Include="MimeKit" Version="4.18.1" />
+    <!-- MimeKit brings this in transitively at 10.0.0, inside the range two .NET denial-of-service advisories cover.
+         Pinned at the fixed release so the version every mail project resolves is decided here rather than by
+         MimeKit's dependency floor. -->
+    <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
     <!-- The iCalendar (RFC 5545) reader an imported `.ics` file is parsed by. The base class library carries none, and
          the format is exactly the kind nobody hand-rolls safely: lines are folded at 75 octets, values escape their own
          separators, every property carries parameters, and a date names a zone, a UTC instant, or neither. Referenced
@@ -111,7 +115,7 @@
          only observable from a connection somebody is holding, and holding one means speaking the hub protocol over a
          real WebSocket. Nothing under backend/src references it — the client a deployment serves is the browser's
          @microsoft/signalr, pinned in the client workspace. -->
-    <PackageVersion Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.13" />
     <!-- The OpenAPI object model, brought in transitively by the generator above and pinned directly for the reason
          BouncyCastle.Cryptography is: the document and operation transformers name its types, so the version this
          repository compiles against is decided here rather than inherited from another package's dependency range.
