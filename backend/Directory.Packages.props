@@ -111,6 +111,10 @@
          registered only where a deployment declared a RESP endpoint to carry it over — so a single-replica deployment
          restores it and connects to nothing. Referenced by Host alone. -->
     <PackageVersion Include="Microsoft.AspNetCore.SignalR.StackExchangeRedis" Version="10.0.12" />
+    <!-- The backplane brings this in transitively at 2.5.302, below the release that fixes a buffer-limit advisory against
+         nested arrays. Pinned at the fixed release so the version the host resolves is decided here rather than by the
+         backplane's dependency floor. -->
+    <PackageVersion Include="MessagePack" Version="2.5.303" />
     <!-- The .NET SignalR client, referenced by the integration suite alone: the claim that a signal crosses replicas is
          only observable from a connection somebody is holding, and holding one means speaking the hub protocol over a
          real WebSocket. Nothing under backend/src references it — the client a deployment serves is the browser's
