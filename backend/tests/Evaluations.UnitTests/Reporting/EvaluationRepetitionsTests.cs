@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/fathomise/MailFathom
 
+using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Evaluations.Costing;
 using MailFathom.Evaluations.Providers;
@@ -72,6 +73,36 @@ public sealed class EvaluationRepetitionsTests : IDisposable
 
         // Assert
         Assert.Equal(("vendor_model", "vendor_model#3"), (first, third));
+    }
+
+    [Fact]
+    public async Task MeasureAsync_SeveralRepetitions_AsksEveryRepetitionBeforeAnyHasAnswered()
+    {
+        // Arrange
+        var reporting = EvaluationStore.OpenUnjudgedAt(this.store.FullName, "only", []);
+        var answer = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var asked = new ConcurrentQueue<int>();
+
+        // Act
+        var measuring = EvaluationRepetitions.MeasureAsync(
+            reporting,
+            Scenario,
+            Model,
+            repetitions: 3,
+            async repetition =>
+            {
+                asked.Enqueue(repetition);
+                await answer.Task;
+
+                return [];
+            },
+            TestContext.Current.CancellationToken);
+        int[] askedBeforeAnyAnswered = [.. asked.Order()];
+        answer.SetResult();
+        await measuring;
+
+        // Assert
+        Assert.Equal([1, 2, 3], askedBeforeAnyAnswered);
     }
 
     [Fact]

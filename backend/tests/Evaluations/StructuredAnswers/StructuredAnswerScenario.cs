@@ -192,32 +192,32 @@ internal static class StructuredAnswerScenario
         return new StructuredAnswer(modelName, shortfall, verdict);
     }
 
-    /// <summary>Measures one model over clients, meters, and a store handle of its own, which is what lets the models run at once.</summary>
-    private static async Task<IReadOnlyList<string>> MeasureAsync(
+    /// <summary>Measures one model, each repetition over clients, meters, and a store handle of its own, which is what lets the models and the repetitions run at once.</summary>
+    private static Task<IReadOnlyList<string>> MeasureAsync(
         JudgeDeclaration judge,
         ModelUnderTest modelUnderTest,
         string apiKey,
         int repetitions,
         StructuredAnswerRequest request,
-        CancellationToken cancellationToken)
-    {
-        var plan = modelUnderTest.Plan;
-        var modelSpend = new SpendMeter();
-        var judgeSpend = new SpendMeter();
-
-        using var model = ProviderChatClient.Open(modelUnderTest, apiKey, modelSpend);
-        using var judgeClient = judge.Open(judgeSpend);
-
-        var reporting = EvaluationStore.Open(judgeClient, judge.CachingKey, request.Evaluators);
-
-        return await EvaluationRepetitions.MeasureAsync(
-            reporting,
+        CancellationToken cancellationToken) =>
+        EvaluationRepetitions.MeasureAsync(
+            EvaluationStore.OpenUnjudged([]),
             request.ScenarioName,
             modelUnderTest.Name,
             repetitions,
-            async repetition => [.. ShortfallsOf(await RunAsync(reporting, model, plan, repetition, request, modelSpend, judgeSpend, cancellationToken))],
+            async repetition =>
+            {
+                var modelSpend = new SpendMeter();
+                var judgeSpend = new SpendMeter();
+
+                using var model = ProviderChatClient.Open(modelUnderTest, apiKey, modelSpend);
+                using var judgeClient = judge.Open(judgeSpend);
+
+                var reporting = EvaluationStore.Open(judgeClient, judge.CachingKey, request.Evaluators);
+
+                return [.. ShortfallsOf(await RunAsync(reporting, model, modelUnderTest.Plan, repetition, request, modelSpend, judgeSpend, cancellationToken))];
+            },
             cancellationToken);
-    }
 
     /// <summary>Adds the deterministic verdict to the result, before the run is written to the store.</summary>
     private static void RecordExpectation(EvaluationResult verdict, string metricName, string? shortfall)

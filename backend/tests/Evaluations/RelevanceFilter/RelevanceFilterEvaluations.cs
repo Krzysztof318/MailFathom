@@ -15,9 +15,9 @@ namespace MailFathom.Evaluations.RelevanceFilter;
 /// <summary>Measures the model-judged relevance filter under every declared model, against the labelled candidates.</summary>
 /// <remarks>
 /// <para>
-/// Shaped like <see cref="ReplyDrafts.ReplyDraftEvaluations" /> — one test over the whole model list, the models
-/// measured at the same time, every shortfall collected before the test fails — with the one difference the filter's
-/// shape makes: no judge is declared, read, or opened, so the run's only provider calls are the filter's own.
+/// One test over the whole model list, the models and each model's repetitions measured at the same time and every
+/// shortfall collected before the test fails, as <see cref="AgentConversations.AgentConversationEvaluations" /> does for
+/// each of its questions. No judge is declared, read, or opened, so the run's only provider calls are the filter's own.
 /// </para>
 /// <para>
 /// A model fails where it falls under the floor at the default threshold. What the other thresholds kept is reported
@@ -45,28 +45,30 @@ public sealed class RelevanceFilterEvaluations
         AiEvaluationRun.AssertNoShortfalls(shortfalls.SelectMany(static modelShortfalls => modelShortfalls));
     }
 
-    /// <summary>Measures one model over a client, a meter, and a store handle of its own, which is what lets the models run at once.</summary>
-    private static async Task<IReadOnlyList<string>> MeasureAsync(ModelUnderTest modelUnderTest, string apiKey, int repetitions)
+    /// <summary>Measures one model, each repetition over a client and a meter of its own, which is what lets the models and the repetitions run at once.</summary>
+    private static Task<IReadOnlyList<string>> MeasureAsync(ModelUnderTest modelUnderTest, string apiKey, int repetitions)
     {
-        var plan = modelUnderTest.Plan;
-        var modelSpend = new SpendMeter();
-
-        using var model = ProviderChatClient.Open(modelUnderTest, apiKey, modelSpend);
-
         var reporting = EvaluationStore.OpenUnjudged(RelevanceFilterScenario.Evaluators);
 
-        return await EvaluationRepetitions.MeasureAsync(
+        return EvaluationRepetitions.MeasureAsync(
             reporting,
             RelevanceFilterScenario.Name,
             modelUnderTest.Name,
             repetitions,
-            async repetition => [.. ShortfallsOf(await RelevanceFilterScenario.RunAsync(
-                reporting,
-                model,
-                plan,
-                repetition,
-                modelSpend,
-                TestContext.Current.CancellationToken))],
+            async repetition =>
+            {
+                var modelSpend = new SpendMeter();
+
+                using var model = ProviderChatClient.Open(modelUnderTest, apiKey, modelSpend);
+
+                return [.. ShortfallsOf(await RelevanceFilterScenario.RunAsync(
+                    reporting,
+                    model,
+                    modelUnderTest.Plan,
+                    repetition,
+                    modelSpend,
+                    TestContext.Current.CancellationToken))];
+            },
             TestContext.Current.CancellationToken);
     }
 

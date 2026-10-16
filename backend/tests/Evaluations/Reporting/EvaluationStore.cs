@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/fathomise/MailFathom
 
+using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using MailFathom.AI.Chat;
@@ -39,6 +40,8 @@ internal static class EvaluationStore
     /// What the expiry still does is let an entry no scenario asks for any more fall away when the script prunes the store.
     /// </remarks>
     private static readonly TimeSpan AnswerLifetime = TimeSpan.FromDays(365);
+
+    private static readonly ConcurrentDictionary<(string Root, string ExecutionName, int Repetitions), TallyingResponseCacheProvider> ResponseCaches = new();
 
     /// <summary>Opens the store a requested run was pointed at.</summary>
     /// <param name="judge">The judge, already anonymous.</param>
@@ -92,7 +95,7 @@ internal static class EvaluationStore
             evaluators,
             new DiskBasedResultStore(root),
             new ChatConfiguration(judge),
-            ResponseCacheAt(root, repetitions),
+            ResponseCacheAt(root, executionName, repetitions),
             [judgeCachingKey],
             executionName);
 
@@ -115,7 +118,7 @@ internal static class EvaluationStore
             evaluators,
             new DiskBasedResultStore(root),
             chatConfiguration: null,
-            ResponseCacheAt(root, repetitions),
+            ResponseCacheAt(root, executionName, repetitions),
             executionName: executionName);
 
     /// <summary>Gets how many answers the model under test gave under one scenario and iteration were replayed from an earlier run, reused from this one, and asked afresh.</summary>
@@ -224,6 +227,14 @@ internal static class EvaluationStore
         .. repetitions is 1 ? Array.Empty<string>() : [string.Create(CultureInfo.InvariantCulture, $"repetitions={repetitions}")],
     ];
 
-    private static TallyingResponseCacheProvider ResponseCacheAt(string root, int repetitions) =>
-        new(new DiskBasedResponseCacheProvider(root, AnswerLifetime), repetitions);
+    /// <summary>Gets the one response cache every handle a run opens over a store shares.</summary>
+    /// <remarks>
+    /// One per store and run rather than one per handle, because a handle is opened per repetition — each over the judge
+    /// client its own spend is metered by — while what a repetition's answers were tallied as is read afterwards through
+    /// another handle on the same store.
+    /// </remarks>
+    private static TallyingResponseCacheProvider ResponseCacheAt(string root, string executionName, int repetitions) =>
+        ResponseCaches.GetOrAdd(
+            (root, executionName, repetitions),
+            static key => new TallyingResponseCacheProvider(new DiskBasedResponseCacheProvider(key.Root, AnswerLifetime), key.Repetitions));
 }

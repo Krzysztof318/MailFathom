@@ -19,6 +19,8 @@ namespace MailFathom.Evaluations.UnitTests.Enrichment;
 /// <param name="metadata">What the client publishes about itself, which is where a real one names its address and model.</param>
 internal sealed class ScriptedChatClient(string answer, ChatClientMetadata metadata) : IChatClient
 {
+    private readonly Lock received = new();
+
     /// <summary>Gets how many requests reached this provider.</summary>
     public int Requests { get; private set; }
 
@@ -31,8 +33,11 @@ internal sealed class ScriptedChatClient(string answer, ChatClientMetadata metad
         ChatOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        this.Requests++;
-        this.ReceivedOptions.Add(options);
+        lock (this.received)
+        {
+            this.Requests++;
+            this.ReceivedOptions.Add(options);
+        }
 
         return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, answer))
         {

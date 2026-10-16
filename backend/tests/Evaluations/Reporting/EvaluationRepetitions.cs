@@ -82,7 +82,7 @@ internal static class EvaluationRepetitions
     }
 
     /// <summary>Asks one case of one model once per repetition, records the share that passed, and names the shortfall.</summary>
-    /// <param name="reporting">The store the case is filed in.</param>
+    /// <param name="reporting">A handle on the store the case is filed in, whose results and tallies are read once every repetition has answered.</param>
     /// <param name="scenarioName">The case, as the store files it.</param>
     /// <param name="modelName">The routed name of the model under test.</param>
     /// <param name="repetitions">How many times the case is asked.</param>
@@ -90,8 +90,9 @@ internal static class EvaluationRepetitions
     /// <param name="cancellationToken">Withdraws the run.</param>
     /// <returns>One line naming the case, the model, how many repetitions fell short, and how many of its answers were replayed from an earlier run, followed by why each fell short; none where the share holds.</returns>
     /// <remarks>
-    /// The repetitions run one after another, because a model's spend meter is read once per answer and two answers
-    /// running at once would each be charged with the other's calls.
+    /// The repetitions are asked at once, because a case costs whatever its slowest repetition takes rather than the sum
+    /// of them. A repetition's cost is read off the spend meters its clients were opened over, so each repetition opens
+    /// clients and meters of its own: two answers measured over one meter would each be charged with the other's calls.
     /// </remarks>
     public static async Task<IReadOnlyList<string>> MeasureAsync(
         ReportingConfiguration reporting,
@@ -104,12 +105,7 @@ internal static class EvaluationRepetitions
         ArgumentNullException.ThrowIfNull(reporting);
         ArgumentNullException.ThrowIfNull(measure);
 
-        var shortfalls = new List<IReadOnlyList<string>>(repetitions);
-
-        for (var repetition = 1; repetition <= repetitions; repetition++)
-        {
-            shortfalls.Add(await measure(repetition));
-        }
+        var shortfalls = await Task.WhenAll(Enumerable.Range(1, repetitions).Select(measure));
 
         var passed = shortfalls.Count(static repetitionShortfalls => repetitionShortfalls.Count is 0);
         var holds = (double)passed / repetitions >= RequiredShare;

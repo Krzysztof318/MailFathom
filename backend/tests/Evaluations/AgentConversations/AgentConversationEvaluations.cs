@@ -16,12 +16,12 @@ namespace MailFathom.Evaluations.AgentConversations;
 /// <para>
 /// A theory over the questions rather than over the models, for the reason <c>DiscoveryPlanningEvaluations</c> gives,
 /// so each question is its own result and runs beside the others under the assembly's parallelization. Each opens its
-/// own clients, its own spend meters, and its own handle on the store for every model, so nothing is shared between two
-/// questions or two models but the directory their results are filed in, each under its own scenario and iteration, and
-/// the cost a question reports is read off meters no other question charges.
+/// own clients, its own spend meters, and its own handle on the store for every model and every repetition, so nothing
+/// is shared between two questions, two models, or two repetitions but the directory their results are filed in, each
+/// under its own scenario and iteration, and the cost a repetition reports is read off meters nothing else charges.
 /// </para>
 /// <para>
-/// The models are measured at the same time. A model that falls short is collected rather than failing the question,
+/// The models, and each model's repetitions, are measured at the same time. A model that falls short is collected rather than failing the question,
 /// so one weak model never hides what the others did, and the question fails at the end naming every model that fell
 /// short and why.
 /// </para>
@@ -55,36 +55,36 @@ public sealed class AgentConversationEvaluations
     }
 
     /// <summary>Puts one question to one model and names what it fell short on.</summary>
-    private static async Task<IReadOnlyList<string>> MeasureAsync(
+    private static Task<IReadOnlyList<string>> MeasureAsync(
         AgentConversationScenario scenario,
         JudgeDeclaration judge,
         ModelUnderTest modelUnderTest,
         string apiKey,
         int repetitions,
-        CancellationToken cancellationToken)
-    {
-        var plan = modelUnderTest.Plan;
-        var modelSpend = new SpendMeter();
-        var judgeSpend = new SpendMeter();
-
-        using var model = ProviderChatClient.Open(modelUnderTest, apiKey, modelSpend);
-        using var judgeClient = judge.Open(judgeSpend);
-
-        var reporting = EvaluationStore.Open(judgeClient, judge.CachingKey, AgentConversationScenario.Evaluators);
-
-        return await EvaluationRepetitions.MeasureAsync(
-            reporting,
+        CancellationToken cancellationToken) =>
+        EvaluationRepetitions.MeasureAsync(
+            EvaluationStore.OpenUnjudged([]),
             scenario.Name,
             modelUnderTest.Name,
             repetitions,
-            async repetition => [.. scenario.ShortfallsOf(await scenario.RunAsync(
-                reporting,
-                model,
-                plan,
-                repetition,
-                modelSpend,
-                judgeSpend,
-                cancellationToken))],
+            async repetition =>
+            {
+                var modelSpend = new SpendMeter();
+                var judgeSpend = new SpendMeter();
+
+                using var model = ProviderChatClient.Open(modelUnderTest, apiKey, modelSpend);
+                using var judgeClient = judge.Open(judgeSpend);
+
+                var reporting = EvaluationStore.Open(judgeClient, judge.CachingKey, AgentConversationScenario.Evaluators);
+
+                return [.. scenario.ShortfallsOf(await scenario.RunAsync(
+                    reporting,
+                    model,
+                    modelUnderTest.Plan,
+                    repetition,
+                    modelSpend,
+                    judgeSpend,
+                    cancellationToken))];
+            },
             cancellationToken);
-    }
 }
