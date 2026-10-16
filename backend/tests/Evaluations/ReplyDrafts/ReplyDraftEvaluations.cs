@@ -12,80 +12,66 @@ using Xunit;
 namespace MailFathom.Evaluations.ReplyDrafts;
 
 /// <summary>Has every declared model draft every reply in <see cref="ReplyDraftScenario.All" />.</summary>
-/// <remarks>
-/// <para>
-/// One test over the whole model list rather than a theory per model, because the list is read from the run's
-/// declaration and a theory's data is read before the skip condition is: a run nobody asked for would fail on a list
-/// nobody declared. Each model is still its own result in the store, filed under its name.
-/// </para>
-/// <para>
-/// The models are measured at the same time rather than one after another, because a run costs whatever the slowest
-/// model takes to answer. Each carries its own clients, its own spend meters, and its own handle on the store, so
-/// nothing is shared between two models but the directory their results are filed in. A model that falls short is
-/// collected rather than failing the run, so one weak model never hides what the others did, and the test fails at the
-/// end naming every model that fell short and why.
-/// </para>
-/// <para>
-/// One model's scenarios run one after another, because each one's cost is read off that model's meters and two
-/// scenarios answered at once would each report the other's spend.
-/// </para>
-/// </remarks>
+/// <remarks>Shaped like <see cref="AgentConversations.AgentConversationEvaluations" />, for the reasons it gives.</remarks>
 public sealed class ReplyDraftEvaluations
 {
     /// <summary>Gets whether an evaluation run was explicitly asked for.</summary>
     /// <remarks>Public and static because that is the shape xUnit reads a skip condition from.</remarks>
     public static bool EvaluationsRequested => AiEvaluationRun.Requested;
 
-    [Fact(Skip = AiEvaluationRun.SkipReason, SkipUnless = nameof(EvaluationsRequested))]
-    public async Task Draft_EveryScenario_EveryDeclaredModelDraftsWhatWasAskedFromTheConversationAlone()
+    /// <summary>Gets every case, by the name it is filed under.</summary>
+    public static TheoryData<string> Cases { get; } = new(ReplyDraftScenario.All.Select(static scenario => scenario.Name));
+
+    [Theory(Skip = AiEvaluationRun.SkipReason, SkipUnless = nameof(EvaluationsRequested))]
+    [MemberData(nameof(Cases))]
+    public async Task Draft_AConversation_EveryDeclaredModelDraftsWhatWasAskedFromTheConversationAlone(string caseName)
     {
         // Arrange
+        var scenario = ReplyDraftScenario.All.Single(candidate => candidate.Name == caseName);
         var judge = JudgeDeclaration.Read();
         var apiKey = EvaluationEndpoint.ApiKey();
         var repetitions = EvaluationRepetitions.Declared();
+        var cancellationToken = TestContext.Current.CancellationToken;
 
         // Act
-        var shortfalls = await Task.WhenAll([.. ModelsUnderTest.For(ChatCapability.ReplyDrafting).Select(model => MeasureAsync(judge, model, apiKey, repetitions))]);
+        var shortfalls = await Task.WhenAll(
+            [.. ModelsUnderTest.For(ChatCapability.ReplyDrafting).Select(model => MeasureAsync(scenario, judge, model, apiKey, repetitions, cancellationToken))]);
 
         // Assert
         AiEvaluationRun.AssertNoShortfalls(shortfalls.SelectMany(static modelShortfalls => modelShortfalls));
     }
 
-    /// <summary>Puts every scenario to one model and names what it fell short on.</summary>
-    private static async Task<IReadOnlyList<string>> MeasureAsync(
+    /// <summary>Puts one case to one model and names what it fell short on.</summary>
+    private static Task<IReadOnlyList<string>> MeasureAsync(
+        ReplyDraftScenario scenario,
         JudgeDeclaration judge,
         ModelUnderTest modelUnderTest,
         string apiKey,
-        int repetitions)
-    {
-        var plan = modelUnderTest.Plan;
-        var modelSpend = new SpendMeter();
-        var judgeSpend = new SpendMeter();
+        int repetitions,
+        CancellationToken cancellationToken) =>
+        EvaluationRepetitions.MeasureAsync(
+            EvaluationStore.OpenUnjudged([]),
+            scenario.Name,
+            modelUnderTest.Name,
+            repetitions,
+            async repetition =>
+            {
+                var modelSpend = new SpendMeter();
+                var judgeSpend = new SpendMeter();
 
-        using var model = ProviderChatClient.Open(modelUnderTest, apiKey, modelSpend);
-        using var judgeClient = judge.Open(judgeSpend);
+                using var model = ProviderChatClient.Open(modelUnderTest, apiKey, modelSpend);
+                using var judgeClient = judge.Open(judgeSpend);
 
-        var reporting = EvaluationStore.Open(judgeClient, judge.CachingKey, ReplyDraftScenario.Evaluators);
-        List<string> shortfalls = [];
+                var reporting = EvaluationStore.Open(judgeClient, judge.CachingKey, ReplyDraftScenario.Evaluators);
 
-        foreach (var scenario in ReplyDraftScenario.All)
-        {
-            shortfalls.AddRange(await EvaluationRepetitions.MeasureAsync(
-                reporting,
-                scenario.Name,
-                modelUnderTest.Name,
-                repetitions,
-                async repetition => [.. scenario.ShortfallsOf(await scenario.RunAsync(
+                return [.. scenario.ShortfallsOf(await scenario.RunAsync(
                     reporting,
                     model,
-                    plan,
+                    modelUnderTest.Plan,
                     repetition,
                     modelSpend,
                     judgeSpend,
-                    TestContext.Current.CancellationToken))],
-                TestContext.Current.CancellationToken));
-        }
-
-        return shortfalls;
-    }
+                    cancellationToken))];
+            },
+            cancellationToken);
 }

@@ -42,36 +42,36 @@ public sealed class MailAnsweringEvaluations
     }
 
     /// <summary>Puts one question to one model and names what it fell short on.</summary>
-    private static async Task<IReadOnlyList<string>> MeasureAsync(
+    private static Task<IReadOnlyList<string>> MeasureAsync(
         MailAnsweringScenario scenario,
         JudgeDeclaration judge,
         ModelUnderTest modelUnderTest,
         string apiKey,
         int repetitions,
-        CancellationToken cancellationToken)
-    {
-        var plan = modelUnderTest.Plan;
-        var modelSpend = new SpendMeter();
-        var judgeSpend = new SpendMeter();
-
-        using var model = ProviderChatClient.Open(modelUnderTest, apiKey, modelSpend);
-        using var judgeClient = judge.Open(judgeSpend);
-
-        var reporting = EvaluationStore.Open(judgeClient, judge.CachingKey, MailAnsweringScenario.Evaluators);
-
-        return await EvaluationRepetitions.MeasureAsync(
-            reporting,
+        CancellationToken cancellationToken) =>
+        EvaluationRepetitions.MeasureAsync(
+            EvaluationStore.OpenUnjudged([]),
             scenario.Name,
             modelUnderTest.Name,
             repetitions,
-            async repetition => [.. scenario.ShortfallsOf(await scenario.RunAsync(
-                reporting,
-                model,
-                plan,
-                repetition,
-                modelSpend,
-                judgeSpend,
-                cancellationToken))],
+            async repetition =>
+            {
+                var modelSpend = new SpendMeter();
+                var judgeSpend = new SpendMeter();
+
+                using var model = ProviderChatClient.Open(modelUnderTest, apiKey, modelSpend);
+                using var judgeClient = judge.Open(judgeSpend);
+
+                var reporting = EvaluationStore.Open(judgeClient, judge.CachingKey, MailAnsweringScenario.Evaluators);
+
+                return [.. scenario.ShortfallsOf(await scenario.RunAsync(
+                    reporting,
+                    model,
+                    modelUnderTest.Plan,
+                    repetition,
+                    modelSpend,
+                    judgeSpend,
+                    cancellationToken))];
+            },
             cancellationToken);
-    }
 }

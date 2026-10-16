@@ -14,7 +14,9 @@ namespace MailFathom.Evaluations.Reporting;
 /// <remarks>
 /// The tally, the entries written, and the count are kept here because the cache provider is the one member of a run's
 /// <see cref="ReportingConfiguration" /> the suite supplies, so it is what every scenario of the run and the code filing
-/// its verdicts can reach alike.
+/// its verdicts can reach alike. <see cref="EvaluationStore" /> hands one instance to every handle opened over the same
+/// store, run name, and repetition count, and keeps it for the life of the process, so a tally read through one handle
+/// counts the answers asked through all of them.
 /// </remarks>
 internal sealed class TallyingResponseCacheProvider(IEvaluationResponseCacheProvider inner, int repetitions)
     : IEvaluationResponseCacheProvider
@@ -45,9 +47,9 @@ internal sealed class TallyingResponseCacheProvider(IEvaluationResponseCacheProv
     /// <param name="iterationName">The iteration the cache is opened for, which is the one <see cref="GetCacheAsync" /> was given.</param>
     /// <returns>The keys, as a set every client over the same cache shares; empty until this run writes an entry there.</returns>
     /// <remarks>
-    /// A scenario opens its store once and asks every question of its run through it, and the provider lives exactly as
-    /// long as that store, so an entry is this run's own when its key is in here: what the cache held before the store
-    /// opened was written by an earlier run.
+    /// The provider is shared by every handle opened over one store and run name, and lives for the process, so an entry
+    /// is this run's own when its key is in here: what the cache held before the run's first handle opened was written by
+    /// an earlier run.
     /// </remarks>
     public ConcurrentDictionary<string, byte> WrittenKeysFor(string scenarioName, string iterationName) =>
         this.writtenKeys.GetOrAdd((scenarioName, iterationName), static _ => new ConcurrentDictionary<string, byte>(StringComparer.Ordinal));

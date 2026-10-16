@@ -45,6 +45,24 @@ public sealed class EvaluationStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task CacheOverAsync_AnswersAskedThroughSeveralHandlesOnOneRun_TalliesThemTogetherUnderEveryHandle()
+    {
+        // Arrange
+        var asking = EvaluationStore.OpenUnjudgedAt(this.store.FullName, "only", []);
+        var askingAgain = EvaluationStore.OpenUnjudgedAt(this.store.FullName, "only", []);
+        var reading = EvaluationStore.OpenUnjudgedAt(this.store.FullName, "only", []);
+        var iterationName = EvaluationStore.IterationNameFor(ScriptedStructuredAnswerRun.ModelUnderTest, repetition: 1);
+
+        // Act
+        await ReachesTheModelAsync(asking, Held);
+        await ReachesTheModelAsync(askingAgain, Held);
+        var tally = EvaluationStore.TallyOf(reading, Held, iterationName);
+
+        // Assert
+        Assert.Equal((0, 1, 1), (tally.Replayed, tally.Reused, tally.Asked));
+    }
+
+    [Fact]
     public async Task CacheOverAsync_AQuestionAnEarlierRunAsked_TalliesTheAnswerAsReplayed()
     {
         // Arrange

@@ -13,9 +13,9 @@ namespace MailFathom.Evaluations.Discovery;
 
 /// <summary>Has every declared model compose every question in <see cref="DiscoveryCompositionScenario.All" /> from its extracts.</summary>
 /// <remarks>
-/// Shaped like <see cref="ReplyDrafts.ReplyDraftEvaluations" /> for the reasons it gives, with one difference: a question
-/// the extracts do not answer is judged on nothing, so each scenario opens its store handle with its own evaluators rather
-/// than the run sharing one set.
+/// Shaped like <see cref="AgentConversations.AgentConversationEvaluations" /> for the reasons it gives, with one
+/// difference: a question the extracts do not answer is judged on nothing, so each case opens its store handle with its
+/// own evaluators.
 /// </remarks>
 public sealed class DiscoveryCompositionEvaluations
 {
@@ -23,56 +23,59 @@ public sealed class DiscoveryCompositionEvaluations
     /// <remarks>Public and static because that is the shape xUnit reads a skip condition from.</remarks>
     public static bool EvaluationsRequested => AiEvaluationRun.Requested;
 
-    [Fact(Skip = AiEvaluationRun.SkipReason, SkipUnless = nameof(EvaluationsRequested))]
-    public async Task Compose_EveryScenario_EveryDeclaredModelComposesOnlyFromTheExtractsItWasHanded()
+    /// <summary>Gets every case, by the name it is filed under.</summary>
+    public static TheoryData<string> Cases { get; } = new(DiscoveryCompositionScenario.All.Select(static scenario => scenario.Name));
+
+    [Theory(Skip = AiEvaluationRun.SkipReason, SkipUnless = nameof(EvaluationsRequested))]
+    [MemberData(nameof(Cases))]
+    public async Task Compose_AQuestion_EveryDeclaredModelComposesOnlyFromTheExtractsItWasHanded(string caseName)
     {
         // Arrange
+        var scenario = DiscoveryCompositionScenario.All.Single(candidate => candidate.Name == caseName);
         var judge = JudgeDeclaration.Read();
         var apiKey = EvaluationEndpoint.ApiKey();
         var repetitions = EvaluationRepetitions.Declared();
+        var cancellationToken = TestContext.Current.CancellationToken;
 
         // Act
-        var shortfalls = await Task.WhenAll([.. ModelsUnderTest.For(ChatCapability.DiscoveryComposition).Select(model => MeasureAsync(judge, model, apiKey, repetitions))]);
+        var shortfalls = await Task.WhenAll(
+            [.. ModelsUnderTest.For(ChatCapability.DiscoveryComposition).Select(model => MeasureAsync(scenario, judge, model, apiKey, repetitions, cancellationToken))]);
 
         // Assert
         AiEvaluationRun.AssertNoShortfalls(shortfalls.SelectMany(static modelShortfalls => modelShortfalls));
     }
 
-    /// <summary>Puts every scenario to one model and names what it fell short on.</summary>
-    private static async Task<IReadOnlyList<string>> MeasureAsync(
+    /// <summary>Puts one case to one model and names what it fell short on.</summary>
+    private static Task<IReadOnlyList<string>> MeasureAsync(
+        DiscoveryCompositionScenario scenario,
         JudgeDeclaration judge,
         ModelUnderTest modelUnderTest,
         string apiKey,
-        int repetitions)
-    {
-        var plan = modelUnderTest.Plan;
-        var modelSpend = new SpendMeter();
-        var judgeSpend = new SpendMeter();
+        int repetitions,
+        CancellationToken cancellationToken) =>
+        EvaluationRepetitions.MeasureAsync(
+            EvaluationStore.OpenUnjudged([]),
+            scenario.Name,
+            modelUnderTest.Name,
+            repetitions,
+            async repetition =>
+            {
+                var modelSpend = new SpendMeter();
+                var judgeSpend = new SpendMeter();
 
-        using var model = ProviderChatClient.Open(modelUnderTest, apiKey, modelSpend);
-        using var judgeClient = judge.Open(judgeSpend);
+                using var model = ProviderChatClient.Open(modelUnderTest, apiKey, modelSpend);
+                using var judgeClient = judge.Open(judgeSpend);
 
-        List<string> shortfalls = [];
+                var reporting = EvaluationStore.Open(judgeClient, judge.CachingKey, scenario.Evaluators);
 
-        foreach (var scenario in DiscoveryCompositionScenario.All)
-        {
-            var reporting = EvaluationStore.Open(judgeClient, judge.CachingKey, scenario.Evaluators);
-            shortfalls.AddRange(await EvaluationRepetitions.MeasureAsync(
-                reporting,
-                scenario.Name,
-                modelUnderTest.Name,
-                repetitions,
-                async repetition => [.. scenario.ShortfallsOf(await scenario.RunAsync(
+                return [.. scenario.ShortfallsOf(await scenario.RunAsync(
                     reporting,
                     model,
-                    plan,
+                    modelUnderTest.Plan,
                     repetition,
                     modelSpend,
                     judgeSpend,
-                    TestContext.Current.CancellationToken))],
-                TestContext.Current.CancellationToken));
-        }
-
-        return shortfalls;
-    }
+                    cancellationToken))];
+            },
+            cancellationToken);
 }
