@@ -229,9 +229,9 @@ internal static class EvaluationStore
 
     /// <summary>Gets the one response cache every handle a run opens over a store shares.</summary>
     /// <remarks>
-    /// One per store and run rather than one per handle, because a handle is opened per repetition — each over the judge
-    /// client its own spend is metered by — while what a repetition's answers were tallied as is read afterwards through
-    /// another handle on the same store.
+    /// One per store, run name, and repetition count rather than one per handle, kept for the life of the process,
+    /// because a handle is opened per repetition — each over the judge client its own spend is metered by — while what a
+    /// repetition's answers were tallied as is read afterwards through another handle on the same store and run.
     /// </remarks>
     private static TallyingResponseCacheProvider ResponseCacheAt(string root, string executionName, int repetitions) =>
         ResponseCaches.GetOrAdd(
