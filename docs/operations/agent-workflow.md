@@ -1257,9 +1257,15 @@ merely fell behind passes it; what fails it is a named pair of files somebody ha
 It reports in seconds, has no draft exemption, and is a required check, on the pull request and on
 the merge group alike.
 
-**When it fails**, the job summary lists every pair, the relation that made it one, and the pull
-request that introduced the landed side — on `merge_group` also whether that pull request is
-already on `main` or still ahead in the queue. For each pair:
+**When it fails**, it annotates every pair with one sentence written from the pull request's side:
+which file this pull request changes, which file another pull request changed, which pull request
+that was and whether it is already on `main` or still ahead in the queue, and the relation with its
+direction — which of the two is the page whose `describes:` marker covers the other, which is the
+`AGENTS.md` that governs the other, or that both changed the same prose file. A pair reads, for
+example, *`docs/operations/agent-workflow.md`, which this pull request changes, has a describes:
+marker covering `.github/workflows/publish-documentation.yml`, changed by
+`https://github.com/fathomise/MailFathom/pull/2472` (on main).* The job summary lists the same
+pairs as a table. For each pair:
 
 1. Read the landed side as it now stands and the pull request's side together, and decide whether
    they still agree: whether the page still describes the file, whether the changed file follows
