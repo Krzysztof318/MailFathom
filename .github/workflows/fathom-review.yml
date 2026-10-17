@@ -1262,6 +1262,8 @@ jobs:
           # approval is made of. Members are told apart by the author association GitHub computes,
           # `OWNER` or `MEMBER`, and this reviewer by its login, because GitHub reports the App as a
           # `CONTRIBUTOR`. GraphQL names the same account without the `[bot]` suffix REST carries.
+          # Another reviewing App, Codex included, is outside the organization by the same reading,
+          # so its remarks are withheld and a finding it raised may be raised again here.
           #
           # On a re-review these are also this reviewer's own previous threads and the replies to
           # them, which is the only record a run has of what it already reported: the job keeps no

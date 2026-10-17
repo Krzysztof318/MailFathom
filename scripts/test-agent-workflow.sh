@@ -3009,8 +3009,11 @@ case "$endpoint" in
           body: "Closes #11\nCloses #12\nPart of #13",
           draft: false,
           user: {login: "Krzysztof318"},
+          author_association: "MEMBER",
           labels: ($labels | map({name: .})),
-          head: {sha: "0123456789abcdef0123456789abcdef01234567"},
+          head: {sha: "0123456789abcdef0123456789abcdef01234567",
+                 repo: (if env.FAKE_DELETED_HEAD_REPOSITORY == "true" then null
+                        else {full_name: "fathomise/MailFathom"} end)},
           base: {sha: "89abcdef0123456789abcdef0123456789abcdef", ref: "main"},
           changed_files: 1,
           additions: 1,
@@ -3139,6 +3142,23 @@ fathom_review_collects_only_what_members_and_the_reviewer_wrote() {
   assert_json '["reviewer review","member review"]' '[.[].body]' "$collect_review_directory/reviews.json"
   assert_json '[["reviewer thread reply","member thread reply"]]' '[.[].comments | map(.body)]' \
     "$collect_review_directory/review-threads.json"
+}
+
+# The submission step decides the approval from these two fields alone, so their projection is
+# pinned here: a wrong path would turn every member's clean pull request into a comment while every
+# submission contract, which writes the fields by hand, stayed green. A deleted fork has no head
+# repository at all, and that has to arrive as `null` rather than as anything that could match.
+fathom_review_collects_where_the_head_lives_and_who_opened_it() {
+  local output_file="$test_directory/fathom-review-collect-head-output"
+
+  run_fathom_review_collect "$output_file"
+
+  assert_json '"fathomise/MailFathom"' '.head_repository' "$collect_review_directory/pull-request.json"
+  assert_json '"MEMBER"' '.author_association' "$collect_review_directory/pull-request.json"
+
+  FAKE_DELETED_HEAD_REPOSITORY='true' run_fathom_review_collect "$output_file"
+
+  assert_json 'null' '.head_repository' "$collect_review_directory/pull-request.json"
 }
 
 # The contract the security pass rests on. Without the labels beside the body, the one thing that
@@ -3607,12 +3627,12 @@ chmod +x "$submit_bin_directory/gh"
 write_fathom_review_collection() {
   local review_directory="$1"
   local head_repository="${2-fathomise/MailFathom}"
-  local author_association="${3:-MEMBER}"
+  local author_association="${3-MEMBER}"
 
   mkdir -p "$review_directory"
   jq -n --arg head_repository "$head_repository" --arg author_association "$author_association" \
     '{head_repository: (if $head_repository == "" then null else $head_repository end),
-      author_association: $author_association}' \
+      author_association: (if $author_association == "" then null else $author_association end)}' \
     > "$review_directory/pull-request.json"
   printf '[{"filename":"backend/src/Sample.cs","lines":[12,13,14]}]\n' > "$review_directory/lines.json"
   : > "$review_directory/truncation.txt"
@@ -3634,7 +3654,7 @@ run_fathom_review_submit() {
   # case; a fork's name, or an empty value for a fork that was deleted, is what withholds approval.
   local head_repository="${7-fathomise/MailFathom}"
   # Who opened it, as GitHub associates them with the organization. A member is the ordinary case.
-  local author_association="${8:-MEMBER}"
+  local author_association="${8-MEMBER}"
   local step_script="$test_directory/fathom-review-submit.sh"
   local review_directory="$test_directory/fathom-review-submit-review"
   local coverage_file="$test_directory/fathom-review-submit-coverage"
@@ -3801,7 +3821,7 @@ fathom_review_approves_only_a_members_pull_request_from_this_repository() {
     run_fathom_review_submit \
       '{"summary":"Read every changed file and found nothing above the bar.","findings":[]}' \
       "$output_file" "$payload_file" 'success' '' '<!-- fathom-review: automatic -->' \
-      "$head_repository" "${author_association:-NONE}"
+      "$head_repository" "$author_association"
 
     ((submit_status == 0))
     assert_json '"COMMENT"' '.event' "$payload_file"
@@ -11133,6 +11153,7 @@ run_test fathom_review_stops_waiting_at_the_ceiling
 run_test fathom_review_reads_the_newest_comment_whatever_the_order
 run_test fathom_review_collects_the_labels_of_an_issue_the_change_closes
 run_test fathom_review_collects_only_what_members_and_the_reviewer_wrote
+run_test fathom_review_collects_where_the_head_lives_and_who_opened_it
 run_test fathom_review_reports_unknown_labels_for_an_issue_it_could_not_fetch
 run_test fathom_review_never_reads_the_design_runtime
 run_test fathom_review_never_reads_a_generated_migration

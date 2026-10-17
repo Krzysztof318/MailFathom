@@ -1440,8 +1440,8 @@ Those two events are the whole of what may cancel, and the rule they share is
 worth stating in the other direction: **a comment never ends a review already
 running.** A push replaces the head and a close removes it, so in both cases what
 is running has stopped describing the code that will merge. Everything else —
-a label, a pull request marked ready — asks for a review without invalidating
-one, and queues on the same group instead. `cancel-in-progress` is therefore an
+a member's requested review, a pull request marked ready — asks for a review
+without invalidating one, and queues on the same group instead. `cancel-in-progress` is therefore an
 expression naming those two events rather than the literal `true`, because
 `issue_comment` fires for *any* comment on a pull request, a bot's included, and
 the gate that tells a request apart from a passing remark runs inside the run —
@@ -1507,7 +1507,10 @@ the organization's members and the reviewer itself wrote — an author GitHub
 associates as `OWNER` or `MEMBER`, or the App by its login, since GitHub reports
 it as a `CONTRIBUTOR` — because anybody can comment on a public pull request and
 a remark from outside the project would otherwise steer the verdict an approval
-is made of; a thread only outsiders wrote is dropped whole. It writes them under `$RUNNER_TEMP/review` with an explicit
+is made of; a thread only outsiders wrote is dropped whole. Another reviewing
+App is outside the organization by the same reading, so a Codex review's
+threads and comments are withheld too, and a finding it raised may be raised
+again. It writes them under `$RUNNER_TEMP/review` with an explicit
 ceiling on every one of them. What a ceiling drops is recorded and ends up in the
 review body, because a partial review that looks complete is worse than one that
 says what it did not see. `truncation.txt` is where each of them appends, so it is
@@ -2147,7 +2150,8 @@ nobody re-read, which carries the previous review's verdict and is counted.
 **An approval carries no findings.** The verdict follows the list rather than the
 severities in it: an empty answer is published as `event: APPROVE` under an
 `APPROVED` heading with the summary and nothing else — or, on a pull request from a
-fork, as `event: COMMENT` under `NO FINDINGS` — and an answer holding anything
+fork or from an author outside the organization, as `event: COMMENT` under
+`NO FINDINGS` — and an answer holding anything
 at all is published as `event: COMMENT` under `NEEDS CHANGES` with its findings as
 inline threads. So `APPROVED` means the reviewer found nothing, and reading the
 verdict is the whole of reading an approval.
@@ -2429,7 +2433,8 @@ reviewer from restating it: a tally written by hand can disagree with the thread
 that were actually posted.
 
 Every body opens with the verdict as a heading of its own — `APPROVED` when the
-findings array is empty, `NO FINDINGS` when it is empty on a fork's pull request,
+findings array is empty, `NO FINDINGS` when it is empty on a pull request from a
+fork or from an author outside the organization,
 `NEEDS CHANGES` when it is not — and the summary sits
 under it. That is the one thing a reader wants before deciding whether to read
 the rest, and inferring it from whether threads appeared fails exactly where it

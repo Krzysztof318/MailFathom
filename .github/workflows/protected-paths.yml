@@ -105,10 +105,12 @@ name: Protected paths
 # holds: weakening the check means editing `.github/`, and a pull request doing that from a fork or
 # from an author outside the organization cannot merge without a maintainer's approval, because
 # `Fathom review` approves neither; and deleting or renaming this job leaves the required check
-# permanently unreported, which the ruleset refuses to merge past. Both ways out are closed to
-# anybody outside the organization. A member's own pull request from a branch here is the one case
-# the first is not closed for: the reviewer's approval merges it, so what stands behind it is the
-# member and the reviewer's verdict rather than a maintainer's reading.
+# permanently unreported, which the ruleset refuses to merge past. The first way out stays open in
+# one case: a pull request a member opened from a branch here, which the reviewer's approval merges.
+# The approval reads who opened the pull request and never who pushed to it, so anybody with write
+# access to the repository can push onto such a branch and rely on the reviewer's verdict alone.
+# Write access is therefore the boundary, and no account outside the organization holds it while
+# none is granted it.
 #
 # The set is a list rather than a pattern because each entry was added for a reason that had to be
 # stated. A directory joins it when a change to it decides what the repository enforces on every
