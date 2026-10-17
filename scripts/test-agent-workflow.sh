@@ -6527,9 +6527,9 @@ coherence_passes_shared_code_without_a_prose_link() {
 }
 
 coherence_relates_the_same_prose_file_and_an_instructions_scope() {
-  run_coherence prose 'README.md backend/AGENTS.md' 'README.md backend/src/Application/Emails/Mailbox.cs frontend/AGENTS.md'
+  run_coherence prose 'README.md backend/AGENTS.md frontend/package.json' 'README.md backend/src/Application/Emails/Mailbox.cs frontend/AGENTS.md'
 
-  assert_json '[{"landed":"README.md","changed":"README.md","reason":"same prose file"},{"landed":"backend/AGENTS.md","changed":"backend/src/Application/Emails/Mailbox.cs","reason":"landed governs changed"}]' \
+  assert_json '[{"landed":"README.md","changed":"README.md","reason":"same prose file"},{"landed":"backend/AGENTS.md","changed":"backend/src/Application/Emails/Mailbox.cs","reason":"landed governs changed"},{"landed":"frontend/package.json","changed":"frontend/AGENTS.md","reason":"changed governs landed"}]' \
     '.' "$test_directory/coherence-prose.json"
 }
 
