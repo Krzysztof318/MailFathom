@@ -890,8 +890,8 @@ same page holds that path too: the missing `type:*` label is what marks an issue
 untriaged, triage either places it by the ordinary rules or closes it as `not
 planned` with a reason, a question moves to Discussions instead of being given a
 label so the board has somewhere to put it, and a contribution is read
-cheapest-check-first — required checks, then `Protected paths`, then the
-code-owner review. The `Triage` board view is where an arrival waits, and an
+cheapest-check-first — required checks, then `Protected paths`, then a
+maintainer's review. The `Triage` board view is where an arrival waits, and an
 item the project opened itself never reaches it.
 
 The three Discussions categories that routing rule names — `Q&A`, `Ideas`, and
@@ -948,8 +948,7 @@ another repository is left out by both, because a label earned from another proj
 numbering and a board item on another project's roadmap are the same mistake.
 
 The labelling only ever adds. A label a hand applied answers a question this pipeline cannot
-see — `fathom-review` is the worked example, and it means *somebody asked* — so nothing
-here removes one, and re-applying a label already present changes nothing and fires no
+see, so nothing here removes one, and re-applying a label already present changes nothing and fires no
 event. An issue that cannot be fetched earns nothing rather than stopping the walk: reading
 a label is how a condition is decided, so an unreadable issue is a condition that was not
 met rather than one to guess at.
@@ -1338,13 +1337,16 @@ through. [Dependency update pull requests](#dependency-update-pull-requests)
 carries the reasoning and when that author appears at all, next to the questions
 a bump is actually read against.
 
-Two things ask for a review anyway, whichever skip refused it:
+One thing asks for a review anyway, whichever skip refused it:
 
 - a comment on the pull request that *begins a line* with `fathom-review` or
-  `@fathom-review`, from an author with write access. A draft is reviewed this
-  way, and so is any published pull request whose current head is worth a second
-  look; the comment path applies none of the checks above, because somebody with
-  write access typing the phrase has already decided the run is worth its cost.
+  `@fathom-review`, from a member of the organization — an author whose
+  association GitHub reports as `OWNER` or `MEMBER`. A collaborator from outside
+  the organization holds write access without belonging to the project, and is
+  refused. A draft is reviewed this way, and so is a fork's pull request, a
+  dependency bump, and any published pull request whose current head is worth a
+  second look; the comment path applies none of the checks above, because a
+  member typing the phrase has already decided the run is worth its cost.
   Adding `opus` to that comment buys a second, costlier opinion;
   `claude-sonnet-5-5` is the default.
 
@@ -1372,12 +1374,15 @@ Two things ask for a review anyway, whichever skip refused it:
   not: that is GitHub's quote-reply marker, so accepting it would make answering
   a thread that contains the phrase start a second run, and a citation is not an
   instruction. The marker must be followed by whitespace, so the hyphenated
-  `-fathom-review` does not count, and neither does `fathom-reviewer`;
-- the `fathom-review` label, which is how a fork's pull request is reviewed at
-  all. A fork's own pushes never start a review, so a maintainer decides. It is
-  also how a dependency bump gets the pass anyway, which is worth doing for a
-  major that touches a workflow's inputs and is not worth doing for a version
-  number the register already answers.
+  `-fathom-review` does not count, and neither does `fathom-reviewer`.
+
+  It is the only way to ask, and a label is deliberately not a second one: a
+  `labeled` event says who applied the label but not whether that account
+  belongs to the organization, so a label trigger would admit whoever can apply
+  one. A fork's own pushes never start a review, so a member decides, and a
+  dependency bump gets the pass the same way — worth doing for a major that
+  touches a workflow's inputs and not for a version number the register already
+  answers.
 
 An automatic review is bounded per pull request: once nine automatic reviews by
 `fathom-reviewer[bot]` stand on it, the gate refuses and says so in the run log
@@ -1403,7 +1408,7 @@ a draft push, a comment about the workflow — from one that did. Among those it
 counts the automatic ones alone. A review somebody asked for neither consumes the
 budget a later push draws on nor is refused by it, because asking is the decision
 this ceiling exists to make when nobody made it, and a maintainer who has made it
-must not find the next push unreviewed as a consequence. So a label or a comment
+must not find the next push unreviewed as a consequence. So a member's comment
 starts a review however many stand on the pull request already.
 
 Which passes were automatic is not something the reviews endpoint records, so the
@@ -1434,8 +1439,8 @@ Those two events are the whole of what may cancel, and the rule they share is
 worth stating in the other direction: **a comment never ends a review already
 running.** A push replaces the head and a close removes it, so in both cases what
 is running has stopped describing the code that will merge. Everything else —
-a label, a pull request marked ready — asks for a review without invalidating
-one, and queues on the same group instead. `cancel-in-progress` is therefore an
+a member's requested review, a pull request marked ready — asks for a review
+without invalidating one, and queues on the same group instead. `cancel-in-progress` is therefore an
 expression naming those two events rather than the literal `true`, because
 `issue_comment` fires for *any* comment on a pull request, a bot's included, and
 the gate that tells a request apart from a passing remark runs inside the run —
@@ -1461,16 +1466,14 @@ So what decides the outcome is **membership of the group** rather than the
 cancellation rule, and the group expression is where it is decided rather than
 in the gate — which is inside the run and therefore always too late. A run that
 can neither review nor cancel is keyed by its own run id and shares a group with
-nothing. Two events are in that position, and both arrive on a pull request
-repeatedly while it is being worked on: a comment, which after this arrangement
-reviews nothing at all and asks for the review through a `repository_dispatch`
-whose run joins the group in its place, and a `labeled` event for a label that is
-not `fathom-review`, since `Apply pull request rules` writes labels and only that
-one asks for a review.
+nothing. A comment is in that position, and comments arrive on a pull request
+repeatedly while it is being worked on: after this arrangement a comment reviews
+nothing at all and asks for the review through a `repository_dispatch` whose run
+joins the group in its place.
 
 Everything else joins the group and must: `synchronize` and `closed` because
-cancelling is what they are there for, `repository_dispatch` and `fathom-review`
-labelling because they review, and `opened`, `reopened`, and `ready_for_review`
+cancelling is what they are there for, `repository_dispatch` because it
+reviews, and `opened`, `reopened`, and `ready_for_review`
 because each of them reviews unless the pull request is a draft, a fork's, or the
 updater's. Those three can decline and are kept in the group anyway — a pull
 request just opened or reopened has no review of its own to displace, and
@@ -1481,8 +1484,11 @@ which is why it is stated rather than engineered away.
 `the_reviewer_listens_for_the_dispatch_it_sends` is what keeps the two halves of
 the comment path naming one event type.
 
-The workflow reports no status check and is not in the `main` ruleset. It
-advises; nothing waits on it.
+The workflow reports no status check. Its approval does satisfy the one
+approving review the `main` ruleset requires, on a member's pull request from a
+branch in this repository, which is why what it may approve and whose words it
+reads are both bounded; [What the submission step guarantees](#what-the-submission-step-guarantees) and
+[What the run is allowed to touch](#what-the-run-is-allowed-to-touch) carry how.
 
 ### What the run is allowed to touch
 
@@ -1495,7 +1501,15 @@ as `main` states them rather than as the branch would rewrite them.
 The change arrives as data. A collection step reads the pull request, its
 changed files with their patches, the resulting content of each changed file,
 the inline threads and issue comments, the reviews already submitted, and the
-issues its body closes, and writes them under `$RUNNER_TEMP/review` with an explicit
+issues its body closes. Of the threads, comments, and reviews it keeps only what
+the organization's members and the reviewer itself wrote — an author GitHub
+associates as `OWNER` or `MEMBER`, or the App by its login, since GitHub reports
+it as a `CONTRIBUTOR` — because anybody can comment on a public pull request and
+a remark from outside the project would otherwise steer the verdict an approval
+is made of; a thread only outsiders wrote is dropped whole. Another reviewing
+App is outside the organization by the same reading, so a Codex review's
+threads and comments are withheld too, and a finding it raised may be raised
+again. It writes them under `$RUNNER_TEMP/review` with an explicit
 ceiling on every one of them. What a ceiling drops is recorded and ends up in the
 review body, because a partial review that looks complete is worse than one that
 says what it did not see. `truncation.txt` is where each of them appends, so it is
@@ -1817,8 +1831,8 @@ with them. `Fathom review` uses it anyway, as the first of two recorded
 exceptions rather than as a rule the repository quietly breaks.
 
 The exception holds because the trigger is what the workflow needs and the danger
-is not what it does. `issue_comment`, `repository_dispatch`, and a label event
-carry no head ref to run, and reviewing a fork at a maintainer's request is the
+is not what it does. `issue_comment` and `repository_dispatch` carry no head
+ref to run, and reviewing a fork at a member's request is the
 whole reason the workflow reaches one at all; `pull_request` would give the run
 neither the secrets it needs to publish under the App nor a trigger a maintainer
 can aim. What makes that safe
@@ -1845,7 +1859,7 @@ that grants a reader or the judge a shell, a writer, or a network tool, that let
 a job other than the judge hold a credential that writes, that adds
 `workflow_dispatch` — a dispatch takes a ref, which would let the branch supply
 the job that receives the Claude credential — or that lets a trigger other than a
-maintainer's label or comment reach a fork. A third workflow wanting the trigger
+member's comment reach a fork. A third workflow wanting the trigger
 does not inherit either argument; it makes its own or uses `pull_request`.
 
 ### What bounds the cost
@@ -1868,9 +1882,10 @@ grow:
   cancelled nor thrown away.
   [When a review is cancelled](#when-a-review-is-cancelled) carries the whole of
   it;
-- a fork's own pushes never start a review; a maintainer's label does;
-- the comment trigger requires an `OWNER`, `MEMBER`, or `COLLABORATOR` author, so
-  nobody outside the project can spend the subscription by typing;
+- a fork's own pushes never start a review; a member's comment does;
+- the comment trigger requires an `OWNER` or `MEMBER` author, so nobody outside
+  the organization can spend the subscription by typing, an outside collaborator
+  included;
 - an automatic review is capped at nine per pull request, as described above, and a
   review somebody asked for is outside that count in both directions;
 - the model is `claude-sonnet-5-5` rather than the costlier Opus, which exactly two
@@ -1942,7 +1957,7 @@ Because both workflows start from the same event, the reviewer waits for the
 labelling run on that head to finish before reading the labels — otherwise a security
 change opened or pushed a moment ago would be reviewed with the default model and no
 pass, on exactly the changes where that costs most. Only a run still in flight is
-waited for, so a comment or a label event, which arrives long after that head was
+waited for, so a comment, which arrives long after that head was
 labelled, waits not at all. The wait is bounded at two minutes and then reads the
 labels as they stand: this decides which model reviews rather than whether a review
 happens, so a stuck labelling run must not hold a review open or fail one.
@@ -2133,7 +2148,9 @@ nobody re-read, which carries the previous review's verdict and is counted.
 
 **An approval carries no findings.** The verdict follows the list rather than the
 severities in it: an empty answer is published as `event: APPROVE` under an
-`APPROVED` heading with the summary and nothing else, and an answer holding anything
+`APPROVED` heading with the summary and nothing else — or, on a pull request from a
+fork or from an author outside the organization, as `event: COMMENT` under
+`NO FINDINGS` — and an answer holding anything
 at all is published as `event: COMMENT` under `NEEDS CHANGES` with its findings as
 inline threads. So `APPROVED` means the reviewer found nothing, and reading the
 verdict is the whole of reading an approval.
@@ -2414,8 +2431,10 @@ moved. The count by severity is rendered here too, and the prompt forbids the
 reviewer from restating it: a tally written by hand can disagree with the threads
 that were actually posted.
 
-Either body opens with the verdict as a heading of its own — `APPROVED` when the
-findings array is empty, `NEEDS CHANGES` when it is not — and the summary sits
+Every body opens with the verdict as a heading of its own — `APPROVED` when the
+findings array is empty, `NO FINDINGS` when it is empty on a pull request from a
+fork or from an author outside the organization,
+`NEEDS CHANGES` when it is not — and the summary sits
 under it. That is the one thing a reader wants before deciding whether to read
 the rest, and inferring it from whether threads appeared fails exactly where it
 matters, on a long pull request.
@@ -2439,12 +2458,19 @@ a notice and publishes no verdict.
 `main` ruleset sets `dismiss_stale_reviews_on_push`, so the next push dismisses
 it and an approval can never describe code that has since changed.
 
-**The approval cannot merge anything on its own.** The ruleset requires one
-approving review *from a code owner*, `CODEOWNERS` makes the repository owner the
-code owner of every path, and a GitHub App cannot be a code owner — so the
-owner's approval is still required and this one sits beside it as a signal.
-`REQUEST_CHANGES` is never used in either branch: a reviewer that reports no
-status check and gates nothing must not be able to block a merge either, which is
+**The approval is what lets a change merge, so only a member's own pull request
+gets one.** The ruleset requires one approving review and does not ask for it
+from a code owner, so the reviewer's approval satisfies it. The submission step
+therefore approves only a pull request whose head branch lives in this
+repository and whose author GitHub associates with the organization as `OWNER`
+or `MEMBER`, both read from what `collect` asked the API rather than from the
+event or the model. On any other pull request — from a fork, from one since
+deleted, which the API reports as no repository, or from an outside
+collaborator's branch here — a pass that found nothing submits `event: COMMENT` under the heading
+`NO FINDINGS`, saying that a project maintainer still has to review and approve
+it, and the maintainer's approval is what merges it.
+`REQUEST_CHANGES` is never used in any branch: a reviewer that reports no
+status check must not be able to block a merge either, which is
 why `NEEDS CHANGES` is a heading in a body and never a review state.
 
 ### What a review moves on the board
@@ -2509,7 +2535,8 @@ describes along with the two permissions it holds. The job mints it, checks out
 only the base commit, runs no model, and receives its input as a string, so the
 board credential never shares a runner with the reviewer session — the same
 separation that keeps the reviewer App's token in the one step that makes no
-model call. Where the App's client id or private key is absent the job says so and ends green: this workflow gates nothing, and a missing
+model call. Where the App's client id or private key is absent the job says so
+and ends green: the board write gates nothing, and a missing
 credential must not turn a review red. A pull request that closes no issue ends
 the same way, with a notice, because a change opened without a contract is an
 ordinary shape. An issue that is not on the board ends green too, but as a
@@ -2706,8 +2733,8 @@ by the checks. A reviewer given the diff sees a version number in a `uses:` line
 and can confirm none of them, so a run would spend subscription usage restating
 what the tag already says, again on every rebase the updater performs. The gate
 refuses by author, before the draft and fork checks that would otherwise let a
-published bump straight through; the `fathom-review` label still reaches one,
-which is what a major touching a workflow's inputs is worth.
+published bump straight through; a member's `fathom-review` comment still
+reaches one, which is what a major touching a workflow's inputs is worth.
 
 Four questions answer a version bump, and the first is the one a version number
 on its own makes easy to skip.
@@ -2734,8 +2761,8 @@ on its own makes easy to skip.
    this author for `.github/workflows/` alone. A red one is a red one; nothing
    here is exempt and nothing auto-merges.
 
-The pull request is merged the same way everything else is: a code owner
-approves it, and the owner merges it. If a bump has to be declined, close the
+The pull request is merged the same way everything else is: an approving
+review satisfies the ruleset, and the owner merges it. If a bump has to be declined, close the
 pull request and say why in it. Closing settles that version and not the
 dependency, and the comment is where the next reader finds out the version was
 considered rather than missed — which matters more when nothing will raise it a

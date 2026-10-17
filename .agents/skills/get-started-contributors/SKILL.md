@@ -502,7 +502,7 @@ offer to go deeper on any one of them instead of expanding all six.
 
    Workflow runs on my pull request wait for a maintainer to approve them, so a check that has
    not started is a queue rather than a failure to chase, and every push waits again.
-   `Fathom review` runs only when a maintainer applies the `fathom-review` label; my own
+   `Fathom review` runs only when a maintainer asks for it in a comment; my own
    pushes never start one.
    ```
 
@@ -653,8 +653,8 @@ offer to go deeper on any one of them instead of expanding all six.
      approve it, on the first push and on every one after, so the checks sit unstarted rather than red and nothing about
      the branch can be read from them. That is why the local gates are the ones to trust, and why an agent left watching
      for a verdict waits for one that cannot arrive yet — which is what the local instruction file above says out loud;
-   - `Fathom review` runs on a fork's pull request only when a maintainer applies the `fathom-review` label. Your own
-     pushes never start one, and nothing you can write in a comment does either;
+   - `Fathom review` runs on a fork's pull request only when a member of the organization asks for it in a comment.
+     Your own pushes never start one, and nothing you can write in a comment does either;
    - the integration suite starts containers and runs when a maintainer asks for it.
 
    **Refresh:** read this again when `AGENTS.md` moved, and then say what changed rather than reciting the list a
