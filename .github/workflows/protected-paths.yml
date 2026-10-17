@@ -84,6 +84,13 @@ name: Protected paths
 # recognised beside the owner, for `.github/workflows/` alone; the step below carries the exception
 # and the argument for why it removes a signal rather than an approval.
 #
+# The refusal is a first answer rather than a last one. Once the owner has read such a change and
+# wants it, their approving review of the pull request's current head clears the check, which is why
+# the job also runs when a review is submitted or dismissed. The approval names a commit, so the next
+# push leaves it naming an older one and the check refuses again until the owner approves what
+# arrived. That is the review the `main` ruleset already asks for, so accepting a change costs the
+# owner no second step, and it keeps the merge inside the queue rather than bypassing the ruleset.
+#
 # Whichever way it decides, the job names the protected files the pull request touched, in the step
 # log and in the job summary. The refusal needs that list to be actionable, and the pass needs it
 # just as much: the owner is allowed to change these paths, not expected to have meant to, and an
@@ -114,6 +121,13 @@ on:
       - converted_to_draft
     branches:
       - main
+  # The owner's approval of the current head is the one thing besides a push that changes the verdict.
+  # GitHub offers no branch filter for this event, and a run for a pull request against another base
+  # reports a check nothing requires.
+  pull_request_review:
+    types:
+      - submitted
+      - dismissed
   # Who wrote a change is a property of the pull request, not of the tree the queue combines it into,
   # so the merge queue is handed the verdict the pull request's head already earned rather than a
   # second judgement. The queue admits no pull request whose required checks have not passed, so this
@@ -183,16 +197,23 @@ jobs:
           echo "${CHECK_NAME} passed on pull request #${pull_request_number}'s head ${head_sha:0:12}."
 
       - name: Verify who changed the repository configuration
-        if: github.event_name == 'pull_request'
+        if: github.event_name != 'merge_group'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
           PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
           PULL_REQUEST_AUTHOR: ${{ github.event.pull_request.user.login }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          # A review event carries a shorter pull request that has no file count, so the step reads
+          # one when this arrives empty.
           CHANGED_FILE_COUNT: ${{ github.event.pull_request.changed_files }}
         run: |
           set -euo pipefail
+
+          if [[ -z "$CHANGED_FILE_COUNT" ]]; then
+            CHANGED_FILE_COUNT="$(gh api "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}" --jq '.changed_files')"
+          fi
 
           protected_prefixes=('.github/' '.agents/' '.claude/' '.config/' 'docs/decisions/')
           protected_names=(
@@ -322,6 +343,41 @@ jobs:
             exit 0
           fi
 
+          # The owner accepts somebody else's change by approving it. A reviewer's verdict is their
+          # newest review that approved, requested changes, or was dismissed — a comment leaves an
+          # earlier verdict standing, exactly as GitHub reads it — and it counts here only when it is
+          # an approval of the head this run is judging, from an account administering the
+          # repository. Reviews arrive oldest first, so the last line per reviewer is that verdict.
+          # A read that failed approves nothing, and the warning says so.
+          approving_owner=''
+          if reviews="$(
+            gh api "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}/reviews?per_page=100" --paginate \
+              --jq '.[] | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED" or .state == "DISMISSED")
+                    | "\(.user.login) \(.state) \(.commit_id)"'
+          )"; then
+            declare -A verdict_by_reviewer=()
+            while read -r reviewer state commit_id; do
+              [[ -n "$reviewer" ]] && verdict_by_reviewer["$reviewer"]="${state} ${commit_id}"
+            done <<< "$reviews"
+
+            for reviewer in "${!verdict_by_reviewer[@]}"; do
+              [[ "${verdict_by_reviewer[$reviewer]}" == "APPROVED ${HEAD_SHA}" ]] || continue
+              if reviewer_permission="$(
+                gh api "repos/${REPOSITORY}/collaborators/${reviewer}/permission" --jq '.permission'
+              )" && [[ "$reviewer_permission" == 'admin' ]]; then
+                approving_owner="$reviewer"
+                break
+              fi
+            done
+          else
+            echo "::warning::The reviews on this pull request could not be read, so no approval from the repository owner was found."
+          fi
+
+          if [[ -n "$approving_owner" ]]; then
+            echo "The repository owner ${approving_owner} approved this pull request's head ${HEAD_SHA:0:12}, so those changes are allowed."
+            exit 0
+          fi
+
           # Dependabot is the one other author this check recognises, and it is recognised for
           # `.github/workflows/` alone. This repository configures no version updates, so that
           # author appears only when the owner acts on an advisory through the repository's
@@ -355,7 +411,7 @@ jobs:
               exit 0
             fi
 
-            echo "::error::This pull request is authored by ${PULL_REQUEST_AUTHOR} and changes ${#outside_the_workflows[@]} protected path(s) outside .github/workflows/: ${outside_the_workflows[*]}. The dependency updater is recognised for the workflows alone; anything else it proposes is the repository owner's to make."
+            echo "::error::This pull request is authored by ${PULL_REQUEST_AUTHOR} and changes ${#outside_the_workflows[@]} protected path(s) outside .github/workflows/: ${outside_the_workflows[*]}. The dependency updater is recognised for the workflows alone; anything else it proposes is the repository owner's to make, or to approve on this head."
             exit 1
           fi
 
@@ -363,8 +419,8 @@ jobs:
           # changed view, so the refusal is readable where the change is read rather than only in the
           # step log.
           for protected_change in "${protected_changes[@]}"; do
-            echo "::error file=${protected_change}::${protected_change} decides how other changes are judged, what the project is published under, or what a release claims it shipped, and only the repository owner may change it in a pull request."
+            echo "::error file=${protected_change}::${protected_change} decides how other changes are judged, what the project is published under, or what a release claims it shipped, and only the repository owner may change it in a pull request or approve the change."
           done
 
-          echo "::error::This pull request is authored by ${PULL_REQUEST_AUTHOR} and changes ${#protected_changes[@]} protected path(s): ${protected_changes[*]}. Open that change separately, or ask the repository owner to make it."
+          echo "::error::This pull request is authored by ${PULL_REQUEST_AUTHOR} and changes ${#protected_changes[@]} protected path(s): ${protected_changes[*]}. Open that change separately, ask the repository owner to make it, or ask them to approve this head, which clears this check."
           exit 1
