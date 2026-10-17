@@ -379,11 +379,13 @@ after the work is pushed.
 exists to prevent.** A pull request whose branch has fallen behind `main` is not
 a pull request that failed: `main` moves whenever anything merges, so a
 freshness check in `CI` would turn every merge into a red check on every branch
-open beside it, none of which says anything about the change under review. The
-`main` ruleset already requires a branch to be current with `main` before it
-merges, and that is the whole of where the question belongs in the pipeline —
-answered once, at the point it decides something, rather than continuously
-against a base nobody is being asked to rebase onto yet.
+open beside it, none of which says anything about the change under review. Nor
+does the `main` ruleset ask it any more. What being current was standing in for —
+that the tree a merge produces was built and tested — is what [the merge
+queue](#the-merge-queue) answers directly, on that tree, and what it cannot judge
+is [`Coherence`](#coherence)'s question. Locally the rebase is still asked for,
+because before a pull request exists it costs nothing and saves a queue entry
+that would otherwise be built in full rather than reused.
 
 One checkout carries on regardless, in the fast loop only: one whose remotes name
 no MailFathom at all. There is no base for it to be behind, so there is nothing
@@ -1157,6 +1159,47 @@ which is what makes the register evidence rather than a file the party it speaks
 edit. [ADR 0015](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0015-contributor-licence-agreement-and-where-assent-is-recorded.md)
 holds the decision and `CLA.md` the agreement.
 
+On `merge_group` the workflow asks nothing and records nothing. It copies the `license/cla` the
+pull request's head carries onto the merge group's commit under the same App, because the queue
+waits for every required check there and an author's acceptance is a property of the pull request
+rather than of the tree it is combined into.
+
+## The merge queue
+
+Every merge into `main` goes through GitHub's merge queue, and a branch does not have to be current
+with `main` to enter it. Auto-merge on an approved pull request whose required checks are green adds
+it to the queue; the queue squashes it onto `main` and the entries ahead of it, runs the required
+checks on that commit — the merge group — and moves `main` to the group's commit once they pass.
+[ADR 0038](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0038-merging-through-a-queue-that-tests-the-tree-a-merge-produces.md)
+records why, and [`Branch protection`](local-development.md#branch-protection) the ruleset's
+settings.
+
+Each required check answers the group in the way its question allows:
+
+- `Required CI` builds and tests the group's tree in full, with no changed-path narrowing — unless
+  the pull request's head already contains the group's base. That group squashes to exactly the
+  head's tree, which the pull request's own run tested, so `Detect changes` finds that run's
+  successful `Required CI`, every other job skips, and `Required CI` reports the reuse. A pull
+  request that was current and first in the queue therefore merges without a second build.
+- `Coherence` asks its own question again against everything that landed under the pull request,
+  the entries ahead of it included.
+- `Protected paths`, `Typo check`, and `license/cla` are properties of the pull request — its author
+  and the words it changes — so the group is handed the verdict the pull request's head already
+  carries rather than a second judgement.
+
+A push to `main` still runs `CI`, but a queue merge reaches `main` as the group's own commit, which
+already carries the `Required CI` the group earned, so `Detect changes` reads it and the run stops
+there instead of building the same tree twice. A merge that bypassed the queue carries none and gets
+the full run.
+
+**When the queue removes a pull request**, the check that failed on the group says why. A red
+`Required CI` is a break between this pull request and something it was combined with: read the run,
+fix it on the branch, and push. A red `Coherence` names each related pair and the pull request that
+introduced the landed side, and [When it fails](#coherence) below is what to do — wait for any pull
+request named as still ahead in the queue to land, rebase once it has, read each pair, and push. In
+either case the push dismisses the approval, so the pull request returns to the queue only once it
+is reviewed again.
+
 ## Coherence
 
 `Coherence` stops a pull request when a change related to it landed underneath it, and only then.
@@ -1192,7 +1235,8 @@ request that changed any row of it.
 It is not the base-freshness check [The base is asked twice locally and never in the
 pipeline](#the-base-is-asked-twice-locally-and-never-in-the-pipeline) rules out. A branch that
 merely fell behind passes it; what fails it is a named pair of files somebody has to read together.
-It reports in seconds, has no draft exemption, and is not a required check yet.
+It reports in seconds, has no draft exemption, and is a required check, on the pull request and on
+the merge group alike.
 
 **When it fails**, the job summary lists every pair, the relation that made it one, and the pull
 request that introduced the landed side — on `merge_group` also whether that pull request is
@@ -1286,9 +1330,9 @@ already said. Six is where that begins: #811 took six rounds, and the last two o
 them each moved two findings that were corrections to earlier findings rather
 than anything the first pass had missed.
 
-The other three are for the pushes that answer no finding. The `main` ruleset
-merges only a branch that is current with its base, so with several pull requests
-open every merge leaves the others behind, and the rebase that brings one back is
+The other three are for the pushes that answer no finding. The merge queue does
+not ask a branch to be current, but a conflict with `main` or a related change
+`Coherence` names still needs a rebase, and the rebase that brings one back is
 a push like any other and spends a pass. Counted against six alone, a pull request
 rebased twice while its findings are being answered runs out of reviews before it
 runs out of findings, and the push that needs a verdict is the one refused. Nine

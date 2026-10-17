@@ -1552,13 +1552,18 @@ verify_fast_runs_in_a_fork_with_no_upstream_remote() {
 # The `Protected paths` workflow never checks the branch out, so its guard cannot be a script in
 # `scripts/` that the job calls: it is one shell block inside the YAML. Extracting that block
 # verbatim from the committed file is what lets these contracts run the same code the runner runs
-# rather than a copy that drifts from it. The block is the step's `run: |`, indented ten spaces, and
-# it is the last thing in the file; `bash -n` on the result is what notices if that stops being true.
+# rather than a copy that drifts from it. The block is the guard step's `run: |`, indented ten spaces,
+# and it is the last thing in the file — the merge-group step above it carries a `run: |` of its own,
+# which is why the extraction starts at the guard step's name rather than at the first block; `bash -n`
+# on the result is what notices if either stops being true.
 extract_protected_paths_step() {
   local step_script="$1"
 
-  awk 'extracting { sub(/^          /, ""); print } /^        run: \|$/ { extracting = 1 }' \
-    "$source_repository_root/.github/workflows/protected-paths.yml" > "$step_script"
+  awk '
+    extracting { sub(/^          /, ""); print }
+    $0 == "      - name: Verify who changed the repository configuration" { found = 1 }
+    found && /^        run: \|$/ { extracting = 1 }
+  ' "$source_repository_root/.github/workflows/protected-paths.yml" > "$step_script"
 
   [[ -s "$step_script" ]]
   bash -n "$step_script"
@@ -8461,6 +8466,128 @@ only_the_recorded_workflows_use_pull_request_target() {
   fi
 }
 
+# Every merge into `main` goes through the merge queue, and the queue waits for each required check on
+# the merge group's own commit. A workflow publishing one that does not listen on `merge_group` leaves
+# that check unreported there, and every pull request then sits in the queue until the check-response
+# timeout removes it. The ruleset lives in repository settings, so the five workflows below are the
+# required checks as `docs/operations/local-development.md` § *Branch protection* records them.
+every_required_check_reports_on_a_merge_group() {
+  local workflow
+  local failures=''
+
+  for workflow in ci.yml coherence.yml contributor-licence.yml protected-paths.yml typo-check.yml; do
+    if ! grep -qE '^  merge_group:' "$source_repository_root/.github/workflows/$workflow"; then
+      failures+="$workflow publishes a required check and does not run on merge_group. "
+    fi
+  done
+
+  if [[ -n "$failures" ]]; then
+    printf '%s\n' "$failures" >&2
+    return 1
+  fi
+}
+
+# `CI`'s `Find a verdict this tree already earned` step decides whether a merge group or a push skips
+# the whole build, so a wrong `true` merges a tree nobody tested. It is extracted verbatim, as the
+# protected-paths guard is, and run against a `gh` that answers each endpoint from a fixture and
+# applies the step's own `--jq` filter to it — the filter is where the newest-run and any-success
+# distinction lives, so a fake that answered past it would prove nothing.
+run_reuse_step() {
+  local event_name="$1"
+  local containment="$2"
+  local check_runs_json="$3"
+  local output_file="$4"
+  local work
+  work="$(mktemp -d "$test_directory/reuse-XXXXXX")"
+  local step_script="$work/step.sh"
+
+  mkdir "$work/bin"
+  awk '
+    $0 == "      - name: Find a verdict this tree already earned" { found = 1; next }
+    found && !extracting && /^        run: \|$/ { extracting = 1; next }
+    extracting {
+      if ($0 != "" && $0 !~ /^          /) { exit }
+      sub(/^          /, "")
+      print
+    }
+  ' "$source_repository_root/.github/workflows/ci.yml" > "$step_script"
+  bash -n "$step_script"
+
+  cat > "$work/bin/gh" << 'FAKE'
+#!/usr/bin/env bash
+filter=''
+endpoint=''
+while (( $# > 0 )); do
+  case "$1" in
+    --jq) filter="$2"; shift 2 ;;
+    --method | -f) shift 2 ;;
+    api) shift ;;
+    *) endpoint="$1"; shift ;;
+  esac
+done
+case "$endpoint" in
+  */pulls/*) body='{"head":{"sha":"1111111111111111111111111111111111111111"}}' ;;
+  */compare/*) body="{\"status\":\"$FAKE_CONTAINMENT\"}" ;;
+  */check-runs) body="$FAKE_CHECK_RUNS" ;;
+  *) exit 1 ;;
+esac
+jq -r "$filter" <<< "$body"
+FAKE
+  chmod +x "$work/bin/gh"
+
+  : > "$work/output"
+  (
+    export PATH="$work/bin:$PATH"
+    export GH_TOKEN='fake-token'
+    export REPOSITORY='fathomise/MailFathom'
+    export EVENT_NAME="$event_name"
+    export MERGE_GROUP_HEAD_REF='refs/heads/gh-readonly-queue/main/pr-7-2222222222222222222222222222222222222222'
+    export MERGE_GROUP_BASE_SHA='2222222222222222222222222222222222222222'
+    export PUSHED_SHA='3333333333333333333333333333333333333333'
+    export FAKE_CONTAINMENT="$containment"
+    export FAKE_CHECK_RUNS="$check_runs_json"
+    export GITHUB_OUTPUT="$work/output"
+    bash "$step_script"
+  ) > /dev/null 2>&1
+  cat "$work/output" > "$output_file"
+}
+
+ci_reuses_a_verdict_only_for_a_tree_a_successful_run_tested() {
+  local output_file="$test_directory/reuse-output"
+  local draft_then_ready='{"check_runs":[
+    {"app":{"slug":"github-actions"},"started_at":"2026-10-17T10:00:00Z","conclusion":"failure"},
+    {"app":{"slug":"github-actions"},"started_at":"2026-10-17T10:05:00Z","conclusion":"success"}]}'
+  local ready_then_failed='{"check_runs":[
+    {"app":{"slug":"github-actions"},"started_at":"2026-10-17T10:00:00Z","conclusion":"success"},
+    {"app":{"slug":"github-actions"},"started_at":"2026-10-17T10:05:00Z","conclusion":"failure"}]}'
+  local push_with_group='{"check_runs":[
+    {"app":{"slug":"github-actions"},"started_at":"2026-10-17T10:00:00Z","conclusion":"success"},
+    {"app":{"slug":"github-actions"},"started_at":"2026-10-17T10:09:00Z","conclusion":"skipped"}]}'
+  local push_bypassed='{"check_runs":[
+    {"app":{"slug":"github-actions"},"started_at":"2026-10-17T10:09:00Z","conclusion":"skipped"}]}'
+  local failures=''
+
+  run_reuse_step merge_group ahead "$draft_then_ready" "$output_file"
+  [[ "$(cat "$output_file")" == 'reuse=true' ]] || failures+='a current head whose newest run passed was not reused. '
+
+  run_reuse_step merge_group diverged "$draft_then_ready" "$output_file"
+  [[ "$(cat "$output_file")" == 'reuse=false' ]] || failures+='a head missing the group base was reused. '
+
+  run_reuse_step merge_group ahead "$ready_then_failed" "$output_file"
+  [[ "$(cat "$output_file")" == 'reuse=false' ]] || failures+='a head whose newest run failed was reused. '
+
+  run_reuse_step push '' "$push_with_group" "$output_file"
+  [[ "$(cat "$output_file")" == 'reuse=true' ]] || failures+="a pushed commit carrying the group's success was not reused. "
+
+  run_reuse_step push '' "$push_bypassed" "$output_file"
+  [[ "$(cat "$output_file")" == 'reuse=false' ]] || failures+='a pushed commit no green group carries was reused. '
+
+  if [[ -n "$failures" ]]; then
+    printf '%s\n' "$failures" >&2
+    return 1
+  fi
+}
+
 # `issue_comment` fires for every comment on a pull request, a bot's included, and the gate that
 # tells a review request apart from any other comment runs *inside* the run — after the run has
 # already entered the concurrency group. An unconditional `cancel-in-progress: true` therefore means
@@ -10553,6 +10680,8 @@ run_test the_mutation_score_is_reported_and_never_gated
 run_test a_paid_provider_run_is_never_the_default
 run_test the_integration_suite_writes_its_results_where_the_workflow_uploads_them
 run_test only_the_recorded_workflows_use_pull_request_target
+run_test every_required_check_reports_on_a_merge_group
+run_test ci_reuses_a_verdict_only_for_a_tree_a_successful_run_tested
 run_test a_comment_never_cancels_a_review_in_flight
 run_test a_comment_never_cancels_a_queued_review
 run_test the_reviewer_listens_for_the_dispatch_it_sends

@@ -197,7 +197,7 @@ Four checks gate the merge. `license/cla` is the one described above and `Typo c
 
 **`CodeQL`** also runs on every pull request that is not a draft: it builds the service's production projects under extraction and runs GitHub's C# security queries over the result, so a finding is a value followed from an untrusted source to somewhere it should not reach rather than a style objection. Findings appear as annotations on the pull request. It is the one check here that gates nothing, and for a reason worth knowing: the query pack updates upstream, so a change that was clean when it merged can become a finding later without anybody touching the code. Treat one as a question to answer in the pull request — fix it, or explain why the path is not reachable — rather than as something to route around.
 
-Merging additionally requires an approving review from a code owner and a branch that is current with `main`. [`docs/operations/local-development.md`](docs/operations/local-development.md#pull-request-checks) documents all four workflows and the branch ruleset in full.
+Merging additionally requires an approving review from a code owner. Your branch does not have to be current with `main`: an approved pull request enters a merge queue, which tests it combined with `main` and merges it, and rebasing is needed only when `git` reports a conflict or the `Coherence` check names a related change that landed underneath it. [`docs/operations/local-development.md`](docs/operations/local-development.md#pull-request-checks) documents all four workflows and the branch ruleset in full.
 
 A separate `Fathom review` workflow may post an automated review on a published pull request. It reports no status check and gates nothing; treat it as a second opinion.
 
