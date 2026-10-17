@@ -1,0 +1,159 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
+# Project repository: https://github.com/fathomise/MailFathom
+
+name: Coherence
+
+# Stops a pull request when a change related to it landed underneath it, and names exactly what to
+# read.
+#
+# Git merges two changes without a conflict whenever they touch different lines, and a test proves
+# the combined tree builds and behaves. Neither sees a page one pull request adds that describes a file
+# another one changed, or a rule written into an `AGENTS.md` that a file changed beside it does not
+# follow. This check covers that half: it compares what landed since the pull request's merge base
+# with what the pull request changes, and fails on every pair `.github/coherence/relate-changes.sh`
+# relates. An unrelated merge costs the pull request nothing, which is what a branch-must-be-current
+# rule cannot offer.
+#
+# It runs on `merge_group` as well, where what landed is everything between the merge base and what
+# the queue entry merges onto — `main` plus the pull requests ahead of it — so the pair a queue would combine
+# without anybody reading is caught before it reaches `main`.
+#
+# It is a workflow of its own rather than a job of `CI` so that it reports within seconds instead of
+# after the build, and so that its red means one thing.
+
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+    branches:
+      - main
+  merge_group:
+    types:
+      - checks_requested
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  coherence:
+    # No draft guard: it costs seconds, and a related change is worth knowing about while the pull
+    # request is still being written.
+    name: Coherence
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      # The whole history, because the merge base can be any distance back, but without blobs: every
+      # question below is about which paths a commit touched, which trees answer. The checkout is the
+      # combined tree — the pull request's merge commit, or the merge group's head — and that is the
+      # tree the `describes:` markers and the `AGENTS.md` files are read from.
+      - name: Check out the combined tree
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+
+      - name: Relate what landed to what this pull request changes
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          MERGE_GROUP_HEAD_REF: ${{ github.event.merge_group.head_ref }}
+          BASE_BRANCH: ${{ github.event.merge_group.base_ref || github.event.pull_request.base.ref }}
+          REPOSITORY_URL: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          work_directory="$(mktemp -d)"
+
+          # The combined tree's first parent is what this pull request would merge onto: current
+          # `main` for a pull request, and `main` plus the entries ahead of it for a merge group.
+          merge_onto="$(git rev-parse HEAD^1)"
+
+          # A pull request's merge commit carries its head as the second parent. A merge group's head
+          # is a squash and carries none, so the head is fetched from the pull request's own ref,
+          # whose number is the one GitHub writes into the queue branch's name.
+          if [[ "$EVENT_NAME" == 'merge_group' ]]; then
+            pull_request_number="$(sed -nE 's|^refs/heads/gh-readonly-queue/[^/]+/pr-([0-9]+)-[0-9a-f]+$|\1|p' <<< "$MERGE_GROUP_HEAD_REF")"
+            if [[ -z "$pull_request_number" ]]; then
+              echo "::error::The merge group ref ${MERGE_GROUP_HEAD_REF} names no pull request."
+              exit 1
+            fi
+            git fetch --quiet --no-tags --filter=blob:none origin "refs/pull/${pull_request_number}/head"
+            pull_request_head="$(git rev-parse FETCH_HEAD)"
+          else
+            pull_request_head="$(git rev-parse HEAD^2)"
+          fi
+
+          merge_base="$(git merge-base "$merge_onto" "$pull_request_head")"
+
+          # `--no-renames` keeps both ends of a move, and keeps git from fetching blobs to detect one.
+          git diff --name-only --no-renames "$merge_base" "$merge_onto" > "$work_directory/landed"
+          git diff --name-only --no-renames "$merge_base" "$pull_request_head" > "$work_directory/changed"
+
+          bash .github/coherence/relate-changes.sh \
+            "$GITHUB_WORKSPACE" "$work_directory/landed" "$work_directory/changed" "$work_directory/pairs.json"
+
+          pair_count="$(jq 'length' "$work_directory/pairs.json")"
+          landed_count="$(grep -c . "$work_directory/landed" || true)"
+
+          if (( pair_count == 0 )); then
+            echo "Nothing related to this pull request landed since its merge base ${merge_base:0:12} (${landed_count} paths landed)."
+            exit 0
+          fi
+
+          # Where each landed path came from: the commits between the merge base and what this would
+          # merge onto that touched it. A squash merge names its pull request at the end of its
+          # subject, which is what a reader opens; a commit that names none is given by its hash.
+          introduced_by() {
+            local path="$1" commit subject number place
+
+            while IFS=' ' read -r commit subject; do
+              number="$(sed -nE 's/.*\(#([0-9]+)\)$/\1/p' <<< "$subject")"
+              if [[ -n "$number" ]]; then
+                place="${REPOSITORY_URL}/pull/${number}"
+              else
+                place="${commit:0:12} ${subject}"
+              fi
+
+              if [[ "$EVENT_NAME" == 'merge_group' ]]; then
+                # Not `merge_group.base_sha`: that is the group's parent commit, the first parent
+                # above, which already carries the entries ahead. The base branch's tip is what is
+                # on `main`, and the full-history checkout holds it as a remote-tracking ref.
+                if git merge-base --is-ancestor "$commit" "origin/${BASE_BRANCH#refs/heads/}"; then
+                  place+=' (on main)'
+                else
+                  place+=' (ahead in the queue)'
+                fi
+              fi
+
+              printf '%s; ' "$place"
+            done < <(git log --format='%H %s' "${merge_base}..${merge_onto}" -- "$path")
+          }
+
+          {
+            echo '### Related changes landed under this pull request'
+            echo
+            echo "Each row pairs a path that landed since the merge base \`${merge_base:0:12}\` with a path this pull request changes. Read the two together, reconcile whichever one no longer agrees, and rebase onto \`main\` once the other side is on it."
+            echo
+            echo '| Landed | Changed here | Relation | Introduced by |'
+            echo '|---|---|---|---|'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          while IFS=$'\t' read -r landed changed reason; do
+            source_of_landed="$(introduced_by "$landed")"
+            source_of_landed="${source_of_landed%; }"
+            echo "::error::${landed} landed under this pull request and is related to ${changed} (${reason}); introduced by ${source_of_landed}"
+            echo "| \`${landed}\` | \`${changed}\` | ${reason} | ${source_of_landed} |" >> "$GITHUB_STEP_SUMMARY"
+          done < <(jq -r '.[] | [.landed, .changed, .reason] | @tsv' "$work_directory/pairs.json")
+
+          echo "${pair_count} related pair(s) landed under this pull request; the job summary lists them."
+          exit 1
