@@ -5,8 +5,9 @@
 name: Fathom review
 
 # A second reviewer, next to the Codex review that already comments here, in the same P1/P2/P3
-# vocabulary so one pass over the threads answers both. It reports no status check and is not in the
-# `main` ruleset: it advises, and nothing waits on it.
+# vocabulary so one pass over the threads answers both. It reports no status check, but its approval
+# satisfies the one approving review the `main` ruleset requires on a member's pull request from
+# this repository — so what it may approve, and whose words it reads, is bounded below.
 #
 # Every trigger here runs the workflow file from the default branch, never from the branch under
 # review. `pull_request_target` and `issue_comment` both do that by definition, and so does
@@ -62,9 +63,10 @@ name: Fathom review
 #
 # The approval is what lets a change merge. The `main` ruleset requires one approving review and
 # does not ask for it from a code owner, so this one satisfies it — which is why it is given only to
-# a pull request whose head branch lives in this repository. A pull request from a fork never gets
-# one: a pass that finds nothing there submits `event: COMMENT` under `NO FINDINGS` instead, and a
-# project maintainer's approval is what merges it. `dismiss_stale_reviews_on_push` discards an
+# a pull request whose head branch lives in this repository and whose author is a member of the
+# organization. Any other pull request never gets one: a pass that finds nothing there submits
+# `event: COMMENT` under `NO FINDINGS` instead, and a project maintainer's approval is what merges
+# it. `dismiss_stale_reviews_on_push` discards an
 # approval on the next push, so it never outlives the commit it was given for, and that same push
 # starts the review that replaces it.
 on:
@@ -114,8 +116,10 @@ on:
   #
   # `repository_dispatch` rather than `workflow_dispatch` for the reason the header gives: this one
   # takes no ref, so nothing about it lets a branch supply the job that holds the Claude credential.
-  # Creating one needs write access to the repository, which only this workflow's own `request` job
-  # holds here, so it reaches nothing the comment gate did not already admit.
+  # Creating one needs write access to the repository, and the gate admits only a dispatch sent by
+  # `github-actions[bot]` — the identity this workflow's own `request` job sends it as — so one sent
+  # with somebody's own token reviews nothing. Write access to the repository is still the trust
+  # boundary beyond that: whoever holds it can run a workflow of their own with the same token.
   repository_dispatch:
     types:
       - fathom-review-requested
@@ -272,6 +276,10 @@ jobs:
           EVENT_ACTION: ${{ github.event.action }}
           REPOSITORY: ${{ github.repository }}
           PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number || github.event.client_payload.pull_request_number }}
+          # Who sent the event, which only the dispatch branch reads: the dispatch this workflow's
+          # `request` job sends arrives from `github-actions[bot]`, and one sent with any other
+          # token did not come through the comment gate.
+          SENDER_LOGIN: ${{ github.event.sender.login }}
           # The model the comment asked for, decided by the gate of the run that dispatched this one
           # and carried here rather than parsed twice. It is data from an API call rather than from
           # this workflow, so the branch that reads it checks it against the identifiers this file
@@ -413,10 +421,15 @@ jobs:
               fi
               ;;
             repository_dispatch)
-              # The comment path's second half. Nothing is re-decided here: this event exists only
-              # because the gate above said yes in the run that dispatched it, and creating one by
-              # hand needs write access to the repository, which only that run's `request` job holds.
-              if [[ -z "$PULL_REQUEST_NUMBER" ]]; then
+              # The comment path's second half. Nothing about the comment is re-decided here: the
+              # gate above said yes in the run that dispatched this one. What is checked is that it
+              # was that run — its `request` job sends the dispatch with the workflow token, which
+              # GitHub reports as `github-actions[bot]` — because anybody with write access can send
+              # the same event with their own token and would otherwise bypass the members-only
+              # comment gate.
+              if [[ "$SENDER_LOGIN" != 'github-actions[bot]' ]]; then
+                reason="the dispatch was sent by ${SENDER_LOGIN} rather than by this workflow's own request"
+              elif [[ -z "$PULL_REQUEST_NUMBER" ]]; then
                 # The payload arrives over the API, so it is checked rather than assumed. Refusing
                 # here costs one short job; letting it through would fail the collection step
                 # several minutes later with an error about a pull request nobody named.
@@ -484,8 +497,8 @@ jobs:
             #
             # A failed count reads as zero and the review proceeds. This is a cost guard rather than
             # a security one, so one extra review is a better outcome than failing a run over a
-            # transient API error — and the workflow gates nothing, so a red run here would be noise
-            # a reader has to dismiss rather than a signal. The retries in front of that fallback
+            # transient API error — and the gate reports no status check, so a red run here would be
+            # noise a reader has to dismiss rather than a signal. The retries in front of that fallback
             # are what keep the ceiling from being lifted by a single dropped connection.
             # The marker is matched as the body's last line rather than anywhere in it. A review body
             # carries the reviewer's summary and findings, which are model text derived from the
@@ -512,7 +525,7 @@ jobs:
 
             if [[ "$explicit" != 'true' ]] && (( automatic_reviews >= automatic_review_limit )); then
               review='false'
-              reason="the automatic review ceiling of ${automatic_review_limit} is reached; ${REVIEWER_LOGIN} has published ${automatic_reviews} automatic reviews on this pull request, so label it fathom-review or comment fathom-review to review it again"
+              reason="the automatic review ceiling of ${automatic_review_limit} is reached; ${REVIEWER_LOGIN} has published ${automatic_reviews} automatic reviews on this pull request, so comment fathom-review to review it again"
             fi
           fi
 
@@ -1047,7 +1060,7 @@ jobs:
           # reads the same label to decide which model performs that pass — one label, read twice,
           # written once.
           "$GITHUB_API_SCRIPT" "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}" \
-            --jq '{number, title, body, draft, author: .user.login, labels: [.labels[].name], head_sha: .head.sha, head_repository: .head.repo.full_name, base_sha: .base.sha, base_ref: .base.ref, changed_files, additions, deletions}' \
+            --jq '{number, title, body, draft, author: .user.login, labels: [.labels[].name], head_sha: .head.sha, head_repository: .head.repo.full_name, author_association, base_sha: .base.sha, base_ref: .base.ref, changed_files, additions, deletions}' \
             > "$REVIEW_DIRECTORY/pull-request.json"
 
           head_sha="$(jq -r '.head_sha' "$REVIEW_DIRECTORY/pull-request.json")"
@@ -2399,10 +2412,11 @@ jobs:
           # so an approval can never describe code that has since changed.
           #
           # The approval satisfies the one approving review the ruleset requires, so it is given only
-          # where the head branch lives in this repository. A fork's pull request gets the same
-          # verdict as a comment, and a maintainer's approval merges it. The head repository is read
-          # from what `collect` asked the API, never from the event or the model, and an absent one —
-          # a deleted fork reports `null` — is treated as a fork. `REQUEST_CHANGES` is never used in
+          # where the head branch lives in this repository and the author is a member of the
+          # organization. Anything else — a fork, or an outside collaborator's branch here — gets the
+          # same verdict as a comment, and a maintainer's approval merges it. Both facts are read from
+          # what `collect` asked the API, never from the event or the model, and an absent one — a
+          # deleted fork reports `null` — withholds the approval. `REQUEST_CHANGES` is never used in
           # any branch: a reviewer that reports no status check must not be able to block a merge.
           # An empty findings array means two different things depending on how the reviewer ended.
           # From a run that finished, it means nothing was found. From one that answered and then
@@ -2419,7 +2433,9 @@ jobs:
 
           if [[ "$(jq '(.findings // []) | length' "$findings_file")" == '0' ]]; then
             head_repository="$(jq -r '.head_repository // ""' "$REVIEW_DIRECTORY/pull-request.json" 2>/dev/null || true)"
-            if [[ "$head_repository" == "$REPOSITORY" ]]; then
+            author_association="$(jq -r '.author_association // ""' "$REVIEW_DIRECTORY/pull-request.json" 2>/dev/null || true)"
+            if [[ "$head_repository" == "$REPOSITORY" ]] \
+              && [[ "$author_association" == 'OWNER' || "$author_association" == 'MEMBER' ]]; then
               event='APPROVE'
               heading='# APPROVED'
               notice=''
@@ -2427,7 +2443,7 @@ jobs:
             else
               event='COMMENT'
               heading='# NO FINDINGS'
-              notice='This pull request comes from a fork, so this reviewer does not approve it. A project maintainer still has to review and approve it before it can merge.'
+              notice='This pull request comes from a fork or from an author outside the organization, so this reviewer does not approve it. A project maintainer still has to review and approve it before it can merge.'
               verdict='no_findings'
             fi
 
@@ -2470,7 +2486,7 @@ jobs:
             if [[ "$event" == 'APPROVE' ]]; then
               echo 'Approved: the review found nothing above the bar.'
             else
-              echo 'Found nothing above the bar; the head lives in a fork, so a maintainer approves it.'
+              echo 'Found nothing above the bar; the head lives in a fork or the author is not a member, so a maintainer approves it.'
             fi
             exit 0
           fi

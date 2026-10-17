@@ -47,12 +47,10 @@ change has not touched. The change itself is under `{{REVIEW_DIRECTORY}}`:
   `reviews.json` — the same App, spelled as each API spells a bot.
 - `issue-comments.json` — the conversation on the pull request.
 - `reviews.json` — the reviews already submitted, each with its `state`, its `body`, and
-  the `commit_id` it was given for.
-
-Those three hold only what members of the organization and you yourself wrote. Anything
-written by an account outside the project is withheld before you see it, so a thread with
-no reply from the author may have had one from somebody else, and a claim that a finding
-was settled reaches you only from a member.
+  the `commit_id` it was given for. This file, `review-threads.json`, and
+  `issue-comments.json` hold only what members of the organization and you yourself
+  wrote: anything written by an account outside the project is withheld before you see
+  it, so a thread with no reply from the author may have had one from somebody else.
 - `changed-since-last-review.txt` — the paths that moved between the head of your last
   review and this one, one per line. Absent on a first pass and on a review somebody
   asked for, which both put the whole change in scope; present and empty means the head
@@ -528,4 +526,5 @@ still has to approve. Two or three lines under that heading: what the pass cover
 the state you found it in. Do not write the verdict yourself — the step adds it, and a
 second one below it reads as a contradiction — and do not invent a finding to avoid
 approving. The approval satisfies the one approving review the `main` ruleset requires,
-so on a pull request from this repository it is what lets the change merge.
+so on a member's pull request from a branch in this repository it is what lets the
+change merge.

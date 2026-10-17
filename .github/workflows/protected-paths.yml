@@ -102,10 +102,13 @@ name: Protected paths
 #
 # It is not a security boundary on its own. A `pull_request` run uses the workflow file as the pull
 # request would leave it, so a change to this file changes the check that judges it. The pair is what
-# holds: weakening the check means editing `.github/`, and a fork's pull request doing that cannot
-# merge without a maintainer's approval, because `Fathom review` never approves one; and deleting or
-# renaming this job leaves the required check permanently unreported, which the ruleset
-# refuses to merge past. Both ways out are closed; neither of them is closed by this file alone.
+# holds: weakening the check means editing `.github/`, and a pull request doing that from a fork or
+# from an author outside the organization cannot merge without a maintainer's approval, because
+# `Fathom review` approves neither; and deleting or renaming this job leaves the required check
+# permanently unreported, which the ruleset refuses to merge past. Both ways out are closed to
+# anybody outside the organization. A member's own pull request from a branch here is the one case
+# the first is not closed for: the reviewer's approval merges it, so what stands behind it is the
+# member and the reviewer's verdict rather than a maintainer's reading.
 #
 # The set is a list rather than a pattern because each entry was added for a reason that had to be
 # stated. A directory joins it when a change to it decides what the repository enforces on every

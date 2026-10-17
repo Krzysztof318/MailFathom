@@ -1409,7 +1409,7 @@ a draft push, a comment about the workflow — from one that did. Among those it
 counts the automatic ones alone. A review somebody asked for neither consumes the
 budget a later push draws on nor is refused by it, because asking is the decision
 this ceiling exists to make when nobody made it, and a maintainer who has made it
-must not find the next push unreviewed as a consequence. So a label or a comment
+must not find the next push unreviewed as a consequence. So a member's comment
 starts a review however many stand on the pull request already.
 
 Which passes were automatic is not something the reviews endpoint records, so the
@@ -1485,8 +1485,11 @@ which is why it is stated rather than engineered away.
 `the_reviewer_listens_for_the_dispatch_it_sends` is what keeps the two halves of
 the comment path naming one event type.
 
-The workflow reports no status check and is not in the `main` ruleset. It
-advises; nothing waits on it.
+The workflow reports no status check. Its approval does satisfy the one
+approving review the `main` ruleset requires, on a member's pull request from a
+branch in this repository, which is why what it may approve and whose words it
+reads are both bounded; [What the submission step guarantees](#what-the-submission-step-guarantees) and
+[What the run is allowed to touch](#what-the-run-is-allowed-to-touch) carry how.
 
 ### What the run is allowed to touch
 
@@ -1499,7 +1502,12 @@ as `main` states them rather than as the branch would rewrite them.
 The change arrives as data. A collection step reads the pull request, its
 changed files with their patches, the resulting content of each changed file,
 the inline threads and issue comments, the reviews already submitted, and the
-issues its body closes, and writes them under `$RUNNER_TEMP/review` with an explicit
+issues its body closes. Of the threads, comments, and reviews it keeps only what
+the organization's members and the reviewer itself wrote — an author GitHub
+associates as `OWNER` or `MEMBER`, or the App by its login, since GitHub reports
+it as a `CONTRIBUTOR` — because anybody can comment on a public pull request and
+a remark from outside the project would otherwise steer the verdict an approval
+is made of; a thread only outsiders wrote is dropped whole. It writes them under `$RUNNER_TEMP/review` with an explicit
 ceiling on every one of them. What a ceiling drops is recorded and ends up in the
 review body, because a partial review that looks complete is worse than one that
 says what it did not see. `truncation.txt` is where each of them appends, so it is
@@ -1821,8 +1829,8 @@ with them. `Fathom review` uses it anyway, as the first of two recorded
 exceptions rather than as a rule the repository quietly breaks.
 
 The exception holds because the trigger is what the workflow needs and the danger
-is not what it does. `issue_comment`, `repository_dispatch`, and a label event
-carry no head ref to run, and reviewing a fork at a maintainer's request is the
+is not what it does. `issue_comment` and `repository_dispatch` carry no head
+ref to run, and reviewing a fork at a member's request is the
 whole reason the workflow reaches one at all; `pull_request` would give the run
 neither the secrets it needs to publish under the App nor a trigger a maintainer
 can aim. What makes that safe
@@ -1849,7 +1857,7 @@ that grants a reader or the judge a shell, a writer, or a network tool, that let
 a job other than the judge hold a credential that writes, that adds
 `workflow_dispatch` — a dispatch takes a ref, which would let the branch supply
 the job that receives the Claude credential — or that lets a trigger other than a
-maintainer's label or comment reach a fork. A third workflow wanting the trigger
+member's comment reach a fork. A third workflow wanting the trigger
 does not inherit either argument; it makes its own or uses `pull_request`.
 
 ### What bounds the cost
@@ -1876,9 +1884,6 @@ grow:
 - the comment trigger requires an `OWNER` or `MEMBER` author, so nobody outside
   the organization can spend the subscription by typing, an outside collaborator
   included;
-- only what the organization's members and the reviewer wrote — threads, reviews,
-  and comments — is collected for the reviewer, so a remark from outside the
-  project cannot steer the verdict an approval is made of;
 - an automatic review is capped at nine per pull request, as described above, and a
   review somebody asked for is outside that count in both directions;
 - the model is `claude-sonnet-5-5` rather than the costlier Opus, which exactly two
@@ -1950,7 +1955,7 @@ Because both workflows start from the same event, the reviewer waits for the
 labelling run on that head to finish before reading the labels — otherwise a security
 change opened or pushed a moment ago would be reviewed with the default model and no
 pass, on exactly the changes where that costs most. Only a run still in flight is
-waited for, so a comment or a label event, which arrives long after that head was
+waited for, so a comment, which arrives long after that head was
 labelled, waits not at all. The wait is bounded at two minutes and then reads the
 labels as they stand: this decides which model reviews rather than whether a review
 happens, so a stuck labelling run must not hold a review open or fail one.
@@ -2449,17 +2454,19 @@ a notice and publishes no verdict.
 `main` ruleset sets `dismiss_stale_reviews_on_push`, so the next push dismisses
 it and an approval can never describe code that has since changed.
 
-**The approval is what lets a change merge, so a fork never gets one.** The
-ruleset requires one approving review and does not ask for it from a code owner,
-so the reviewer's approval satisfies it. The submission step therefore approves
-only a pull request whose head branch lives in this repository, read from what
-`collect` asked the API rather than from the event or the model. On a pull
-request from a fork — or from one since deleted, which the API reports as no
-repository — a pass that found nothing submits `event: COMMENT` under the heading
+**The approval is what lets a change merge, so only a member's own pull request
+gets one.** The ruleset requires one approving review and does not ask for it
+from a code owner, so the reviewer's approval satisfies it. The submission step
+therefore approves only a pull request whose head branch lives in this
+repository and whose author GitHub associates with the organization as `OWNER`
+or `MEMBER`, both read from what `collect` asked the API rather than from the
+event or the model. On any other pull request — from a fork, from one since
+deleted, which the API reports as no repository, or from an outside
+collaborator's branch here — a pass that found nothing submits `event: COMMENT` under the heading
 `NO FINDINGS`, saying that a project maintainer still has to review and approve
 it, and the maintainer's approval is what merges it.
 `REQUEST_CHANGES` is never used in any branch: a reviewer that reports no
-status check and gates nothing must not be able to block a merge either, which is
+status check must not be able to block a merge either, which is
 why `NEEDS CHANGES` is a heading in a body and never a review state.
 
 ### What a review moves on the board
@@ -2524,7 +2531,8 @@ describes along with the two permissions it holds. The job mints it, checks out
 only the base commit, runs no model, and receives its input as a string, so the
 board credential never shares a runner with the reviewer session — the same
 separation that keeps the reviewer App's token in the one step that makes no
-model call. Where the App's client id or private key is absent the job says so and ends green: this workflow gates nothing, and a missing
+model call. Where the App's client id or private key is absent the job says so
+and ends green: the board write gates nothing, and a missing
 credential must not turn a review red. A pull request that closes no issue ends
 the same way, with a notice, because a change opened without a contract is an
 ordinary shape. An issue that is not on the board ends green too, but as a

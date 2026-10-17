@@ -2323,6 +2323,8 @@ run_fathom_review_gate() {
     export COMMENT_BODY="${GATE_COMMENT_BODY:-}"
     export COMMENT_ASSOCIATION="${GATE_COMMENT_ASSOCIATION:-}"
     export REQUESTED_MODEL="${GATE_REQUESTED_MODEL:-}"
+    # The workflow token's identity, which is what the `request` job sends a dispatch as.
+    export SENDER_LOGIN="${GATE_SENDER_LOGIN:-github-actions[bot]}"
     export GH_TOKEN='fake-token'
     export REVIEWER_LOGIN='fathom-reviewer[bot]'
     export UPDATER_LOGIN='dependabot[bot]'
@@ -2397,6 +2399,7 @@ fathom_review_stops_reviewing_a_push_at_the_automatic_ceiling() {
   # The refusal names the way out, because a member reading it is one comment away from the pass
   # the ceiling just declined to spend.
   assert_contains 'comment fathom-review' "$output_file"
+  assert_excludes 'label it fathom-review' "$output_file"
 }
 
 # A review somebody asked for is a decision already taken, so it neither counts against the budget a
@@ -2637,9 +2640,21 @@ fathom_review_reviews_the_pull_request_a_dispatch_names() {
 
   assert_contains 'review=true' "$step_output_file"
   # Somebody asked for this pass, so the ceiling neither refuses it nor counts it and the bar stays
-  # full — the same three consequences a label carries, reached through the comment path instead.
+  # full — the three consequences of somebody asking, reached through the comment path.
   assert_contains 'explicit=true' "$step_output_file"
   assert_contains 'model=claude-opus-5-5' "$step_output_file"
+}
+
+# Anybody with write access can send the dispatch with their own token, which would skip the
+# members-only comment gate entirely. Only the one this workflow's `request` job sends reviews.
+fathom_review_refuses_a_dispatch_it_did_not_send() {
+  local output_file="$test_directory/fathom-review-dispatch-sender-output"
+  local step_output_file="$test_directory/fathom-review-dispatch-sender-step-output"
+
+  GATE_SENDER_LOGIN='collaborator' run_fathom_review_dispatch_gate '' "$output_file" "$step_output_file"
+
+  assert_contains 'review=false' "$step_output_file"
+  assert_contains 'the dispatch was sent by collaborator' "$output_file"
 }
 
 fathom_review_reviews_with_the_default_model_when_a_dispatch_names_an_unknown_one() {
@@ -3592,9 +3607,12 @@ chmod +x "$submit_bin_directory/gh"
 write_fathom_review_collection() {
   local review_directory="$1"
   local head_repository="${2-fathomise/MailFathom}"
+  local author_association="${3:-MEMBER}"
 
   mkdir -p "$review_directory"
-  jq -n --arg head_repository "$head_repository" '{head_repository: (if $head_repository == "" then null else $head_repository end)}' \
+  jq -n --arg head_repository "$head_repository" --arg author_association "$author_association" \
+    '{head_repository: (if $head_repository == "" then null else $head_repository end),
+      author_association: $author_association}' \
     > "$review_directory/pull-request.json"
   printf '[{"filename":"backend/src/Sample.cs","lines":[12,13,14]}]\n' > "$review_directory/lines.json"
   : > "$review_directory/truncation.txt"
@@ -3615,6 +3633,8 @@ run_fathom_review_submit() {
   # Where the head branch lives, as `collect` read it from the API. This repository is the ordinary
   # case; a fork's name, or an empty value for a fork that was deleted, is what withholds approval.
   local head_repository="${7-fathomise/MailFathom}"
+  # Who opened it, as GitHub associates them with the organization. A member is the ordinary case.
+  local author_association="${8:-MEMBER}"
   local step_script="$test_directory/fathom-review-submit.sh"
   local review_directory="$test_directory/fathom-review-submit-review"
   local coverage_file="$test_directory/fathom-review-submit-coverage"
@@ -3622,7 +3642,7 @@ run_fathom_review_submit() {
   submit_step_output_file="$test_directory/fathom-review-submit-step-output"
 
   extract_fathom_review_step 'submit' "$step_script"
-  write_fathom_review_collection "$review_directory" "$head_repository"
+  write_fathom_review_collection "$review_directory" "$head_repository" "$author_association"
   rm -f "$payload_file"
   : > "$submit_step_output_file"
 
@@ -3766,17 +3786,22 @@ fathom_review_approves_when_it_finds_nothing() {
 }
 
 # The approval satisfies the review the `main` ruleset requires, so a pull request whose head lives
-# in a fork — or in a fork since deleted, which the API reports as no repository at all — gets the
-# same verdict as a comment and never as an approval.
-fathom_review_never_approves_a_pull_request_from_a_fork() {
+# in a fork — or in a fork since deleted, which the API reports as no repository at all — or whose
+# author is outside the organization gets the same verdict as a comment and never as an approval.
+fathom_review_approves_only_a_members_pull_request_from_this_repository() {
   local output_file="$test_directory/fathom-review-submit-fork-output"
   local payload_file="$test_directory/fathom-review-submit-fork-payload"
+  local case_spec
   local head_repository
+  local author_association
 
-  for head_repository in 'contributor/MailFathom' ''; do
+  for case_spec in 'contributor/MailFathom|MEMBER' '|MEMBER' 'fathomise/MailFathom|COLLABORATOR' 'fathomise/MailFathom|'; do
+    head_repository="${case_spec%%|*}"
+    author_association="${case_spec#*|}"
     run_fathom_review_submit \
       '{"summary":"Read every changed file and found nothing above the bar.","findings":[]}' \
-      "$output_file" "$payload_file" 'success' '' '<!-- fathom-review: automatic -->' "$head_repository"
+      "$output_file" "$payload_file" 'success' '' '<!-- fathom-review: automatic -->' \
+      "$head_repository" "${author_association:-NONE}"
 
     ((submit_status == 0))
     assert_json '"COMMENT"' '.event' "$payload_file"
@@ -4304,8 +4329,8 @@ fathom_review_announces_over_every_other_status() {
 }
 
 # Writing the organization's project needs the board App's token, which is minted only while the App
-# is configured. Without it the step says so and ends green: the workflow gates nothing, so a missing
-# credential must not turn a review red.
+# is configured. Without it the step says so and ends green: the board write gates nothing, so a
+# missing credential must not turn a review red.
 fathom_review_writes_no_status_without_the_board_token() {
   local output_file="$test_directory/fathom-review-board-untokened-output"
 
@@ -11098,6 +11123,7 @@ run_test fathom_review_carries_the_model_a_comment_named_into_the_request
 run_test fathom_review_neither_reviews_nor_asks_for_a_comment_that_only_mentions_the_phrase
 run_test fathom_review_refuses_a_comment_from_outside_the_organization
 run_test fathom_review_reviews_the_pull_request_a_dispatch_names
+run_test fathom_review_refuses_a_dispatch_it_did_not_send
 run_test fathom_review_reviews_with_the_default_model_when_a_dispatch_names_an_unknown_one
 run_test fathom_review_refuses_a_dispatch_that_names_no_pull_request
 run_test fathom_review_collects_at_once_when_nobody_has_commented
@@ -11135,7 +11161,7 @@ run_test fathom_review_holds_a_pass_that_still_found_something_owed
 run_test fathom_review_holds_a_settling_pass_whatever_the_severity
 run_test fathom_review_moves_a_finding_with_no_line_into_the_body
 run_test fathom_review_approves_when_it_finds_nothing
-run_test fathom_review_never_approves_a_pull_request_from_a_fork
+run_test fathom_review_approves_only_a_members_pull_request_from_this_repository
 run_test fathom_review_reports_the_files_a_review_never_named
 run_test fathom_review_reports_no_gap_when_the_review_named_every_file
 run_test fathom_review_counts_a_named_path_the_change_does_not_contain
