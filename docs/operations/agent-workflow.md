@@ -818,9 +818,10 @@ The canonical skills are:
 - `check-docs-licenses` is the mandatory documentation, changelog, and licensing
   gate;
 - `finish-change` stages only the task files, requires that gate, runs full
-  verification, checks the final diff, creates a focused commit, pushes the
-  branch, opens a pull request that references its issue with
-  `Closes #<issue>`, and then moves that issue to `Queue: Next` so the board
+  verification, checks the final diff, reports the open pull requests related
+  to the change, creates a focused commit, pushes the branch, opens a pull
+  request that references its issue with `Closes #<issue>` and names those
+  related pull requests, and then moves that issue to `Queue: Next` so the board
   shows the work as in flight and writes its `Size` from the pull request's own
   `additions + deletions`, which is the first moment that field can state a
   measurement rather than the placeholder the issue was opened with;
@@ -1277,6 +1278,38 @@ pairs as a table. For each pair:
 
 A rebase with nothing to reconcile is still the answer to step 2: the check asks that the pair was
 read, and the moved merge base is what records that it was.
+
+**Before a change is published**, the same relation is asked against what is still open, because a
+related pull request that has not merged cannot be seen at merge time at all:
+
+```bash
+bash scripts/report-related-pull-requests.sh
+```
+
+It reads the open pull requests to `main` and their changed paths in one `gh pr list` call, and runs
+`relate-changes.sh` once, with all of their paths as the landed side and the working tree's change
+against its merge base as the changed side. One call is what keeps the cost flat however many pull
+requests are open, since the index behind the relation costs the same for two paths as for two
+thousand. Each pair is attributed to the open pull requests that touch its landed side, and each of
+those gets one row: its link, its related paths, and every pair folded beneath them — its path,
+then the path here, and the relation with its direction stated from this change's side, such as
+*its page describes the path here*. The branch's own pull request, identified by the owner of the
+repository it is pushed to and its branch name, is left out.
+
+`$finish-change` runs it before committing, so an edit it prompts goes through the gates with the
+rest of the change, and copies the section it prints into the body, so a reviewer knows which
+in-flight changes this one has to agree with. Everything in a row comes from somebody else's pull
+request, so paths are printed as code spans with backticks and control characters removed, `|`
+escaped, and a `#` before a digit split by an invisible word joiner, and no title is printed at all: the link renders as one, and a title would carry closing keywords, mentions, or markup
+into the body it is pasted into. The link is the pull request's full URL rather than `#<n>`, because
+[the labels a change earns](#labels-the-change-earns) are read from every `#<n>` its body refers to,
+and a related pull request carrying `security` would otherwise hand that label to this one.
+
+It is advisory and needs only read access, so it runs in the fork role too. It reads at most 100
+open pull requests, its own `--limit`, and `gh` returns at most 100 files of each; the report says so
+on stderr whenever a reply reaches either ceiling, since a pull request or a path past it is missing from the result. The markers come
+from the working tree, not from each open pull request's tree, so a page an open pull request adds
+that describes a path changed here is only paired once it lands, and `Coherence` pairs it then.
 
 ## Review on the pull request
 

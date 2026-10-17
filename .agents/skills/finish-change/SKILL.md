@@ -54,20 +54,31 @@ Do not proceed while a gate fails.
 
 ## Publish
 
-1. Confirm the staged diff still contains exactly the task files.
-2. Commit with a focused message.
-3. Fetch the base remote and confirm the branch remains safely based on its current `main`. Integrate
+1. Run `scripts/report-related-pull-requests.sh`. It prints one row for every open pull request to
+   `main` that touches a path `Coherence` would relate to this change, with that pull request's
+   related paths and every pair they make — its path, then the path here, and the relation. It gates
+   nothing: read each pull request it names and make this change agree with it, or say in the body
+   why nothing needed to change. An edit made here is part of the change, so it goes back through
+   the Required Gates before step 2. It needs only read access, so it runs in both roles, and it says
+   on stderr when its own limit of 100 open pull requests, or `gh`'s 100 files of one, cut the
+   reading short. Each row links its pull request by URL rather than by `#<n>`, so pasting the
+   section does not make the labelling steps read the related pull requests as issues this one
+   refers to.
+2. Confirm the staged diff still contains exactly the task files.
+3. Commit with a focused message.
+4. Fetch the base remote and confirm the branch remains safely based on its current `main`. Integrate
    remote movement without discarding work, then repeat affected gates.
-4. Push the branch. In the owner's checkout that is `origin`; in the fork role it is the fork's own
+5. Push the branch. In the owner's checkout that is `origin`; in the fork role it is the fork's own
    `origin`, and nothing is ever pushed to `fathomise/MailFathom`.
-5. Create a pull request whose body contains `Closes #<issue>` for the issue the change
-   completes. In the fork role it targets `main` on `fathomise/MailFathom` from the fork's branch.
-6. Confirm the reference is present in the published body. `gh pr edit` fails against this repository
+6. Create a pull request whose body contains `Closes #<issue>` for the issue the change
+   completes, and — when step 1 printed a `## Related open pull requests` section — that section as
+   printed. In the fork role it targets `main` on `fathomise/MailFathom` from the fork's branch.
+7. Confirm the reference is present in the published body. `gh pr edit` fails against this repository
    with a Projects-classic GraphQL error and silently drops the edit, so correct a missing reference
    through `gh api repos/<owner>/<repo>/pulls/<number> -X PATCH -f body=...`. That endpoint names the
    *base* repository even for a fork's pull request, and it is the author who is allowed to patch it
    rather than anyone with write access to that repository.
-7. **Wherever the board probe in `$start-task` returned write access:** set `Queue: Next` on the
+8. **Wherever the board probe in `$start-task` returned write access:** set `Queue: Next` on the
    issue the pull request closes, whether it was opened for this task or already existed, and
    confirm the value landed. No project automation can
    write that field, so a value that did not land is an incomplete gate in the same way a missing
@@ -104,7 +115,7 @@ Do not proceed while a gate fails.
 Confirm the issue is still placed, against `docs/operations/issue-tracking.md`, as far as this
 session's access reaches: exactly one `type:*` label, a `backend` or `frontend` label where the work
 landed in one of the two stacks, and a milestone if the release rule assigns one, all of which need
-write access to the repository, and an `Area` and a `Size` on the board, the `Size` being what step 7
+write access to the repository, and an `Area` and a `Size` on the board, the `Size` being what step 8
 measured rather than the placeholder the issue was opened with. A change that grew past what the
 issue described may have outgrown its placement too.
 
@@ -124,6 +135,7 @@ Commit: <hash and subject>
 Push: <remote and branch>
 Pull request: <URL, and the base repository it targets>
 Issue link: <Closes #N confirmed in the published body>
+Related pull requests: <the ones scripts/report-related-pull-requests.sh named and what each changed here, or none>
 Queue: <Next confirmed on the board after the pull request existed, or not applicable (no board write)>
 Size: <the band written from this pull request's own diff and confirmed, or not applicable (no board write, or a parent issue)>
 Placement: <type label, stack label or neither, Area, milestone or none — or what this session's access left to triage>
