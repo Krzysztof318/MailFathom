@@ -1298,8 +1298,8 @@ repository it is pushed to and its branch name, is left out.
 `$finish-change` runs it before committing, so an edit it prompts goes through the gates with the
 rest of the change, and copies the section it prints into the body, so a reviewer knows which
 in-flight changes this one has to agree with. Everything in a row comes from somebody else's pull
-request, so paths are printed as code spans with backticks removed and `|` escaped, and no title is
-printed at all: the link renders as one, and a title would carry closing keywords, mentions, or markup
+request, so paths are printed as code spans with backticks and control characters removed, `|`
+escaped, and a `#` before a digit split by an invisible word joiner, and no title is printed at all: the link renders as one, and a title would carry closing keywords, mentions, or markup
 into the body it is pasted into. The link is the pull request's full URL rather than `#<n>`, because
 [the labels a change earns](#labels-the-change-earns) are read from every `#<n>` its body refers to,
 and a related pull request carrying `security` would otherwise hand that label to this one.

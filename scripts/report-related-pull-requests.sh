@@ -90,9 +90,11 @@ bash .github/coherence/relate-changes.sh \
 # spans and no title is printed at all — the link already renders as one, and a title would carry
 # closing keywords, mentions, and markup into the body it is pasted into. The link is a full URL
 # rather than `#<n>`, because the labelling steps read every `#<n>` in a body as an issue it refers
-# to, and a related pull request would hand its labels to this one.
+# to, and a related pull request would hand its labels to this one. For the same reason a `#` before a
+# digit in a path is split by a word joiner, which renders as nothing, and a control character that
+# could end the table row is dropped.
 jq -r --arg repository_url "https://github.com/$CANONICAL_REPOSITORY" --slurpfile others "$work_directory/others.json" '
-  def code: gsub("`"; "") | gsub("\\|"; "\\|") | "`\(.)`";
+  def code: gsub("[[:cntrl:]`]"; "") | gsub("\\|"; "\\|") | gsub("#(?<digit>[0-9])"; "#\u2060\(.digit)") | "`\(.)`";
   . as $pairs
   | $others[0] | sort_by(.number)
   | map(. as $pull_request

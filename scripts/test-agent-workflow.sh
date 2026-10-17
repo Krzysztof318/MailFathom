@@ -6621,11 +6621,13 @@ related_pull_requests_names_the_open_pull_request_a_pair_comes_from() {
 related_pull_requests_writes_another_pull_request_s_paths_as_inert_code() {
   run_related_pull_requests hostile '[
     {"number": 7, "headRefName": "agent/notes", "headRepositoryOwner": {"login": "fathomise"},
-     "files": [{"path": "docs/features/a`b|c.md"}]}
-  ]' 'docs/features/a`b|c.md'
+     "files": [{"path": "docs/features/a`b|c (#5).md"}]}
+  ]' 'docs/features/a`b|c (#5).md'
 
-  assert_contains '| https://github.com/fathomise/MailFathom/pull/7 | `docs/features/ab\|c.md` |' \
-    "$test_directory/related-pull-requests-hostile-output"
+  local output_file="$test_directory/related-pull-requests-hostile-output"
+  assert_contains '| https://github.com/fathomise/MailFathom/pull/7 | `docs/features/ab\|c (#' "$output_file"
+  assert_file_content '' <(bash "$source_repository_root/.github/pull-request/collect-referenced-issues.sh" \
+    "$output_file" fathomise/MailFathom)
 }
 
 # A reply at either ceiling may be missing exactly the pull request or the path that relates, so the
