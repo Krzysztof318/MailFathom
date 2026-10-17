@@ -24,12 +24,6 @@ on:
     types: [opened, reopened, synchronize]
   issue_comment:
     types: [created]
-  # `license/cla` is a required check, so the merge queue waits for it on the tree it combines. Whether
-  # the author accepted the agreement is a property of the pull request rather than of that tree, so
-  # the group is handed the status the pull request's head already carries, under the same App, which
-  # is the integration the ruleset requires the status from.
-  merge_group:
-    types: [checks_requested]
 
 # The workflow token is unused: every call below carries the App's installation token instead, so
 # the default grant is emptied rather than narrowed. `pull_request_target` would otherwise hand a
@@ -52,7 +46,6 @@ jobs:
     # afterwards would leave a signature nothing ever verified against a live status.
     if: >-
       github.event_name == 'pull_request_target'
-      || github.event_name == 'merge_group'
       || (github.event.issue.pull_request != null && github.event.issue.state == 'open')
 
     steps:
@@ -74,62 +67,12 @@ jobs:
           client-id: ${{ vars.LICENSE_APP_CLIENT_ID }}
           private-key: ${{ secrets.LICENSE_APP_PRIVATE_KEY }}
 
-      # Nothing is asked, read from the register, or recorded for a merge group: the queue admitted the
-      # pull request with this status already green, and the group's own commit is the only thing that
-      # lacks it. Every later step reads the next step's outputs or the comment event, so all of them
-      # skip. A read that fails still posts a status, as `error`, because a required check that never
-      # arrives holds the queue until its timeout and removes the pull request without saying why.
-      - name: Carry the pull request's licence status onto the merge group
-        if: github.event_name == 'merge_group'
-        env:
-          GH_TOKEN: ${{ steps.app.outputs.token }}
-          REPOSITORY: ${{ github.repository }}
-          MERGE_GROUP_HEAD_REF: ${{ github.event.merge_group.head_ref }}
-          MERGE_GROUP_HEAD_SHA: ${{ github.event.merge_group.head_sha }}
-        run: |
-          set -euo pipefail
-
-          number=$(printf '%s' "$MERGE_GROUP_HEAD_REF" | sed -nE 's|^refs/heads/gh-readonly-queue/[^/]+/pr-([0-9]+)-[0-9a-f]+$|\1|p')
-          state=error
-          description='The merge group names no pull request, so no licence status could be carried'
-
-          if [ -n "$number" ]; then
-            head_sha=$(gh api "repos/$REPOSITORY/pulls/$number" --jq '.head.sha') || head_sha=''
-            read_failed=false
-            carried=''
-            if [ -z "$head_sha" ]; then
-              read_failed=true
-            elif ! carried=$(gh api "repos/$REPOSITORY/commits/$head_sha/status?per_page=100" \
-                --jq '[.statuses[] | select(.context == "license/cla")][0].state // empty'); then
-              read_failed=true
-            fi
-
-            if [ "$read_failed" = 'true' ]; then
-              description="The licence status of pull request #$number could not be read; re-running the job carries it"
-            elif [ "$carried" = 'success' ]; then
-              state=success
-              description="Carried from pull request #$number, whose author needs no agreement or has accepted it"
-            else
-              state=failure
-              description="Pull request #$number carries license/cla as '${carried:-missing}', not 'success'"
-            fi
-          fi
-
-          gh api "repos/$REPOSITORY/statuses/$MERGE_GROUP_HEAD_SHA" \
-            -f state="$state" \
-            -f context='license/cla' \
-            -f description="$description" \
-            >/dev/null
-
-          printf 'license/cla = %s (%s)\n' "$state" "$description"
-
       # Both events are reduced to the same five facts here rather than read out of two different
       # payload shapes further down. The pull request is fetched even under `pull_request_target`,
       # where the payload already carries it, because `synchronize` reports the head the event was
       # queued for and the status has to name the head that exists now.
       - name: Resolve the pull request and its author
         id: subject
-        if: github.event_name != 'merge_group'
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           REPOSITORY: ${{ github.repository }}
