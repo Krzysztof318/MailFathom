@@ -13,10 +13,11 @@
 
 *       @Krzysztof318
 
-# The `Protected paths` workflow refuses a change from anyone but the repository owner to the five
-# protected directories, to the configuration and build-contract files matched at any depth, and to
-# the repository-root version, package-source, SDK, license, and changelog files; `protected-paths.yml`
-# lists them with the reason each one joined. They get no entry of their own here, because the rule
-# above already makes the owner their code owner and a restatement would neither add to that nor
-# survive a path rule added below it; the last matching pattern wins either way. The place to name a
-# path as needing the owner is a rule that gives it other owners too.
+# The `Protected paths` workflow refuses a change from anyone but the repository owner, until the
+# owner approves the pull request's current head, to the five protected directories, to the
+# configuration and build-contract files matched at any depth, and to the repository-root version,
+# package-source, SDK, license, and changelog files; `protected-paths.yml` lists them with the
+# reason each one joined. They get no entry of their own here, because the rule above already makes
+# the owner their code owner and a restatement would neither add to that nor survive a path rule
+# added below it; the last matching pattern wins either way. The place to name a path as needing the
+# owner is a rule that gives it other owners too.

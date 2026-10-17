@@ -1512,8 +1512,8 @@ Nothing compares a vendored file against its upstream, so the drop rests on who
 can change one rather than on what it contains. That is a decision rather than an
 oversight. Both `.agents/` and `.gitattributes` are protected paths, so a pull
 request from anyone but the owner that edits a vendored skill, adds a file beside
-one, or marks a new directory vendored fails `Protected paths` whatever the review
-says. What the drop gives up is a second opinion on the owner's own refresh. The
+one, or marks a new directory vendored fails `Protected paths` until the owner
+approves its head, whatever `Fathom review` says. What the drop gives up is a second opinion on the owner's own refresh. The
 note it leaves in the review names every file it dropped rather than only counting
 them, so an edit to vendored text that was not meant as a refresh is still visible
 in the review body.

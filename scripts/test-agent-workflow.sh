@@ -141,13 +141,44 @@ git -C "$repository_root" commit --quiet -m 'fixture C# file'
 # permission the author holds on the repository, then the files the pull request changes — so their
 # fake `gh` lives in a directory of its own rather than beside the fake `dotnet`. Only those contracts
 # put it on `PATH`, and nothing else in this suite can then reach a `gh` it did not ask for. An empty
-# permission stands for a read that failed.
+# permission stands for a read that failed. A reviewer's permission comes from `FAKE_REVIEWER_PERMISSIONS`,
+# `login=permission` pairs, and the reviews are a JSON fixture run through the step's own `--jq`,
+# because that filter is where the newest-verdict rule lives; `FAKE_REVIEWS` set to `fail` is a read
+# that failed. The pull request itself answers with its file count, which is what a review event,
+# carrying no count of its own, makes the step read.
 mkdir -p "$protected_paths_bin_directory"
 cat > "$protected_paths_bin_directory/gh" <<'FAKE_GH'
 #!/usr/bin/env bash
 if [[ "$*" == *'/permission'* ]]; then
-  [[ -n "$FAKE_AUTHOR_PERMISSION" ]] || exit 1
-  printf '%s\n' "$FAKE_AUTHOR_PERMISSION"
+  login="$*"
+  login="${login#*collaborators/}"
+  login="${login%%/permission*}"
+  if [[ "$login" == "$PULL_REQUEST_AUTHOR" ]]; then
+    permission="$FAKE_AUTHOR_PERMISSION"
+  else
+    permission=''
+    for pair in ${FAKE_REVIEWER_PERMISSIONS:-}; do
+      [[ "${pair%%=*}" == "$login" ]] && permission="${pair#*=}"
+    done
+  fi
+  [[ -n "$permission" ]] || exit 1
+  printf '%s\n' "$permission"
+  exit 0
+fi
+if [[ "$*" == *'/reviews'* ]]; then
+  [[ "${FAKE_REVIEWS:-}" != 'fail' ]] || exit 1
+  filter=''
+  while (( $# > 0 )); do
+    if [[ "$1" == '--jq' ]]; then
+      filter="$2"
+    fi
+    shift
+  done
+  jq -r "$filter" <<< "${FAKE_REVIEWS:-[]}"
+  exit 0
+fi
+if [[ "$*" != *'/files'* ]]; then
+  printf '%s\n' "$FAKE_CHANGED_FILE_COUNT"
   exit 0
 fi
 printf '%s\n' "$FAKE_CHANGED_PATHS"
@@ -1572,7 +1603,8 @@ extract_protected_paths_step() {
 # Returns the step's own exit status, so every caller invokes it as a condition rather than letting
 # `set -e` end the test before the refusal can be inspected. The author holds `read` on the repository
 # unless the caller sets `AUTHOR_PERMISSION`, which is what an outside contributor holds on a public
-# one.
+# one. `EVENT_FILE_COUNT` set empty stands for a review event, whose pull request carries no file
+# count, so the step has to read the count from the pull request.
 run_protected_paths_step() {
   local pull_request_author="$1"
   local changed_paths="$2"
@@ -1590,8 +1622,12 @@ run_protected_paths_step() {
     export REPOSITORY='fathomise/MailFathom'
     export PULL_REQUEST_NUMBER='1'
     export PULL_REQUEST_AUTHOR="$pull_request_author"
-    export CHANGED_FILE_COUNT="$changed_file_count"
+    export HEAD_SHA='head-commit'
+    export CHANGED_FILE_COUNT="${EVENT_FILE_COUNT-$changed_file_count}"
+    export FAKE_CHANGED_FILE_COUNT="$changed_file_count"
     export FAKE_AUTHOR_PERMISSION="${AUTHOR_PERMISSION-read}"
+    export FAKE_REVIEWER_PERMISSIONS="${REVIEWER_PERMISSIONS-}"
+    export FAKE_REVIEWS="${REVIEWS-[]}"
     export FAKE_CHANGED_PATHS="$changed_paths"
     export GITHUB_STEP_SUMMARY="$summary_file"
     bash "$step_script"
@@ -1764,6 +1800,73 @@ protected_paths_refuses_an_author_whose_permission_could_not_be_read() {
   assert_contains '::error file=.github/workflows/ci.yml::' "$output_file"
 }
 
+# The owner accepts a contributor's change by approving its head, and the run that sees it is the
+# review event's, which carries no file count. A comment after the approval leaves it standing, as it
+# does on GitHub, and the pass still names what it let through.
+protected_paths_allows_a_change_the_owner_approved_on_its_head() {
+  local output_file="$test_directory/protected-paths-approved-output"
+  local summary_file="$test_directory/protected-paths-approved-summary"
+
+  if ! EVENT_FILE_COUNT='' REVIEWER_PERMISSIONS='a-maintainer=admin' REVIEWS='[
+    {"user":{"login":"a-maintainer"},"state":"APPROVED","commit_id":"head-commit"},
+    {"user":{"login":"a-maintainer"},"state":"COMMENTED","commit_id":"head-commit"}]' \
+    run_protected_paths_step \
+    'outside-contributor' \
+    '.config/typos.toml' \
+    "$output_file" \
+    "$summary_file"; then
+    printf 'Protected paths refused a change the repository owner approved on its head\n' >&2
+    return 1
+  fi
+
+  assert_contains 'The repository owner a-maintainer approved this pull request' "$output_file"
+  assert_excludes '::error' "$output_file"
+  assert_contains '- `.config/typos.toml`' "$summary_file"
+}
+
+# Each of these approves nothing: an approval of a head the contributor has since pushed past, one
+# its reviewer dismissed or followed with a request for changes, one from an account that does not
+# administer the repository, and reviews that could not be read.
+protected_paths_refuses_an_approval_that_does_not_name_the_owner_and_the_head() {
+  local output_file
+  local summary_file="$test_directory/protected-paths-unapproved-summary"
+  local failures=''
+  local case_name
+  local -A reviews_by_case=(
+    [older-head]='[{"user":{"login":"a-maintainer"},"state":"APPROVED","commit_id":"older-commit"}]'
+    [dismissed]='[{"user":{"login":"a-maintainer"},"state":"APPROVED","commit_id":"head-commit"},
+      {"user":{"login":"a-maintainer"},"state":"DISMISSED","commit_id":"head-commit"}]'
+    [changes-requested]='[{"user":{"login":"a-maintainer"},"state":"APPROVED","commit_id":"head-commit"},
+      {"user":{"login":"a-maintainer"},"state":"CHANGES_REQUESTED","commit_id":"head-commit"}]'
+    [not-an-administrator]='[{"user":{"login":"a-collaborator"},"state":"APPROVED","commit_id":"head-commit"}]'
+    [unreadable]='fail'
+  )
+
+  for case_name in "${!reviews_by_case[@]}"; do
+    output_file="$test_directory/protected-paths-unapproved-$case_name-output"
+    if REVIEWER_PERMISSIONS='a-maintainer=admin a-collaborator=write' REVIEWS="${reviews_by_case[$case_name]}" \
+      run_protected_paths_step \
+      'outside-contributor' \
+      '.config/typos.toml' \
+      "$output_file" \
+      "$summary_file"; then
+      failures+="Protected paths passed on a $case_name approval. "
+    elif ! grep -qF '::error file=.config/typos.toml::' "$output_file"; then
+      failures+="Protected paths refused a $case_name approval without naming the path. "
+    fi
+  done
+
+  if ! grep -qF '::warning::The reviews on this pull request could not be read' \
+    "$test_directory/protected-paths-unapproved-unreadable-output"; then
+    failures+='Protected paths did not say the reviews could not be read. '
+  fi
+
+  if [[ -n "$failures" ]]; then
+    printf '%s\n' "$failures" >&2
+    return 1
+  fi
+}
+
 protected_paths_allows_dependabot_to_update_the_workflows() {
   local output_file="$test_directory/protected-paths-dependabot-output"
   local summary_file="$test_directory/protected-paths-dependabot-summary"
@@ -1822,6 +1925,36 @@ protected_paths_refuses_an_author_merely_resembling_dependabot() {
   fi
 
   assert_contains '::error file=.github/workflows/ci.yml::' "$output_file"
+}
+
+# A review event's run reads the file count from the pull request, and the ceiling has to hold on that
+# path as it does on the pull request's own. Bash arithmetic reads an empty or `null` count as zero,
+# so a count that did not arrive must refuse rather than pass every pull request under the ceiling.
+protected_paths_holds_the_reportable_limit_on_a_review_event() {
+  local output_file
+  local summary_file="$test_directory/protected-paths-review-event-summary"
+  local failures=''
+
+  output_file="$test_directory/protected-paths-review-event-oversized-output"
+  if EVENT_FILE_COUNT='' run_protected_paths_step \
+    'outside-contributor' 'README.md' "$output_file" "$summary_file" 3001; then
+    failures+='Protected paths passed a review event for a pull request past the reportable limit. '
+  elif ! grep -qF 'more than the 3000' "$output_file"; then
+    failures+='Protected paths refused a review event past the limit without saying why. '
+  fi
+
+  output_file="$test_directory/protected-paths-review-event-unread-output"
+  if EVENT_FILE_COUNT='' run_protected_paths_step \
+    'outside-contributor' 'README.md' "$output_file" "$summary_file" 'null'; then
+    failures+='Protected paths passed a review event whose file count did not arrive. '
+  elif ! grep -qF 'could not be read' "$output_file"; then
+    failures+='Protected paths refused an unread file count without saying why. '
+  fi
+
+  if [[ -n "$failures" ]]; then
+    printf '%s\n' "$failures" >&2
+    return 1
+  fi
 }
 
 protected_paths_refuses_a_pull_request_larger_than_the_reportable_limit() {
@@ -10740,9 +10873,12 @@ run_test protected_paths_ignores_paths_that_only_resemble_a_protected_one
 run_test protected_paths_reports_the_paths_it_found_when_the_owner_is_the_author
 run_test protected_paths_refuses_a_collaborator_who_does_not_administer_the_repository
 run_test protected_paths_refuses_an_author_whose_permission_could_not_be_read
+run_test protected_paths_allows_a_change_the_owner_approved_on_its_head
+run_test protected_paths_refuses_an_approval_that_does_not_name_the_owner_and_the_head
 run_test protected_paths_allows_dependabot_to_update_the_workflows
 run_test protected_paths_refuses_dependabot_outside_the_workflows
 run_test protected_paths_refuses_an_author_merely_resembling_dependabot
+run_test protected_paths_holds_the_reportable_limit_on_a_review_event
 run_test protected_paths_refuses_a_pull_request_larger_than_the_reportable_limit
 run_test protected_paths_lets_the_owner_past_the_reportable_limit
 run_test typo_check_passes_the_files_the_pull_request_changed
