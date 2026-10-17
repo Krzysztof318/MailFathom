@@ -18,7 +18,15 @@ name: CodeQL
 # Every one of those is a source in the C# query pack, and the sinks are all present: raw SQL beside
 # EF Core, filesystem paths built from secret references, certificate and PEM parsing, MIME decoding,
 # and an MCP surface that accepts arguments from a model. A rule saying a value is untrusted states an
-# intent; a query that follows the value is what checks the intent held.
+# intent; a query that follows the value is what checks the intent held. The client is the other half
+# of that: it renders the same email HTML, headers, and URLs in a browser, and the desktop head wraps
+# it in a Rust shell — so both stacks are analyzed, in three languages.
+#
+# **One parallel job per language, and only for the languages a change reached.** The C# job is a
+# traced Release build and takes minutes; the TypeScript and Rust jobs read source and take far less.
+# Separate jobs keep the slow one from delaying the others and name the stack a failure belongs to.
+# Which of them a pull request runs is decided by `Detect changed languages` below, the way `CI`
+# decides which stack to build, so a change to the client never pays for the server's traced build.
 #
 # **Advanced setup rather than default setup.** Default setup is GitHub-managed and commits no file,
 # which would put the one check that reads this repository's source outside the repository — invisible
@@ -26,7 +34,7 @@ name: CodeQL
 # locked restore `NuGet.config` and the lock files decide. Every other check here is a workflow, and
 # so is this one.
 #
-# **Build mode `manual`, not `none` and not `autobuild`.** `none` resolves dependencies itself, which
+# **C# builds in mode `manual`, not `none` and not `autobuild`.** `none` resolves dependencies itself, which
 # is guesswork against a repository whose entire closure is pinned centrally and fixed by fifteen
 # committed lock files; it would analyse a graph nothing else here builds. `autobuild` guesses the
 # build. The restore below is the one `build-test-format-and-migrations.yml` runs and the build is
@@ -43,7 +51,14 @@ name: CodeQL
 # `github/codeql-action` v4 ships is past that. What makes this a check rather than a belief is the
 # last step: a bundle that cannot extract this SDK's output produces a database with nothing in it and
 # a green run, which is worse than no analysis at all, so the run fails when the database holds fewer
-# source files than `backend/src/` does.
+# source files than `backend/src/` does. Every language carries the same check against its own tree.
+#
+# **TypeScript and Rust in mode `none`**, which is the only mode either offers: the JavaScript
+# extractor reads TypeScript itself, and the Rust one reads the crate through `cargo`, which the runner
+# image carries. The TypeScript analysis covers the client's production source under `frontend/src/`
+# and leaves its unit tests out, for the reason the C# build leaves `backend/tests/` out; without that
+# scope it would analyze the whole checkout, the design's artboard scripts included. The Rust analysis
+# covers `frontend/src-tauri/`, the one crate in the repository.
 #
 # **A finding does not block a merge.** This workflow is not in the `main` ruleset and reports no
 # required status check. The reasoning is not `Typo check`'s — a misspelling is worth less than a
@@ -75,10 +90,10 @@ on:
     - cron: '0 3 * * 1'
   workflow_dispatch:
 
-# No `paths` filter. Nothing waits on this check, so an uninstantiated run would block nothing, and
-# the set of files that can introduce a taint path is not one a path filter can name: a build file
-# that adds a project, a package pin that changes what a call resolves to, and this workflow itself
-# all move the answer without a `.cs` file changing.
+# No `paths` filter on the trigger: one filter cannot pick a language, so the choice is made per
+# language by `Detect changed languages` instead, from lists that name more than source files — a
+# build file that adds a project, a package pin or a lock file that changes what a call resolves to,
+# and this workflow itself all move an answer without a `.cs`, `.ts`, or `.rs` file changing.
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -88,13 +103,113 @@ permissions:
   contents: read
 
 jobs:
-  analyze:
-    name: Analyze C#
-    # The same draft exemption `Typo check` carries, for the same reason and with more at stake: this
-    # check occupies a runner for minutes where that one takes seconds, and a draft is a change
-    # still being written. `ready_for_review` opts every later push back in.
+  detect-changes:
+    name: Detect changed languages
+    # The same draft exemption `Typo check` carries, for the same reason and with more at stake: an
+    # analysis occupies a runner for minutes where that one takes seconds, and a draft is a change
+    # still being written. `ready_for_review` opts every later push back in. Skipping this job skips
+    # every analysis, which reads it.
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      languages: ${{ steps.languages.outputs.languages }}
+    steps:
+      # Narrowing is a pull request's economy alone. A push to `main`, the weekly schedule, and a
+      # manual dispatch ask about the whole tree, and the schedule exists precisely because the query
+      # pack moves when the code does not — so every language runs there.
+      - name: Detect changed paths
+        id: filter
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@v4
+        with:
+          filters: |
+            csharp:
+              - 'backend/src/**'
+              - 'backend/Directory.Build.props'
+              - 'backend/Directory.Build.targets'
+              - 'backend/Directory.Packages.props'
+              - 'backend/MailFathom.slnx'
+              - 'NuGet.config'
+              - 'global.json'
+              - '.github/workflows/codeql.yml'
+            javascript-typescript:
+              - 'frontend/src/**'
+              - 'frontend/package.json'
+              - 'frontend/tsconfig.json'
+              - 'frontend/tsconfig.base.json'
+              - '.github/workflows/codeql.yml'
+            rust:
+              - 'frontend/src-tauri/**'
+              - '.github/workflows/codeql.yml'
+
+      # The analysis job's whole matrix, written here rather than in that job: an `include` entry there
+      # that matches no chosen language is added as a combination of its own, so a static list would
+      # analyze every language whatever this step chose. Off a pull request every language runs, and
+      # on one only those whose filter matched; an empty list skips the analysis job altogether.
+      #
+      # `sources` and `extension` are what each verification step compares the database against: the
+      # tracked files the analysis is meant to cover, as git pathspecs, and the extension that counts
+      # them in the source archive.
+      - name: Choose the languages to analyze
+        id: languages
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          CSHARP_CHANGED: ${{ steps.filter.outputs.csharp }}
+          JAVASCRIPT_TYPESCRIPT_CHANGED: ${{ steps.filter.outputs.javascript-typescript }}
+          RUST_CHANGED: ${{ steps.filter.outputs.rust }}
+        run: |
+          set -euo pipefail
+
+          languages="$(
+            jq --null-input --compact-output \
+              --arg event "$EVENT_NAME" \
+              --arg csharp "$CSHARP_CHANGED" \
+              --arg javascript_typescript "$JAVASCRIPT_TYPESCRIPT_CHANGED" \
+              --arg rust "$RUST_CHANGED" \
+              '[
+                 {
+                   language: "csharp", name: "C#", "build-mode": "manual", config: "",
+                   sources: [":(glob)backend/src/**/*.cs"], extension: "\\.cs$",
+                   changed: $csharp
+                 },
+                 {
+                   language: "javascript-typescript", name: "JavaScript and TypeScript", "build-mode": "none",
+                   config: "paths:\n  - frontend/src\npaths-ignore:\n  - \"**/*.test.ts\"\n  - \"**/*.test.tsx\"\n",
+                   sources: [
+                     ":(glob)frontend/src/**/*.ts", ":(glob)frontend/src/**/*.tsx",
+                     ":(exclude,glob)frontend/src/**/*.test.ts", ":(exclude,glob)frontend/src/**/*.test.tsx"
+                   ],
+                   extension: "\\.tsx?$",
+                   changed: $javascript_typescript
+                 },
+                 {
+                   language: "rust", name: "Rust", "build-mode": "none", config: "",
+                   sources: [":(glob)frontend/src-tauri/**/*.rs"], extension: "\\.rs$",
+                   changed: $rust
+                 }
+               ]
+               | map(select($event != "pull_request" or .changed == "true") | del(.changed))'
+          )"
+
+          echo "Languages to analyze: $(jq --raw-output 'map(.language) | join(", ") | if . == "" then "none" else . end' <<< "$languages")"
+          echo "languages=${languages}" >> "$GITHUB_OUTPUT"
+
+  analyze:
+    name: Analyze ${{ matrix.name }}
+    needs:
+      - detect-changes
+    if: needs.detect-changes.outputs.languages != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      # Each language is a separate answer about a separate stack, so one failing must not cancel the
+      # others.
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.detect-changes.outputs.languages) }}
     permissions:
       contents: read
       # The one write scope in this repository that does not belong to a publishing job. It writes
@@ -111,7 +226,10 @@ jobs:
         with:
           persist-credentials: false
 
+      # The three steps from here to `Initialize CodeQL`, and the build after it, are the C# job's alone:
+      # TypeScript and Rust are read without a build.
       - name: Set up .NET SDK
+        if: matrix.language == 'csharp'
         uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
@@ -119,6 +237,7 @@ jobs:
       # The same cache and the same key as every other job that restores, for the reason
       # `build-test-format-and-migrations.yml` records.
       - name: Cache NuGet packages
+        if: matrix.language == 'csharp'
         uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
@@ -129,6 +248,7 @@ jobs:
       # compiler invocations alone. `--locked-mode` is what makes the analysed graph the graph the
       # committed lock files fix, rather than whatever resolves on the day.
       - name: Restore dependencies
+        if: matrix.language == 'csharp'
         run: dotnet restore backend/MailFathom.slnx --locked-mode
 
       # `db-location` is written out rather than left to the action's default, because the step that
@@ -138,8 +258,9 @@ jobs:
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
         with:
-          languages: csharp
-          build-mode: manual
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          config: ${{ matrix.config }}
           db-location: ${{ runner.temp }}/codeql-databases
 
       # The build the pull-request gate runs, narrowed twice, because a traced build pays for
@@ -169,6 +290,7 @@ jobs:
       # checkout. One build over a filter rather than one per project keeps the projects building
       # beside each other, which is where a four-core runner gets its time back.
       - name: Build the production projects
+        if: matrix.language == 'csharp'
         shell: bash
         run: |
           set -euo pipefail
@@ -185,41 +307,52 @@ jobs:
       - name: Analyze
         uses: github/codeql-action/analyze@v4
         with:
-          category: /language:csharp
+          category: /language:${{ matrix.language }}
 
       # The step that makes the run's verdict mean something. "CodeQL detected code written in C# but
       # could not process any of it" is a failure loud enough to notice; a database holding a fraction
       # of the source is not, and it produces the same green check as a clean analysis. The source
-      # archive is compared against what `backend/src/` actually contains, so a partial extraction — a new SDK
-      # the bundle cannot read, a project that stopped compiling into the traced window — fails here
-      # instead of being reported as no findings. The bound is what `backend/src/` tracks, and the build
-      # above compiles every file of it; the sources its generators write are extracted on top, which is
+      # archive is compared against the tracked files the language's `sources` name, so a partial
+      # extraction — a new SDK the bundle cannot read, a project that stopped compiling into the traced
+      # window, a crate `cargo` could not read — fails here instead of being reported as no findings.
+      # The bound is what those paths track, and every one of them is meant to be extracted; whatever
+      # is extracted on top — the sources C# generators write, the crates a Rust analysis reads — is
       # the headroom that keeps a true statement from becoming a brittle one.
+      #
+      # The database directory is found rather than named, because CodeQL names it after its own
+      # canonical language, which is not always the one this matrix passes in. One analysis per job
+      # leaves exactly one there.
       - name: Verify the database holds this repository's source
         shell: bash
         env:
           DATABASE_DIRECTORY: ${{ runner.temp }}/codeql-databases
+          LANGUAGE_NAME: ${{ matrix.name }}
+          SOURCES: ${{ toJSON(matrix.sources) }}
+          EXTENSION: ${{ matrix.extension }}
         run: |
           set -euo pipefail
 
-          source_archive="${DATABASE_DIRECTORY}/csharp/src.zip"
+          shopt -s nullglob
+          source_archives=("${DATABASE_DIRECTORY}"/*/src.zip)
 
-          if [[ ! -f "$source_archive" ]]; then
-            echo "::error::CodeQL wrote no source archive at ${source_archive}, so the analysis ran against a database this workflow cannot inspect."
+          if (( ${#source_archives[@]} != 1 )); then
+            echo "::error::CodeQL wrote ${#source_archives[@]} source archive(s) under ${DATABASE_DIRECTORY} where one was expected, so the analysis ran against a database this workflow cannot inspect."
             exit 1
           fi
 
-          extracted_count="$(unzip -Z1 "$source_archive" | grep -c '\.cs$' || true)"
-          expected_count="$(git ls-files -- ':(glob)backend/src/**/*.cs' | grep -c '' || true)"
+          mapfile -t pathspecs < <(jq --raw-output '.[]' <<< "$SOURCES")
+
+          extracted_count="$(unzip -Z1 "${source_archives[0]}" | grep -cE "$EXTENSION" || true)"
+          expected_count="$(git ls-files -- "${pathspecs[@]}" | grep -c '' || true)"
 
           if (( expected_count == 0 )); then
-            echo "::error::No C# source was found under backend/src/, so there is nothing to compare the CodeQL database against."
+            echo "::error::No ${LANGUAGE_NAME} source matches ${pathspecs[*]}, so there is nothing to compare the CodeQL database against."
             exit 1
           fi
 
           if (( extracted_count < expected_count )); then
-            echo "::error::The CodeQL database holds ${extracted_count} C# source file(s) and backend/src/ contains ${expected_count}. The analysis saw less than the repository's own production code, so its findings say nothing about the rest."
+            echo "::error::The CodeQL database holds ${extracted_count} ${LANGUAGE_NAME} source file(s) and the repository tracks ${expected_count} it is meant to cover. The analysis saw less than the repository's own production code, so its findings say nothing about the rest."
             exit 1
           fi
 
-          echo "The CodeQL database holds ${extracted_count} C# source file(s), covering the ${expected_count} under backend/src/."
+          echo "The CodeQL database holds ${extracted_count} ${LANGUAGE_NAME} source file(s), covering the ${expected_count} the repository tracks under ${pathspecs[*]}."
