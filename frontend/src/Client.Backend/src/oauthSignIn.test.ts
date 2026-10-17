@@ -86,8 +86,15 @@ describe('discoveryAddresses', () => {
         ]);
     });
 
-    it('treats an issuer whose path is only slashes as one with no path', () => {
-        expect(discoveryAddresses(`${issuer}${'/'.repeat(50_000)}`)).toEqual(discoveryAddresses(issuer));
+    // The run a non-slash ends is the input a trailing-slash pattern backtracks over quadratically.
+    it('keeps a long run of slashes that a non-slash ends', () => {
+        const path = `${'/'.repeat(50_000)}x`;
+
+        expect(discoveryAddresses(`${issuer}${path}`)).toEqual([
+            `${issuer}/.well-known/oauth-authorization-server${path}`,
+            `${issuer}/.well-known/openid-configuration${path}`,
+            `${issuer}${path}/.well-known/openid-configuration`,
+        ]);
     });
 });
 
