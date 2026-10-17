@@ -2617,9 +2617,13 @@ repository and nothing else, because the workflow token is scoped to the
 repository and reaches no project. Its private key is the `BOARD_APP_PRIVATE_KEY`
 secret, and the job exchanges it for an installation token that lasts an hour.
 A stored key the App no longer accepts fails that job and says so,
-rather than leaving the board quietly behind. Nothing else reads the key, and it
-is held by a job that runs no model and checks out nothing from the branch under
-review.
+rather than leaving the board quietly behind. Two jobs read the key, and neither
+runs a model: this workflow's `announce`, which checks out only the base commit,
+and the board job of `Apply pull request rules`, which on the merge queue's
+`enqueued` and `dequeued` events checks out the pull request's merge commit and
+runs its scripts holding the token — for a pull request from this repository,
+whose author can already change the workflow itself on that event, and never for
+a fork's, whose `pull_request` events carry no secrets.
 
 ## Dependency update pull requests
 
