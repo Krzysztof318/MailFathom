@@ -2292,13 +2292,12 @@ run_fathom_review_gate() {
   local event_action="$1"
   local output_file="$2"
   local step_output_file="$3"
-  # The author and the applied label default to the ordinary case — the owner's own pull request,
-  # and an event carrying no label — so a contract below names only the input it is about.
+  # The author defaults to the ordinary case — the owner's own pull request — so a contract below
+  # names only the input it is about.
   local pull_request_author="${4:-Krzysztof318}"
-  local added_label="${5:-}"
   # The reviews already on the pull request, absent by default: a first review is the ordinary case
   # and the ceiling contracts are the ones that write a history.
-  local reviews_file="${6:-}"
+  local reviews_file="${5:-}"
   local step_script="$test_directory/fathom-review-gate.sh"
 
   extract_fathom_review_step 'gate' "$step_script"
@@ -2320,7 +2319,6 @@ run_fathom_review_gate() {
     export PULL_REQUEST_DRAFT='false'
     export PULL_REQUEST_AUTHOR="$pull_request_author"
     export HEAD_REPOSITORY='fathomise/MailFathom'
-    export ADDED_LABEL="$added_label"
     export IS_PULL_REQUEST_COMMENT="${GATE_IS_PULL_REQUEST_COMMENT:-false}"
     export COMMENT_BODY="${GATE_COMMENT_BODY:-}"
     export COMMENT_ASSOCIATION="${GATE_COMMENT_ASSOCIATION:-}"
@@ -2376,7 +2374,7 @@ fathom_review_reviews_a_push_below_the_automatic_ceiling() {
 
   write_fathom_review_history 8 0 "$reviews_file"
 
-  run_fathom_review_gate 'synchronize' "$output_file" "$step_output_file" 'Krzysztof318' '' "$reviews_file"
+  run_fathom_review_gate 'synchronize' "$output_file" "$step_output_file" 'Krzysztof318' "$reviews_file"
 
   assert_contains 'review=true' "$step_output_file"
   # The same count the ceiling reasons about is published for the submission step, which spends it on
@@ -2392,13 +2390,13 @@ fathom_review_stops_reviewing_a_push_at_the_automatic_ceiling() {
 
   write_fathom_review_history 9 0 "$reviews_file"
 
-  run_fathom_review_gate 'synchronize' "$output_file" "$step_output_file" 'Krzysztof318' '' "$reviews_file"
+  run_fathom_review_gate 'synchronize' "$output_file" "$step_output_file" 'Krzysztof318' "$reviews_file"
 
   assert_contains 'review=false' "$step_output_file"
   assert_contains 'the automatic review ceiling of 9 is reached' "$output_file"
-  # The refusal names the way out, because a maintainer reading it is one label away from the pass
+  # The refusal names the way out, because a member reading it is one comment away from the pass
   # the ceiling just declined to spend.
-  assert_contains 'label it fathom-review or comment fathom-review' "$output_file"
+  assert_contains 'comment fathom-review' "$output_file"
 }
 
 # A review somebody asked for is a decision already taken, so it neither counts against the budget a
@@ -2411,7 +2409,7 @@ fathom_review_never_counts_a_requested_review_against_the_ceiling() {
 
   write_fathom_review_history 8 4 "$reviews_file"
 
-  run_fathom_review_gate 'synchronize' "$output_file" "$step_output_file" 'Krzysztof318' '' "$reviews_file"
+  run_fathom_review_gate 'synchronize' "$output_file" "$step_output_file" 'Krzysztof318' "$reviews_file"
 
   assert_contains 'review=true' "$step_output_file"
 }
@@ -2432,7 +2430,7 @@ fathom_review_counts_the_marker_only_where_the_submission_writes_it() {
                    body: "# NEEDS CHANGES\n\nThe gate counts a body ending in <!-- fathom-review: automatic --> and this one quotes it.\n\n<!-- fathom-review: requested -->"}]
   ' > "$reviews_file"
 
-  run_fathom_review_gate 'synchronize' "$output_file" "$step_output_file" 'Krzysztof318' '' "$reviews_file"
+  run_fathom_review_gate 'synchronize' "$output_file" "$step_output_file" 'Krzysztof318' "$reviews_file"
 
   assert_contains 'review=true' "$step_output_file"
 }
@@ -2447,7 +2445,7 @@ fathom_review_reads_an_early_pass_at_the_full_bar() {
 
   write_fathom_review_history 2 0 "$reviews_file"
 
-  run_fathom_review_gate 'synchronize' "$output_file" "$step_output_file" 'Krzysztof318' '' "$reviews_file"
+  run_fathom_review_gate 'synchronize' "$output_file" "$step_output_file" 'Krzysztof318' "$reviews_file"
 
   assert_contains 'review=true' "$step_output_file"
   assert_contains 'posture=full' "$step_output_file"
@@ -2463,7 +2461,7 @@ fathom_review_settles_the_bar_from_the_fourth_pass() {
 
   write_fathom_review_history 3 0 "$reviews_file"
 
-  run_fathom_review_gate 'synchronize' "$output_file" "$step_output_file" 'Krzysztof318' '' "$reviews_file"
+  run_fathom_review_gate 'synchronize' "$output_file" "$step_output_file" 'Krzysztof318' "$reviews_file"
 
   assert_contains 'posture=settling' "$step_output_file"
   # The reason is said in the log beside the decision, because a maintainer reading a pass that
@@ -2480,7 +2478,7 @@ fathom_review_keeps_a_requested_review_at_the_full_bar() {
 
   write_fathom_review_history 5 0 "$reviews_file"
 
-  run_fathom_review_gate 'labeled' "$output_file" "$step_output_file" 'Krzysztof318' 'fathom-review' "$reviews_file"
+  run_fathom_review_dispatch_gate '' "$output_file" "$step_output_file" 1 "$reviews_file"
 
   assert_contains 'explicit=true' "$step_output_file"
   assert_contains 'posture=full' "$step_output_file"
@@ -2493,7 +2491,7 @@ fathom_review_answers_a_request_past_the_automatic_ceiling() {
 
   write_fathom_review_history 12 0 "$reviews_file"
 
-  run_fathom_review_gate 'labeled' "$output_file" "$step_output_file" 'Krzysztof318' 'fathom-review' "$reviews_file"
+  run_fathom_review_dispatch_gate '' "$output_file" "$step_output_file" 1 "$reviews_file"
 
   assert_contains 'review=true' "$step_output_file"
   # The other half of the same decision: a maintainer asked for this one, so it carries the requested
@@ -2528,16 +2526,14 @@ fathom_review_refuses_a_pull_request_the_updater_opened() {
   assert_contains 'authored by dependabot[bot]' "$output_file"
 }
 
-# The refusal above is a default and not a wall. A major bump that renames an input is worth the
-# pass, and the maintainer reaches it the same way a draft and a fork are reached.
-fathom_review_reviews_an_updater_pull_request_the_maintainer_labelled() {
-  local output_file="$test_directory/fathom-review-updater-labelled-output"
-  local step_output_file="$test_directory/fathom-review-updater-labelled-step-output"
+# A label used to ask for a review, and nothing in a `labeled` event says whether the account that
+# applied it belongs to the organization. The trigger is gone, so applying the label starts nothing.
+fathom_review_is_not_started_by_a_label() {
+  local reviewer_workflow="$source_repository_root/.github/workflows/fathom-review.yml"
+  local triggers
 
-  run_fathom_review_gate 'labeled' "$output_file" "$step_output_file" 'dependabot[bot]' 'fathom-review'
-
-  assert_contains 'review=true' "$step_output_file"
-  assert_contains 'a maintainer applied the fathom-review label' "$output_file"
+  triggers="$(sed -n '/^on:/,/^concurrency:/p' "$reviewer_workflow" | grep -v '^[[:space:]]*#')"
+  assert_excludes 'labeled' <(printf '%s\n' "$triggers")
 }
 
 # The comment path is two runs, and these six contracts hold the gate's half of both. A comment's own
@@ -2549,9 +2545,9 @@ run_fathom_review_comment_gate() {
   local comment_body="$1"
   local output_file="$2"
   local step_output_file="$3"
-  # Write access is what the comment path checks instead of the draft and fork checks it skips, so
-  # the ordinary case is an author who has it and a contract names one who does not.
-  local comment_association="${4:-OWNER}"
+  # Organization membership is what the comment path checks instead of the draft and fork checks it
+  # skips, so the ordinary case is a member and a contract names an author who is not one.
+  local comment_association="${4:-MEMBER}"
 
   (
     export GATE_EVENT_NAME='issue_comment'
@@ -2569,12 +2565,13 @@ run_fathom_review_dispatch_gate() {
   local output_file="$2"
   local step_output_file="$3"
   local pull_request_number="${4-1}"
+  local reviews_file="${5:-}"
 
   (
     export GATE_EVENT_NAME='repository_dispatch'
     export GATE_REQUESTED_MODEL="$requested_model"
     export GATE_PULL_REQUEST_NUMBER="$pull_request_number"
-    run_fathom_review_gate '' "$output_file" "$step_output_file"
+    run_fathom_review_gate '' "$output_file" "$step_output_file" 'Krzysztof318' "$reviews_file"
   )
 }
 
@@ -2615,16 +2612,21 @@ fathom_review_neither_reviews_nor_asks_for_a_comment_that_only_mentions_the_phra
   assert_contains 'does not ask for fathom-review' "$output_file"
 }
 
-fathom_review_refuses_a_comment_from_an_author_without_write_access() {
+fathom_review_refuses_a_comment_from_outside_the_organization() {
   local output_file="$test_directory/fathom-review-comment-outsider-output"
   local step_output_file="$test_directory/fathom-review-comment-outsider-step-output"
+  local association
 
-  run_fathom_review_comment_gate 'fathom-review' "$output_file" "$step_output_file" 'CONTRIBUTOR'
+  # `COLLABORATOR` is the one that matters: an outside collaborator holds write access to the
+  # repository without belonging to the organization, and the gate admits members alone.
+  for association in 'COLLABORATOR' 'CONTRIBUTOR' 'NONE'; do
+    run_fathom_review_comment_gate 'fathom-review' "$output_file" "$step_output_file" "$association"
 
-  # The dispatch is what spends the subscription now, so the association check has to refuse before
-  # it rather than before a review this run no longer performs.
-  assert_contains 'dispatch=false' "$step_output_file"
-  assert_contains 'cannot spend review usage' "$output_file"
+    # The dispatch is what spends the subscription now, so the association check has to refuse
+    # before it rather than before a review this run no longer performs.
+    assert_contains 'dispatch=false' "$step_output_file"
+    assert_contains 'cannot spend review usage' "$output_file"
+  done
 }
 
 fathom_review_reviews_the_pull_request_a_dispatch_names() {
@@ -2828,6 +2830,16 @@ case "$endpoint" in
       response='{"data":{"repository":{"pullRequest":{"closingIssuesReferences":{"nodes":[
         {"number":11,"repository":{"nameWithOwner":"fathomise/MailFathom"}},
         {"number":12,"repository":{"nameWithOwner":"fathomise/MailFathom"}}]}}}}}'
+    elif [[ "${FAKE_MIXED_AUTHORS:-false}" == 'true' ]]; then
+      # One thread opened by somebody outside the project and answered by a member, and one only an
+      # outsider wrote. The second has nothing left once the outsider is withheld.
+      response='{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[
+        {"isResolved":false,"isOutdated":false,"path":"backend/src/Sample.cs","line":12,"comments":{"nodes":[
+          {"author":{"login":"passer-by"},"authorAssociation":"NONE","createdAt":"2026-08-14T09:00:00Z","body":"outsider thread opener"},
+          {"author":{"login":"fathom-reviewer"},"authorAssociation":"CONTRIBUTOR","createdAt":"2026-08-14T09:01:00Z","body":"reviewer thread reply"},
+          {"author":{"login":"Krzysztof318"},"authorAssociation":"MEMBER","createdAt":"2026-08-14T09:02:00Z","body":"member thread reply"}]}},
+        {"isResolved":false,"isOutdated":false,"path":"backend/src/Sample.cs","line":13,"comments":{"nodes":[
+          {"author":{"login":"collaborator"},"authorAssociation":"COLLABORATOR","createdAt":"2026-08-14T09:03:00Z","body":"collaborator thread"}]}}]}}}}}'
     else
       response='{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[]}}}}}'
     fi
@@ -2950,12 +2962,23 @@ case "$endpoint" in
              submitted_at: "2026-08-14T09:00:00Z",
              body: "# NEEDS CHANGES"}]'
       )"
+    elif [[ "${FAKE_MIXED_AUTHORS:-false}" == 'true' ]]; then
+      response='[{"user":{"login":"passer-by"},"author_association":"NONE","state":"APPROVED","commit_id":"a","submitted_at":"2026-08-14T09:00:00Z","body":"outsider review"},
+                 {"user":{"login":"fathom-reviewer[bot]"},"author_association":"CONTRIBUTOR","state":"COMMENTED","commit_id":"a","submitted_at":"2026-08-14T09:01:00Z","body":"reviewer review"},
+                 {"user":{"login":"Krzysztof318"},"author_association":"MEMBER","state":"COMMENTED","commit_id":"a","submitted_at":"2026-08-14T09:02:00Z","body":"member review"}]'
     else
       response='[]'
     fi
     ;;
   */issues/*/comments*)
-    response='[]'
+    if [[ "${FAKE_MIXED_AUTHORS:-false}" == 'true' ]]; then
+      response='[{"user":{"login":"passer-by"},"author_association":"NONE","created_at":"2026-08-14T09:00:00Z","body":"outsider comment"},
+                 {"user":{"login":"collaborator"},"author_association":"COLLABORATOR","created_at":"2026-08-14T09:01:00Z","body":"collaborator comment"},
+                 {"user":{"login":"fathom-reviewer[bot]"},"author_association":"CONTRIBUTOR","created_at":"2026-08-14T09:02:00Z","body":"reviewer comment"},
+                 {"user":{"login":"Krzysztof318"},"author_association":"MEMBER","created_at":"2026-08-14T09:03:00Z","body":"member comment"}]'
+    else
+      response='[]'
+    fi
     ;;
   */pulls/*)
     pull_request_labels="${FAKE_PULL_REQUEST_LABELS:-}"
@@ -3087,6 +3110,20 @@ run_fathom_review_collect() {
     export EXPLICIT="$explicit"
     bash "$step_script"
   ) > "$output_file" 2>&1
+}
+
+# Anybody can comment on a public pull request, and what the reviewer reads it weighs. So only what
+# the organization's members and this reviewer wrote is collected — threads, reviews, and comments
+# alike — and a thread only an outsider wrote is dropped whole rather than left as an empty shell.
+fathom_review_collects_only_what_members_and_the_reviewer_wrote() {
+  local output_file="$test_directory/fathom-review-collect-authors-output"
+
+  FAKE_MIXED_AUTHORS='true' run_fathom_review_collect "$output_file"
+
+  assert_json '["reviewer comment","member comment"]' '[.[].body]' "$collect_review_directory/issue-comments.json"
+  assert_json '["reviewer review","member review"]' '[.[].body]' "$collect_review_directory/reviews.json"
+  assert_json '[["reviewer thread reply","member thread reply"]]' '[.[].comments | map(.body)]' \
+    "$collect_review_directory/review-threads.json"
 }
 
 # The contract the security pass rests on. Without the labels beside the body, the one thing that
@@ -3554,8 +3591,11 @@ chmod +x "$submit_bin_directory/gh"
 # do not run — what they exercise is everything the submission step does with them.
 write_fathom_review_collection() {
   local review_directory="$1"
+  local head_repository="${2-fathomise/MailFathom}"
 
   mkdir -p "$review_directory"
+  jq -n --arg head_repository "$head_repository" '{head_repository: (if $head_repository == "" then null else $head_repository end)}' \
+    > "$review_directory/pull-request.json"
   printf '[{"filename":"backend/src/Sample.cs","lines":[12,13,14]}]\n' > "$review_directory/lines.json"
   : > "$review_directory/truncation.txt"
 }
@@ -3572,6 +3612,9 @@ run_fathom_review_submit() {
   # Which marker the published review carries. A push is the ordinary case, and the gate of the next
   # run counts exactly the reviews carrying this one.
   local trigger_marker="${6:-<!-- fathom-review: automatic -->}"
+  # Where the head branch lives, as `collect` read it from the API. This repository is the ordinary
+  # case; a fork's name, or an empty value for a fork that was deleted, is what withholds approval.
+  local head_repository="${7-fathomise/MailFathom}"
   local step_script="$test_directory/fathom-review-submit.sh"
   local review_directory="$test_directory/fathom-review-submit-review"
   local coverage_file="$test_directory/fathom-review-submit-coverage"
@@ -3579,7 +3622,7 @@ run_fathom_review_submit() {
   submit_step_output_file="$test_directory/fathom-review-submit-step-output"
 
   extract_fathom_review_step 'submit' "$step_script"
-  write_fathom_review_collection "$review_directory"
+  write_fathom_review_collection "$review_directory" "$head_repository"
   rm -f "$payload_file"
   : > "$submit_step_output_file"
 
@@ -3720,6 +3763,28 @@ fathom_review_approves_when_it_finds_nothing() {
   # `comments` key at all, so a reader who sees `APPROVED` is owed nothing further.
   assert_json 'null' '.comments' "$payload_file"
   assert_excludes '### Findings with no line to sit on' "$payload_file"
+}
+
+# The approval satisfies the review the `main` ruleset requires, so a pull request whose head lives
+# in a fork — or in a fork since deleted, which the API reports as no repository at all — gets the
+# same verdict as a comment and never as an approval.
+fathom_review_never_approves_a_pull_request_from_a_fork() {
+  local output_file="$test_directory/fathom-review-submit-fork-output"
+  local payload_file="$test_directory/fathom-review-submit-fork-payload"
+  local head_repository
+
+  for head_repository in 'contributor/MailFathom' ''; do
+    run_fathom_review_submit \
+      '{"summary":"Read every changed file and found nothing above the bar.","findings":[]}' \
+      "$output_file" "$payload_file" 'success' '' '<!-- fathom-review: automatic -->' "$head_repository"
+
+    ((submit_status == 0))
+    assert_json '"COMMENT"' '.event' "$payload_file"
+    assert_contains '# NO FINDINGS' "$payload_file"
+    assert_contains 'A project maintainer still has to review and approve it' "$payload_file"
+    assert_excludes '# APPROVED' "$payload_file"
+    assert_contains 'verdict=no_findings' "$submit_step_output_file"
+  done
 }
 
 # The marker is what the ceiling counts with, and it is written by the only step that publishes. A
@@ -9179,8 +9244,8 @@ a_comment_never_cancels_a_review_in_flight() {
 # them ended it and then declined to start one, leaving the head with no verdict at all.
 #
 # What answers it is membership rather than cancellation: a run that can neither review nor cancel
-# is keyed by its own run id, so it shares a group with nothing. Two events are in that position and
-# both arrive on a pull request repeatedly — a comment, and a label that is not `fathom-review`.
+# is keyed by its own run id, so it shares a group with nothing. A comment is in that position, and
+# comments arrive on a pull request repeatedly.
 #
 # The commentary is stripped before the expression is read, because this file's prose names every
 # term below while arguing for it, and an assertion satisfied by the argument for a rule rather than
@@ -9195,8 +9260,6 @@ a_comment_never_cancels_a_queued_review() {
 
   for required_term in \
     "github.event_name == 'issue_comment'" \
-    "github.event.action == 'labeled'" \
-    "github.event.label.name != 'fathom-review'" \
     'github.run_id'; do
     if [[ "$concurrency" != *"$required_term"* ]]; then
       failures+="fathom-review.yml's concurrency group does not name ${required_term}, so a run that reviews nothing shares the pull request's group and cancels a review still queued there. "
@@ -11029,11 +11092,11 @@ run_test fathom_review_keeps_a_requested_review_at_the_full_bar
 run_test fathom_review_answers_a_request_past_the_automatic_ceiling
 run_test fathom_review_refuses_a_closed_pull_request
 run_test fathom_review_refuses_a_pull_request_the_updater_opened
-run_test fathom_review_reviews_an_updater_pull_request_the_maintainer_labelled
+run_test fathom_review_is_not_started_by_a_label
 run_test fathom_review_asks_for_a_run_of_its_own_when_a_comment_requests_a_review
 run_test fathom_review_carries_the_model_a_comment_named_into_the_request
 run_test fathom_review_neither_reviews_nor_asks_for_a_comment_that_only_mentions_the_phrase
-run_test fathom_review_refuses_a_comment_from_an_author_without_write_access
+run_test fathom_review_refuses_a_comment_from_outside_the_organization
 run_test fathom_review_reviews_the_pull_request_a_dispatch_names
 run_test fathom_review_reviews_with_the_default_model_when_a_dispatch_names_an_unknown_one
 run_test fathom_review_refuses_a_dispatch_that_names_no_pull_request
@@ -11043,6 +11106,7 @@ run_test fathom_review_waits_for_a_recent_comment_to_go_quiet
 run_test fathom_review_stops_waiting_at_the_ceiling
 run_test fathom_review_reads_the_newest_comment_whatever_the_order
 run_test fathom_review_collects_the_labels_of_an_issue_the_change_closes
+run_test fathom_review_collects_only_what_members_and_the_reviewer_wrote
 run_test fathom_review_reports_unknown_labels_for_an_issue_it_could_not_fetch
 run_test fathom_review_never_reads_the_design_runtime
 run_test fathom_review_never_reads_a_generated_migration
@@ -11071,6 +11135,7 @@ run_test fathom_review_holds_a_pass_that_still_found_something_owed
 run_test fathom_review_holds_a_settling_pass_whatever_the_severity
 run_test fathom_review_moves_a_finding_with_no_line_into_the_body
 run_test fathom_review_approves_when_it_finds_nothing
+run_test fathom_review_never_approves_a_pull_request_from_a_fork
 run_test fathom_review_reports_the_files_a_review_never_named
 run_test fathom_review_reports_no_gap_when_the_review_named_every_file
 run_test fathom_review_counts_a_named_path_the_change_does_not_contain

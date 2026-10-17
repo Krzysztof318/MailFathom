@@ -38,9 +38,8 @@ name: Apply pull request rules
 #   required to merge, so nothing here reads its conclusion and a run of it decides nothing.
 #   `scripts/test-agent-workflow.sh` holds the list to exactly the workflows a pull request runs.
 #
-# It only ever adds a label. A label a hand applied answers a question this workflow cannot see —
-# `Fathom review`'s own `fathom-review` label is the worked example of a label that means *somebody
-# asked* — and a workflow that tidied the list would erase it. The board write is bounded the other
+# It only ever adds a label. A label a hand applied answers a question this workflow cannot see,
+# and a workflow that tidied the list would erase it. The board write is bounded the other
 # way, by the statuses each rule declares it may act on.
 #
 # `pull_request` rather than `pull_request_target`, which two workflows hold as recorded exceptions —

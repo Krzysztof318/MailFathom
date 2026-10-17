@@ -102,8 +102,9 @@ name: Protected paths
 #
 # It is not a security boundary on its own. A `pull_request` run uses the workflow file as the pull
 # request would leave it, so a change to this file changes the check that judges it. The pair is what
-# holds: weakening the check means editing `.github/`, which needs the code owner's approval, and
-# deleting or renaming this job leaves the required check permanently unreported, which the ruleset
+# holds: weakening the check means editing `.github/`, and a fork's pull request doing that cannot
+# merge without a maintainer's approval, because `Fathom review` never approves one; and deleting or
+# renaming this job leaves the required check permanently unreported, which the ruleset
 # refuses to merge past. Both ways out are closed; neither of them is closed by this file alone.
 #
 # The set is a list rather than a pattern because each entry was added for a reason that had to be
@@ -393,8 +394,7 @@ jobs:
           #
           # What the exception removes is one author-side signal — *you are editing the gate you
           # have to pass* — from an author that cannot read it. It removes no approval. The `main`
-          # ruleset still requires an approving review from a code owner on this pull request like
-          # on any other, `CODEOWNERS` still names the repository owner for `.github/`, and
+          # ruleset still requires an approving review on this pull request like on any other, and
           # `Required CI` still has to pass. A human contributor's verdict is unchanged, because
           # `user.login` is set by GitHub when the pull request is created and nothing in a
           # contribution can set it to this value.

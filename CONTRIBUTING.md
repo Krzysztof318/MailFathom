@@ -84,7 +84,7 @@ there; `$finish-change` reports the board write as `not applicable (no board wri
 
 Workflow runs on my pull request wait for a maintainer to approve them, so a check that has
 not started is a queue rather than a failure to chase, and every push waits again.
-`Fathom review` runs only when a maintainer applies the `fathom-review` label; my own
+`Fathom review` runs only when a maintainer asks for it in a comment; my own
 pushes never start one.
 ```
 
@@ -198,11 +198,11 @@ Five checks gate the merge. `license/cla` is the one described above and `Typo c
 
 **`CodeQL`** also runs on every pull request that is not a draft, and analyzes the stacks your change reached — the service's C#, the client's TypeScript, the desktop shell's Rust — each in its own `Analyze` job. It runs GitHub's security queries over each, so a finding is a value followed from an untrusted source to somewhere it should not reach rather than a style objection. Findings appear as annotations on the pull request. It is the one check here that gates nothing, and for a reason worth knowing: the query pack updates upstream, so a change that was clean when it merged can become a finding later without anybody touching the code. Treat one as a question to answer in the pull request — fix it, or explain why the path is not reachable — rather than as something to route around.
 
-Merging additionally requires an approving review from a code owner. Your branch does not have to be current with `main`: an approved pull request enters a merge queue, which tests it combined with `main` and merges it, and rebasing is needed only when `git` reports a conflict or the `Coherence` check names a related change that landed underneath it. [`docs/operations/local-development.md`](docs/operations/local-development.md#pull-request-checks) documents every workflow and the branch ruleset in full.
+Merging additionally requires an approving review from a project maintainer. Your branch does not have to be current with `main`: an approved pull request enters a merge queue, which tests it combined with `main` and merges it, and rebasing is needed only when `git` reports a conflict or the `Coherence` check names a related change that landed underneath it. [`docs/operations/local-development.md`](docs/operations/local-development.md#pull-request-checks) documents every workflow and the branch ruleset in full.
 
-A separate `Fathom review` workflow may post an automated review on a published pull request. It reports no status check and gates nothing; treat it as a second opinion.
+A separate `Fathom review` workflow may post an automated review on a published pull request. It reports no status check, and it never approves a pull request from a fork — when it finds nothing it says so in a comment — so treat it as a second opinion beside the maintainer's review.
 
-**From a fork it runs only when a maintainer asks for it**, by applying the `fathom-review` label or by commenting. Your own pushes never start one, and that is the security boundary rather than an oversight — the workflow holds a credential, so nothing a contribution can do may start it. Two practical consequences: pushing a fix does not queue a re-review the way it does on a maintainer's own branch, so say in the pull request that you have pushed and let them relabel; and a review that has not appeared is waiting on a person rather than on a queue. Nothing is lost by not having one — the required checks and the maintainer's own review are what decide the merge.
+**From a fork it runs only when a maintainer asks for it** in a comment. Your own pushes never start one, and that is the security boundary rather than an oversight — the workflow holds a credential, so nothing a contribution can do may start it. Two practical consequences: pushing a fix does not queue a re-review the way it does on a maintainer's own branch, so say in the pull request that you have pushed and let them ask again; and a review that has not appeared is waiting on a person rather than on a queue. Nothing is lost by not having one — the required checks and the maintainer's own review are what decide the merge.
 
 ## Licensing your contribution
 

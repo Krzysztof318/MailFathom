@@ -65,8 +65,8 @@ name: CodeQL
 # taint path, and if the argument were only about severity this would be required. It is that the
 # query pack updates upstream, so a commit that was clean when it merged becomes a finding with
 # nothing in this repository having changed; making that block a merge lets somebody else's release
-# stop MailFathom's. The alert is read, and the code-owner review the ruleset already requires is
-# where a security question is answered by a person. Revisit once the pack's false-positive rate here
+# stop MailFathom's. The alert is read, and the approving review the ruleset already requires is
+# where a security question is answered. Revisit once the pack's false-positive rate here
 # has been observed rather than guessed at.
 on:
   pull_request:

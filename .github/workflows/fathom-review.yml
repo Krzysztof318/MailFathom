@@ -52,20 +52,21 @@ name: Fathom review
 # `event: COMMENT`: an approval carries no findings, whatever severity they would have had, so
 # reading the verdict is the whole of reading an approval. The verdict is the content of an
 # all-clear, so it is said in the one place GitHub renders as a verdict rather than as a wall of
-# threads that each read "this is fine". Either body opens with that verdict as a heading of its
-# own — `APPROVED` or `NEEDS CHANGES` — so what the run concluded is legible before the summary
-# under it is read, and a reader scrolling a long pull request does not have to infer it from
-# whether threads appeared.
+# threads that each read "this is fine". Every body opens with that verdict as a heading of its
+# own — `APPROVED`, `NO FINDINGS`, or `NEEDS CHANGES` — so what the run concluded is legible before
+# the summary under it is read, and a reader scrolling a long pull request does not have to infer
+# it from whether threads appeared.
 #
 # `NEEDS CHANGES` is a heading and nothing more. `REQUEST_CHANGES` is deliberately never used:
-# this reviewer advises and gates nothing, so it must not be able to block a merge either.
+# this reviewer reports no status check, so it must not be able to block a merge either.
 #
-# The approval cannot merge anything on its own. The `main` ruleset requires one approving review
-# *from a code owner*, `CODEOWNERS` makes the repository owner the code owner of every path, and a
-# GitHub App cannot be a code owner — so the owner's own approval is still required, and this one
-# sits beside it as a signal. `dismiss_stale_reviews_on_push` then discards it on the next push, so
-# an approval never outlives the commit it was given for, and that same push starts the review that
-# replaces it.
+# The approval is what lets a change merge. The `main` ruleset requires one approving review and
+# does not ask for it from a code owner, so this one satisfies it — which is why it is given only to
+# a pull request whose head branch lives in this repository. A pull request from a fork never gets
+# one: a pass that finds nothing there submits `event: COMMENT` under `NO FINDINGS` instead, and a
+# project maintainer's approval is what merges it. `dismiss_stale_reviews_on_push` discards an
+# approval on the next push, so it never outlives the commit it was given for, and that same push
+# starts the review that replaces it.
 on:
   # `synchronize` is what reviews a push. The branch that will merge is the one worth a verdict, and
   # the `main` ruleset sets `dismiss_stale_reviews_on_push`, so a commit landing on an approved pull
@@ -88,12 +89,14 @@ on:
       - reopened
       - ready_for_review
       - synchronize
-      - labeled
       - closed
     branches:
       - main
 
-  # The escape hatch that reviews a draft and a fork, and the half of it that decides. A run this
+  # The escape hatch that reviews a draft and a fork, and the half of it that decides. It is the
+  # only way to ask for a review, because it is the only event that says who asked in a form GitHub
+  # computes itself: the comment's author association. A label carries no such field, so a label
+  # trigger would admit whoever can apply one rather than the organization's members. A run this
   # event creates never reviews: it asks whether the comment requested one and, when it did, asks
   # for the review through `repository_dispatch` below.
   #
@@ -111,8 +114,8 @@ on:
   #
   # `repository_dispatch` rather than `workflow_dispatch` for the reason the header gives: this one
   # takes no ref, so nothing about it lets a branch supply the job that holds the Claude credential.
-  # Creating one needs write access to the repository, which is the bar the comment gate already
-  # applies to a comment's author, so it reaches nothing a comment did not reach before.
+  # Creating one needs write access to the repository, which only this workflow's own `request` job
+  # holds here, so it reaches nothing the comment gate did not already admit.
   repository_dispatch:
     types:
       - fathom-review-requested
@@ -129,8 +132,8 @@ concurrency:
   # worth the saved usage, because the review is one POST at the end of the job — a run stopped
   # before it posts nothing at all, and a run stopped after it has already finished.
   #
-  # **Every other event asks for a review rather than invalidating one, so it waits.** A label and a
-  # pull request marked ready leave the head alone: what is running is still reading the code that
+  # **Every other event asks for a review rather than invalidating one, so it waits.** A requested
+  # review and a pull request marked ready leave the head alone: what is running is still reading the code that
   # will merge, and its verdict is still worth having. They queue on this group instead, which costs
   # a pending run and produces two verdicts in order rather than one verdict thrown away.
   #
@@ -154,18 +157,15 @@ concurrency:
   #
   # Which is why membership of this group is decided here rather than by the gate. A run that can
   # neither review nor cancel is given a group of its own, keyed by its run id and therefore shared
-  # with nothing, so it never displaces a review waiting to start. Two classes of event are in that
-  # position, and both arrive on a pull request repeatedly while it is being worked on:
-  #
-  # - **A comment.** After #1347 an `issue_comment` run reviews nothing at all — it asks for the
-  #   review through `repository_dispatch`, and *that* run joins this group. So the trigger whose
-  #   verdict cannot be known in time is also the one that no longer needs to be known: a comment
-  #   never belongs here, whatever it says.
-  # - **A label that is not `fathom-review`.** `Apply pull request rules` writes labels, and the one
-  #   label that asks for a review is the only `labeled` event the gate admits.
+  # with nothing, so it never displaces a review waiting to start. A comment is in that position,
+  # and comments arrive on a pull request repeatedly while it is being worked on. After #1347 an
+  # `issue_comment` run reviews nothing at all — it asks for the review through
+  # `repository_dispatch`, and *that* run joins this group. So the trigger whose verdict cannot be
+  # known in time is also the one that no longer needs to be known: a comment never belongs here,
+  # whatever it says.
   #
   # Everything else joins the group and must. `synchronize` and `closed` because cancelling is what
-  # they are here for; `repository_dispatch` and `labeled` with `fathom-review` because they review;
+  # they are here for; `repository_dispatch` because it reviews;
   # and `opened`, `reopened`, and `ready_for_review` because each reviews unless the pull request is
   # a draft, a fork's, or the updater's. Those three can decline, and are kept here anyway: a pull
   # request just opened or reopened has no review of its own to displace, and `ready_for_review`
@@ -173,12 +173,11 @@ concurrency:
   # residue this arrangement accepts, and it is bounded by an event a hand performs once.
   #
   # The clauses below are folded into one line, so each of them is a whole condition rather than a
-  # continuation: a run keyed apart, the two events that are keyed apart, the key that is shared
-  # with nothing, and the pull request's own key that everything else joins.
+  # continuation: the event that is keyed apart, the key that is shared with nothing, and the pull
+  # request's own key that everything else joins.
   group: >-
     ${{ github.workflow }}-${{
-    (github.event_name == 'issue_comment'
-    || (github.event.action == 'labeled' && github.event.label.name != 'fathom-review'))
+    github.event_name == 'issue_comment'
     && format('request-{0}', github.run_id)
     || format('pull-request-{0}', github.event.pull_request.number || github.event.client_payload.pull_request_number) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request_target' && (github.event.action == 'synchronize' || github.event.action == 'closed') }}
@@ -281,7 +280,6 @@ jobs:
           PULL_REQUEST_DRAFT: ${{ github.event.pull_request.draft }}
           PULL_REQUEST_AUTHOR: ${{ github.event.pull_request.user.login }}
           HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
-          ADDED_LABEL: ${{ github.event.label.name }}
           IS_PULL_REQUEST_COMMENT: ${{ github.event.issue.pull_request.url != '' }}
           COMMENT_BODY: ${{ github.event.comment.body }}
           COMMENT_ASSOCIATION: ${{ github.event.comment.author_association }}
@@ -310,8 +308,8 @@ jobs:
           # comment path sets it, because only a comment arrives in a run that must stay out of the
           # pull request's concurrency group — the commentary on that group is why.
           dispatch='false'
-          # Whether somebody asked for this run in so many words. A label or a comment is a person
-          # with write access deciding the pass is worth its cost; every other path is the workflow
+          # Whether somebody asked for this run in so many words. A comment is a member of the
+          # organization deciding the pass is worth its cost; every other path is the workflow
           # deciding for them, and only that one is bounded below.
           explicit='false'
           # Sonnet 5.5 by default, at the exact identifier rather than the `sonnet` alias: an alias
@@ -331,16 +329,6 @@ jobs:
                 # by entering the concurrency group and cancelling the review that was still
                 # reading a pull request nobody will act on again.
                 reason='the pull request is closed'
-              elif [[ "$EVENT_ACTION" == 'labeled' ]]; then
-                # The label is the maintainer's explicit ask, which is the only way a fork's pull
-                # request reaches this workflow and the only way a draft does.
-                if [[ "$ADDED_LABEL" == 'fathom-review' ]]; then
-                  review='true'
-                  explicit='true'
-                  reason='a maintainer applied the fathom-review label'
-                else
-                  reason="the applied label is '${ADDED_LABEL}'"
-                fi
               elif [[ "$PULL_REQUEST_AUTHOR" == "$UPDATER_LOGIN" ]]; then
                 # A version bump is not a change this reviewer can advise on. What decides one is
                 # whether the upstream release renamed an input or dropped a runner, and whether
@@ -350,18 +338,17 @@ jobs:
                 # again on every rebase the updater performs.
                 #
                 # This is the one skip that is about the author rather than about the change's
-                # state, so it is placed with the other checks the label escapes rather than
-                # anywhere earlier: a major bump worth a second opinion is still one label away.
-                reason="the pull request is authored by ${UPDATER_LOGIN}; label it fathom-review or comment fathom-review to review a bump anyway"
+                # state, so it is placed with the other checks a comment escapes rather than
+                # anywhere earlier: a major bump worth a second opinion is still one comment away.
+                reason="the pull request is authored by ${UPDATER_LOGIN}; comment fathom-review to review a bump anyway"
               elif [[ "$PULL_REQUEST_DRAFT" == 'true' ]]; then
                 # This is the one check that contains what `synchronize` costs: a draft is pushed
                 # to while it is being written, and none of those pushes is reviewed.
-                reason='the pull request is a draft; label it fathom-review or comment fathom-review to review it anyway'
+                reason='the pull request is a draft; comment fathom-review to review it anyway'
               elif [[ "$HEAD_REPOSITORY" != "$REPOSITORY" ]]; then
-                # A fork's own pull request never starts a review by being opened or pushed to. The
-                # label does, and the action's own write-permission check on the actor agrees: on a
-                # `labeled` event the actor is the maintainer who applied it.
-                reason="the head branch is in ${HEAD_REPOSITORY}; a maintainer applies the fathom-review label to review a fork"
+                # A fork's own pull request never starts a review by being opened or pushed to. A
+                # member's comment does.
+                reason="the head branch is in ${HEAD_REPOSITORY}; a member of the organization comments fathom-review to review a fork"
               elif [[ "$EVENT_ACTION" == 'synchronize' ]]; then
                 review='true'
                 reason='the branch was pushed to'
@@ -373,8 +360,11 @@ jobs:
             issue_comment)
               # The comment path deliberately applies none of the checks above. A draft is reviewed
               # this way — it is the escape hatch the draft branch above names — and so is a fork's
-              # pull request, because somebody with write access typing the phrase has already
-              # decided this run is worth its cost. Author association is the whole guard here.
+              # pull request, because a member of the organization typing the phrase has already
+              # decided this run is worth its cost. Author association is the whole guard here, and
+              # it admits `OWNER` and `MEMBER` alone: a collaborator from outside the organization
+              # holds write access to the repository without being part of the project, and spends
+              # no review usage.
               #
               # `fathom-review` rather than `@claude`: an at-mention collides with GitHub Copilot's
               # own trigger.
@@ -407,14 +397,14 @@ jobs:
                 reason='the comment is on an issue rather than a pull request'
               elif [[ ! "${COMMENT_BODY,,}" =~ $trigger_pattern ]]; then
                 reason='the comment does not ask for fathom-review'
-              elif [[ "$COMMENT_ASSOCIATION" != 'OWNER' && "$COMMENT_ASSOCIATION" != 'MEMBER' && "$COMMENT_ASSOCIATION" != 'COLLABORATOR' ]]; then
+              elif [[ "$COMMENT_ASSOCIATION" != 'OWNER' && "$COMMENT_ASSOCIATION" != 'MEMBER' ]]; then
                 reason="the comment author is ${COMMENT_ASSOCIATION} and cannot spend review usage"
               else
                 # The decision is the same one this branch always took; what changed is that the
                 # run holding it cannot be the run that reviews. `request` below turns this into a
                 # `repository_dispatch`, and the review happens in the run that event creates.
                 dispatch='true'
-                reason='a maintainer asked for fathom-review in a comment; asking for a run of its own'
+                reason='a member asked for fathom-review in a comment; asking for a run of its own'
                 # The escape hatch to the more expensive model, for a change where the default
                 # reviewer's verdict is worth a second, costlier opinion.
                 if [[ "${COMMENT_BODY,,}" == *opus* ]]; then
@@ -425,8 +415,7 @@ jobs:
             repository_dispatch)
               # The comment path's second half. Nothing is re-decided here: this event exists only
               # because the gate above said yes in the run that dispatched it, and creating one by
-              # hand needs the write access that gate demands of a comment's author, so the two ways
-              # to reach this branch are bounded by the same permission.
+              # hand needs write access to the repository, which only that run's `request` job holds.
               if [[ -z "$PULL_REQUEST_NUMBER" ]]; then
                 # The payload arrives over the API, so it is checked rather than assumed. Refusing
                 # here costs one short job; letting it through would fail the collection step
@@ -460,7 +449,7 @@ jobs:
           #
           # What is counted is the reviews this App published from an automatic run, which each carry
           # the marker the submission step writes into their body. A review somebody asked for is not
-          # counted and is never refused: a maintainer with write access has already made the decision
+          # counted and is never refused: a member of the organization has already made the decision
           # this ceiling exists to make when nobody made it, so asking must neither be rationed nor
           # consume the budget a later push draws on.
           #
@@ -477,8 +466,8 @@ jobs:
           # like any other and spends a pass. Counted against six alone, those rebases
           # end the automatic loop on a pull request whose findings are still being answered, and
           # the push that needs a verdict is the one refused. Past nine the work is answering the
-          # review rather than asking for another, and a maintainer who disagrees says so with a
-          # label or a comment.
+          # review rather than asking for another, and a member who disagrees says so with a
+          # comment.
           automatic_review_limit=9
 
           # Counted whenever a review is going to happen rather than only when the ceiling could
@@ -1058,7 +1047,7 @@ jobs:
           # reads the same label to decide which model performs that pass — one label, read twice,
           # written once.
           "$GITHUB_API_SCRIPT" "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}" \
-            --jq '{number, title, body, draft, author: .user.login, labels: [.labels[].name], head_sha: .head.sha, base_sha: .base.sha, base_ref: .base.ref, changed_files, additions, deletions}' \
+            --jq '{number, title, body, draft, author: .user.login, labels: [.labels[].name], head_sha: .head.sha, head_repository: .head.repo.full_name, base_sha: .base.sha, base_ref: .base.ref, changed_files, additions, deletions}' \
             > "$REVIEW_DIRECTORY/pull-request.json"
 
           head_sha="$(jq -r '.head_sha' "$REVIEW_DIRECTORY/pull-request.json")"
@@ -1254,6 +1243,13 @@ jobs:
           # What other reviewers have already said, so the same finding is not raised twice, and the
           # governing issue, which is where the change's contract is written down.
           #
+          # Only what the organization's members and this reviewer wrote is collected. Anybody can
+          # comment on a public pull request, and what a comment says reaches the reviewer as
+          # context it weighs — so a remark from outside the project would steer the verdict an
+          # approval is made of. Members are told apart by the author association GitHub computes,
+          # `OWNER` or `MEMBER`, and this reviewer by its login, because GitHub reports the App as a
+          # `CONTRIBUTOR`. GraphQL names the same account without the `[bot]` suffix REST carries.
+          #
           # On a re-review these are also this reviewer's own previous threads and the replies to
           # them, which is the only record a run has of what it already reported: the job keeps no
           # state between runs, and a push arrives as a whole diff rather than as an increment.
@@ -1291,7 +1287,7 @@ jobs:
                         path
                         line
                         comments(last: $threadComments) {
-                          nodes { author { login } createdAt body }
+                          nodes { author { login } authorAssociation createdAt body }
                         }
                       }
                     }
@@ -1299,11 +1295,14 @@ jobs:
                 }
               }' \
             --jq '.data.repository.pullRequest.reviewThreads.nodes' \
-            | jq --argjson bytes "$comment_body_limit" \
+            | jq --argjson bytes "$comment_body_limit" --arg reviewer "${REVIEWER_LOGIN%\[bot\]}" \
                  '[.[] | {path, line, resolved: .isResolved, outdated: .isOutdated,
                           comments: [.comments.nodes[]
+                                     | select(.authorAssociation == "OWNER" or .authorAssociation == "MEMBER"
+                                              or .author.login == $reviewer)
                                      | {author: .author.login, created_at: .createdAt,
-                                        body: (.body // "")[0:$bytes]}]}]' \
+                                        body: (.body // "")[0:$bytes]}]}
+                       | select(.comments != [])]' \
             > "$REVIEW_DIRECTORY/review-threads.json"
 
           # The submitted reviews, which is where a verdict lives: an inline comment carries a
@@ -1313,7 +1312,8 @@ jobs:
           # and `state` distinguishes a review that still stands from one `dismiss_stale_reviews_on_push`
           # discarded.
           "$GITHUB_API_SCRIPT" "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}/reviews?per_page=100" --paginate \
-            --jq '.[] | {author: .user.login, state, commit_id, submitted_at, body}' \
+            --jq '.[] | select(.author_association == "OWNER" or .author_association == "MEMBER" or .user.login == env.REVIEWER_LOGIN)
+                  | {author: .user.login, state, commit_id, submitted_at, body}' \
             | jq -s --argjson limit "$comment_limit" --argjson bytes "$comment_body_limit" \
                  '[.[-$limit:][] | .body |= .[0:$bytes]]' \
             > "$REVIEW_DIRECTORY/reviews.json"
@@ -1349,7 +1349,8 @@ jobs:
           fi
 
           "$GITHUB_API_SCRIPT" "repos/${REPOSITORY}/issues/${PULL_REQUEST_NUMBER}/comments?per_page=100" --paginate \
-            --jq '.[] | {author: .user.login, created_at, body}' \
+            --jq '.[] | select(.author_association == "OWNER" or .author_association == "MEMBER" or .user.login == env.REVIEWER_LOGIN)
+                  | {author: .user.login, created_at, body}' \
             | jq -s --argjson limit "$comment_limit" --argjson bytes "$comment_body_limit" \
                  '[.[-$limit:][] | .body |= .[0:$bytes]]' \
             > "$REVIEW_DIRECTORY/issue-comments.json"
@@ -2397,9 +2398,12 @@ jobs:
           # `dismiss_stale_reviews_on_push` set on the `main` ruleset, the next push dismisses it,
           # so an approval can never describe code that has since changed.
           #
-          # This cannot merge anything by itself: the ruleset requires an approving review from a
-          # code owner, and a GitHub App cannot be one. `REQUEST_CHANGES` is never used in either
-          # branch — a reviewer that gates nothing must not be able to block a merge either.
+          # The approval satisfies the one approving review the ruleset requires, so it is given only
+          # where the head branch lives in this repository. A fork's pull request gets the same
+          # verdict as a comment, and a maintainer's approval merges it. The head repository is read
+          # from what `collect` asked the API, never from the event or the model, and an absent one —
+          # a deleted fork reports `null` — is treated as a fork. `REQUEST_CHANGES` is never used in
+          # any branch: a reviewer that reports no status check must not be able to block a merge.
           # An empty findings array means two different things depending on how the reviewer ended.
           # From a run that finished, it means nothing was found. From one that answered and then
           # failed anyway, it means the search never completed and the answer is a snapshot rather
@@ -2414,15 +2418,32 @@ jobs:
           fi
 
           if [[ "$(jq '(.findings // []) | length' "$findings_file")" == '0' ]]; then
+            head_repository="$(jq -r '.head_repository // ""' "$REVIEW_DIRECTORY/pull-request.json" 2>/dev/null || true)"
+            if [[ "$head_repository" == "$REPOSITORY" ]]; then
+              event='APPROVE'
+              heading='# APPROVED'
+              notice=''
+              verdict='approved'
+            else
+              event='COMMENT'
+              heading='# NO FINDINGS'
+              notice='This pull request comes from a fork, so this reviewer does not approve it. A project maintainer still has to review and approve it before it can merge.'
+              verdict='no_findings'
+            fi
+
             jq --arg commit "$HEAD_SHA" \
+               --arg event "$event" \
+               --arg heading "$heading" \
+               --arg notice "$notice" \
                --arg truncation "$(cat "$REVIEW_DIRECTORY/truncation.txt")" \
                --arg coverage "$(cat "$COVERAGE_FILE" 2>/dev/null || true)" \
                --arg marker "$TRIGGER_MARKER" '
               {
                 commit_id: $commit,
-                event: "APPROVE",
+                event: $event,
                 body: (
-                  ["# APPROVED", ""]
+                  [$heading, ""]
+                  + (if $notice == "" then [] else [$notice, ""] end)
                   + [((.summary // "") | if . == "" then "The review found nothing above the bar in this change." else . end)]
                   + (if $truncation == "" then [] else ["", $truncation] end)
                   + (if $coverage == "" then [] else ["", $coverage] end)
@@ -2444,9 +2465,13 @@ jobs:
             # The verdict is stated here rather than derived again downstream, because this is the
             # only place that knows a review was actually published: every branch above returns
             # without one, and the run's own metrics must not record a verdict that was never posted.
-            echo 'verdict=approved' >> "$GITHUB_OUTPUT"
+            echo "verdict=${verdict}" >> "$GITHUB_OUTPUT"
 
-            echo 'Approved: the review found nothing above the bar.'
+            if [[ "$event" == 'APPROVE' ]]; then
+              echo 'Approved: the review found nothing above the bar.'
+            else
+              echo 'Found nothing above the bar; the head lives in a fork, so a maintainer approves it.'
+            fi
             exit 0
           fi
 
