@@ -276,7 +276,7 @@ given client is one of them, and each has an answer above rather than a setting 
 
 ## What a working connection looks like
 
-Whichever client was configured, a connected one whose user holds the seeded `Mail user` role lists at least fourteen
+Whichever client was configured, a connected one whose user holds the seeded `User` role lists at least fourteen
 tools; a user no role is assigned to is listed none. Four of them — `list_accounts`,
 `list_emails`, `get_email_content`, and `search_emails` — advertise themselves as read-only, non-destructive, and
 idempotent. Four of the rest are not read-only. `set_mail_flags`

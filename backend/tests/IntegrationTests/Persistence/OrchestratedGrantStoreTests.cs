@@ -47,30 +47,26 @@ public sealed class OrchestratedGrantStoreTests(MailFathomOrchestrationFixture o
 
     private static readonly RolePermissions ReadMail = RolePermissions.Of([MailFathomPermission.MailRead]);
 
-    /// <summary>The user-facing half as the migrations left it on <c>Mail user</c>, in ordinal order.</summary>
-    /// <remarks>
-    /// The seeding migration wrote the names of its day, and the split of the user-facing permissions by domain carried
-    /// that list to the names its holders already acted under — the one later migration that rewrites it.
-    /// </remarks>
-    private static readonly string[] UserFacingHalf =
+    /// <summary>The identifier the seeding migration gave the role that is <c>User</c> today.</summary>
+    private static readonly Guid SeededUserRoleId = Guid.Parse("01a11deb-3808-7000-8000-000000000001");
+
+    /// <summary>The identifier the seeding migration gave <c>Organization administrator</c>.</summary>
+    private static readonly Guid SeededOrganizationAdministratorRoleId = Guid.Parse("01a11deb-3808-7000-8000-000000000002");
+
+    /// <summary>One pattern per user-facing domain, as the migrations left them on <c>User</c>, in ordinal order.</summary>
+    private static readonly string[] UserFacingPatterns =
     [
-        "mailfathom.assistant.use", "mailfathom.calendar.read", "mailfathom.calendar.write",
-        "mailfathom.contacts.read", "mailfathom.contacts.write", "mailfathom.mail.accounts.write",
-        "mailfathom.mail.delete", "mailfathom.mail.drafts.write", "mailfathom.mail.flags.write",
-        "mailfathom.mail.folders.write", "mailfathom.mail.move", "mailfathom.mail.read", "mailfathom.mail.send",
-        "mailfathom.notifications.read", "mailfathom.notifications.write", "mailfathom.profile.read",
-        "mailfathom.profile.write", "mailfathom.tasks.read", "mailfathom.tasks.write",
+        "mailfathom.assistant.*", "mailfathom.calendar.*", "mailfathom.contacts.*", "mailfathom.mail.*",
+        "mailfathom.notifications.*", "mailfathom.profile.*", "mailfathom.tasks.*",
     ];
 
     private static readonly AdministrativeListingQuery FirstPage =
         AdministrativeListingQuery.Create(AdministrativeListingQuery.MaximumPageSize, after: null)!;
 
     /// <summary>
-    /// The two lists written out by name are fixed by the migrations that wrote them, so they are stated here as the
-    /// names those left rather than read from what this build publishes: a release publishing a new permission adds it
-    /// to neither, and a name this build does not publish yet is still on the row, reported rather than granted.
-    /// <c>Administrator</c> is the one the later migration rewrote, and what proves the rewrite ran is the entry as it is
-    /// stored: the single pattern, which reaches everything this build publishes rather than a list that happens to.
+    /// A fresh database holds two seeded roles and both list patterns, so what proves the migrations ran is each entry
+    /// as it is stored. <c>User</c> reaches every name the user-facing half publishes and nothing administrative, and
+    /// <c>Administrator</c> reaches everything; <c>Organization administrator</c> and the name <c>Mail user</c> are gone.
     /// </summary>
     [Fact]
     public async Task ReadRolesAsync_TheSeededRoles_ListWhatTheMigrationsWrote()
@@ -83,19 +79,111 @@ public sealed class OrchestratedGrantStoreTests(MailFathomOrchestrationFixture o
         var roles = await ReadEveryRoleAsync(services, cancellationToken);
 
         // Assert
-        Assert.Equal(UserFacingHalf, ListedNames(roles, "Mail user"));
-        Assert.Equal(
-            [
-                "mailfathom.admin.audit.read", "mailfathom.admin.configuration.write",
-                "mailfathom.admin.credentials.write", "mailfathom.admin.erase", "mailfathom.admin.operate",
-                "mailfathom.admin.read", "mailfathom.admin.roles.write",
-            ],
-            ListedNames(roles, "Organization administrator"));
+        var user = Assert.Single(roles, role => role.Name == "User").Permissions;
         var administrator = Assert.Single(roles, role => role.Name == "Administrator").Permissions;
 
+        Assert.DoesNotContain(roles, role => role.Name is "Mail user" or "Organization administrator");
+        Assert.Equal(UserFacingPatterns, user.Written.Order(StringComparer.Ordinal));
+        Assert.Equal(
+            MailFathomPermission.All
+                .Where(permission => permission.Surface == ProtectedSurface.Mail)
+                .Select(permission => permission.Name)
+                .Order(StringComparer.Ordinal),
+            user.Granted.Select(permission => permission.Name).Order(StringComparer.Ordinal));
+        Assert.Empty(user.Unpublished);
         Assert.Equal(["*"], administrator.Written);
         Assert.Equal(MailFathomPermission.All, administrator.Granted);
         Assert.Empty(administrator.Unpublished);
+    }
+
+    /// <summary>
+    /// The reduction of the seeded roles is run here as the migration states it, against each shape an operator may
+    /// have left the two rows in, because a guard that let one through would rename or rewrite a role somebody
+    /// deliberately changed, or remove one somebody holds. The first step is the control: both rows exactly as the
+    /// earlier migrations left them are reduced, so the rows left alone are left alone by the guard rather than by a
+    /// statement that does nothing. Everything runs in one transaction that is rolled back, since the rows are the ones
+    /// the rest of the suite reads.
+    /// </summary>
+    [Fact]
+    public async Task ReduceSeededRolesToUserAndAdministrator_ARowSomebodyChangedOrHolds_IsLeftAsItStandsWhileTheSeededOnesAreReduced()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var holder = Guid.CreateVersion7();
+        await ProvisionUserAsync(services, holder, cancellationToken);
+
+        try
+        {
+            // Act
+            var outcomes = await services.InScopeAsync(
+                async (scope, token) =>
+                {
+                    var dbContext = scope.GetRequiredService<MailFathomDbContext>();
+                    var reduction = dbContext.GetService<IMigrationsAssembly>().CreateMigration(
+                        typeof(ReduceSeededRolesToUserAndAdministrator).GetTypeInfo(),
+                        dbContext.Database.ProviderName!);
+                    var up = Assert.Single(reduction.UpOperations.OfType<SqlOperation>()).Sql;
+                    var down = Assert.Single(reduction.DownOperations.OfType<SqlOperation>()).Sql;
+
+                    async Task<(string? UserName, string[] UserList, bool OrganizationAdministratorStands)> ReadAsync()
+                    {
+                        var name = await dbContext.Roles.AsNoTracking()
+                            .Where(role => role.Id == SeededUserRoleId)
+                            .Select(role => role.Name)
+                            .SingleOrDefaultAsync(token);
+                        var list = await dbContext.RolePermissions.AsNoTracking()
+                            .Where(listed => listed.RoleId == SeededUserRoleId)
+                            .Select(listed => listed.Permission)
+                            .OrderBy(permission => permission)
+                            .ToArrayAsync(token);
+                        var stands = await dbContext.Roles.AsNoTracking()
+                            .AnyAsync(role => role.Id == SeededOrganizationAdministratorRoleId, token);
+
+                        return (name, list, stands);
+                    }
+
+                    await using var transaction = await dbContext.Database.BeginTransactionAsync(token);
+
+                    await dbContext.Database.ExecuteSqlRawAsync(down, token);
+                    var restored = await ReadAsync();
+                    await dbContext.Database.ExecuteSqlRawAsync(up, token);
+                    var reduced = await ReadAsync();
+
+                    await dbContext.Database.ExecuteSqlRawAsync(down, token);
+                    await dbContext.Database.ExecuteSqlAsync(
+                        $"""DELETE FROM role_permissions WHERE "RoleId" = {SeededUserRoleId} AND "Permission" = 'mailfathom.mail.send'""",
+                        token);
+                    await dbContext.Database.ExecuteSqlAsync(
+                        $"""
+                         INSERT INTO role_assignments ("Id", "RoleId", "PrincipalUserId", "AssignedAt")
+                         VALUES ({Guid.CreateVersion7()}, {SeededOrganizationAdministratorRoleId}, {holder}, {RecordedAt})
+                         """,
+                        token);
+                    await dbContext.Database.ExecuteSqlRawAsync(up, token);
+                    var changed = await ReadAsync();
+
+                    await transaction.RollbackAsync(CancellationToken.None);
+
+                    return (Restored: restored, Reduced: reduced, Changed: changed);
+                },
+                cancellationToken);
+
+            // Assert
+            Assert.Equal("Mail user", outcomes.Restored.UserName);
+            Assert.DoesNotContain(outcomes.Restored.UserList, entry => entry.Contains('*', StringComparison.Ordinal));
+            Assert.True(outcomes.Restored.OrganizationAdministratorStands);
+            Assert.Equal("User", outcomes.Reduced.UserName);
+            Assert.Equal(UserFacingPatterns, outcomes.Reduced.UserList);
+            Assert.False(outcomes.Reduced.OrganizationAdministratorStands);
+            Assert.Equal("Mail user", outcomes.Changed.UserName);
+            Assert.Equal(outcomes.Restored.UserList.Length - 1, outcomes.Changed.UserList.Length);
+            Assert.True(outcomes.Changed.OrganizationAdministratorStands);
+        }
+        finally
+        {
+            await OrchestratedForeignUser.EraseAsync(services, holder);
+        }
     }
 
     /// <summary>
@@ -1028,19 +1116,6 @@ public sealed class OrchestratedGrantStoreTests(MailFathomOrchestrationFixture o
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => Store(scope).HoldsWideningRoleAsync(principal, token),
             cancellationToken);
-
-    private static string[] ListedNames(IReadOnlyList<Role> roles, string name)
-    {
-        var role = Assert.Single(roles, candidate => candidate.Name == name);
-
-        return
-        [
-            .. role.Permissions.Granted
-                .Select(permission => permission.Name)
-                .Concat(role.Permissions.Unpublished)
-                .Order(StringComparer.Ordinal),
-        ];
-    }
 
     private static async Task<IReadOnlyList<Role>> ReadEveryRoleAsync(
         OrchestratedMailFathomServices services,

@@ -394,10 +394,6 @@ public readonly record struct MailFathomPermission
     /// is another permission's act and is not refused over it — see
     /// <see href="https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0012-authorization-model-named-permissions-and-where-they-are-enforced.md">ADR 0012</see>.
     /// </para>
-    /// <para>
-    /// The built-in <c>Organization administrator</c> and <c>Administrator</c> roles were seeded listing it before any
-    /// build published it, so a stored name that read back as unpublished until now grants it from this build on.
-    /// </para>
     /// </remarks>
     public static MailFathomPermission AdminRolesWrite { get; } =
         new("mailfathom.admin.roles.write", ProtectedSurface.Administration);

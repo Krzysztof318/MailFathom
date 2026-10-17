@@ -43,7 +43,7 @@ the answers become `mailbox.json` beside `compose.yaml`, and a mailbox is a mail
 deployment holds. Its address is `--email-address`, which defaults to the login when that is an address, and its
 `Language` is `--language`, English unless stated. A fresh database holds nobody, so where the script started the
 deployment it records what a first sign-in needs, through the administrative endpoint and in this order: one user, the
-built-in `Mail user` role assigned to them at their own scope, the mailbox, and their credentials. The role is not
+built-in `User` role assigned to them at their own scope, the mailbox, and their credentials. The role is not
 optional — a recorded user holds nothing until one is assigned. A step the deployment refuses stops the recording,
 is named, and is followed by the `mfctl` commands that finish it by hand; a run that started nothing prints the same
 commands. Until the mailbox is recorded the deployment reads nothing, which is an ordinary first-run state rather than
@@ -284,7 +284,7 @@ settings, with the same `file:` reference into `/etc/mailfathom/secrets`. The ma
 write commits, without a restart, and the next synchronization run is its first one. `mfctl user add` records the person
 under the label you tell them apart by, and `mfctl account add` names no user, because the deployment then holds
 exactly one; once `mfctl user add` records a second person, `--user` says whom the account is created for. [Getting started § write down the mailbox](../users/getting-started.md#2-write-down-the-mailbox) is what goes
-in the file, and [administering your deployment](../users/administering.md) the command group around it. Recording the person assigns them no role, so they reach no tool until they hold `Mail user` —
+in the file, and [administering your deployment](../users/administering.md) the command group around it. Recording the person assigns them no role, so they reach no tool until they hold `User` —
 [getting started § record the mailbox](../users/getting-started.md#6-record-the-mailbox) gives the `mfctl assignment add`
 command that assigns it.
 

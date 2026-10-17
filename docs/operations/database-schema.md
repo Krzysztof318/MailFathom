@@ -29,14 +29,13 @@ given installation holds in order to know which file to apply — there is one f
 once.
 
 It can write rows as well as creating tables, and what it wrote keeps the meaning a deployment has since given it.
-Every database, fresh or upgraded, gets the three built-in roles — `Mail user`, `Organization administrator`, and
-`Administrator` — with the permissions [the stored schema](../architecture/stored-email-schema.md#the-roles-groups-and-assignments-a-grant-is-read-from)
+Every database, fresh or upgraded, gets the two built-in roles — `User` and `Administrator` — with the permissions [the stored schema](../architecture/stored-email-schema.md#the-roles-groups-and-assignments-a-grant-is-read-from)
 lists for each; they are ordinary rows a deployment may rename, edit, or delete, and no migration changes what a list
 a deployment has changed grants. One migration does rewrite names: where a release publishes a permission under another
 name, or publishes apart what one name used to reach, every stored list — a role's, a credential's narrowing, a
 session's — is carried to the names its holders already acted under, seeded or not, and gains nothing beyond them.
-`Administrator` lists the pattern `*`, so its holders hold every permission the release being upgraded to publishes
-without a row being written.
+`User` lists one pattern per user-facing domain and `Administrator` the pattern `*`, so their holders hold every
+permission the release being upgraded to publishes within that reach without a row being written.
 Where it upgrades
 a database that already holds mail, or anything recorded about it, from a release before users were recorded, the chain
 provisions the **user** that mail is bound to — one record, labelled `user`, with the mail accounts this deployment already

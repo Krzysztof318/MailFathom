@@ -742,19 +742,18 @@ name it publishes, or a pattern reaching at least one. One stored entry that com
 build no longer publishes, a pattern left reaching nothing — is read back beside the role as unpublished, rather than
 making the whole role unreadable.
 
-The migrations seed three roles, as ordinary rows an operator may rename, edit, or delete:
+The migrations seed two roles, as ordinary rows an operator may rename, edit, or delete:
 
 | Role | What it lists |
 |---|---|
-| `Mail user` | Every name the user-facing half published when it was seeded, carried to the names those are published under now |
-| `Organization administrator` | `mailfathom.admin.read`, `mailfathom.admin.audit.read`, `mailfathom.admin.operate`, `mailfathom.admin.credentials.write`, `mailfathom.admin.configuration.write`, `mailfathom.admin.erase`, and `mailfathom.admin.roles.write` |
+| `User` | One pattern per user-facing domain — `mailfathom.mail.*`, `mailfathom.contacts.*`, `mailfathom.tasks.*`, `mailfathom.calendar.*`, `mailfathom.notifications.*`, `mailfathom.profile.*`, and `mailfathom.assistant.*` — which reach every name the user-facing half publishes and nothing administrative, a name a later release adds in one of those domains included |
 | `Administrator` | The pattern `*` alone, which reaches every name both halves publish, a name a later release adds included |
 
 `RewriteAdministratorRoleAsAPattern` is the migration that wrote that pattern, in place of the names the seeding
 migration listed, and only where the role still listed exactly those names. A seeded `Administrator` an operator had
 narrowed, emptied, or deleted was left as it stood, because rewriting it would have handed its holders every permission
 they were deliberately denied. It changes no table: whether an entry is a name or a pattern is decided when a grant is
-computed. No migration widens either of the other two.
+computed.
 
 `SplitUserFacingPermissionsByDomain` is the migration that carried every stored list — each role's, each credential's
 narrowing, and each session's — to the names the user-facing half is published under, and it changes no table either. A
@@ -766,8 +765,16 @@ role alike, seeded or not, because what it carries is the reach of a name rather
 It carries what was stored when it ran and nothing written afterwards, so a list a replica of the build before it wrote
 during a rolling upgrade — a session signed in there, above all — holds the names that build knew until it is replaced.
 
+`ReduceSeededRolesToUserAndAdministrator` is the migration that left two seeded roles where there were three, and it
+changes no table either. The role seeded as `Mail user` is renamed `User` and its names are replaced with the patterns
+above, and `Organization administrator` is deleted. Each happens only to a row still as the earlier migrations left it:
+`Mail user` only while it carries that name and exactly the names `SplitUserFacingPermissionsByDomain` left on it, and
+while no other role is already called `User`; `Organization administrator` only while it carries that name, exactly its
+seeded list, and no assignment. A row an operator renamed, edited, or assigned is left as it stood, so on such a
+database the role keeps its old name and list, and `mfctl role list` is where to read which happened.
+
 The migration that moved mail grants from credentials onto users, `HoldMailGrantsOnUsers`, gave every user who held no
-assignment one at their own scope reproducing the union of what their credentials listed: `Mail user` where that union
+assignment one at their own scope reproducing the union of what their credentials listed: the seeded role that is `User` today where that union
 was the whole user-facing half — and for a user holding no credential, whom only an endpoint requiring none could have served —
 and otherwise a role of its own, `Carried-over mail grant <n>`, one per distinct union and numbered in the order of the
 names it lists. A user whose credentials all listed nothing was given nothing. The same migration recorded no narrowing
