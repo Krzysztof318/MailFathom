@@ -2591,6 +2591,17 @@ fathom_review_asks_for_a_run_of_its_own_when_a_comment_requests_a_review() {
   assert_contains 'asking for a run of its own' "$output_file"
 }
 
+# The organization's owners are members too, and GitHub reports them as `OWNER` rather than
+# `MEMBER`, so the gate admits both and a contract holds each.
+fathom_review_asks_for_a_review_an_owner_requested() {
+  local output_file="$test_directory/fathom-review-comment-owner-output"
+  local step_output_file="$test_directory/fathom-review-comment-owner-step-output"
+
+  run_fathom_review_comment_gate 'fathom-review' "$output_file" "$step_output_file" 'OWNER'
+
+  assert_contains 'dispatch=true' "$step_output_file"
+}
+
 fathom_review_carries_the_model_a_comment_named_into_the_request() {
   local output_file="$test_directory/fathom-review-comment-opus-output"
   local step_output_file="$test_directory/fathom-review-comment-opus-step-output"
@@ -2852,7 +2863,8 @@ case "$endpoint" in
         {"isResolved":false,"isOutdated":false,"path":"backend/src/Sample.cs","line":12,"comments":{"nodes":[
           {"author":{"login":"passer-by"},"authorAssociation":"NONE","createdAt":"2026-08-14T09:00:00Z","body":"outsider thread opener"},
           {"author":{"login":"fathom-reviewer"},"authorAssociation":"CONTRIBUTOR","createdAt":"2026-08-14T09:01:00Z","body":"reviewer thread reply"},
-          {"author":{"login":"Krzysztof318"},"authorAssociation":"MEMBER","createdAt":"2026-08-14T09:02:00Z","body":"member thread reply"}]}},
+          {"author":{"login":"Krzysztof318"},"authorAssociation":"MEMBER","createdAt":"2026-08-14T09:02:00Z","body":"member thread reply"},
+          {"author":{"login":"organization-owner"},"authorAssociation":"OWNER","createdAt":"2026-08-14T09:02:30Z","body":"owner thread reply"}]}},
         {"isResolved":false,"isOutdated":false,"path":"backend/src/Sample.cs","line":13,"comments":{"nodes":[
           {"author":{"login":"collaborator"},"authorAssociation":"COLLABORATOR","createdAt":"2026-08-14T09:03:00Z","body":"collaborator thread"}]}}]}}}}}'
     else
@@ -2980,7 +2992,8 @@ case "$endpoint" in
     elif [[ "${FAKE_MIXED_AUTHORS:-false}" == 'true' ]]; then
       response='[{"user":{"login":"passer-by"},"author_association":"NONE","state":"APPROVED","commit_id":"a","submitted_at":"2026-08-14T09:00:00Z","body":"outsider review"},
                  {"user":{"login":"fathom-reviewer[bot]"},"author_association":"CONTRIBUTOR","state":"COMMENTED","commit_id":"a","submitted_at":"2026-08-14T09:01:00Z","body":"reviewer review"},
-                 {"user":{"login":"Krzysztof318"},"author_association":"MEMBER","state":"COMMENTED","commit_id":"a","submitted_at":"2026-08-14T09:02:00Z","body":"member review"}]'
+                 {"user":{"login":"Krzysztof318"},"author_association":"MEMBER","state":"COMMENTED","commit_id":"a","submitted_at":"2026-08-14T09:02:00Z","body":"member review"},
+                 {"user":{"login":"organization-owner"},"author_association":"OWNER","state":"COMMENTED","commit_id":"a","submitted_at":"2026-08-14T09:02:30Z","body":"owner review"}]'
     else
       response='[]'
     fi
@@ -2990,7 +3003,8 @@ case "$endpoint" in
       response='[{"user":{"login":"passer-by"},"author_association":"NONE","created_at":"2026-08-14T09:00:00Z","body":"outsider comment"},
                  {"user":{"login":"collaborator"},"author_association":"COLLABORATOR","created_at":"2026-08-14T09:01:00Z","body":"collaborator comment"},
                  {"user":{"login":"fathom-reviewer[bot]"},"author_association":"CONTRIBUTOR","created_at":"2026-08-14T09:02:00Z","body":"reviewer comment"},
-                 {"user":{"login":"Krzysztof318"},"author_association":"MEMBER","created_at":"2026-08-14T09:03:00Z","body":"member comment"}]'
+                 {"user":{"login":"Krzysztof318"},"author_association":"MEMBER","created_at":"2026-08-14T09:03:00Z","body":"member comment"},
+                 {"user":{"login":"organization-owner"},"author_association":"OWNER","created_at":"2026-08-14T09:03:30Z","body":"owner comment"}]'
     else
       response='[]'
     fi
@@ -3138,9 +3152,9 @@ fathom_review_collects_only_what_members_and_the_reviewer_wrote() {
 
   FAKE_MIXED_AUTHORS='true' run_fathom_review_collect "$output_file"
 
-  assert_json '["reviewer comment","member comment"]' '[.[].body]' "$collect_review_directory/issue-comments.json"
-  assert_json '["reviewer review","member review"]' '[.[].body]' "$collect_review_directory/reviews.json"
-  assert_json '[["reviewer thread reply","member thread reply"]]' '[.[].comments | map(.body)]' \
+  assert_json '["reviewer comment","member comment","owner comment"]' '[.[].body]' "$collect_review_directory/issue-comments.json"
+  assert_json '["reviewer review","member review","owner review"]' '[.[].body]' "$collect_review_directory/reviews.json"
+  assert_json '[["reviewer thread reply","member thread reply","owner thread reply"]]' '[.[].comments | map(.body)]' \
     "$collect_review_directory/review-threads.json"
 }
 
@@ -3799,6 +3813,15 @@ fathom_review_approves_when_it_finds_nothing() {
   assert_contains '# APPROVED' "$payload_file"
   assert_contains 'nothing above the bar' "$payload_file"
   assert_contains 'verdict=approved' "$submit_step_output_file"
+
+  # An owner of the organization is a member under another name.
+  run_fathom_review_submit \
+    '{"summary":"Read every changed file and found nothing above the bar.","findings":[]}' \
+    "$output_file" "$payload_file" 'success' '' '<!-- fathom-review: automatic -->' \
+    'fathomise/MailFathom' 'OWNER'
+
+  ((submit_status == 0))
+  assert_json '"APPROVE"' '.event' "$payload_file"
   # An approval carries no threads, which is the whole of what it means: the payload has no
   # `comments` key at all, so a reader who sees `APPROVED` is owed nothing further.
   assert_json 'null' '.comments' "$payload_file"
@@ -11139,6 +11162,7 @@ run_test fathom_review_refuses_a_closed_pull_request
 run_test fathom_review_refuses_a_pull_request_the_updater_opened
 run_test fathom_review_is_not_started_by_a_label
 run_test fathom_review_asks_for_a_run_of_its_own_when_a_comment_requests_a_review
+run_test fathom_review_asks_for_a_review_an_owner_requested
 run_test fathom_review_carries_the_model_a_comment_named_into_the_request
 run_test fathom_review_neither_reviews_nor_asks_for_a_comment_that_only_mentions_the_phrase
 run_test fathom_review_refuses_a_comment_from_outside_the_organization

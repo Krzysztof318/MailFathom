@@ -948,8 +948,7 @@ another repository is left out by both, because a label earned from another proj
 numbering and a board item on another project's roadmap are the same mistake.
 
 The labelling only ever adds. A label a hand applied answers a question this pipeline cannot
-see — `fathom-review` is the worked example, and it means *somebody asked* — so nothing
-here removes one, and re-applying a label already present changes nothing and fires no
+see, so nothing here removes one, and re-applying a label already present changes nothing and fires no
 event. An issue that cannot be fetched earns nothing rather than stopping the walk: reading
 a label is how a condition is decided, so an unreadable issue is a condition that was not
 met rather than one to guess at.
