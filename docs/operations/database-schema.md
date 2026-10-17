@@ -29,8 +29,10 @@ given installation holds in order to know which file to apply — there is one f
 once.
 
 It can write rows as well as creating tables, and what it wrote keeps the meaning a deployment has since given it.
-Every database, fresh or upgraded, gets the two built-in roles — `User` and `Administrator` — with the permissions [the stored schema](../architecture/stored-email-schema.md#the-roles-groups-and-assignments-a-grant-is-read-from)
-lists for each; they are ordinary rows a deployment may rename, edit, or delete, and no migration changes what a list
+A fresh database gets the two built-in roles — `User` and `Administrator` — with the permissions [the stored schema](../architecture/stored-email-schema.md#the-roles-groups-and-assignments-a-grant-is-read-from)
+lists for each. An upgraded one gets them only where the rows seeded before were still as the earlier migrations left
+them: a `Mail user` an operator renamed or edited, or one beside a role already called `User`, keeps its name and list,
+and an `Organization administrator` somebody holds or edited stays, as the stored schema states. The built-in roles are ordinary rows a deployment may rename, edit, or delete, and no migration changes what a list
 a deployment has changed grants. One migration does rewrite names: where a release publishes a permission under another
 name, or publishes apart what one name used to reach, every stored list — a role's, a credential's narrowing, a
 session's — is carried to the names its holders already acted under, seeded or not, and gains nothing beyond them.

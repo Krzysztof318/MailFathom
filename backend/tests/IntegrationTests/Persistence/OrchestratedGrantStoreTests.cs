@@ -98,11 +98,13 @@ public sealed class OrchestratedGrantStoreTests(MailFathomOrchestrationFixture o
 
     /// <summary>
     /// The reduction of the seeded roles is run here as the migration states it, against each shape an operator may
-    /// have left the two rows in, because a guard that let one through would rename or rewrite a role somebody
-    /// deliberately changed, or remove one somebody holds. The first step is the control: both rows exactly as the
-    /// earlier migrations left them are reduced, so the rows left alone are left alone by the guard rather than by a
-    /// statement that does nothing. Everything runs in one transaction that is rolled back, since the rows are the ones
-    /// the rest of the suite reads.
+    /// have left the two rows in, one shape at a time, because a guard that let one through would rename or rewrite a
+    /// role somebody deliberately changed, remove one somebody holds, or fail the upgrade over a name already taken. The
+    /// first step is the control: both rows exactly as the earlier migrations left them are reduced, so the rows left
+    /// alone are left alone by their own guard rather than by a statement that does nothing — and each later step
+    /// changes one row only, so the other row being reduced beside it shows the two guards do not lean on each other.
+    /// Every step runs from one savepoint inside a transaction that is rolled back, since the rows are the ones the rest
+    /// of the suite reads.
     /// </summary>
     [Fact]
     public async Task ReduceSeededRolesToUserAndAdministrator_ARowSomebodyChangedOrHolds_IsLeftAsItStandsWhileTheSeededOnesAreReduced()
@@ -126,7 +128,7 @@ public sealed class OrchestratedGrantStoreTests(MailFathomOrchestrationFixture o
                     var up = Assert.Single(reduction.UpOperations.OfType<SqlOperation>()).Sql;
                     var down = Assert.Single(reduction.DownOperations.OfType<SqlOperation>()).Sql;
 
-                    async Task<(string? UserName, string[] UserList, bool OrganizationAdministratorStands)> ReadAsync()
+                    async Task<SeededRoleRows> ReadAsync()
                     {
                         var name = await dbContext.Roles.AsNoTracking()
                             .Where(role => role.Id == SeededUserRoleId)
@@ -135,37 +137,55 @@ public sealed class OrchestratedGrantStoreTests(MailFathomOrchestrationFixture o
                         var list = await dbContext.RolePermissions.AsNoTracking()
                             .Where(listed => listed.RoleId == SeededUserRoleId)
                             .Select(listed => listed.Permission)
-                            .OrderBy(permission => permission)
                             .ToArrayAsync(token);
                         var stands = await dbContext.Roles.AsNoTracking()
                             .AnyAsync(role => role.Id == SeededOrganizationAdministratorRoleId, token);
 
-                        return (name, list, stands);
+                        return new SeededRoleRows(name, [.. list.Order(StringComparer.Ordinal)], stands);
                     }
 
                     await using var transaction = await dbContext.Database.BeginTransactionAsync(token);
 
                     await dbContext.Database.ExecuteSqlRawAsync(down, token);
                     var restored = await ReadAsync();
-                    await dbContext.Database.ExecuteSqlRawAsync(up, token);
-                    var reduced = await ReadAsync();
+                    await transaction.CreateSavepointAsync(nameof(restored), token);
 
-                    await dbContext.Database.ExecuteSqlRawAsync(down, token);
-                    await dbContext.Database.ExecuteSqlAsync(
+                    async Task<SeededRoleRows> ReduceAfterAsync(Func<Task> deviation)
+                    {
+                        await deviation();
+                        await dbContext.Database.ExecuteSqlRawAsync(up, token);
+                        var rows = await ReadAsync();
+                        await transaction.RollbackToSavepointAsync(nameof(restored), token);
+
+                        return rows;
+                    }
+
+                    var reduced = await ReduceAfterAsync(() => Task.CompletedTask);
+                    var userNarrowed = await ReduceAfterAsync(() => dbContext.Database.ExecuteSqlAsync(
                         $"""DELETE FROM role_permissions WHERE "RoleId" = {SeededUserRoleId} AND "Permission" = 'mailfathom.mail.send'""",
-                        token);
-                    await dbContext.Database.ExecuteSqlAsync(
+                        token));
+                    var userNameTaken = await ReduceAfterAsync(() => dbContext.Database.ExecuteSqlAsync(
+                        $"""INSERT INTO roles ("Id", "Name", "CreatedAt") VALUES ({Guid.CreateVersion7()}, 'User', {RecordedAt})""",
+                        token));
+                    var organizationAdministratorNarrowed = await ReduceAfterAsync(() => dbContext.Database.ExecuteSqlAsync(
+                        $"""DELETE FROM role_permissions WHERE "RoleId" = {SeededOrganizationAdministratorRoleId} AND "Permission" = 'mailfathom.admin.erase'""",
+                        token));
+                    var organizationAdministratorHeld = await ReduceAfterAsync(() => dbContext.Database.ExecuteSqlAsync(
                         $"""
                          INSERT INTO role_assignments ("Id", "RoleId", "PrincipalUserId", "AssignedAt")
                          VALUES ({Guid.CreateVersion7()}, {SeededOrganizationAdministratorRoleId}, {holder}, {RecordedAt})
                          """,
-                        token);
-                    await dbContext.Database.ExecuteSqlRawAsync(up, token);
-                    var changed = await ReadAsync();
+                        token));
 
                     await transaction.RollbackAsync(CancellationToken.None);
 
-                    return (Restored: restored, Reduced: reduced, Changed: changed);
+                    return (
+                        Restored: restored,
+                        Reduced: reduced,
+                        UserNarrowed: userNarrowed,
+                        UserNameTaken: userNameTaken,
+                        OrganizationAdministratorNarrowed: organizationAdministratorNarrowed,
+                        OrganizationAdministratorHeld: organizationAdministratorHeld);
                 },
                 cancellationToken);
 
@@ -173,12 +193,22 @@ public sealed class OrchestratedGrantStoreTests(MailFathomOrchestrationFixture o
             Assert.Equal("Mail user", outcomes.Restored.UserName);
             Assert.DoesNotContain(outcomes.Restored.UserList, entry => entry.Contains('*', StringComparison.Ordinal));
             Assert.True(outcomes.Restored.OrganizationAdministratorStands);
-            Assert.Equal("User", outcomes.Reduced.UserName);
-            Assert.Equal(UserFacingPatterns, outcomes.Reduced.UserList);
-            Assert.False(outcomes.Reduced.OrganizationAdministratorStands);
-            Assert.Equal("Mail user", outcomes.Changed.UserName);
-            Assert.Equal(outcomes.Restored.UserList.Length - 1, outcomes.Changed.UserList.Length);
-            Assert.True(outcomes.Changed.OrganizationAdministratorStands);
+            AssertReduced(outcomes.Reduced, organizationAdministratorStands: false);
+            Assert.Equal("Mail user", outcomes.UserNarrowed.UserName);
+            Assert.Equal(outcomes.Restored.UserList.Length - 1, outcomes.UserNarrowed.UserList.Length);
+            Assert.False(outcomes.UserNarrowed.OrganizationAdministratorStands);
+            Assert.Equal("Mail user", outcomes.UserNameTaken.UserName);
+            Assert.Equal(outcomes.Restored.UserList, outcomes.UserNameTaken.UserList);
+            Assert.False(outcomes.UserNameTaken.OrganizationAdministratorStands);
+            AssertReduced(outcomes.OrganizationAdministratorNarrowed, organizationAdministratorStands: true);
+            AssertReduced(outcomes.OrganizationAdministratorHeld, organizationAdministratorStands: true);
+
+            static void AssertReduced(SeededRoleRows rows, bool organizationAdministratorStands)
+            {
+                Assert.Equal("User", rows.UserName);
+                Assert.Equal(UserFacingPatterns, rows.UserList);
+                Assert.Equal(organizationAdministratorStands, rows.OrganizationAdministratorStands);
+            }
         }
         finally
         {
@@ -1116,6 +1146,9 @@ public sealed class OrchestratedGrantStoreTests(MailFathomOrchestrationFixture o
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => Store(scope).HoldsWideningRoleAsync(principal, token),
             cancellationToken);
+
+    /// <summary>What the reduction is judged by: the seeded user row's name and list, and whether the seeded organization administrator still stands.</summary>
+    private sealed record SeededRoleRows(string? UserName, string[] UserList, bool OrganizationAdministratorStands);
 
     private static async Task<IReadOnlyList<Role>> ReadEveryRoleAsync(
         OrchestratedMailFathomServices services,
