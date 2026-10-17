@@ -449,9 +449,9 @@ verify_fast_runs_every_suite_when_a_shared_build_input_changed() {
 }
 
 # The base check is the fast loop's now as well as the full gate's, and it is the one question `CI`
-# never asks: a pull request behind `main` is not a failed pull request, and the ruleset that
-# requires a branch to be current before it merges is where that belongs in the pipeline. Locally it
-# is asked at the point a rebase is cheapest, which is before anything has been built.
+# never asks: a pull request behind `main` is not a failed pull request, and the merge queue tests the
+# tree a merge produces instead (root `AGENTS.md`, ADR 0038). Locally it is asked at the point a rebase
+# is cheapest, which is before anything has been built.
 verify_fast_stops_when_head_is_behind_origin_main() {
   local behind_output="$test_directory/verify-fast-behind-origin-main-output"
   local script_status=0
@@ -1552,13 +1552,18 @@ verify_fast_runs_in_a_fork_with_no_upstream_remote() {
 # The `Protected paths` workflow never checks the branch out, so its guard cannot be a script in
 # `scripts/` that the job calls: it is one shell block inside the YAML. Extracting that block
 # verbatim from the committed file is what lets these contracts run the same code the runner runs
-# rather than a copy that drifts from it. The block is the step's `run: |`, indented ten spaces, and
-# it is the last thing in the file; `bash -n` on the result is what notices if that stops being true.
+# rather than a copy that drifts from it. The block is the guard step's `run: |`, indented ten spaces,
+# and it is the last thing in the file — the merge-group step above it carries a `run: |` of its own,
+# which is why the extraction starts at the guard step's name rather than at the first block; `bash -n`
+# on the result is what notices if either stops being true.
 extract_protected_paths_step() {
   local step_script="$1"
 
-  awk 'extracting { sub(/^          /, ""); print } /^        run: \|$/ { extracting = 1 }' \
-    "$source_repository_root/.github/workflows/protected-paths.yml" > "$step_script"
+  awk '
+    extracting { sub(/^          /, ""); print }
+    $0 == "      - name: Verify who changed the repository configuration" { found = 1 }
+    found && /^        run: \|$/ { extracting = 1 }
+  ' "$source_repository_root/.github/workflows/protected-paths.yml" > "$step_script"
 
   [[ -s "$step_script" ]]
   bash -n "$step_script"
@@ -3957,7 +3962,7 @@ prepare_fathom_review_board_state() {
   {"id":"option-todo","name":"Todo"},
   {"id":"option-review","name":"In review"},
   {"id":"option-changes","name":"Changes requested"},
-  {"id":"option-conflicts","name":"Conflicts"},
+  {"id":"option-in-merge","name":"In merge"},
   {"id":"option-ready","name":"Ready to merge"},
   {"id":"option-done","name":"Done"}
 ]}}}}}
@@ -4130,11 +4135,11 @@ run_board_status_write() {
 board_status_moves_an_item_a_rule_is_entitled_to_move() {
   local output_file="$test_directory/board-status-required-match-output"
 
-  run_board_status_write 'Conflicts' 'Ready to merge' 'Ready to merge' "$output_file"
+  run_board_status_write 'Changes requested' 'Ready to merge' 'Ready to merge' "$output_file"
 
   ((board_status == 0))
-  assert_contains 'option=option-conflicts' "$board_mutations_file"
-  assert_contains 'Issue 12 moved from Ready to merge to Conflicts' "$output_file"
+  assert_contains 'option=option-changes' "$board_mutations_file"
+  assert_contains 'Issue 12 moved from Ready to merge to Changes requested' "$output_file"
 }
 
 # Every other status, including the two a preserved list would have named and the item carrying no
@@ -4144,10 +4149,10 @@ board_status_leaves_an_item_outside_the_required_statuses() {
   local output_file
   local current_status
 
-  for current_status in 'In progress' 'Changes requested' 'Blocked' 'Done' '' ; do
+  for current_status in 'In progress' 'In merge' 'Blocked' 'Done' '' ; do
     output_file="$test_directory/board-status-required-${current_status:-none}-output"
 
-    run_board_status_write 'Conflicts' 'Ready to merge' "$current_status" "$output_file"
+    run_board_status_write 'Changes requested' 'Ready to merge' "$current_status" "$output_file"
 
     ((board_status == 0))
     [[ ! -s "$board_mutations_file" ]]
@@ -4162,7 +4167,7 @@ board_status_leaves_an_item_outside_the_required_statuses() {
 board_status_stops_writing_when_its_window_is_gone() {
   local output_file="$test_directory/board-status-window-output"
 
-  run_board_status_write 'Conflicts' 'Ready to merge' 'Ready to merge' "$output_file" '12,13' 0
+  run_board_status_write 'Changes requested' 'Ready to merge' 'Ready to merge' "$output_file" '12,13' 0
 
   ((board_status == 0))
   [[ ! -s "$board_mutations_file" ]]
@@ -4191,14 +4196,19 @@ write_pull_request_state() {
   local approval="$3"
   local checks="$4"
   local draft="${5:-false}"
+  local queued="${6:-false}"
+  local removed_at="${7:-}"
 
   jq -n --arg mergeable "$mergeable" --arg approval "$approval" \
     --argjson checks "$checks" --argjson draft "$draft" \
+    --argjson queued "$queued" --arg removed "$removed_at" \
     '{number: 1, mergeable: $mergeable, isDraft: $draft, state: "OPEN", labels: [],
-      headRefOid: "head-commit",
+      headRefOid: "head-commit", inMergeQueue: $queued,
+      removedFromMergeQueueAt: (if $removed == "" then null else $removed end),
       reviews: (if $approval == "none" then []
                 else [{author: "fathom-reviewer[bot]",
                        state: (if $approval == "commented" then "COMMENTED" else "APPROVED" end),
+                       submittedAt: "2026-10-17T10:00:00Z",
                        commit: (if $approval == "stale" then "older-commit" else "head-commit" end)}]
                 end),
       checks: $checks}' \
@@ -4211,38 +4221,73 @@ run_select_board_status() {
   local approval="${3:-none}"
   local checks="${4:-[]}"
   local draft="${5:-false}"
+  local queued="${6:-false}"
+  local removed_at="${7:-}"
   local state_file="$test_directory/select-board-status-pull-request.json"
 
-  write_pull_request_state "$state_file" "$mergeable" "$approval" "$checks" "$draft"
+  write_pull_request_state "$state_file" "$mergeable" "$approval" "$checks" "$draft" "$queued" "$removed_at"
 
   bash "$source_repository_root/.github/pull-request/select-board-status.sh" \
     "$state_file" > "$output_file" 2>&1
 }
 
+# A pull request in the merge queue is waiting on the queue, whatever its head says — a pipeline
+# still running on the head, or a conflict the queue will find for itself — so the queue's rule is
+# asked before any of them.
+select_board_status_earns_in_merge_while_the_queue_holds_the_pull_request() {
+  local output_file="$test_directory/select-board-status-in-merge"
+  local checks
+
+  checks="$(jq -c '.[0].status = "IN_PROGRESS"' <<< "$board_state_green_checks")"
+
+  run_select_board_status 'CONFLICTING' "$output_file" 'current' "$checks" 'false' 'true'
+
+  assert_file_content $'In merge\t\tDone,Blocked' "$output_file"
+}
+
+# The queue letting go of an approved head is a change owed by the agent, and the green head would
+# otherwise read as `Ready to merge` again on the next sweep. A removal the current approval came
+# after is one a push and a new review already answered.
+select_board_status_earns_changes_requested_for_a_head_the_queue_removed() {
+  local output_file="$test_directory/select-board-status-removed"
+
+  run_select_board_status 'MERGEABLE' "$output_file" 'current' "$board_state_green_checks" 'false' 'false' \
+    '2026-10-17T11:00:00Z'
+
+  assert_file_content $'Changes requested\t\tDone,Blocked' "$output_file"
+
+  output_file="$test_directory/select-board-status-removed-then-approved"
+
+  run_select_board_status 'MERGEABLE' "$output_file" 'current' "$board_state_green_checks" 'false' 'false' \
+    '2026-10-17T09:00:00Z'
+
+  assert_file_content $'Ready to merge\t\tDone,Blocked' "$output_file"
+}
+
 # A conflict nothing has a verdict about — no review on the head in front of us — says only that a
 # change which had been ready stopped merging, so it moves an item out of `Ready to merge` and out of
 # nowhere else.
-select_board_status_earns_conflicts_from_ready_to_merge_alone() {
+select_board_status_moves_a_conflict_out_of_ready_to_merge_alone() {
   local output_file="$test_directory/select-board-status-conflicting"
 
   run_select_board_status 'CONFLICTING' "$output_file"
 
-  assert_file_content $'Conflicts\tReady to merge\t' "$output_file"
+  assert_file_content $'Changes requested\tReady to merge\t' "$output_file"
 }
 
 # An approved head that stopped merging is the one `Ready to merge` would describe but for the
 # conflict, so it carries that rule's authority: an approval that met a conflict before its pipelines
 # finished never reached `Ready to merge`, and a rule bounded to that column would leave it in review.
-select_board_status_earns_conflicts_from_any_column_for_an_approved_head() {
+select_board_status_moves_a_conflicting_approved_head_from_any_column() {
   local output_file="$test_directory/select-board-status-approved-conflicting"
 
   run_select_board_status 'CONFLICTING' "$output_file" 'current' "$board_state_green_checks"
 
-  assert_file_content $'Conflicts\t\tDone,Blocked' "$output_file"
+  assert_file_content $'Changes requested\t\tDone,Blocked' "$output_file"
 }
 
 # A verdict is asked before whether the change still merges. Asked the other way round, a conflicting
-# head would print `Conflicts` for a write refused everywhere but `Ready to merge`, and the withheld
+# head would print the conflict rule's answer, a write refused everywhere but `Ready to merge`, and the withheld
 # approval or the failed check it shadowed would never be published — the item would stay in review.
 select_board_status_earns_changes_requested_on_a_pull_request_that_stopped_merging() {
   local output_file
@@ -4434,7 +4479,7 @@ select_board_status_asks_a_draft_only_whether_it_still_merges() {
 
   run_select_board_status 'CONFLICTING' "$output_file" 'current' "$checks" 'true'
 
-  assert_file_content $'Conflicts\tReady to merge\t' "$output_file"
+  assert_file_content $'Changes requested\tReady to merge\t' "$output_file"
 }
 
 # The `workflow_run` list has no `workflows-ignore`, so what a pull request runs and what this
@@ -4533,11 +4578,16 @@ if [[ "$arguments" == *'statusCheckRollup'* ]]; then
     jq -nc --arg mergeable "$mergeable" \
       --argjson reviewed "$(cat "$FAKE_BOARD_DIRECTORY/reviewed" 2>/dev/null || printf 'false')" \
       --argjson checks "$(cat "$FAKE_BOARD_DIRECTORY/checks.json" 2>/dev/null || printf '[]')" \
+      --argjson queued "$(cat "$FAKE_BOARD_DIRECTORY/queued" 2>/dev/null || printf 'false')" \
+      --arg removed "$(cat "$FAKE_BOARD_DIRECTORY/removed-at" 2>/dev/null || true)" \
       '{number: 1, mergeable: $mergeable, isDraft: false, state: "OPEN", baseRefName: "main",
-        headRefOid: "head-commit", labels: {nodes: []},
+        headRefOid: "head-commit", isInMergeQueue: $queued,
+        timelineItems: {nodes: (if $removed == "" then [] else [{createdAt: $removed}] end)},
+        labels: {nodes: []},
         latestReviews: {nodes: (if $reviewed
                                 then [{author: {__typename: "Bot", login: "fathom-reviewer"},
-                                       state: "APPROVED", commit: {oid: "head-commit"}}]
+                                       state: "APPROVED", submittedAt: "2026-10-17T10:00:00Z",
+                                       commit: {oid: "head-commit"}}]
                                 else [] end)},
         commits: {nodes: [{commit: {statusCheckRollup:
           {contexts: {totalCount: ($checks | length),
@@ -4602,6 +4652,8 @@ run_pull_request_rules_board() {
   printf '%s' "${reviewed:-false}" > "$board_directory/reviewed"
   printf '%s' "${checks_json:-[]}" > "$board_directory/checks.json"
   printf '%s' "${commit_pull_requests:-[]}" > "$board_directory/commit-pull-requests.json"
+  printf '%s' "${queued:-false}" > "$board_directory/queued"
+  printf '%s' "${removed_at:-}" > "$board_directory/removed-at"
 
   set +e
   (
@@ -4614,6 +4666,7 @@ run_pull_request_rules_board() {
     export STATUS_FIELD='Status'
     export BASE_BRANCH='main'
     export WORKFLOW_RUN_HEAD_SHA="${workflow_run_head_sha:-}"
+    export QUEUED_PULL_REQUEST_NUMBER="${queued_pull_request_number:-}"
     export READ_STATE_SCRIPT="$source_repository_root/.github/pull-request/read-pull-request-state.sh"
     export GITHUB_API_SCRIPT="$source_repository_root/.github/pull-request/call-github-api.sh"
     export SELECT_BOARD_STATUS_SCRIPT="$source_repository_root/.github/pull-request/select-board-status.sh"
@@ -4637,8 +4690,8 @@ pull_request_rules_move_a_pull_request_that_stopped_merging() {
   run_pull_request_rules_board 'CONFLICTING' 'Ready to merge' '0' "$output_file"
 
   ((board_status == 0))
-  assert_contains 'option=option-conflicts' "$board_mutations_file"
-  assert_contains 'Issue 12 moved from Ready to merge to Conflicts' "$output_file"
+  assert_contains 'option=option-changes' "$board_mutations_file"
+  assert_contains 'Issue 12 moved from Ready to merge to Changes requested' "$output_file"
 }
 
 pull_request_rules_move_nothing_for_a_pull_request_that_still_merges() {
@@ -4659,7 +4712,7 @@ pull_request_rules_wait_for_github_to_decide_mergeability() {
   run_pull_request_rules_board 'CONFLICTING' 'Ready to merge' '2' "$output_file"
 
   ((board_status == 0))
-  assert_contains 'option=option-conflicts' "$board_mutations_file"
+  assert_contains 'option=option-changes' "$board_mutations_file"
 }
 
 # The ceiling on how many open pull requests one sweep reads reports what it cut, for the reason
@@ -4706,8 +4759,36 @@ pull_request_rules_move_an_approved_pull_request_that_stopped_merging_out_of_rev
   run_pull_request_rules_board 'CONFLICTING' 'In review' '0' "$output_file"
 
   ((board_status == 0))
-  assert_contains 'option=option-conflicts' "$board_mutations_file"
-  assert_contains 'Issue 12 moved from In review to Conflicts' "$output_file"
+  assert_contains 'option=option-changes' "$board_mutations_file"
+  assert_contains 'Issue 12 moved from In review to Changes requested' "$output_file"
+}
+
+# The queue's two events decide the one pull request they name, so entering the queue moves its
+# issue out of `Ready to merge` and leaving it without a merge moves it on to `Changes requested`.
+pull_request_rules_follow_a_pull_request_into_and_out_of_the_merge_queue() {
+  local output_file="$test_directory/pull-request-rules-enqueued-output"
+  local queued_pull_request_number='1'
+  local reviewed='true'
+  local checks_json='[{"workflow": "CI", "name": "Required CI", "status": "COMPLETED", "conclusion": "SUCCESS"}]'
+  local queued='true'
+  local removed_at=''
+
+  run_pull_request_rules_board 'MERGEABLE' 'Ready to merge' '0' "$output_file"
+
+  ((board_status == 0))
+  assert_contains 'which the merge queue took in or let go of' "$output_file"
+  assert_contains 'option=option-in-merge' "$board_mutations_file"
+  assert_contains 'Issue 12 moved from Ready to merge to In merge' "$output_file"
+
+  output_file="$test_directory/pull-request-rules-dequeued-output"
+  queued='false'
+  removed_at='2026-10-17T11:00:00Z'
+
+  run_pull_request_rules_board 'MERGEABLE' 'In merge' '0' "$output_file"
+
+  ((board_status == 0))
+  assert_contains 'option=option-changes' "$board_mutations_file"
+  assert_contains 'Issue 12 moved from In merge to Changes requested' "$output_file"
 }
 
 # A pipeline that ran on `main` itself, or on a head whose pull request has since closed, decides
@@ -8461,6 +8542,279 @@ only_the_recorded_workflows_use_pull_request_target() {
   fi
 }
 
+# Every merge into `main` goes through the merge queue, and the queue waits for each required check on
+# the merge group's own commit. A workflow publishing one that does not listen on `merge_group` leaves
+# that check unreported there, and every pull request then sits in the queue until the check-response
+# timeout removes it. `checks_requested` is the one activity type GitHub raises for a group, so a
+# trigger naming any other never fires. The ruleset lives in repository settings, so the five
+# workflows below are the required checks as `docs/operations/local-development.md` § *Branch
+# protection* records them.
+every_required_check_reports_on_a_merge_group() {
+  local workflow
+  local failures=''
+
+  for workflow in ci.yml coherence.yml contributor-licence.yml protected-paths.yml typo-check.yml; do
+    if ! grep -A2 -E '^  merge_group:' "$source_repository_root/.github/workflows/$workflow" |
+      grep -qF 'checks_requested'; then
+      failures+="$workflow publishes a required check and does not run on merge_group's checks_requested. "
+    fi
+  done
+
+  if [[ -n "$failures" ]]; then
+    printf '%s\n' "$failures" >&2
+    return 1
+  fi
+}
+
+# The steps a merge group runs instead of the pull request's own work decide whether a required check
+# passes on the tree the queue merges, so each is extracted verbatim from its workflow, as the
+# protected-paths guard is, and run against a `gh` that answers each endpoint from a fixture and
+# applies the step's own `--jq` filter to it. The filter is where the newest-run, any-success, and
+# first-status choices live, so a fake that answered past it would prove nothing. `FAKE_FAILING`
+# names an endpoint fragment whose read fails, and a status the step posts is written to
+# `FAKE_POSTED` as the `state` it carried.
+extract_named_run_step() {
+  local workflow="$1"
+  local step_name="$2"
+  local step_script="$3"
+
+  awk -v step="      - name: $step_name" '
+    $0 == step { found = 1; next }
+    found && !extracting && /^        run: \|$/ { extracting = 1; next }
+    extracting {
+      if ($0 != "" && $0 !~ /^          /) { exit }
+      sub(/^          /, "")
+      print
+    }
+  ' "$source_repository_root/.github/workflows/$workflow" > "$step_script"
+
+  [[ -s "$step_script" ]]
+  bash -n "$step_script"
+}
+
+write_merge_group_gh() {
+  local bin_directory="$1"
+
+  cat > "$bin_directory/gh" << 'FAKE'
+#!/usr/bin/env bash
+filter='.'
+endpoint=''
+posted_state=''
+while (( $# > 0 )); do
+  case "$1" in
+    --jq) filter="$2"; shift 2 ;;
+    -f)
+      [[ "$2" == state=* ]] && posted_state="${2#state=}"
+      shift 2
+      ;;
+    --method) shift 2 ;;
+    api) shift ;;
+    *) endpoint="$1"; shift ;;
+  esac
+done
+if [[ -n "${FAKE_FAILING:-}" && "$endpoint" == *"$FAKE_FAILING"* ]]; then
+  exit 1
+fi
+case "$endpoint" in
+  */statuses/*) printf '%s' "$posted_state" > "$FAKE_POSTED"; exit 0 ;;
+  */pulls/*) body='{"head":{"sha":"1111111111111111111111111111111111111111"}}' ;;
+  */compare/*) body="{\"status\":\"$FAKE_CONTAINMENT\"}" ;;
+  */check-runs) body="$FAKE_CHECK_RUNS" ;;
+  */status\?*) body="$FAKE_STATUSES" ;;
+  *) exit 1 ;;
+esac
+jq -r "$filter" <<< "$body"
+FAKE
+  chmod +x "$bin_directory/gh"
+}
+
+# Runs one extracted step with the merge-group environment every one of them reads, plus whatever
+# the caller exported, and returns the step's own exit status.
+run_merge_group_step() {
+  local workflow="$1"
+  local step_name="$2"
+  local work="$3"
+
+  mkdir -p "$work/bin"
+  extract_named_run_step "$workflow" "$step_name" "$work/step.sh"
+  write_merge_group_gh "$work/bin"
+  : > "$work/output"
+  : > "$work/posted"
+
+  (
+    export PATH="$work/bin:$PATH"
+    export GH_TOKEN='fake-token'
+    export REPOSITORY='fathomise/MailFathom'
+    export MERGE_GROUP_HEAD_REF='refs/heads/gh-readonly-queue/main/pr-7-2222222222222222222222222222222222222222'
+    export MERGE_GROUP_HEAD_SHA='4444444444444444444444444444444444444444'
+    export MERGE_GROUP_BASE_SHA='2222222222222222222222222222222222222222'
+    export PUSHED_SHA='3333333333333333333333333333333333333333'
+    export GITHUB_OUTPUT="$work/output"
+    export FAKE_POSTED="$work/posted"
+    bash "$work/step.sh"
+  ) > "$work/log" 2>&1
+}
+
+# `CI`'s `Find a verdict this tree already earned` decides whether a merge group or a push skips the
+# whole build, so a wrong `true` merges a tree nobody tested.
+run_reuse_step() {
+  local event_name="$1"
+  local containment="$2"
+  local check_runs_json="$3"
+  local output_file="$4"
+  local work
+
+  work="$(mktemp -d "$test_directory/reuse-XXXXXX")"
+  EVENT_NAME="$event_name" FAKE_CONTAINMENT="$containment" FAKE_CHECK_RUNS="$check_runs_json" \
+    run_merge_group_step ci.yml 'Find a verdict this tree already earned' "$work" || true
+  cat "$work/output" > "$output_file"
+}
+
+# `Protected paths` and `Typo check` carry the newest conclusion of their own check on the pull
+# request's head, and pass only on `success`: an older success beside a newer failure, a run still in
+# progress, and no run at all each fail the group.
+merge_groups_carry_only_a_successful_newest_check_run() {
+  local workflow
+  local check_name
+  local work
+  local failures=''
+  local newest_success='{"check_runs":[
+    {"app":{"slug":"github-actions"},"started_at":"2026-10-17T10:00:00Z","conclusion":"failure"},
+    {"app":{"slug":"github-actions"},"started_at":"2026-10-17T10:05:00Z","conclusion":"success"}]}'
+  local newest_failure='{"check_runs":[
+    {"app":{"slug":"github-actions"},"started_at":"2026-10-17T10:00:00Z","conclusion":"success"},
+    {"app":{"slug":"github-actions"},"started_at":"2026-10-17T10:05:00Z","conclusion":"failure"}]}'
+  local in_progress='{"check_runs":[
+    {"app":{"slug":"github-actions"},"started_at":"2026-10-17T10:05:00Z","conclusion":null}]}'
+  local missing='{"check_runs":[]}'
+
+  for workflow in protected-paths.yml typo-check.yml; do
+    work="$(mktemp -d "$test_directory/carry-XXXXXX")"
+    # The step's own `env:` block names the check, and the extraction carries the script alone.
+    if [[ "$workflow" == 'protected-paths.yml' ]]; then
+      export CHECK_NAME='Protected paths'
+    else
+      export CHECK_NAME='Typo check'
+    fi
+    FAKE_CHECK_RUNS="$newest_success" \
+      run_merge_group_step "$workflow" "Carry the verdict the pull request's head earned" "$work/success" ||
+      failures+="$workflow failed a group whose head's newest run passed. "
+
+    for check_name in newest_failure in_progress missing; do
+      if FAKE_CHECK_RUNS="${!check_name}" \
+        run_merge_group_step "$workflow" "Carry the verdict the pull request's head earned" "$work/$check_name"; then
+        failures+="$workflow passed a group whose head's newest run was $check_name. "
+      fi
+    done
+
+    if FAKE_FAILING='/pulls/' FAKE_CHECK_RUNS="$newest_success" \
+      run_merge_group_step "$workflow" "Carry the verdict the pull request's head earned" "$work/unreadable"; then
+      failures+="$workflow passed a group whose pull request could not be read. "
+    fi
+  done
+  unset CHECK_NAME
+
+  if [[ -n "$failures" ]]; then
+    printf '%s\n' "$failures" >&2
+    return 1
+  fi
+}
+
+# `license/cla` is a commit status rather than a job, so the merge group carries it by posting one,
+# and it must post one whatever happened: a status that never arrives holds the queue until its
+# timeout. Only a head carrying `success` is carried as `success`, and a read that failed is posted
+# as `error` rather than as a verdict about the author.
+merge_groups_always_receive_a_licence_status() {
+  local work
+  local failures=''
+  local step_name="Carry the pull request's licence status onto the merge group"
+
+  work="$(mktemp -d "$test_directory/licence-XXXXXX")"
+
+  expect_posted() {
+    local case_name="$1"
+    local expected="$2"
+
+    if [[ "$(cat "$work/$case_name/posted")" != "$expected" ]]; then
+      failures+="$case_name posted license/cla as '$(cat "$work/$case_name/posted")', not '$expected'. "
+    fi
+  }
+
+  FAKE_STATUSES='{"statuses":[{"context":"license/cla","state":"success"}]}' \
+    run_merge_group_step contributor-licence.yml "$step_name" "$work/accepted" || true
+  expect_posted accepted success
+
+  FAKE_STATUSES='{"statuses":[{"context":"Required CI","state":"success"},{"context":"license/cla","state":"failure"}]}' \
+    run_merge_group_step contributor-licence.yml "$step_name" "$work/refused" || true
+  expect_posted refused failure
+
+  FAKE_STATUSES='{"statuses":[]}' \
+    run_merge_group_step contributor-licence.yml "$step_name" "$work/missing" || true
+  expect_posted missing failure
+
+  FAKE_FAILING='/status?' FAKE_STATUSES='{"statuses":[]}' \
+    run_merge_group_step contributor-licence.yml "$step_name" "$work/status-unreadable" || true
+  expect_posted status-unreadable error
+
+  FAKE_FAILING='/pulls/' FAKE_STATUSES='{"statuses":[]}' \
+    run_merge_group_step contributor-licence.yml "$step_name" "$work/pull-unreadable" || true
+  expect_posted pull-unreadable error
+
+  unset -f expect_posted
+
+  if [[ -n "$failures" ]]; then
+    printf '%s\n' "$failures" >&2
+    return 1
+  fi
+}
+
+ci_reuses_a_verdict_only_for_a_tree_a_successful_run_tested() {
+  local output_file="$test_directory/reuse-output"
+  local draft_then_ready='{"check_runs":[
+    {"app":{"slug":"github-actions"},"started_at":"2026-10-17T10:00:00Z","conclusion":"failure"},
+    {"app":{"slug":"github-actions"},"started_at":"2026-10-17T10:05:00Z","conclusion":"success"}]}'
+  local ready_then_failed='{"check_runs":[
+    {"app":{"slug":"github-actions"},"started_at":"2026-10-17T10:00:00Z","conclusion":"success"},
+    {"app":{"slug":"github-actions"},"started_at":"2026-10-17T10:05:00Z","conclusion":"failure"}]}'
+  local push_with_group='{"check_runs":[
+    {"app":{"slug":"github-actions"},"started_at":"2026-10-17T10:00:00Z","conclusion":"success"},
+    {"app":{"slug":"github-actions"},"started_at":"2026-10-17T10:09:00Z","conclusion":"skipped"}]}'
+  local push_bypassed='{"check_runs":[
+    {"app":{"slug":"github-actions"},"started_at":"2026-10-17T10:09:00Z","conclusion":"skipped"}]}'
+  local failures=''
+
+  run_reuse_step merge_group ahead "$draft_then_ready" "$output_file"
+  [[ "$(cat "$output_file")" == 'reuse=true' ]] || failures+='a current head whose newest run passed was not reused. '
+
+  run_reuse_step merge_group diverged "$draft_then_ready" "$output_file"
+  [[ "$(cat "$output_file")" == 'reuse=false' ]] || failures+='a head missing the group base was reused. '
+
+  run_reuse_step merge_group ahead "$ready_then_failed" "$output_file"
+  [[ "$(cat "$output_file")" == 'reuse=false' ]] || failures+='a head whose newest run failed was reused. '
+
+  run_reuse_step push '' "$push_with_group" "$output_file"
+  [[ "$(cat "$output_file")" == 'reuse=true' ]] || failures+="a pushed commit carrying the group's success was not reused. "
+
+  run_reuse_step push '' "$push_bypassed" "$output_file"
+  [[ "$(cat "$output_file")" == 'reuse=false' ]] || failures+='a pushed commit no green group carries was reused. '
+
+  # A read that fails is answered by building in full, never by failing `Detect changes`, which would
+  # remove an approved pull request from the queue over a transient error.
+  local failing
+  for failing in /pulls/ /compare/ /check-runs; do
+    FAKE_FAILING="$failing" run_reuse_step merge_group ahead "$draft_then_ready" "$output_file"
+    [[ "$(cat "$output_file")" == 'reuse=false' ]] || failures+="a failed read of ${failing} did not fall back to a full build. "
+  done
+
+  FAKE_FAILING=/check-runs run_reuse_step push '' "$push_with_group" "$output_file"
+  [[ "$(cat "$output_file")" == 'reuse=false' ]] || failures+='a failed read on a push did not fall back to a full build. '
+
+  if [[ -n "$failures" ]]; then
+    printf '%s\n' "$failures" >&2
+    return 1
+  fi
+}
+
 # `issue_comment` fires for every comment on a pull request, a bot's included, and the gate that
 # tells a review request apart from any other comment runs *inside* the run — after the run has
 # already entered the concurrency group. An unconditional `cancel-in-progress: true` therefore means
@@ -10412,8 +10766,8 @@ run_test fathom_review_writes_no_status_without_the_board_token
 run_test board_status_moves_an_item_a_rule_is_entitled_to_move
 run_test board_status_leaves_an_item_outside_the_required_statuses
 run_test board_status_stops_writing_when_its_window_is_gone
-run_test select_board_status_earns_conflicts_from_ready_to_merge_alone
-run_test select_board_status_earns_conflicts_from_any_column_for_an_approved_head
+run_test select_board_status_moves_a_conflict_out_of_ready_to_merge_alone
+run_test select_board_status_moves_a_conflicting_approved_head_from_any_column
 run_test select_board_status_earns_changes_requested_on_a_pull_request_that_stopped_merging
 run_test select_board_status_earns_nothing_until_github_has_decided
 run_test select_board_status_earns_ready_to_merge_when_the_review_and_the_checks_agree
@@ -10424,6 +10778,8 @@ run_test select_board_status_earns_changes_requested_from_a_withheld_approval
 run_test select_board_status_earns_nothing_from_a_withheld_approval_of_an_older_head
 run_test select_board_status_reads_neither_codeql_nor_its_own_checks
 run_test select_board_status_asks_a_draft_only_whether_it_still_merges
+run_test select_board_status_earns_in_merge_while_the_queue_holds_the_pull_request
+run_test select_board_status_earns_changes_requested_for_a_head_the_queue_removed
 run_test pull_request_rules_listen_to_every_workflow_a_pull_request_runs
 run_test pull_request_rules_move_a_pull_request_that_stopped_merging
 run_test pull_request_rules_move_nothing_for_a_pull_request_that_still_merges
@@ -10433,6 +10789,7 @@ run_test pull_request_rules_decide_nothing_for_a_head_no_open_pull_request_has
 run_test pull_request_rules_wait_for_github_to_decide_mergeability
 run_test pull_request_rules_report_the_pull_requests_the_ceiling_cut
 run_test pull_request_rules_report_a_pull_request_github_never_decided
+run_test pull_request_rules_follow_a_pull_request_into_and_out_of_the_merge_queue
 run_test every_documentation_page_declares_what_it_describes
 run_test every_describes_pattern_matches_something_that_exists
 run_test no_documentation_page_carries_the_third_party_notice_twice
@@ -10553,6 +10910,10 @@ run_test the_mutation_score_is_reported_and_never_gated
 run_test a_paid_provider_run_is_never_the_default
 run_test the_integration_suite_writes_its_results_where_the_workflow_uploads_them
 run_test only_the_recorded_workflows_use_pull_request_target
+run_test every_required_check_reports_on_a_merge_group
+run_test ci_reuses_a_verdict_only_for_a_tree_a_successful_run_tested
+run_test merge_groups_carry_only_a_successful_newest_check_run
+run_test merge_groups_always_receive_a_licence_status
 run_test a_comment_never_cancels_a_review_in_flight
 run_test a_comment_never_cancels_a_queued_review
 run_test the_reviewer_listens_for_the_dispatch_it_sends

@@ -63,8 +63,12 @@ pull_request_fields='
     state
     baseRefName
     headRefOid
+    isInMergeQueue
+    timelineItems(last: 1, itemTypes: [REMOVED_FROM_MERGE_QUEUE_EVENT]) {
+      nodes { ... on RemovedFromMergeQueueEvent { createdAt } }
+    }
     labels(first: 20) { nodes { name } }
-    latestReviews(first: 20) { nodes { author { __typename login } state commit { oid } } }
+    latestReviews(first: 20) { nodes { author { __typename login } state submittedAt commit { oid } } }
     commits(last: 1) {
       nodes {
         commit {
@@ -99,6 +103,11 @@ projection='
       isDraft,
       state,
       headRefOid,
+      inMergeQueue: (.isInMergeQueue // false),
+      # The last time the queue let go of this pull request without merging it. The rules compare it
+      # with the approval on the head, which is what tells a removal still standing from one a later
+      # push and review already answered.
+      removedFromMergeQueueAt: (.timelineItems.nodes[0].createdAt // null),
       labels: [.labels.nodes[].name],
       reviews: [
         .latestReviews.nodes[]?
@@ -110,6 +119,7 @@ projection='
         | {
           author: (.author.login + (if .author.__typename == "Bot" then "[bot]" else "" end)),
           state: .state,
+          submittedAt: .submittedAt,
           commit: .commit.oid
         }
       ],

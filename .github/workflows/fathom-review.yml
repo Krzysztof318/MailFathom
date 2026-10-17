@@ -472,9 +472,9 @@ jobs:
           # paying for itself as an answer to findings: #811 took six rounds and the last two of them
           # each moved two findings, both of which were fixes to earlier findings rather than
           # anything the first pass had missed. The other three are for the pushes that answer
-          # nothing. The ruleset merges only a branch that is current with its base, so with several
-          # pull requests open every merge leaves the others behind, and the rebase that brings one
-          # back is a push like any other and spends a pass. Counted against six alone, those rebases
+          # nothing. The merge queue does not ask a branch to be current, but a conflict with `main`
+          # or a related change `Coherence` names still needs a rebase, and that rebase is a push
+          # like any other and spends a pass. Counted against six alone, those rebases
           # end the automatic loop on a pull request whose findings are still being answered, and
           # the push that needs a verdict is the one refused. Past nine the work is answering the
           # review rather than asking for another, and a maintainer who disagrees says so with a

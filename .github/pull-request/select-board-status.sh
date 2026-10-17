@@ -20,7 +20,11 @@
 # be empty: an empty required list means any status may be moved, and an empty preserved list means
 # none is refused.
 #
-# Four rules are implemented, in this order:
+# Six rules are implemented, in this order:
+#
+# - A pull request in the merge queue earns `In merge`, before anything else is asked of it. It is
+#   waiting on the queue rather than on the owner or the agent, and nothing its head carries can say
+#   otherwise: the queue's own checks run on the merge group's commit, not on the head.
 #
 # - A check that failed on the head earns `Changes requested`, whatever the review said. The column
 #   says the change is waiting on the agent rather than on the owner, and a red pipeline is exactly
@@ -32,26 +36,32 @@
 #   built-in `Code changes requested` workflow therefore never fires for it — the column that says a
 #   change is waiting on the agent has no other writer.
 #
-# - An approved head earns `Ready to merge` where it still merges and `Conflicts` where it does not.
-#   Both say the reviewer and the pipelines agree about the change and differ only in who acts next —
-#   the owner pressing the button, or the agent rebasing — so the two carry one authority. That is
-#   what moves an approval that met a conflict before its pipelines finished, which never reached
-#   `Ready to merge` and would otherwise sit in `In review`.
+# - An approved head the merge queue removed after the approval earns `Changes requested`. The queue
+#   lets go of a pull request when the tree it combined failed a required check, and that is a change
+#   owed by the agent however green the head's own checks are; without this rule the next sweep would
+#   read the approval and the green head and put the item back in `Ready to merge`, a column claiming
+#   nothing is left but a merge the queue has just refused. A push and a new approval answer it, which
+#   is why the removal is compared with the approval rather than read on its own.
+#
+# - An approved head earns `Ready to merge` where it still merges and `Changes requested` where it
+#   does not. A conflict is a change owed by the agent like any other, so it takes the column that
+#   says so rather than one of its own. That is what moves an approval that met a conflict before its
+#   pipelines finished, which never reached `Ready to merge` and would otherwise sit in `In review`.
 #
 # - A pull request that no longer merges and that none of the rules above describes moves the issues
-#   it closes from `Ready to merge` to `Conflicts`. That is a draft, and a head no review has answered:
-#   neither carries a verdict of its own, so what the rule can say is only that a change which had been
-#   ready has stopped merging. `Ready to merge` says the change is waiting on nothing but the owner
-#   pressing the button, and a conflict is precisely the discovery that it is not, so the item has to
-#   leave that column for one that says a rebase is owed. From `Ready to merge` and from nowhere else:
+#   it closes from `Ready to merge` to `Changes requested`. That is a draft, and a head no review has
+#   answered: neither carries a verdict of its own, so what the rule can say is only that a change which
+#   had been ready has stopped merging. `Ready to merge` says the change is waiting on nothing but a
+#   merge, and a conflict is precisely the discovery that it is not, so the item has to leave that
+#   column for the one that says the agent owes a rebase. From `Ready to merge` and from nowhere else:
 #   an item still being written, already blocked, or already done says nothing about whether a
 #   conflict is news, and a rule that moved those would be reporting the same conflict on every push
 #   to the base branch for as long as it went unresolved.
 #
-# **Every rule but a draft's is decided only once every pipeline outside the ignored set has
-# finished**, which is the single condition stated at the point the counts are read rather than
-# repeated in each of them. Every verdict claims something about the whole state of the change: `Ready to merge` and
-# `Conflicts` say nothing is left to wait for but one act, and `Changes requested` says what is owed is
+# **Every rule but the merge queue's and a draft's is decided only once every pipeline outside the
+# ignored set has finished** — the queue's because it reads no check on the head at all — which is the single condition stated at the point the counts are read rather than
+# repeated in each of them. Every verdict claims something about the whole state of the change: `Ready to merge`
+# says nothing is left to wait for but a merge, and `Changes requested` says what is owed is
 # an answer from the agent — and a run still in flight can add to what that answer has to cover. So a
 # review published minutes before `Required CI` finishes moves nothing until it does, and the pipeline
 # that concludes last raises the event that asks again. `CodeQL` is outside that wait for the reason it
@@ -68,9 +78,9 @@
 # Usage: select-board-status.sh <pull-request-json-file>
 #
 # The JSON file holds one object with the fields the collecting caller read from GitHub — `number`,
-# `mergeable`, `isDraft`, `state`, `labels`, `headRefOid`, `reviews`, and `checks` — which is what
-# lets this be run by hand and tested against a fixture without a token. A `review` is
-# `{author, state, commit}` and a `check` is `{workflow, name, status, conclusion}`, both as GitHub
+# `mergeable`, `isDraft`, `state`, `labels`, `headRefOid`, `inMergeQueue`, `removedFromMergeQueueAt`,
+# `reviews`, and `checks` — which is what lets this be run by hand and tested against a fixture
+# without a token. A `review` is `{author, state, submittedAt, commit}` and a `check` is `{workflow, name, status, conclusion}`, both as GitHub
 # spells them.
 
 set -euo pipefail
@@ -112,6 +122,11 @@ pull_request_file="${1:?the pull request JSON file is required}"
 # waits for the answer instead, and reports the pull requests it never got one for.
 mergeable="$(jq -r '.mergeable // "UNKNOWN"' "$pull_request_file")"
 
+if [[ "$(jq -r '.inMergeQueue // false' "$pull_request_file")" == 'true' ]]; then
+  printf 'In merge\t\tDone,Blocked\n'
+  exit 0
+fi
+
 # A draft is work being written rather than a change asking for anything, and its checks are red as
 # often as not while it is. None of the verdicts reads one, which is what keeps the item where the
 # work put it until the pull request is marked ready — while the last rule still does, because a
@@ -149,15 +164,27 @@ if [[ "$(jq -r '.isDraft // false' "$pull_request_file")" != 'true' ]]; then
   #
   # `latestReviews` is what the state was read from, which is one review per author, so this is the
   # reviewer's current word rather than the first one it ever said.
-  verdict="$(
+  #
+  # The verdict is printed with whether the merge queue removed the pull request after it, because a
+  # removal the approval predates is one nobody has answered yet. Both instants are ISO 8601 in UTC as
+  # GitHub writes them, so comparing the strings compares the times.
+  IFS=$'\t' read -r verdict removed_after_verdict <<< "$(
     jq -r --arg login "$REVIEWER_LOGIN" '
       . as $pull_request
-      | [.reviews[]? | select(.author == $login and .commit == $pull_request.headRefOid) | .state]
-      | last // ""' \
+      | ([.reviews[]? | select(.author == $login and .commit == $pull_request.headRefOid)] | last) as $review
+      | [($review.state // ""),
+         (($pull_request.removedFromMergeQueueAt // "") as $removed
+          | if $review != null and $removed != "" and $removed > ($review.submittedAt // "") then "true" else "false" end)]
+      | @tsv' \
       "$pull_request_file"
   )"
 
   if [[ "$verdict" == 'COMMENTED' ]]; then
+    printf 'Changes requested\t\tDone,Blocked\n'
+    exit 0
+  fi
+
+  if [[ "$verdict" == 'APPROVED' && "$removed_after_verdict" == 'true' ]]; then
     printf 'Changes requested\t\tDone,Blocked\n'
     exit 0
   fi
@@ -168,12 +195,12 @@ if [[ "$(jq -r '.isDraft // false' "$pull_request_file")" != 'true' ]]; then
   fi
 
   if [[ "$verdict" == 'APPROVED' && "$mergeable" == 'CONFLICTING' ]]; then
-    printf 'Conflicts\t\tDone,Blocked\n'
+    printf 'Changes requested\t\tDone,Blocked\n'
     exit 0
   fi
 fi
 
 if [[ "$mergeable" == 'CONFLICTING' ]]; then
-  printf 'Conflicts\tReady to merge\t\n'
+  printf 'Changes requested\tReady to merge\t\n'
   exit 0
 fi

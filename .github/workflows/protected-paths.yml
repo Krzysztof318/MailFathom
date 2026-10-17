@@ -114,6 +114,14 @@ on:
       - converted_to_draft
     branches:
       - main
+  # Who wrote a change is a property of the pull request, not of the tree the queue combines it into,
+  # so the merge queue is handed the verdict the pull request's head already earned rather than a
+  # second judgement. The queue admits no pull request whose required checks have not passed, so this
+  # repeats a fact; it is here because a required check the queue never receives is one it waits on
+  # until it gives up.
+  merge_group:
+    types:
+      - checks_requested
 
 # No `paths` filter, for the reason `ci.yml` records: GitHub instantiates no run for a workflow a path
 # filter excluded, and a required check that was never created never arrives. This job takes seconds
@@ -138,8 +146,44 @@ jobs:
       # The changed-file query reads the pull request through the REST API and never checks the
       # branch out, so this is the whole privilege it needs.
       pull-requests: read
+      # On a merge group, the check run the pull request's head already carries.
+      checks: read
     steps:
+      # The queue names the pull request in its branch, `gh-readonly-queue/<base>/pr-<number>-<sha>`,
+      # and that is the only place a merge group says which one it is.
+      - name: Carry the verdict the pull request's head earned
+        if: github.event_name == 'merge_group'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          MERGE_GROUP_HEAD_REF: ${{ github.event.merge_group.head_ref }}
+          CHECK_NAME: Protected paths
+        run: |
+          set -euo pipefail
+
+          pull_request_number="$(sed -nE 's|^refs/heads/gh-readonly-queue/[^/]+/pr-([0-9]+)-[0-9a-f]+$|\1|p' <<< "$MERGE_GROUP_HEAD_REF")"
+          if [[ -z "$pull_request_number" ]]; then
+            echo "::error::The merge group ref ${MERGE_GROUP_HEAD_REF} names no pull request."
+            exit 1
+          fi
+
+          head_sha="$(gh api "repos/${REPOSITORY}/pulls/${pull_request_number}" --jq '.head.sha')"
+          conclusion="$(
+            gh api --method GET "repos/${REPOSITORY}/commits/${head_sha}/check-runs" \
+              -f check_name="$CHECK_NAME" -f filter=all -f per_page=100 \
+              --jq '[.check_runs[] | select(.app.slug == "github-actions")] | sort_by(.started_at) | last | .conclusion // empty'
+          )"
+
+          if [[ "$conclusion" != 'success' ]]; then
+            echo "::error::${CHECK_NAME} on pull request #${pull_request_number}'s head ${head_sha:0:12} is '${conclusion:-missing}', not 'success'."
+            exit 1
+          fi
+
+          echo "${CHECK_NAME} passed on pull request #${pull_request_number}'s head ${head_sha:0:12}."
+
       - name: Verify who changed the repository configuration
+        if: github.event_name == 'pull_request'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}

@@ -28,24 +28,29 @@ on:
       - converted_to_draft
     branches:
       - main
-  # `main` itself, once a merge has landed there: the build, the unit tests, the coverage gate, the
-  # pending-model-changes check, and the workflow contracts. The `main` ruleset requires a branch to be
-  # current with `main` before it merges, so a pull request is normally verified against the state its
-  # merge produces — but the repository admin role bypasses the ruleset when merging, a break that
-  # reached `main` would otherwise first be reported by that night's publication failing its own gate,
-  # which names a run at 02:00 rather than the merge that caused it, and *is `main` green right now* is
-  # otherwise not a fact that exists anywhere, only one inferred from the last pull request that closed.
+  # Every merge reaches `main` through the merge queue, and this is the queue asking whether the tree
+  # an entry produces — `main`, the entries ahead of it, and this pull request squashed on top — is
+  # green. What it builds is that tree and nothing narrower: `Detect changes` filters a pull request
+  # alone, so every job below runs in full here unless `Detect changes` finds that the pull request's
+  # own run already answered for exactly this tree.
+  merge_group:
+    types:
+      - checks_requested
+  # `main` itself, once a merge has landed there. The queue already tested every tree it merges, so
+  # this run normally finds that tree's verdict on the very commit it was pushed as and stops there:
+  # a squash queue moves `main` to the merge group's own commit, so `Detect changes` reads the
+  # `Required CI` the group earned instead of building the same tree twice. What it does not find
+  # that verdict on is a merge that bypassed the queue — the repository admin role can — and that
+  # commit gets the full run, so the break is reported against the merge that caused it rather than
+  # first by that night's publication failing its own gate, and *is `main` green right now* stays a
+  # fact with a run behind it rather than one inferred from whichever pull request closed last.
   # `CodeQL` watches the branch this way for its own reasons already.
   #
   # No path filter here, and no changed-path narrowing inside the run either. The pull-request reason
   # stated below — a filtered-out workflow reports neither success nor failure, so a required check
   # never arrives — protects a required check, and nothing waits on a push conclusion, so it does not
-  # reach this trigger. What replaces it is a stronger reason of its own: what a push is asked is *is
-  # `main` green*, and a run that verified the part of the tree this merge happened to touch has not
-  # answered that. Two changes that never saw each other are what a merge produces and are what neither
-  # of their pull requests could have caught, and the paths one of them moved say nothing about which
-  # half of the tree the pair broke. So every job below runs unconditionally on a push, at the cost of a
-  # full build per merge, and `Detect changes` answers only the event that has a reason to ask.
+  # reach this trigger. What replaces it is that a push is asked *is `main` green*, and a run that
+  # verified the part of the tree this merge happened to touch has not answered that.
   push:
     branches:
       - main
@@ -80,17 +85,93 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      # The check runs an earlier run left on a commit, which is what `reuse` below is read from.
+      checks: read
     # Skipping work a change cannot affect is a pull request's economy and only a pull request's. On a
-    # push to `main` and on a manual dispatch the filter is skipped and every output falls back to
-    # `true`: `main` is asked whether the whole tree is green, and an explicitly started run always does
-    # the work. The job itself still runs on all three, because the jobs below read its outputs.
+    # merge group, a push to `main`, and a manual dispatch the filter is skipped and every output falls
+    # back to `true`: the whole tree is asked about, and an explicitly started run always does the
+    # work. The job itself still runs on every event, because the jobs below read its outputs.
+    #
+    # `reuse` is the one exception, and it skips the work only where a run already did it on the same
+    # tree: the pull request's own on a merge group, and the merge group's on a push.
     outputs:
       build: ${{ github.event_name != 'pull_request' || steps.filter.outputs.build == 'true' }}
       format: ${{ github.event_name != 'pull_request' || steps.filter.outputs.format == 'true' }}
       model: ${{ github.event_name != 'pull_request' || steps.filter.outputs.model == 'true' }}
       frontend: ${{ github.event_name != 'pull_request' || steps.filter.outputs.frontend == 'true' }}
       helm: ${{ github.event_name != 'pull_request' || steps.filter.outputs.helm == 'true' }}
+      reuse: ${{ steps.earned.outputs.reuse == 'true' }}
     steps:
+      # A merge group whose base the pull request's head already contains squashes to exactly that
+      # head's tree, which is the tree the pull request's own run tested: its merge commit had nothing
+      # of `main` to add either, since `main` only grows towards the group's base. A pull request that
+      # was not current, or one behind other entries in the queue, fails the containment and is built
+      # in full. On a push the queue moved `main` to the group's own commit, so the verdict is read off
+      # that commit itself; a merge that bypassed the queue carries none, and is built in full.
+      #
+      # Only `success` is reused. On a pull request's head the newest `Required CI` is the one read,
+      # because the head carries one per event it ran on and the one a draft earned skipped the build —
+      # a draft cannot enter the queue, and the `ready_for_review` run is the newer of the two. On a
+      # pushed commit any successful one answers, because this push's own run never concludes that job
+      # as anything but `skipped`, and may already have created it.
+      - name: Find a verdict this tree already earned
+        id: earned
+        if: github.event_name == 'merge_group' || github.event_name == 'push'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          MERGE_GROUP_HEAD_REF: ${{ github.event.merge_group.head_ref }}
+          MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
+          PUSHED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          # Prints what the jq filter in `$2` selects from the commit's `Required CI` check runs.
+          required_ci_conclusion() {
+            gh api --method GET "repos/${REPOSITORY}/commits/$1/check-runs" \
+              -f check_name='Required CI' -f filter=all -f per_page=100 \
+              --jq "[.check_runs[] | select(.app.slug == \"github-actions\")] | $2"
+          }
+
+          if [[ "$EVENT_NAME" == 'merge_group' ]]; then
+            pull_request_number="$(sed -nE 's|^refs/heads/gh-readonly-queue/[^/]+/pr-([0-9]+)-[0-9a-f]+$|\1|p' <<< "$MERGE_GROUP_HEAD_REF")"
+            if [[ -z "$pull_request_number" ]]; then
+              echo "The merge group ref ${MERGE_GROUP_HEAD_REF} names no pull request, so the tree is built in full."
+              echo 'reuse=false' >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            # A read that fails leaves nothing to reuse, which builds in full rather than failing the
+            # group over an answer the build gives anyway.
+            head_sha="$(gh api "repos/${REPOSITORY}/pulls/${pull_request_number}" --jq '.head.sha')" || head_sha=''
+            containment=''
+            if [[ -n "$head_sha" ]]; then
+              containment="$(gh api "repos/${REPOSITORY}/compare/${MERGE_GROUP_BASE_SHA}...${head_sha}" --jq '.status')" || containment=''
+            fi
+
+            if [[ "$containment" != 'ahead' && "$containment" != 'identical' ]]; then
+              echo "Pull request #${pull_request_number} does not contain the group's base (${containment}), so the tree is built in full."
+              echo 'reuse=false' >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            verdict_source="pull request #${pull_request_number}'s own run on ${head_sha:0:12}"
+            conclusion="$(required_ci_conclusion "$head_sha" 'sort_by(.started_at) | last | .conclusion // empty')" || conclusion=''
+          else
+            verdict_source="the merge group that produced ${PUSHED_SHA:0:12}"
+            conclusion="$(required_ci_conclusion "$PUSHED_SHA" 'if any(.conclusion == "success") then "success" else empty end')" || conclusion=''
+          fi
+
+          if [[ "$conclusion" == 'success' ]]; then
+            echo "Reusing the verdict of ${verdict_source}, which tested this tree."
+            echo 'reuse=true' >> "$GITHUB_OUTPUT"
+          else
+            echo "No successful Required CI from ${verdict_source} (${conclusion:-none}), so the tree is built in full."
+            echo 'reuse=false' >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Detect changed paths
         id: filter
         if: github.event_name == 'pull_request'
@@ -191,25 +272,28 @@ jobs:
   # showed a skipped server formatting job beside a green client build and read as the client's formatting
   # having been skipped. Both jobs now carry the stack in front of the question.
   #
-  # The draft test is the whole condition, because `detect-changes` runs on every event this workflow
-  # takes and the ordinary dependency semantics cover the rest: change detection that failed leaves this
-  # job knowing nothing about the change, and skipping it is the right outcome. A pull request then fails
-  # through the aggregate, which refuses a run whose change detection did not succeed, and a push through
-  # the run's own conclusion.
+  # The draft test and the reused verdict are the whole condition, because `detect-changes` runs on every
+  # event this workflow takes and the ordinary dependency semantics cover the rest: change detection that
+  # failed leaves this job knowing nothing about the change, and skipping it is the right outcome. A pull
+  # request or a merge group then fails through the aggregate, which refuses a run whose change detection
+  # did not succeed, and a push through the run's own conclusion.
   backend:
     name: Backend
     needs:
       - detect-changes
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    if: (github.event_name != 'pull_request' || github.event.pull_request.draft == false) && needs.detect-changes.outputs.reuse != 'true'
     permissions:
       contents: read
     uses: ./.github/workflows/build-test-format-and-migrations.yml
     with:
-      # `dotnet format` is the one input that still reads the event. Formatting is a property of the
-      # files a change wrote, which is exactly what the pull request that wrote them already answered —
-      # and it is the one verdict here that cannot be broken by two changes that merged without seeing
-      # each other. The model check can be: one pull request moves the model and another adds the
-      # migration, and neither run sees both, which is why that one is asked again on `main`.
+      # `dotnet format` is the one input that still reads the event. A merge group asks it, because
+      # two changes formatted on their own can still combine into a tree that is not — two using
+      # directives inserted apart that now sit out of order — and a group built in full is a tree no
+      # run formatted; a group whose verdict was reused skips this job altogether. A push does not ask
+      # it: the queue already formatted the tree it merged, and a merge that bypassed the queue is
+      # reported by the build and the tests rather than held up over whitespace. The model check is
+      # asked on a push for the stronger reason that one pull request can move the model while another
+      # adds the migration, and only the combined tree has both.
       run-build: ${{ needs.detect-changes.outputs.build == 'true' }}
       run-format: ${{ github.event_name != 'push' && needs.detect-changes.outputs.format == 'true' }}
       run-model: ${{ needs.detect-changes.outputs.model == 'true' }}
@@ -230,7 +314,7 @@ jobs:
     name: Frontend
     needs:
       - detect-changes
-    if: (github.event_name != 'pull_request' || github.event.pull_request.draft == false) && needs.detect-changes.outputs.frontend == 'true'
+    if: (github.event_name != 'pull_request' || github.event.pull_request.draft == false) && needs.detect-changes.outputs.frontend == 'true' && needs.detect-changes.outputs.reuse != 'true'
     permissions:
       contents: read
     uses: ./.github/workflows/build-test-frontend.yml
@@ -244,7 +328,8 @@ jobs:
   # `repository-contracts.yml` for the reason the two build workflows are called workflows: a nightly and a release
   # assert them against the tree they publish, from one definition rather than from a copy of these steps.
   #
-  # `Workflow contracts` runs on every event and under every condition. `Detect changes` routes `.github/**`,
+  # `Workflow contracts` runs on every event and under every condition but one: a tree whose verdict `Detect changes`
+  # found already earned, where both jobs skip with the rest of the run. `Detect changes` routes `.github/**`,
   # `docs/**`, `scripts/**`, and `.agents/**` to nothing, because none of them can move a build, a formatting verdict,
   # or the EF Core model, so without this a pull request touching only those would clear `Required CI` having verified
   # nothing about them. It takes no path filter, and that is the point rather than an omission: the suite asserts the
@@ -265,6 +350,7 @@ jobs:
     name: Repository contracts
     needs:
       - detect-changes
+    if: needs.detect-changes.outputs.reuse != 'true'
     permissions:
       contents: read
     uses: ./.github/workflows/repository-contracts.yml
@@ -301,10 +387,18 @@ jobs:
           BACKEND_RESULT: ${{ needs.backend.result }}
           FRONTEND_RESULT: ${{ needs.frontend.result }}
           CONTRACTS_RESULT: ${{ needs.contracts.result }}
+          VERDICT_REUSED: ${{ needs.detect-changes.outputs.reuse }}
         run: |
           set -euo pipefail
 
           verdict=0
+
+          # A reused verdict skipped every job below `Detect changes`, which is the one that has to
+          # have succeeded for the reuse to be what it says.
+          if [[ "$DETECT_CHANGES_RESULT" == 'success' && "$VERDICT_REUSED" == 'true' ]]; then
+            echo 'This tree was already verified by an earlier successful Required CI; Detect changes names it.'
+            exit 0
+          fi
 
           # Change detection decides whether the other jobs were allowed to skip, so a run in which it
           # did not finish knows nothing about the change and cannot clear it.

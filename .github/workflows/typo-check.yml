@@ -32,6 +32,12 @@ on:
       - converted_to_draft
     branches:
       - main
+  # The words a pull request changes are its own and do not change when the queue combines it with
+  # others, so a merge group is handed the verdict the pull request's head already earned, for the
+  # reason `protected-paths.yml` gives for the same trigger.
+  merge_group:
+    types:
+      - checks_requested
 
 # No `paths` filter, deliberately, and for two reasons. The check is required, so a run GitHub never
 # instantiated would hold a pull request forever, which is the reason `ci.yml` records for its own.
@@ -40,7 +46,8 @@ on:
 # this file.
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  # A merge group carries no pull request number, and its ref is unique to the group.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -59,17 +66,52 @@ jobs:
     # The one exception to always running. A draft is a change still being written, where a
     # half-finished sentence is expected rather than reportable, and `ready_for_review` above is the
     # deliberate act that opts every later push in.
-    if: github.event.pull_request.draft == false
+    if: github.event_name == 'merge_group' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     permissions:
       contents: read
       # The changed-file query reads the pull request through the REST API. The checkout below reads
       # the merge commit, which `contents: read` already covers.
       pull-requests: read
+      # On a merge group, the check run the pull request's head already carries.
+      checks: read
     steps:
+      # The same step `protected-paths.yml` carries, for the same reason.
+      - name: Carry the verdict the pull request's head earned
+        if: github.event_name == 'merge_group'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          MERGE_GROUP_HEAD_REF: ${{ github.event.merge_group.head_ref }}
+          CHECK_NAME: Typo check
+        run: |
+          set -euo pipefail
+
+          pull_request_number="$(sed -nE 's|^refs/heads/gh-readonly-queue/[^/]+/pr-([0-9]+)-[0-9a-f]+$|\1|p' <<< "$MERGE_GROUP_HEAD_REF")"
+          if [[ -z "$pull_request_number" ]]; then
+            echo "::error::The merge group ref ${MERGE_GROUP_HEAD_REF} names no pull request."
+            exit 1
+          fi
+
+          head_sha="$(gh api "repos/${REPOSITORY}/pulls/${pull_request_number}" --jq '.head.sha')"
+          conclusion="$(
+            gh api --method GET "repos/${REPOSITORY}/commits/${head_sha}/check-runs" \
+              -f check_name="$CHECK_NAME" -f filter=all -f per_page=100 \
+              --jq '[.check_runs[] | select(.app.slug == "github-actions")] | sort_by(.started_at) | last | .conclusion // empty'
+          )"
+
+          if [[ "$conclusion" != 'success' ]]; then
+            echo "::error::${CHECK_NAME} on pull request #${pull_request_number}'s head ${head_sha:0:12} is '${conclusion:-missing}', not 'success'."
+            exit 1
+          fi
+
+          echo "${CHECK_NAME} passed on pull request #${pull_request_number}'s head ${head_sha:0:12}."
+
       # The default ref for a `pull_request` event is the merge commit the pull request would
       # produce, which is the tree worth checking: it is what the words will look like once merged.
       - name: Check out the merge commit this pull request would produce
+        if: github.event_name == 'pull_request'
         uses: actions/checkout@v7
         with:
           # Nothing after this step uses Git against the remote — the changed-file query below reads
@@ -78,6 +120,7 @@ jobs:
 
       - name: Collect the files this pull request changes
         id: changed-files
+        if: github.event_name == 'pull_request'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
