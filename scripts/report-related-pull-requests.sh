@@ -94,13 +94,20 @@ bash .github/coherence/relate-changes.sh \
 # digit in a path is split by a word joiner, which renders as nothing, and a control character that
 # could end the table row is dropped.
 jq -r --arg repository_url "https://github.com/$CANONICAL_REPOSITORY" --slurpfile others "$work_directory/others.json" '
+  # The open pull request is the landed side, so each direction is restated as seen from here.
+  def relation:
+    {"same prose file": "both change this prose file",
+     "landed describes changed": "its page describes the path here",
+     "changed describes landed": "the page here describes its path",
+     "landed governs changed": "its AGENTS.md governs the path here",
+     "changed governs landed": "the AGENTS.md here governs its path"}[.] // .;
   def code: gsub("[[:cntrl:]`]"; "") | gsub("\\|"; "\\|") | gsub("#(?<digit>[0-9])"; "#\u2060\(.digit)") | "`\(.)`";
   . as $pairs
   | $others[0] | sort_by(.number)
   | map(. as $pull_request
       | ($pairs | map(select(.landed as $landed | any($pull_request.files[]?; .path == $landed)))) as $related
       | select($related | length > 0)
-      | "| \($repository_url)/pull/\(.number) | \($related | map(.landed) | unique | map(code) | join(", ")) | <details><summary>\($related | length)</summary>\($related | map("\(.landed | code) → \(.changed | code) (\(.reason))") | join("<br>"))</details> |")
+      | "| \($repository_url)/pull/\(.number) | \($related | map(.landed) | unique | map(code) | join(", ")) | <details><summary>\($related | length)</summary>\($related | map("\(.landed | code) → \(.changed | code) (\(.reason | relation))") | join("<br>"))</details> |")
   | .[]
 ' "$work_directory/pairs.json" > "$work_directory/rows"
 

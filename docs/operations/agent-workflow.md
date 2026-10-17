@@ -1292,7 +1292,8 @@ against its merge base as the changed side. One call is what keeps the cost flat
 requests are open, since the index behind the relation costs the same for two paths as for two
 thousand. Each pair is attributed to the open pull requests that touch its landed side, and each of
 those gets one row: its link, its related paths, and every pair folded beneath them — its path,
-then the path here, and the relation. The branch's own pull request, identified by the owner of the
+then the path here, and the relation with its direction stated from this change's side, such as
+*its page describes the path here*. The branch's own pull request, identified by the owner of the
 repository it is pushed to and its branch name, is left out.
 
 `$finish-change` runs it before committing, so an edit it prompts goes through the gates with the
