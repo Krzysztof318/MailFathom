@@ -15,8 +15,8 @@ name: Coherence
 # relates. An unrelated merge costs the pull request nothing, which is what a branch-must-be-current
 # rule cannot offer.
 #
-# It runs on `merge_group` as well, where what landed is everything between the merge base and the
-# group's base — `main` plus the pull requests ahead in the queue — so the pair a queue would combine
+# It runs on `merge_group` as well, where what landed is everything between the merge base and what
+# the queue entry merges onto — `main` plus the pull requests ahead of it — so the pair a queue would combine
 # without anybody reading is caught before it reaches `main`.
 #
 # It is a workflow of its own rather than a job of `CI` so that it reports within seconds instead of
@@ -67,7 +67,7 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           MERGE_GROUP_HEAD_REF: ${{ github.event.merge_group.head_ref }}
-          MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
+          BASE_BRANCH: ${{ github.event.merge_group.base_ref || github.event.pull_request.base.ref }}
           REPOSITORY_URL: ${{ github.server_url }}/${{ github.repository }}
         run: |
           set -euo pipefail
@@ -125,7 +125,10 @@ jobs:
               fi
 
               if [[ "$EVENT_NAME" == 'merge_group' ]]; then
-                if git merge-base --is-ancestor "$commit" "$MERGE_GROUP_BASE_SHA"; then
+                # Not `merge_group.base_sha`: that is the group's parent commit, the first parent
+                # above, which already carries the entries ahead. The base branch's tip is what is
+                # on `main`, and the full-history checkout holds it as a remote-tracking ref.
+                if git merge-base --is-ancestor "$commit" "origin/${BASE_BRANCH#refs/heads/}"; then
                   place+=' (on main)'
                 else
                   place+=' (ahead in the queue)'

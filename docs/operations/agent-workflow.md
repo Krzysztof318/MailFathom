@@ -1167,7 +1167,7 @@ beside it does not follow. That is the half this check covers.
 
 It compares two path lists. What *landed* is every path changed between the pull request's merge
 base and what it would merge onto: current `main` on a pull request, and on `merge_group` the
-group's base, which is `main` plus the pull requests ahead in the queue. What *changed* is every
+queue entry's parent, which is `main` plus the pull requests ahead of it. What *changed* is every
 path the pull request changes. `.github/coherence/relate-changes.sh` pairs a landed path with a
 changed one when
 
