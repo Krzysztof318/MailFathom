@@ -6533,6 +6533,78 @@ coherence_relates_the_same_prose_file_and_an_instructions_scope() {
     '.' "$test_directory/coherence-prose.json"
 }
 
+# The same relation asked before publishing, against pull requests still open rather than changes
+# that landed. The open ones come from `gh pr list`, so what is pinned is what the script does with
+# that answer: which pull request a pair is attributed to, and that the branch's own pull request is
+# never reported as related to itself.
+related_pull_requests_bin_directory="$test_directory/related-pull-requests-bin"
+mkdir -p "$related_pull_requests_bin_directory"
+
+cat > "$related_pull_requests_bin_directory/gh" <<'FAKE_GH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+: "${FAKE_OPEN_PULL_REQUESTS_FILE:?FAKE_OPEN_PULL_REQUESTS_FILE must name the answer to return}"
+
+cat "$FAKE_OPEN_PULL_REQUESTS_FILE"
+FAKE_GH
+chmod +x "$related_pull_requests_bin_directory/gh"
+
+run_related_pull_requests() {
+  local name="$1" open_pull_requests="$2"
+  local fixture_root="$test_directory/related-pull-requests-$name"
+
+  create_coherence_fixture "$fixture_root"
+  mkdir -p "$fixture_root/scripts" "$fixture_root/.github/coherence" "$fixture_root/.github/fathom-review"
+  cp "$source_repository_root/scripts/report-related-pull-requests.sh" \
+    "$source_repository_root/scripts/resolve-base-remote.sh" "$fixture_root/scripts/"
+  cp "$source_repository_root/.github/coherence/relate-changes.sh" "$fixture_root/.github/coherence/"
+  cp "$source_repository_root/.github/fathom-review/index-obligations.sh" "$fixture_root/.github/fathom-review/"
+
+  git -C "$fixture_root" init --initial-branch=main --quiet
+  git -C "$fixture_root" config user.email agent-workflow@example.invalid
+  git -C "$fixture_root" config user.name 'Agent Workflow Tests'
+  git -C "$fixture_root" add .
+  git -C "$fixture_root" commit --quiet -m 'base'
+  git -C "$fixture_root" remote add origin https://github.com/fathomise/MailFathom.git
+  git -C "$fixture_root" update-ref refs/remotes/origin/main HEAD
+  git -C "$fixture_root" switch --quiet -c agent/widgets
+
+  printf 'internal sealed class MailboxWidget { }\n' \
+    > "$fixture_root/backend/src/Application/Emails/MailboxWidget.cs"
+  printf '%s' "$open_pull_requests" > "$test_directory/related-pull-requests-$name.json"
+
+  (
+    cd "$fixture_root"
+    PATH="$related_pull_requests_bin_directory:$PATH" \
+      FAKE_OPEN_PULL_REQUESTS_FILE="$test_directory/related-pull-requests-$name.json" \
+      bash scripts/report-related-pull-requests.sh
+  ) > "$test_directory/related-pull-requests-$name-output" 2>&1
+}
+
+related_pull_requests_names_the_open_pull_request_a_pair_comes_from() {
+  run_related_pull_requests attributed '[
+    {"number": 7, "title": "Describe | widgets", "headRefName": "agent/docs", "files": [{"path": "docs/features/widgets.md"}]},
+    {"number": 8, "title": "Chart values", "headRefName": "agent/chart", "files": [{"path": "deploy/helm/mailfathom/values.yaml"}]},
+    {"number": 9, "title": "This branch", "headRefName": "agent/widgets", "files": [{"path": "docs/features/widgets.md"}]}
+  ]'
+
+  local output_file="$test_directory/related-pull-requests-attributed-output"
+  assert_contains '## Related open pull requests' "$output_file"
+  assert_contains '| #7 Describe \| widgets | `docs/features/widgets.md` | `backend/src/Application/Emails/MailboxWidget.cs` | describes: |' "$output_file"
+  assert_excludes '#8' "$output_file"
+  assert_excludes '#9' "$output_file"
+}
+
+related_pull_requests_says_so_when_nothing_open_is_related() {
+  run_related_pull_requests unrelated '[
+    {"number": 8, "title": "Chart values", "headRefName": "agent/chart", "files": [{"path": "deploy/helm/mailfathom/values.yaml"}]}
+  ]'
+
+  assert_file_content 'No open pull request to main is related to this change (1 open besides it).' \
+    "$test_directory/related-pull-requests-unrelated-output"
+}
+
 # The split is what makes coverage a property of the run rather than of the model. Every contract
 # below is about one of the two things that must hold whatever the shape of the change: no file is
 # lost, and no reader is given so much more than another that the run waits on it.
@@ -11053,6 +11125,8 @@ run_test coherence_relates_an_added_page_to_a_landed_path_it_describes
 run_test coherence_passes_an_unrelated_change
 run_test coherence_passes_shared_code_without_a_prose_link
 run_test coherence_relates_the_same_prose_file_and_an_instructions_scope
+run_test related_pull_requests_names_the_open_pull_request_a_pair_comes_from
+run_test related_pull_requests_says_so_when_nothing_open_is_related
 run_test group_split_gives_every_changed_file_exactly_one_reader
 run_test group_split_never_exceeds_the_reader_ceiling
 run_test group_split_balances_what_each_reader_is_given

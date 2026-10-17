@@ -819,8 +819,9 @@ The canonical skills are:
   gate;
 - `finish-change` stages only the task files, requires that gate, runs full
   verification, checks the final diff, creates a focused commit, pushes the
-  branch, opens a pull request that references its issue with
-  `Closes #<issue>`, and then moves that issue to `Queue: Next` so the board
+  branch, reports the open pull requests related to the change, opens a pull
+  request that references its issue with `Closes #<issue>` and names those
+  related pull requests, and then moves that issue to `Queue: Next` so the board
   shows the work as in flight and writes its `Size` from the pull request's own
   `additions + deletions`, which is the first moment that field can state a
   measurement rather than the placeholder the issue was opened with;
@@ -1277,6 +1278,24 @@ pairs as a table. For each pair:
 
 A rebase with nothing to reconcile is still the answer to step 2: the check asks that the pair was
 read, and the moved merge base is what records that it was.
+
+**Before a change is published**, the same relation is asked against what is still open, because a
+related pull request that has not merged cannot be seen at merge time at all:
+
+```bash
+bash scripts/report-related-pull-requests.sh
+```
+
+It reads every open pull request to `main` and its changed paths in one `gh pr list` call, and runs
+`relate-changes.sh` once, with all of their paths as the landed side and the working tree's change
+against its merge base as the changed side. Each pair is then attributed to the open pull requests
+that touch its landed side, and the branch's own pull request is left out. One call is what keeps the
+cost flat however many pull requests are open, since the index behind the relation costs the same for
+two paths as for two thousand. `$finish-change` runs it before opening the pull request and copies the
+section it prints into the body, so a reviewer knows which in-flight changes this one has to agree
+with. It is advisory and needs only read access, so it runs in the fork role too. The markers come
+from the working tree, not from each open pull request's tree, so a page an open pull request adds
+that describes a path changed here is only paired once it lands, and `Coherence` pairs it then.
 
 ## Review on the pull request
 

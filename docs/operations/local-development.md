@@ -80,6 +80,18 @@ reports and never gates: nothing it prints is a finding until it is confirmed in
 the file it points at, and it names the untracked paths no diff contains rather
 than describing less than the change while looking complete.
 
+Before publishing, ask which open pull requests the change has to agree with:
+
+```bash
+bash scripts/report-related-pull-requests.sh
+```
+
+That prints every open pull request to `main` touching a path
+[`Coherence`](agent-workflow.md#coherence) would relate to the change, as a
+section ready to paste into the pull request body. It reads the open pull
+requests with `gh`, so it needs read access to GitHub and nothing more, and like
+the obligations report it never gates.
+
 The fast script restores the solution, builds it whole in Release configuration,
 runs without rebuilding the unit suites the change can have broken, and formats
 the C# files the branch changed — each against whichever of the two solutions
