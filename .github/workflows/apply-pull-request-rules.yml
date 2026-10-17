@@ -228,8 +228,13 @@ jobs:
     permissions:
       contents: read
       # The open pull requests and whether each still merges. Writing the board is not a repository
-      # permission at all: it is the classic token below, which is why nothing here is `write`.
+      # permission at all: it is the board App's token below, which is why nothing here is `write`.
       pull-requests: read
+    # Whether both halves of the board App's credential are stored, as a flag rather than the key
+    # itself, so the step that mints the token can be skipped without the key reaching any step's
+    # environment. A step condition cannot read `secrets` directly.
+    env:
+      BOARD_APP_CONFIGURED: ${{ vars.BOARD_APP_CLIENT_ID != '' && secrets.BOARD_APP_PRIVATE_KEY != '' }}
     steps:
       # For the two scripts below. `main` is what a push or a concluded pipeline is about, so the
       # default checkout is already the tree the rules are read from; on the two queue events it is
@@ -239,6 +244,23 @@ jobs:
         with:
           persist-credentials: false
 
+      # The board is the organization's, and the workflow token reaches no project at all, so the
+      # write takes the `Fathomise projects` App's installation token: minted here, valid for an hour, revoked
+      # when the job ends, and narrowed to the two permissions the walk spends — `Projects: Read and
+      # write` on the organization and `Issues: Read` to find an issue's item. The step is skipped
+      # while either half of the App's credential is absent, which leaves the token empty and the
+      # board alone — the queue events of a fork's pull request among them, which carry variables
+      # but no secrets.
+      - name: Mint the board App's token
+        id: board-app
+        if: env.BOARD_APP_CONFIGURED == 'true'
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.BOARD_APP_CLIENT_ID }}
+          private-key: ${{ secrets.BOARD_APP_PRIVATE_KEY }}
+          permission-organization-projects: write
+          permission-issues: read
+
       - name: Move the issues whose pull requests earn a status
         id: board
         shell: bash
@@ -247,11 +269,9 @@ jobs:
           # and nothing else, and it is named on those calls inside `write-board-status.sh` rather
           # than on this whole step.
           GH_TOKEN: ${{ github.token }}
-          BOARD_TOKEN: ${{ secrets.BOARD_PROJECT_TOKEN }}
+          BOARD_TOKEN: ${{ steps.board-app.outputs.token }}
           REPOSITORY: ${{ github.repository }}
-          # The board is the organization's, and the workflow token reaches no project at all, which is
-          # why the credential above is a classic token carrying the `project` scope. The number belongs
-          # to that organization's namespace.
+          # The number belongs to the organization's namespace rather than to the repository's.
           BOARD_OWNER: fathomise
           BOARD_NUMBER: '1'
           STATUS_FIELD: Status

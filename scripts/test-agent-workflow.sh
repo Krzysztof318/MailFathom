@@ -4014,7 +4014,7 @@ run_fathom_review_announcement() {
   local output_file="$3"
   # The ordinary case is a configured board; the contract about an unconfigured one names the empty
   # token itself.
-  local board_token="${4-classic-token-that-is-not-real}"
+  local board_token="${4-ghs_boardtokenthatisnotreal}"
   local step_script="$test_directory/fathom-review-announce.sh"
 
   extract_fathom_review_step 'in-review' "$step_script"
@@ -4105,8 +4105,8 @@ fathom_review_announces_over_every_other_status() {
   done
 }
 
-# Writing a user-owned project needs a classic token with the `project` scope, which is account-wide.
-# Until one is stored the step says so and ends green: the workflow gates nothing, so a missing
+# Writing the organization's project needs the board App's token, which is minted only while the App
+# is configured. Without it the step says so and ends green: the workflow gates nothing, so a missing
 # credential must not turn a review red.
 fathom_review_writes_no_status_without_the_board_token() {
   local output_file="$test_directory/fathom-review-board-untokened-output"
@@ -4115,7 +4115,7 @@ fathom_review_writes_no_status_without_the_board_token() {
 
   ((board_status == 0))
   [[ ! -s "$board_mutations_file" ]]
-  assert_contains 'BOARD_PROJECT_TOKEN is not set' "$output_file"
+  assert_contains 'The board App is not configured' "$output_file"
 }
 
 # The other direction of the same question. A caller that names the statuses it may act on has said
@@ -4136,7 +4136,7 @@ run_board_status_write() {
 
   set +e
   (
-    export_fathom_review_board_environment 'classic-token-that-is-not-real'
+    export_fathom_review_board_environment 'ghs_boardtokenthatisnotreal'
     [[ -z "$limit_seconds" ]] || export BOARD_WRITE_LIMIT_SECONDS="$limit_seconds"
     bash "$source_repository_root/.github/pull-request/write-board-status.sh" \
       "$status" '' "$required_statuses"
@@ -4672,7 +4672,7 @@ run_pull_request_rules_board() {
   (
     export PATH="$rules_board_bin_directory:$PATH"
     export GH_TOKEN='ghs_workflowtokenthatisnotreal'
-    export BOARD_TOKEN='classic-token-that-is-not-real'
+    export BOARD_TOKEN='ghs_boardtokenthatisnotreal'
     export REPOSITORY='fathomise/MailFathom'
     export BOARD_OWNER='fathomise'
     export BOARD_NUMBER='1'

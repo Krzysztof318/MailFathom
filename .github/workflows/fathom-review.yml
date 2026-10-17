@@ -771,6 +771,11 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+    # Whether both halves of the board App's credential are stored, as a flag rather than the key
+    # itself, so the step that mints the token can be skipped without the key reaching any step's
+    # environment. A step condition cannot read `secrets` directly.
+    env:
+      BOARD_APP_CONFIGURED: ${{ vars.BOARD_APP_CLIENT_ID != '' && secrets.BOARD_APP_PRIVATE_KEY != '' }}
     steps:
       # The base commit, for the two scripts below and for the reason every other read of this
       # repository in this file uses it: the branch under review must not supply the code that
@@ -781,12 +786,25 @@ jobs:
           ref: ${{ github.event.pull_request.base.sha || github.event.repository.default_branch }}
           persist-credentials: false
 
+      # The board App's token, for the reason `Apply pull request rules` mints one: the workflow token
+      # reaches no project. Skipped while either half of the App's credential is absent, which leaves
+      # the board alone.
+      - name: Mint the board App's token
+        id: board-app
+        if: env.BOARD_APP_CONFIGURED == 'true'
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.BOARD_APP_CLIENT_ID }}
+          private-key: ${{ secrets.BOARD_APP_PRIVATE_KEY }}
+          permission-organization-projects: write
+          permission-issues: read
+
       - name: Move the issues this pull request closes into review
         id: in-review
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          BOARD_TOKEN: ${{ secrets.BOARD_PROJECT_TOKEN }}
+          BOARD_TOKEN: ${{ steps.board-app.outputs.token }}
           REPOSITORY: ${{ github.repository }}
           PULL_REQUEST_NUMBER: ${{ needs.decide.outputs.pull_request_number }}
           BOARD_OWNER: fathomise
