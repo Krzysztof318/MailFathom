@@ -8781,6 +8781,59 @@ merge_groups_always_receive_a_licence_status() {
   fi
 }
 
+# Write access is not the copyright, so only a bot and the owner's own account pass without being
+# asked: an organisation member, a collaborator, and any other organisation owner are asked exactly as
+# an outside contributor is. The owner is the numeric id, so a login that merely reads the same is
+# asked too.
+only_the_owner_and_bots_are_exempt_from_the_licence_agreement() {
+  local work
+  local failures=''
+
+  work="$(mktemp -d "$test_directory/licence-exempt-XXXXXX")"
+  mkdir -p "$work/bin"
+  extract_workflow_step "$source_repository_root/.github/workflows/contributor-licence.yml" subject "$work/step.sh"
+  cat > "$work/bin/gh" << 'FAKE'
+#!/usr/bin/env bash
+printf '%s' "$FAKE_PULL_REQUEST"
+FAKE
+  chmod +x "$work/bin/gh"
+
+  expect_exempt() {
+    local case_name="$1"
+    local expected="$2"
+    local user="$3"
+    local association="$4"
+
+    : > "$work/$case_name.output"
+    (
+      export PATH="$work/bin:$PATH"
+      export GH_TOKEN='fake-token' REPOSITORY='fathomise/MailFathom' NUMBER='7'
+      export GITHUB_OUTPUT="$work/$case_name.output"
+      export FAKE_PULL_REQUEST="{\"user\":$user,\"author_association\":\"$association\",\"head\":{\"sha\":\"1111\"}}"
+      bash "$work/step.sh"
+    ) > "$work/$case_name.log" 2>&1 || failures+="$case_name failed to run. "
+
+    if ! grep -qx "exempt=$expected" "$work/$case_name.output"; then
+      failures+="$case_name was not resolved as exempt=$expected. "
+    fi
+  }
+
+  expect_exempt owner true '{"login":"Krzysztof318","id":60486987,"type":"User"}' OWNER
+  expect_exempt bot true '{"login":"dependabot[bot]","id":49699333,"type":"Bot"}' NONE
+  expect_exempt other-owner false '{"login":"another-owner","id":101,"type":"User"}' OWNER
+  expect_exempt member false '{"login":"a-member","id":102,"type":"User"}' MEMBER
+  expect_exempt collaborator false '{"login":"a-collaborator","id":103,"type":"User"}' COLLABORATOR
+  expect_exempt outsider false '{"login":"an-outsider","id":104,"type":"User"}' NONE
+  expect_exempt owner-login-elsewhere false '{"login":"Krzysztof318","id":105,"type":"User"}' NONE
+
+  unset -f expect_exempt
+
+  if [[ -n "$failures" ]]; then
+    printf '%s\n' "$failures" >&2
+    return 1
+  fi
+}
+
 ci_reuses_a_verdict_only_for_a_tree_a_successful_run_tested() {
   local output_file="$test_directory/reuse-output"
   local draft_then_ready='{"check_runs":[
@@ -10928,6 +10981,7 @@ run_test every_required_check_reports_on_a_merge_group
 run_test ci_reuses_a_verdict_only_for_a_tree_a_successful_run_tested
 run_test merge_groups_carry_only_a_successful_newest_check_run
 run_test merge_groups_always_receive_a_licence_status
+run_test only_the_owner_and_bots_are_exempt_from_the_licence_agreement
 run_test a_comment_never_cancels_a_review_in_flight
 run_test a_comment_never_cancels_a_queued_review
 run_test the_reviewer_listens_for_the_dispatch_it_sends
