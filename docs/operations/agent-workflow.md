@@ -1,6 +1,6 @@
 # Agent workflow
 
-<!-- describes: scripts/**, .agents/skills/**, .github/workflows/**, .github/fathom-review/**, .github/pull-request/**, **/.editorconfig, .gitignore, .worktreeinclude -->
+<!-- describes: scripts/**, .agents/skills/**, .github/workflows/**, .github/fathom-review/**, .github/pull-request/**, .github/coherence/**, **/.editorconfig, .gitignore, .worktreeinclude -->
 
 Codex and Claude Code share one repository-owned workflow. Deterministic Git and
 .NET operations live in scripts, while repository-specific judgment lives in
