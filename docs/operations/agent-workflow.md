@@ -1114,8 +1114,8 @@ says so and ends green.
 
 ### The licence a contribution earns
 
-`Contributor licence` asks an external contributor to accept `CLA.md` and records the
-acceptance. It is a separate workflow rather than a job of the pipeline above, and the two
+`Contributor licence` asks every human author but the owner to accept `CLA.md` and records
+the acceptance. It is a separate workflow rather than a job of the pipeline above, and the two
 reasons are the same fact read twice: it needs a write-capable token on a pull request from
 a fork, which `pull_request` never supplies, and it needs `issue_comment`, which the
 labelling pipeline has no use for. Folding it in would put the elevated trigger on the run
@@ -1123,14 +1123,16 @@ that also derives every label, which widens the exception the next section grant
 than containing it.
 
 What it derives is one commit status, `license/cla`, published on every run so a pull
-request always carries a current answer rather than one from before the last push. An author
-who is the owner, a collaborator, or an organisation member where the repository is owned
-by one earns `success` without being asked anything: those are the accounts that already
-hold write access here, and the workflow reads them off `author_association`. A bot earns
-it too, on a different field and for a different reason — `user.type`, because a bot's
-output is not a work of authorship anybody could grant rights in —
-`success` rather than nothing, because an absent status and one that has not run yet are
-indistinguishable. Everyone else earns it by replying to their own pull request with the
+request always carries a current answer rather than one from before the last push. The
+owner's own account earns `success` without being asked anything, because the owner already
+holds every right the agreement grants; the workflow matches it by its numeric user id
+rather than by a login that can be renamed and claimed again. A bot earns it too, on a
+different field and for a different reason — `user.type`, because a bot's output is not a
+work of authorship anybody could grant rights in — `success` rather than nothing, because an
+absent status and one that has not run yet are indistinguishable. Write access earns
+nothing, so `author_association` is never read for it: an organisation member, a
+collaborator, and any other owner of the organisation hold the copyright in what they write
+exactly as an outside contributor does. Everyone else earns it by replying to their own pull request with the
 sentence `CLA.md` names, as the whole of the comment; the workflow appends an entry to
 `signatures.json` on the `cla-signatures` branch and the status turns green. The sentence has
 to *be* the comment rather than appear in it, because an acceptance is a legal act and a

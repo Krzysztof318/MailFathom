@@ -4,7 +4,7 @@
 
 name: Contributor licence
 
-# Asks an external contributor to accept `CLA.md` and records the acceptance, so that the right to
+# Asks every human author but the owner to accept `CLA.md` and records the acceptance, so that the right to
 # publish MailFathom under other terms survives the first contribution this repository takes from
 # somebody other than the owner. ADR 0015 holds why the agreement exists and why the record lives
 # where it does; this file is only how it is collected.
@@ -89,17 +89,17 @@ jobs:
           head_sha=$(printf '%s' "$pull_request" | jq -r '.head.sha')
 
           # Who owes nothing. A bot's output is not a work of authorship anybody could grant rights
-          # in, and `OWNER`, `MEMBER`, and `COLLABORATOR` are the accounts that already hold write
-          # access here — the owner's own contributions are covered by owning the copyright, and a
-          # collaborator is somebody the owner added deliberately. Everyone else is external, which
-          # is the whole population this workflow exists for.
+          # in, and the owner's own contributions are covered by owning the copyright. Write access
+          # is not the copyright: an organisation member, a collaborator, and any other owner of the
+          # organisation write work they hold the rights in, so they are asked exactly as an outside
+          # contributor is, and `author_association` decides nothing here. The owner is matched by
+          # the numeric account id rather than the login, which can be renamed and then claimed by
+          # somebody else.
+          owner_user_id=60486987
           exempt=false
-          case "$user_type" in
-            Bot) exempt=true ;;
-          esac
-          case "$association" in
-            OWNER | MEMBER | COLLABORATOR) exempt=true ;;
-          esac
+          if [ "$user_type" = 'Bot' ] || [ "$user_id" = "$owner_user_id" ]; then
+            exempt=true
+          fi
 
           {
             printf 'number=%s\n' "$NUMBER"
