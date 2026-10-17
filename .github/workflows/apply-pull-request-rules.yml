@@ -25,8 +25,9 @@ name: Apply pull request rules
 #   it still merges, which changes when something *else* merges into `main`; whether the reviewer
 #   approved the head in front of us; and what its pipelines concluded. So it is decided on a push to
 #   `main`, across every open pull request at once, and on a pipeline concluding, for the one pull
-#   request that run belongs to. It is never decided on a `pull_request` event, where it would answer
-#   nothing and lengthen the wait above.
+#   request that run belongs to. The one `pull_request` event it is decided on is the merge queue
+#   taking a pull request in or letting it go — `enqueued` and `dequeued` — because nothing else
+#   announces either; on every other one it would answer nothing and lengthen the wait above.
 #
 #   `workflow_run` rather than `check_suite`, and that is not a preference: GitHub does not raise
 #   `check_suite` for a suite GitHub Actions created, which is every pipeline in this repository, so
@@ -63,6 +64,11 @@ on:
       - reopened
       - ready_for_review
       - edited
+      # The merge queue taking a pull request in and letting it go, which no other event here
+      # announces: the queue's own checks run on a merge group's commit, so no pipeline concluding on
+      # the head says either happened. These two decide the board alone and earn no label.
+      - enqueued
+      - dequeued
     branches:
       - main
 
@@ -117,7 +123,7 @@ jobs:
     # The labels follow from the body, so only an event that carries one asks the question. A push to
     # `main` skips this job in about a second, which is what keeps the sweep from appearing to a
     # reader as a labelling run that failed to label anything.
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && github.event.action != 'enqueued' && github.event.action != 'dequeued'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -217,7 +223,7 @@ jobs:
   # there.
   board:
     name: Apply the board statuses the open pull requests earn
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' || github.event.action == 'enqueued' || github.event.action == 'dequeued'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -225,8 +231,9 @@ jobs:
       # permission at all: it is the classic token below, which is why nothing here is `write`.
       pull-requests: read
     steps:
-      # For the two scripts below. `main` is what this event is about, so the default checkout is
-      # already the tree the rules are read from.
+      # For the two scripts below. `main` is what a push or a concluded pipeline is about, so the
+      # default checkout is already the tree the rules are read from; on the two queue events it is
+      # the pull request's merge commit, read for the reason the label job reads it.
       - name: Check out the rules
         uses: actions/checkout@v7
         with:
@@ -261,6 +268,9 @@ jobs:
           # pull request rather than about all of them. It is empty on the sweep, which is what
           # selects between the two ways the state is read below.
           WORKFLOW_RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          # The pull request the merge queue took in or let go of, on those two events and on no
+          # other: the label job owns every other `pull_request` event this workflow takes.
+          QUEUED_PULL_REQUEST_NUMBER: ${{ github.event_name == 'pull_request' && github.event.pull_request.number || '' }}
           # More open pull requests than this repository has ever had at once, and still a ceiling:
           # one project call is made per issue below it, so an unbounded sweep is an unbounded number
           # of them.
@@ -299,6 +309,11 @@ jobs:
             fi
 
             printf 'Deciding pull request %s, whose pipeline concluded.\n' "$pull_request_number"
+          fi
+
+          if [[ -n "$QUEUED_PULL_REQUEST_NUMBER" ]]; then
+            pull_request_number="$QUEUED_PULL_REQUEST_NUMBER"
+            printf 'Deciding pull request %s, which the merge queue took in or let go of.\n' "$pull_request_number"
           fi
 
           # The state every rule reads, in one call: the sweep asks for every open pull request at

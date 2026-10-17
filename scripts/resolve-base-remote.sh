@@ -101,8 +101,9 @@ base_remote_resolution_hint() {
 #
 # Nothing in the pipeline asks this. A pull request whose branch fell behind `main` is not a pull
 # request that failed, and failing one for it would turn every merge into a red check on every branch
-# open beside it; the `main` ruleset already requires a branch to be current before it merges, which
-# is the one place the question belongs there.
+# open beside it. The pipeline asks instead what being current stood in for: the merge queue tests the
+# tree a merge produces, and `Coherence` stops a pull request a related change landed under — root
+# `AGENTS.md` and ADR 0038 hold that model.
 require_base_is_contained() {
   local gate_name="$1"
   local base_remote

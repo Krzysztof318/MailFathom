@@ -286,14 +286,16 @@ jobs:
       contents: read
     uses: ./.github/workflows/build-test-format-and-migrations.yml
     with:
-      # `dotnet format` is the one input that still reads the event. Formatting is a property of the
-      # files a change wrote, which is exactly what the pull request that wrote them already answered —
-      # and it is the one verdict here that cannot be broken by two changes combined without seeing
-      # each other, so neither a merge group nor a push asks it again. The model check can be: one pull
-      # request moves the model and another adds the migration, and neither run sees both, which is why
-      # that one is asked again on the combined tree.
+      # `dotnet format` is the one input that still reads the event. A merge group asks it, because
+      # two changes formatted on their own can still combine into a tree that is not — two using
+      # directives inserted apart that now sit out of order — and a group built in full is a tree no
+      # run formatted; a group whose verdict was reused skips this job altogether. A push does not ask
+      # it: the queue already formatted the tree it merged, and a merge that bypassed the queue is
+      # reported by the build and the tests rather than held up over whitespace. The model check is
+      # asked on a push for the stronger reason that one pull request can move the model while another
+      # adds the migration, and only the combined tree has both.
       run-build: ${{ needs.detect-changes.outputs.build == 'true' }}
-      run-format: ${{ github.event_name != 'push' && github.event_name != 'merge_group' && needs.detect-changes.outputs.format == 'true' }}
+      run-format: ${{ github.event_name != 'push' && needs.detect-changes.outputs.format == 'true' }}
       run-model: ${{ needs.detect-changes.outputs.model == 'true' }}
 
   # The client stack's build and unit suite, in `build-test-frontend.yml` for the reason the server's work is in a
@@ -320,7 +322,7 @@ jobs:
       # The same exemption the server's `run-format` gets above, and it is the whole of this switch rather than a repeat
       # of the change detection the job condition already applied: whether the client's formatting can have moved is a
       # question the `frontend` filter answers, and whether it is worth asking again on a merge is this one.
-      run-format: ${{ github.event_name != 'push' && github.event_name != 'merge_group' }}
+      run-format: ${{ github.event_name != 'push' }}
 
   # The two checks that read the half of the repository the build, formatting, and model jobs cannot see, in
   # `repository-contracts.yml` for the reason the two build workflows are called workflows: a nightly and a release

@@ -991,8 +991,13 @@ below leave it out for. `scripts/test-agent-workflow.sh` holds the list to exact
 workflows a pull request runs, in both directions, so a new pipeline cannot be forgotten
 into a pull request that then never reaches `Ready to merge`.
 
-Four rules live in `.github/pull-request/select-board-status.sh`, read top to bottom:
+Six rules live in `.github/pull-request/select-board-status.sh`, read top to bottom:
 
+- A pull request **in the merge queue** earns `In merge`, before anything else is asked of it
+  and over every status but `Done` and `Blocked`. It is waiting on the queue rather than on the
+  owner or the agent, and nothing on its head can say otherwise: the queue's checks run on the
+  merge group's commit. The workflow also runs on the `enqueued` and `dequeued` events of a pull
+  request for this reason alone, since no pipeline concluding on the head announces either.
 - A **check that failed** on the head earns `Changes requested`, whatever the review said.
   That column says the change is waiting on the agent rather than on the owner, and a red
   pipeline is exactly that whether the objection was written by a reader or produced by a
@@ -1003,35 +1008,40 @@ Four rules live in `.github/pull-request/select-board-status.sh`, read top to bo
 - A **head the reviewer withheld approval on** earns `Changes requested` as well. That
   verdict is published as a `COMMENT` review on purpose, so that a reviewer reporting no
   status check cannot block a merge, which is exactly why GitHub's built-in
-  `Code changes requested` workflow never fires for it — this rule is the column's only
-  writer.
-- An **approved head** earns `Ready to merge` where it still merges and `Conflicts` where it
-  does not, and this is the rule the pipeline exists for. `Fathom review` reads the diff and
+  `Code changes requested` workflow never fires for it — this rule and the three below are the
+  column's only writers.
+- An **approved head the merge queue removed after the approval** earns `Changes requested`.
+  The queue lets go of a pull request when the tree it combined failed a required check, and
+  that is a change the agent owes however green the head is; read without it, the approval and
+  the green head would put the item back in `Ready to merge`. The removal is compared with the
+  approval's time rather than read on its own, so a push and a new approval answer it.
+- An **approved head** earns `Ready to merge` where it still merges and `Changes requested`
+  where it does not, and this is the rule the pipeline exists for. `Fathom review` reads the diff and
   cannot see the pipeline, so an approval published while `Required CI` is still running
   says nothing about whether the change builds; both halves are asked here, where both are
   visible. Either verdict has to be of the head in front of us — GitHub keeps a review
   against the commit it was written on — and `Ready to merge` also needs the pull request to
   read `MERGEABLE` rather than merely not `CONFLICTING`, because a column claiming there is
   nothing left to wait for is claimed from an answer rather than from the absence of one.
-  The two columns carry one authority, every status but `Done` and `Blocked`: both say the
-  reviewer and the pipelines agree, and they differ only in whether the owner merges or the
-  agent rebases. That is what moves an approval that met a conflict before its pipelines
+  A conflict is a rebase the agent owes, which is what `Changes requested` already says, so
+  it takes no column of its own. Both answers carry one authority, every status but `Done` and
+  `Blocked`. That is what moves an approval that met a conflict before its pipelines
   finished, which never reached `Ready to merge`.
 - A pull request that **no longer merges** and that none of the rules above describes moves
-  the issues it closes from `Ready to merge` to `Conflicts`. That is a draft, and a head no
-  review has answered: neither carries a verdict, so all the rule can say is that a change
-  which had been ready stopped merging. `Ready to merge` says the change is waiting on
-  nothing but the owner pressing the button, and a conflict is precisely the discovery that
+  the issues it closes from `Ready to merge` to `Changes requested`. That is a draft, and a
+  head no review has answered: neither carries a verdict, so all the rule can say is that a
+  change which had been ready stopped merging. `Ready to merge` says the change is waiting on
+  nothing but a merge, and a conflict is precisely the discovery that
   it is not. From `Ready to merge` and from nowhere else — an item still being written,
   already blocked, or already done says nothing about whether a conflict is news, and a rule
   that moved those would report the same conflict on every push to `main` for as long as it
   went unresolved.
 
-**Every rule but a draft's is decided only once every pipeline outside the ignored set has
-finished.** That is one condition stated where the checks are counted rather than a copy of it
-in each rule, and it holds for every verdict because each claims something about the whole
-state of the change: `Ready to merge` and `Conflicts` say nothing is left to wait for but one
-act, and `Changes requested` says what is owed is the agent's answer — while a run still in
+**Every rule but the merge queue's and a draft's is decided only once every pipeline outside
+the ignored set has finished** — the queue's because it reads no check on the head at all. That
+is one condition stated where the checks are counted rather than a copy of it in each rule, and
+it holds for every verdict because each claims something about the whole state of the change:
+`Ready to merge` says nothing is left to wait for but a merge, and `Changes requested` says what is owed is the agent's answer — while a run still in
 flight can add to what that answer has to cover. So a review published minutes before
 `Required CI` finishes moves nothing until it does, a check that failed beside one still
 running waits with it, and the pipeline that concludes last raises the event that asks again.
@@ -1069,9 +1079,9 @@ permission to merge.
 
 A rule states the statuses it may act on and the statuses it refuses to overwrite, and the
 job passes both to `write-board-status.sh` unread. Those are the two directions of one
-question, and which one a rule uses says what it means: the rules about a review and a
-pipeline — both routes to `Changes requested`, and an approved head earning `Ready to merge`
-or `Conflicts` — describe any item they find and name the two statuses they must not erase,
+question, and which one a rule uses says what it means: the rules about the queue, a review,
+and a pipeline — `In merge`, every route to `Changes requested` but the last, and an approved
+head earning `Ready to merge` — describe any item they find and name the two statuses they must not erase,
 while the rule about a conflict nothing has a verdict about, a draft or a head no review has
 answered, is only true of an item that had been ready and names the one status it is
 entitled to move.
@@ -1088,9 +1098,12 @@ how many issues one pull request's closing references are followed. A pull reque
 or an issue nobody was told about is a board item silently left behind or decided from half
 the answer, which is the same reason the reviewer's own ceilings report.
 
-Nothing here is refused on a fork's pull request, unlike the labelling above: both triggers
-fire in this repository with this repository's own token, and each reads a fork's pull
-request exactly as it reads any other. That is also why a concluded pipeline is traced back
+Nothing here is refused on a fork's pull request, unlike the labelling above: the push and the
+concluded pipeline fire in this repository with this repository's own token, and each reads a
+fork's pull request exactly as it reads any other. The two queue events are the exception: they
+are `pull_request` events, which GitHub runs without the repository's secrets for a fork, so the
+board write is refused there and the next push to `main` or concluded pipeline decides the item
+instead. That is also why a concluded pipeline is traced back
 to its pull request through the head it ran on rather than through
 `workflow_run.pull_requests`, which a run started by `pull_request_target` — the trigger
 `Fathom review` and `Contributor licence` hold — carries empty. What the job does need is
@@ -2422,8 +2435,8 @@ board, mutate it — and the callers differ only in the value they write and in 
 statuses they may write it over. That authority is two arguments rather than one,
 because it is one question asked in two directions: the statuses a write refuses
 to overwrite, and the statuses it may act on and no others. The announcement and
-the verdict rules — both routes to `Changes requested`, and an approved head's
-`Ready to merge` or `Conflicts` — name the same preserved pair and no required
+the verdict rules — `In merge`, every route to `Changes requested` but the conflict
+rule's, and an approved head's `Ready to merge` — name the same preserved pair and no required
 list, because each describes whatever item it finds; the conflict rule for a draft
 or a head no review has answered names one required status and no preserved list,
 because it is only true of an item that had been ready. The closing issues come from `collect-closing-issues.sh`, the same
