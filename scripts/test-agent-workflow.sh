@@ -8566,7 +8566,7 @@ every_required_check_reports_on_a_merge_group() {
   local workflow
   local failures=''
 
-  for workflow in ci.yml coherence.yml contributor-licence.yml protected-paths.yml typo-check.yml; do
+  for workflow in ci.yml coherence.yml contributor-licence-merge-group.yml protected-paths.yml typo-check.yml; do
     if ! grep -A2 -E '^  merge_group:' "$source_repository_root/.github/workflows/$workflow" |
       grep -qF 'checks_requested'; then
       failures+="$workflow publishes a required check and does not run on merge_group's checks_requested. "
@@ -8754,23 +8754,23 @@ merge_groups_always_receive_a_licence_status() {
   }
 
   FAKE_STATUSES='{"statuses":[{"context":"license/cla","state":"success"}]}' \
-    run_merge_group_step contributor-licence.yml "$step_name" "$work/accepted" || true
+    run_merge_group_step contributor-licence-merge-group.yml "$step_name" "$work/accepted" || true
   expect_posted accepted success
 
   FAKE_STATUSES='{"statuses":[{"context":"Required CI","state":"success"},{"context":"license/cla","state":"failure"}]}' \
-    run_merge_group_step contributor-licence.yml "$step_name" "$work/refused" || true
+    run_merge_group_step contributor-licence-merge-group.yml "$step_name" "$work/refused" || true
   expect_posted refused failure
 
   FAKE_STATUSES='{"statuses":[]}' \
-    run_merge_group_step contributor-licence.yml "$step_name" "$work/missing" || true
+    run_merge_group_step contributor-licence-merge-group.yml "$step_name" "$work/missing" || true
   expect_posted missing failure
 
   FAKE_FAILING='/status?' FAKE_STATUSES='{"statuses":[]}' \
-    run_merge_group_step contributor-licence.yml "$step_name" "$work/status-unreadable" || true
+    run_merge_group_step contributor-licence-merge-group.yml "$step_name" "$work/status-unreadable" || true
   expect_posted status-unreadable error
 
   FAKE_FAILING='/pulls/' FAKE_STATUSES='{"statuses":[]}' \
-    run_merge_group_step contributor-licence.yml "$step_name" "$work/pull-unreadable" || true
+    run_merge_group_step contributor-licence-merge-group.yml "$step_name" "$work/pull-unreadable" || true
   expect_posted pull-unreadable error
 
   unset -f expect_posted
