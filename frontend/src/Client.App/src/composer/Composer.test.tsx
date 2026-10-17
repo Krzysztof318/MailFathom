@@ -1418,7 +1418,9 @@ describe('Composer, a draft', () => {
 
         await screen.findByText('Half a thought');
 
-        expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Message' }));
+        await waitFor(() => {
+            expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Message' }));
+        });
     });
 
     it('offers the subject for editing, a draft being a message of its own rather than one the deployment words', async () => {
