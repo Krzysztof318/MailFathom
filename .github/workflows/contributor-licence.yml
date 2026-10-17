@@ -74,13 +74,11 @@ jobs:
           client-id: ${{ vars.LICENSE_APP_CLIENT_ID }}
           private-key: ${{ secrets.LICENSE_APP_PRIVATE_KEY }}
 
-      # Both events are reduced to the same five facts here rather than read out of two different
-      # payload shapes further down. The pull request is fetched even under `pull_request_target`,
-      # where the payload already carries it, because `synchronize` reports the head the event was
-      # queued for and the status has to name the head that exists now.
       # Nothing is asked, read from the register, or recorded for a merge group: the queue admitted the
       # pull request with this status already green, and the group's own commit is the only thing that
-      # lacks it. Every later step reads this step's outputs or the comment event, so all of them skip.
+      # lacks it. Every later step reads the next step's outputs or the comment event, so all of them
+      # skip. A read that fails still posts a status, as `error`, because a required check that never
+      # arrives holds the queue until its timeout and removes the pull request without saying why.
       - name: Carry the pull request's licence status onto the merge group
         if: github.event_name == 'merge_group'
         env:
@@ -96,11 +94,19 @@ jobs:
           description='The merge group names no pull request, so no licence status could be carried'
 
           if [ -n "$number" ]; then
-            head_sha=$(gh api "repos/$REPOSITORY/pulls/$number" --jq '.head.sha')
-            carried=$(gh api "repos/$REPOSITORY/commits/$head_sha/status" \
-              --jq '[.statuses[] | select(.context == "license/cla")][0].state // empty')
+            head_sha=$(gh api "repos/$REPOSITORY/pulls/$number" --jq '.head.sha') || head_sha=''
+            read_failed=false
+            carried=''
+            if [ -z "$head_sha" ]; then
+              read_failed=true
+            elif ! carried=$(gh api "repos/$REPOSITORY/commits/$head_sha/status?per_page=100" \
+                --jq '[.statuses[] | select(.context == "license/cla")][0].state // empty'); then
+              read_failed=true
+            fi
 
-            if [ "$carried" = 'success' ]; then
+            if [ "$read_failed" = 'true' ]; then
+              description="The licence status of pull request #$number could not be read; re-running the job carries it"
+            elif [ "$carried" = 'success' ]; then
               state=success
               description="Carried from pull request #$number, whose author needs no agreement or has accepted it"
             else
@@ -117,6 +123,10 @@ jobs:
 
           printf 'license/cla = %s (%s)\n' "$state" "$description"
 
+      # Both events are reduced to the same five facts here rather than read out of two different
+      # payload shapes further down. The pull request is fetched even under `pull_request_target`,
+      # where the payload already carries it, because `synchronize` reports the head the event was
+      # queued for and the status has to name the head that exists now.
       - name: Resolve the pull request and its author
         id: subject
         if: github.event_name != 'merge_group'

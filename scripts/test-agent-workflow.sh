@@ -8469,15 +8469,18 @@ only_the_recorded_workflows_use_pull_request_target() {
 # Every merge into `main` goes through the merge queue, and the queue waits for each required check on
 # the merge group's own commit. A workflow publishing one that does not listen on `merge_group` leaves
 # that check unreported there, and every pull request then sits in the queue until the check-response
-# timeout removes it. The ruleset lives in repository settings, so the five workflows below are the
-# required checks as `docs/operations/local-development.md` § *Branch protection* records them.
+# timeout removes it. `checks_requested` is the one activity type GitHub raises for a group, so a
+# trigger naming any other never fires. The ruleset lives in repository settings, so the five
+# workflows below are the required checks as `docs/operations/local-development.md` § *Branch
+# protection* records them.
 every_required_check_reports_on_a_merge_group() {
   local workflow
   local failures=''
 
   for workflow in ci.yml coherence.yml contributor-licence.yml protected-paths.yml typo-check.yml; do
-    if ! grep -qE '^  merge_group:' "$source_repository_root/.github/workflows/$workflow"; then
-      failures+="$workflow publishes a required check and does not run on merge_group. "
+    if ! grep -A2 -E '^  merge_group:' "$source_repository_root/.github/workflows/$workflow" |
+      grep -qF 'checks_requested'; then
+      failures+="$workflow publishes a required check and does not run on merge_group's checks_requested. "
     fi
   done
 
@@ -8487,69 +8490,206 @@ every_required_check_reports_on_a_merge_group() {
   fi
 }
 
-# `CI`'s `Find a verdict this tree already earned` step decides whether a merge group or a push skips
-# the whole build, so a wrong `true` merges a tree nobody tested. It is extracted verbatim, as the
+# The steps a merge group runs instead of the pull request's own work decide whether a required check
+# passes on the tree the queue merges, so each is extracted verbatim from its workflow, as the
 # protected-paths guard is, and run against a `gh` that answers each endpoint from a fixture and
-# applies the step's own `--jq` filter to it — the filter is where the newest-run and any-success
-# distinction lives, so a fake that answered past it would prove nothing.
-run_reuse_step() {
-  local event_name="$1"
-  local containment="$2"
-  local check_runs_json="$3"
-  local output_file="$4"
-  local work
-  work="$(mktemp -d "$test_directory/reuse-XXXXXX")"
-  local step_script="$work/step.sh"
+# applies the step's own `--jq` filter to it. The filter is where the newest-run, any-success, and
+# first-status choices live, so a fake that answered past it would prove nothing. `FAKE_FAILING`
+# names an endpoint fragment whose read fails, and a status the step posts is written to
+# `FAKE_POSTED` as the `state` it carried.
+extract_named_run_step() {
+  local workflow="$1"
+  local step_name="$2"
+  local step_script="$3"
 
-  mkdir "$work/bin"
-  awk '
-    $0 == "      - name: Find a verdict this tree already earned" { found = 1; next }
+  awk -v step="      - name: $step_name" '
+    $0 == step { found = 1; next }
     found && !extracting && /^        run: \|$/ { extracting = 1; next }
     extracting {
       if ($0 != "" && $0 !~ /^          /) { exit }
       sub(/^          /, "")
       print
     }
-  ' "$source_repository_root/.github/workflows/ci.yml" > "$step_script"
-  bash -n "$step_script"
+  ' "$source_repository_root/.github/workflows/$workflow" > "$step_script"
 
-  cat > "$work/bin/gh" << 'FAKE'
+  [[ -s "$step_script" ]]
+  bash -n "$step_script"
+}
+
+write_merge_group_gh() {
+  local bin_directory="$1"
+
+  cat > "$bin_directory/gh" << 'FAKE'
 #!/usr/bin/env bash
-filter=''
+filter='.'
 endpoint=''
+posted_state=''
 while (( $# > 0 )); do
   case "$1" in
     --jq) filter="$2"; shift 2 ;;
-    --method | -f) shift 2 ;;
+    -f)
+      [[ "$2" == state=* ]] && posted_state="${2#state=}"
+      shift 2
+      ;;
+    --method) shift 2 ;;
     api) shift ;;
     *) endpoint="$1"; shift ;;
   esac
 done
+if [[ -n "${FAKE_FAILING:-}" && "$endpoint" == *"$FAKE_FAILING"* ]]; then
+  exit 1
+fi
 case "$endpoint" in
+  */statuses/*) printf '%s' "$posted_state" > "$FAKE_POSTED"; exit 0 ;;
   */pulls/*) body='{"head":{"sha":"1111111111111111111111111111111111111111"}}' ;;
   */compare/*) body="{\"status\":\"$FAKE_CONTAINMENT\"}" ;;
   */check-runs) body="$FAKE_CHECK_RUNS" ;;
+  */status\?*) body="$FAKE_STATUSES" ;;
   *) exit 1 ;;
 esac
 jq -r "$filter" <<< "$body"
 FAKE
-  chmod +x "$work/bin/gh"
+  chmod +x "$bin_directory/gh"
+}
 
+# Runs one extracted step with the merge-group environment every one of them reads, plus whatever
+# the caller exported, and returns the step's own exit status.
+run_merge_group_step() {
+  local workflow="$1"
+  local step_name="$2"
+  local work="$3"
+
+  mkdir -p "$work/bin"
+  extract_named_run_step "$workflow" "$step_name" "$work/step.sh"
+  write_merge_group_gh "$work/bin"
   : > "$work/output"
+  : > "$work/posted"
+
   (
     export PATH="$work/bin:$PATH"
     export GH_TOKEN='fake-token'
     export REPOSITORY='fathomise/MailFathom'
-    export EVENT_NAME="$event_name"
     export MERGE_GROUP_HEAD_REF='refs/heads/gh-readonly-queue/main/pr-7-2222222222222222222222222222222222222222'
+    export MERGE_GROUP_HEAD_SHA='4444444444444444444444444444444444444444'
     export MERGE_GROUP_BASE_SHA='2222222222222222222222222222222222222222'
     export PUSHED_SHA='3333333333333333333333333333333333333333'
-    export FAKE_CONTAINMENT="$containment"
-    export FAKE_CHECK_RUNS="$check_runs_json"
     export GITHUB_OUTPUT="$work/output"
-    bash "$step_script"
-  ) > /dev/null 2>&1
+    export FAKE_POSTED="$work/posted"
+    bash "$work/step.sh"
+  ) > "$work/log" 2>&1
+}
+
+# `CI`'s `Find a verdict this tree already earned` decides whether a merge group or a push skips the
+# whole build, so a wrong `true` merges a tree nobody tested.
+run_reuse_step() {
+  local event_name="$1"
+  local containment="$2"
+  local check_runs_json="$3"
+  local output_file="$4"
+  local work
+
+  work="$(mktemp -d "$test_directory/reuse-XXXXXX")"
+  EVENT_NAME="$event_name" FAKE_CONTAINMENT="$containment" FAKE_CHECK_RUNS="$check_runs_json" \
+    run_merge_group_step ci.yml 'Find a verdict this tree already earned' "$work" || true
   cat "$work/output" > "$output_file"
+}
+
+# `Protected paths` and `Typo check` carry the newest conclusion of their own check on the pull
+# request's head, and pass only on `success`: an older success beside a newer failure, a run still in
+# progress, and no run at all each fail the group.
+merge_groups_carry_only_a_successful_newest_check_run() {
+  local workflow
+  local check_name
+  local work
+  local failures=''
+  local newest_success='{"check_runs":[
+    {"app":{"slug":"github-actions"},"started_at":"2026-10-17T10:00:00Z","conclusion":"failure"},
+    {"app":{"slug":"github-actions"},"started_at":"2026-10-17T10:05:00Z","conclusion":"success"}]}'
+  local newest_failure='{"check_runs":[
+    {"app":{"slug":"github-actions"},"started_at":"2026-10-17T10:00:00Z","conclusion":"success"},
+    {"app":{"slug":"github-actions"},"started_at":"2026-10-17T10:05:00Z","conclusion":"failure"}]}'
+  local in_progress='{"check_runs":[
+    {"app":{"slug":"github-actions"},"started_at":"2026-10-17T10:05:00Z","conclusion":null}]}'
+  local missing='{"check_runs":[]}'
+
+  for workflow in protected-paths.yml typo-check.yml; do
+    work="$(mktemp -d "$test_directory/carry-XXXXXX")"
+    # The step's own `env:` block names the check, and the extraction carries the script alone.
+    if [[ "$workflow" == 'protected-paths.yml' ]]; then
+      export CHECK_NAME='Protected paths'
+    else
+      export CHECK_NAME='Typo check'
+    fi
+    FAKE_CHECK_RUNS="$newest_success" \
+      run_merge_group_step "$workflow" "Carry the verdict the pull request's head earned" "$work/success" ||
+      failures+="$workflow failed a group whose head's newest run passed. "
+
+    for check_name in newest_failure in_progress missing; do
+      if FAKE_CHECK_RUNS="${!check_name}" \
+        run_merge_group_step "$workflow" "Carry the verdict the pull request's head earned" "$work/$check_name"; then
+        failures+="$workflow passed a group whose head's newest run was $check_name. "
+      fi
+    done
+
+    if FAKE_FAILING='/pulls/' FAKE_CHECK_RUNS="$newest_success" \
+      run_merge_group_step "$workflow" "Carry the verdict the pull request's head earned" "$work/unreadable"; then
+      failures+="$workflow passed a group whose pull request could not be read. "
+    fi
+  done
+  unset CHECK_NAME
+
+  if [[ -n "$failures" ]]; then
+    printf '%s\n' "$failures" >&2
+    return 1
+  fi
+}
+
+# `license/cla` is a commit status rather than a job, so the merge group carries it by posting one,
+# and it must post one whatever happened: a status that never arrives holds the queue until its
+# timeout. Only a head carrying `success` is carried as `success`, and a read that failed is posted
+# as `error` rather than as a verdict about the author.
+merge_groups_always_receive_a_licence_status() {
+  local work
+  local failures=''
+  local step_name="Carry the pull request's licence status onto the merge group"
+
+  work="$(mktemp -d "$test_directory/licence-XXXXXX")"
+
+  expect_posted() {
+    local case_name="$1"
+    local expected="$2"
+
+    if [[ "$(cat "$work/$case_name/posted")" != "$expected" ]]; then
+      failures+="$case_name posted license/cla as '$(cat "$work/$case_name/posted")', not '$expected'. "
+    fi
+  }
+
+  FAKE_STATUSES='{"statuses":[{"context":"license/cla","state":"success"}]}' \
+    run_merge_group_step contributor-licence.yml "$step_name" "$work/accepted" || true
+  expect_posted accepted success
+
+  FAKE_STATUSES='{"statuses":[{"context":"Required CI","state":"success"},{"context":"license/cla","state":"failure"}]}' \
+    run_merge_group_step contributor-licence.yml "$step_name" "$work/refused" || true
+  expect_posted refused failure
+
+  FAKE_STATUSES='{"statuses":[]}' \
+    run_merge_group_step contributor-licence.yml "$step_name" "$work/missing" || true
+  expect_posted missing failure
+
+  FAKE_FAILING='/status?' FAKE_STATUSES='{"statuses":[]}' \
+    run_merge_group_step contributor-licence.yml "$step_name" "$work/status-unreadable" || true
+  expect_posted status-unreadable error
+
+  FAKE_FAILING='/pulls/' FAKE_STATUSES='{"statuses":[]}' \
+    run_merge_group_step contributor-licence.yml "$step_name" "$work/pull-unreadable" || true
+  expect_posted pull-unreadable error
+
+  unset -f expect_posted
+
+  if [[ -n "$failures" ]]; then
+    printf '%s\n' "$failures" >&2
+    return 1
+  fi
 }
 
 ci_reuses_a_verdict_only_for_a_tree_a_successful_run_tested() {
@@ -10682,6 +10822,8 @@ run_test the_integration_suite_writes_its_results_where_the_workflow_uploads_the
 run_test only_the_recorded_workflows_use_pull_request_target
 run_test every_required_check_reports_on_a_merge_group
 run_test ci_reuses_a_verdict_only_for_a_tree_a_successful_run_tested
+run_test merge_groups_carry_only_a_successful_newest_check_run
+run_test merge_groups_always_receive_a_licence_status
 run_test a_comment_never_cancels_a_review_in_flight
 run_test a_comment_never_cancels_a_queued_review
 run_test the_reviewer_listens_for_the_dispatch_it_sends
