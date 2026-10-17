@@ -6239,6 +6239,73 @@ obligation_index_leaves_migrations_out() {
   assert_json '0' '.tests | length' "$output_file"
 }
 
+# `Coherence` pairs what landed under a pull request with what the pull request changes. The tree is
+# the combined one, so a page either side added is on disk, and the two path lists are what each side
+# changed. The motivating case has to fail in both orders: a page that landed describing a path this
+# change moves, and a page this change adds describing a path that landed.
+create_coherence_fixture() {
+  local fixture_root="$1"
+
+  rm -rf "$fixture_root"
+  mkdir -p "$fixture_root/backend/src/Application/Emails" "$fixture_root/docs/features"
+
+  printf 'internal sealed class MailboxWidget;\n' > "$fixture_root/backend/src/Application/Emails/MailboxWidget.cs"
+  printf '%s\n' \
+    '# Mailbox widgets' \
+    '' \
+    '<!-- describes: backend/src/Application/Emails/** -->' \
+    > "$fixture_root/docs/features/widgets.md"
+}
+
+run_coherence() {
+  local name="$1" landed="$2" changed="$3"
+  local fixture_root="$test_directory/coherence-$name"
+
+  create_coherence_fixture "$fixture_root"
+  printf '%s\n' $landed > "$test_directory/coherence-$name-landed"
+  printf '%s\n' $changed > "$test_directory/coherence-$name-changed"
+
+  bash "$source_repository_root/.github/coherence/relate-changes.sh" \
+    "$fixture_root" "$test_directory/coherence-$name-landed" "$test_directory/coherence-$name-changed" \
+    "$test_directory/coherence-$name.json"
+}
+
+coherence_relates_a_landed_page_to_the_path_it_describes() {
+  run_coherence landed-page 'docs/features/widgets.md' 'backend/src/Application/Emails/MailboxWidget.cs'
+
+  assert_json '[{"landed":"docs/features/widgets.md","changed":"backend/src/Application/Emails/MailboxWidget.cs","reason":"describes:"}]' \
+    '.' "$test_directory/coherence-landed-page.json"
+}
+
+coherence_relates_an_added_page_to_a_landed_path_it_describes() {
+  run_coherence added-page 'backend/src/Application/Emails/MailboxWidget.cs' 'docs/features/widgets.md'
+
+  assert_json '[{"landed":"backend/src/Application/Emails/MailboxWidget.cs","changed":"docs/features/widgets.md","reason":"describes:"}]' \
+    '.' "$test_directory/coherence-added-page.json"
+}
+
+coherence_passes_an_unrelated_change() {
+  run_coherence unrelated 'frontend/src/Client.App/src/App.tsx deploy/helm/mailfathom/values.yaml' \
+    'backend/src/Application/Emails/MailboxWidget.cs docs/features/widgets.md'
+
+  assert_json '[]' '.' "$test_directory/coherence-unrelated.json"
+}
+
+# Shared code is the merge queue's to judge on the combined tree, so a file both sides changed is a
+# pair only when it is prose.
+coherence_passes_shared_code_without_a_prose_link() {
+  run_coherence shared-code 'backend/src/Application/Emails/Mailbox.cs' 'backend/src/Application/Emails/Mailbox.cs'
+
+  assert_json '[]' '.' "$test_directory/coherence-shared-code.json"
+}
+
+coherence_relates_the_same_prose_file_and_an_instructions_scope() {
+  run_coherence prose 'README.md backend/AGENTS.md' 'README.md backend/src/Application/Emails/Mailbox.cs frontend/AGENTS.md'
+
+  assert_json '[{"landed":"README.md","changed":"README.md","reason":"same prose file"},{"landed":"backend/AGENTS.md","changed":"backend/src/Application/Emails/Mailbox.cs","reason":"AGENTS.md scope"}]' \
+    '.' "$test_directory/coherence-prose.json"
+}
+
 # The split is what makes coverage a property of the run rather than of the model. Every contract
 # below is about one of the two things that must hold whatever the shape of the change: no file is
 # lost, and no reader is given so much more than another that the run waits on it.
@@ -10421,6 +10488,11 @@ run_test review_obligations_names_the_untracked_paths_no_diff_contains
 run_test review_obligations_reports_without_gating
 run_test review_obligations_reports_on_a_patch_past_the_argument_limit
 run_test obligation_index_leaves_migrations_out
+run_test coherence_relates_a_landed_page_to_the_path_it_describes
+run_test coherence_relates_an_added_page_to_a_landed_path_it_describes
+run_test coherence_passes_an_unrelated_change
+run_test coherence_passes_shared_code_without_a_prose_link
+run_test coherence_relates_the_same_prose_file_and_an_instructions_scope
 run_test group_split_gives_every_changed_file_exactly_one_reader
 run_test group_split_never_exceeds_the_reader_ceiling
 run_test group_split_balances_what_each_reader_is_given

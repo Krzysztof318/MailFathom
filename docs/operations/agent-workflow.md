@@ -1157,6 +1157,58 @@ which is what makes the register evidence rather than a file the party it speaks
 edit. [ADR 0015](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0015-contributor-licence-agreement-and-where-assent-is-recorded.md)
 holds the decision and `CLA.md` the agreement.
 
+## Coherence
+
+`Coherence` stops a pull request when a change related to it landed underneath it, and only then.
+Git merges two changes without a conflict whenever they touch different lines, and the build and
+the tests prove the combined tree compiles and behaves; neither notices a page one pull request adds
+that describes a file another one changed, or a rule written into an `AGENTS.md` that a file changed
+beside it does not follow. That is the half this check covers.
+
+It compares two path lists. What *landed* is every path changed between the pull request's merge
+base and what it would merge onto: current `main` on a pull request, and on `merge_group` the
+group's base, which is `main` plus the pull requests ahead in the queue. What *changed* is every
+path the pull request changes. `.github/coherence/relate-changes.sh` pairs a landed path with a
+changed one when
+
+- both are the same prose file — a `*.md` anywhere, which takes in every `AGENTS.md` and ADR, or
+  anything under `design/`;
+- either is a page whose `describes:` marker covers the other;
+- either is an `AGENTS.md` whose directory contains the other, so the root one relates to every
+  path.
+
+A code file both sides changed is not a pair on its own. Whether two code changes still agree is
+what the build and the tests on the combined tree answer, and a check failing on every shared file
+would be the branch-must-be-current rule again under another name.
+
+The markers and the `AGENTS.md` files are read from the combined tree, which is what makes both
+orders fail: a page that landed describing a path this pull request changes, and a page this pull
+request adds describing a path that landed. They are resolved through
+`.github/fathom-review/index-obligations.sh`, the implementation `Fathom review` reads them with,
+so the two never disagree about which page describes which path. Granularity is the whole file: a
+pull request that changes one row of `THIRD_PARTY_LICENSES.md` is related to every other pull
+request that changed any row of it.
+
+It is not the base-freshness check [The base is asked twice locally and never in the
+pipeline](#the-base-is-asked-twice-locally-and-never-in-the-pipeline) rules out. A branch that
+merely fell behind passes it; what fails it is a named pair of files somebody has to read together.
+It reports in seconds, has no draft exemption, and is not a required check yet.
+
+**When it fails**, the job summary lists every pair, the relation that made it one, and the pull
+request that introduced the landed side — on `merge_group` also whether that pull request is
+already on `main` or still ahead in the queue. For each pair:
+
+1. Read the landed side as it now stands and the pull request's side together, and decide whether
+   they still agree: whether the page still describes the file, whether the changed file follows
+   the rule, whether both edits to the same page still read as one.
+2. Rebase onto `main` once the landed side is on it, and fix whatever no longer agrees in the same
+   push. A pull request still ahead in the queue is not on `main` yet, so wait for it to merge
+   rather than rebasing onto a base that lacks it.
+3. Push. The merge base moves past what landed, so the same pair is not reported again.
+
+A rebase with nothing to reconcile is still the answer to step 2: the check asks that the pair was
+read, and the moved merge base is what records that it was.
+
 ## Review on the pull request
 
 `review-change` reviews the diff before it leaves the workspace. Two reviewers

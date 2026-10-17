@@ -81,6 +81,7 @@ on:
       - completed
     workflows:
       - CI
+      - Coherence
       - Contributor licence
       - Fathom review
       - Protected paths

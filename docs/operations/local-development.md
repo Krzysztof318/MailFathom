@@ -1885,7 +1885,7 @@ A dispatch with `postgres_retrieval` set starts a PostgreSQL container before th
 
 ## Pull request checks
 
-Five workflows run for every pull request targeting `main`. Three of them always run; `Typo check` and `CodeQL` always run except on a draft. `CI` also runs on every push to `main`, which [`CI` after a merge to `main`](#ci-after-a-merge-to-main) below describes. It carries eight jobs.
+Six workflows run for every pull request targeting `main`. Four of them always run; `Typo check` and `CodeQL` always run except on a draft. `CI` also runs on every push to `main`, which [`CI` after a merge to `main`](#ci-after-a-merge-to-main) below describes. It carries eight jobs.
 
 Each check reads as `<stack> / <question>`, and the stack in front is what makes the list legible: the server's three jobs arrive under `Backend` and the client's one under `Frontend`, so a job that skipped is read as work the change could not reach rather than as a stack nobody verified. The two are not symmetrical in shape and are not meant to be — the server asks its three questions in three jobs and the client asks all of its in one, for reasons the bullets below give — which is exactly why each name has to carry both halves.
 
@@ -1936,7 +1936,7 @@ two jobs, split by the event that can answer them. On a `pull_request` — opene
 ready, or edited — it checks out the merge commit and applies the labels
 `.github/pull-request/select-labels.sh` says the change earns, today `security` when any issue the
 body refers to carries it, whether the change closes that issue or merely names it. On a push to
-`main`, and on any of the six workflows a pull request runs concluding, it instead reads what those
+`main`, and on any of the seven workflows a pull request runs concluding, it instead reads what those
 pull requests are in — whether each still merges, whether the reviewer approved the head, and what
 its checks concluded — and writes the roadmap board where
 `.github/pull-request/select-board-status.sh` says a state earns a status: `Changes requested` for a
@@ -1953,6 +1953,8 @@ a label, so one a hand applied stays. [Rules on the pull
 request](agent-workflow.md#rules-on-the-pull-request) carries the reasoning, including why the
 labelling takes `pull_request` rather than the trigger `Fathom review` holds, why the board half
 takes `workflow_run` rather than `check_suite`, and what either costs on a fork.
+
+The sixth workflow, `Coherence`, carries one job of the same name and answers whether a change related to this one landed underneath it since its merge base. It runs on a pull request and on `merge_group`, checks out the combined tree with the whole history and no blobs, lists the paths that landed and the paths the pull request changes, and hands both to `.github/coherence/relate-changes.sh`; it fails on every pair that script relates and names the pull request that introduced the landed side. It takes seconds, has no draft exemption, and is not a required check yet. [`Coherence`](agent-workflow.md#coherence) carries the relation and what to do when it fails.
 
 ### `CI` after a merge to `main`
 
@@ -2001,7 +2003,7 @@ An outside contributor whose change genuinely needs one of these directories —
 
 ### Draft pull requests
 
-Draft pull requests skip the build, formatting, model-check, typo-check, and code-scanning jobs without allocating a runner; only the seconds-long `Detect changes`, `Required CI`, and `Protected paths` jobs and the two behind `Repository contracts` — the twenty-second `Workflow contracts`, and, when the change reaches the chart, the equally short `Helm chart` — do any work, and `Required CI` clears the ones that skipped because a skipped job is a valid outcome.
+Draft pull requests skip the build, formatting, model-check, typo-check, and code-scanning jobs without allocating a runner; only the seconds-long `Detect changes`, `Required CI`, `Protected paths`, and `Coherence` jobs and the two behind `Repository contracts` — the twenty-second `Workflow contracts`, and, when the change reaches the chart, the equally short `Helm chart` — do any work, and `Required CI` clears the ones that skipped because a skipped job is a valid outcome.
 
 Skipping is not disappearing: each skipped job still reports a `skipped` conclusion and is listed among the pull request's checks, `Typo check` and `CodeQL` included. Its workflow puts no draft condition on the trigger, for the same reason `CI` puts no path filter on one — the run is instantiated and the decision is taken inside, where a job that declines to work still says so. A draft cannot be merged regardless. Marking a draft ready for review starts the applicable jobs immediately through the `ready_for_review` activity, and later commits continue to start them through `synchronize`. Converting a ready pull request back to draft cancels the superseded active run through the concurrency group and skips the replacement jobs. `CI` and `CodeQL` remain available through manual dispatch regardless of pull request state; `Typo check` and `Protected paths` carry no `workflow_dispatch` and run only for a pull request.
 
