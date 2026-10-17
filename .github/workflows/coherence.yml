@@ -124,15 +124,15 @@ jobs:
                 place="${commit:0:12} ${subject}"
               fi
 
-              if [[ "$EVENT_NAME" == 'merge_group' ]]; then
-                # Not `merge_group.base_sha`: that is the group's parent commit, the first parent
-                # above, which already carries the entries ahead. The base branch's tip is what is
-                # on `main`, and the full-history checkout holds it as a remote-tracking ref.
-                if git merge-base --is-ancestor "$commit" "origin/${BASE_BRANCH#refs/heads/}"; then
-                  place+=' (on main)'
-                else
-                  place+=' (ahead in the queue)'
-                fi
+              # Everything a pull request sees landed is on `main` by construction. On a merge group,
+              # not `merge_group.base_sha`: that is the group's parent commit, the first parent above,
+              # which already carries the entries ahead. The base branch's tip is what is on `main`,
+              # and the full-history checkout holds it as a remote-tracking ref.
+              if [[ "$EVENT_NAME" != 'merge_group' ]] \
+                || git merge-base --is-ancestor "$commit" "origin/${BASE_BRANCH#refs/heads/}"; then
+                place+=' (on main)'
+              else
+                place+=' (ahead in the queue)'
               fi
 
               printf '%s; ' "$place"
@@ -140,20 +140,48 @@ jobs:
           }
 
           {
-            echo '### Related changes landed under this pull request'
+            echo '### Other pull requests changed files related to this one'
             echo
-            echo "Each row pairs a path that landed since the merge base \`${merge_base:0:12}\` with a path this pull request changes. Read the two together, reconcile whichever one no longer agrees, and rebase onto \`main\` once the other side is on it."
+            echo "Each row pairs a file this pull request changes with a file another pull request changed after this branch's merge base \`${merge_base:0:12}\`. Read the two together, reconcile whichever one no longer agrees, and rebase onto \`main\` once the other pull request is on it."
             echo
-            echo '| Landed | Changed here | Relation | Introduced by |'
+            echo '| Changed by this pull request | Changed by another pull request | Which pull request | How they relate |'
             echo '|---|---|---|---|'
           } >> "$GITHUB_STEP_SUMMARY"
 
           while IFS=$'\t' read -r landed changed reason; do
             source_of_landed="$(introduced_by "$landed")"
             source_of_landed="${source_of_landed%; }"
-            echo "::error::${landed} landed under this pull request and is related to ${changed} (${reason}); introduced by ${source_of_landed}"
-            echo "| \`${landed}\` | \`${changed}\` | ${reason} | ${source_of_landed} |" >> "$GITHUB_STEP_SUMMARY"
+
+            case "$reason" in
+              'same prose file')
+                relation='both changed this prose file'
+                message="${changed} is changed by this pull request and was also changed by ${source_of_landed}."
+                ;;
+              'landed describes changed')
+                relation="the other pull request's page has a \`describes:\` marker covering the file here"
+                message="${landed}, changed by ${source_of_landed}, has a describes: marker covering ${changed}, which this pull request changes."
+                ;;
+              'changed describes landed')
+                relation="the page here has a \`describes:\` marker covering the other pull request's file"
+                message="${changed}, which this pull request changes, has a describes: marker covering ${landed}, changed by ${source_of_landed}."
+                ;;
+              'landed governs changed')
+                relation="the other pull request's \`AGENTS.md\` governs the file here"
+                message="${landed}, changed by ${source_of_landed}, governs ${changed}, which this pull request changes."
+                ;;
+              'changed governs landed')
+                relation="the \`AGENTS.md\` here governs the other pull request's file"
+                message="${changed}, which this pull request changes, governs ${landed}, changed by ${source_of_landed}."
+                ;;
+              *)
+                echo "::error::relate-changes.sh returned the unknown relation '${reason}'."
+                exit 1
+                ;;
+            esac
+
+            echo "::error title=Related change in another pull request::${message} Read the two together."
+            echo "| \`${changed}\` | \`${landed}\` | ${source_of_landed} | ${relation} |" >> "$GITHUB_STEP_SUMMARY"
           done < <(jq -r '.[] | [.landed, .changed, .reason] | @tsv' "$work_directory/pairs.json")
 
-          echo "${pair_count} related pair(s) landed under this pull request; the job summary lists them."
+          echo "${pair_count} file(s) changed by other pull requests relate to files this pull request changes; the job summary lists them."
           exit 1

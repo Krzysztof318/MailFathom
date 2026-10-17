@@ -6500,14 +6500,14 @@ run_coherence() {
 coherence_relates_a_landed_page_to_the_path_it_describes() {
   run_coherence landed-page 'docs/features/widgets.md' 'backend/src/Application/Emails/MailboxWidget.cs'
 
-  assert_json '[{"landed":"docs/features/widgets.md","changed":"backend/src/Application/Emails/MailboxWidget.cs","reason":"describes:"}]' \
+  assert_json '[{"landed":"docs/features/widgets.md","changed":"backend/src/Application/Emails/MailboxWidget.cs","reason":"landed describes changed"}]' \
     '.' "$test_directory/coherence-landed-page.json"
 }
 
 coherence_relates_an_added_page_to_a_landed_path_it_describes() {
   run_coherence added-page 'backend/src/Application/Emails/MailboxWidget.cs' 'docs/features/widgets.md'
 
-  assert_json '[{"landed":"backend/src/Application/Emails/MailboxWidget.cs","changed":"docs/features/widgets.md","reason":"describes:"}]' \
+  assert_json '[{"landed":"backend/src/Application/Emails/MailboxWidget.cs","changed":"docs/features/widgets.md","reason":"changed describes landed"}]' \
     '.' "$test_directory/coherence-added-page.json"
 }
 
@@ -6529,7 +6529,7 @@ coherence_passes_shared_code_without_a_prose_link() {
 coherence_relates_the_same_prose_file_and_an_instructions_scope() {
   run_coherence prose 'README.md backend/AGENTS.md' 'README.md backend/src/Application/Emails/Mailbox.cs frontend/AGENTS.md'
 
-  assert_json '[{"landed":"README.md","changed":"README.md","reason":"same prose file"},{"landed":"backend/AGENTS.md","changed":"backend/src/Application/Emails/Mailbox.cs","reason":"AGENTS.md scope"}]' \
+  assert_json '[{"landed":"README.md","changed":"README.md","reason":"same prose file"},{"landed":"backend/AGENTS.md","changed":"backend/src/Application/Emails/Mailbox.cs","reason":"landed governs changed"}]' \
     '.' "$test_directory/coherence-prose.json"
 }
 

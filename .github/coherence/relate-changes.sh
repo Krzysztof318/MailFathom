@@ -28,7 +28,9 @@
 #
 # It reads files and calls no API, which is what lets the contract suite run it against a fixture
 # tree. The pairs come out as a JSON array of `{landed, changed, reason}`, empty when nothing is
-# related.
+# related. The reason carries the direction, because the message a reader acts on has to say which
+# side holds the page or the `AGENTS.md`: `same prose file`, `landed describes changed`,
+# `changed describes landed`, `landed governs changed`, or `changed governs landed`.
 #
 # Usage: relate-changes.sh <repository-root> <landed-paths> <changed-paths> <output.json>
 
@@ -82,10 +84,14 @@ awk -F'\t' '
         reason = ""
         if (l == c) {
           if (is_prose(l)) reason = "same prose file"
-        } else if ((l SUBSEP c) in describes || (c SUBSEP l) in describes) {
-          reason = "describes:"
-        } else if (governs(l, c) || governs(c, l)) {
-          reason = "AGENTS.md scope"
+        } else if ((l SUBSEP c) in describes) {
+          reason = "landed describes changed"
+        } else if ((c SUBSEP l) in describes) {
+          reason = "changed describes landed"
+        } else if (governs(l, c)) {
+          reason = "landed governs changed"
+        } else if (governs(c, l)) {
+          reason = "changed governs landed"
         }
         if (reason != "") print l "\t" c "\t" reason
       }
