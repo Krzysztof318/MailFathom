@@ -60,7 +60,10 @@ Do not proceed while a gate fails.
    nothing: read each pull request it names and make this change agree with it, or say in the body
    why nothing needed to change. An edit made here is part of the change, so it goes back through
    the Required Gates before step 2. It needs only read access, so it runs in both roles, and it says
-   on stderr when `gh`'s ceiling of 100 open pull requests or 100 files of one cut the reading short.
+   on stderr when its own limit of 100 open pull requests, or `gh`'s 100 files of one, cut the
+   reading short. Each row links its pull request by URL rather than by `#<n>`, so pasting the
+   section does not make the labelling steps read the related pull requests as issues this one
+   refers to.
 2. Confirm the staged diff still contains exactly the task files.
 3. Commit with a focused message.
 4. Fetch the base remote and confirm the branch remains safely based on its current `main`. Integrate

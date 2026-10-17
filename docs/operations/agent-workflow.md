@@ -1291,7 +1291,7 @@ It reads the open pull requests to `main` and their changed paths in one `gh pr 
 against its merge base as the changed side. One call is what keeps the cost flat however many pull
 requests are open, since the index behind the relation costs the same for two paths as for two
 thousand. Each pair is attributed to the open pull requests that touch its landed side, and each of
-those gets one row: its number, its related paths, and every pair folded beneath them — its path,
+those gets one row: its link, its related paths, and every pair folded beneath them — its path,
 then the path here, and the relation. The branch's own pull request, identified by the owner of the
 repository it is pushed to and its branch name, is left out.
 
@@ -1299,12 +1299,14 @@ repository it is pushed to and its branch name, is left out.
 rest of the change, and copies the section it prints into the body, so a reviewer knows which
 in-flight changes this one has to agree with. Everything in a row comes from somebody else's pull
 request, so paths are printed as code spans with backticks removed and `|` escaped, and no title is
-printed at all: the number links to it, and a title would carry closing keywords, mentions, or markup
-into the body it is pasted into.
+printed at all: the link renders as one, and a title would carry closing keywords, mentions, or markup
+into the body it is pasted into. The link is the pull request's full URL rather than `#<n>`, because
+[the labels a change earns](#labels-the-change-earns) are read from every `#<n>` its body refers to,
+and a related pull request carrying `security` would otherwise hand that label to this one.
 
-It is advisory and needs only read access, so it runs in the fork role too. `gh` reads at most 100
-open pull requests and 100 files of each, and the report says so on stderr whenever a reply reaches
-either ceiling, since a pull request or a path past it is missing from the result. The markers come
+It is advisory and needs only read access, so it runs in the fork role too. It reads at most 100
+open pull requests, its own `--limit`, and `gh` returns at most 100 files of each; the report says so
+on stderr whenever a reply reaches either ceiling, since a pull request or a path past it is missing from the result. The markers come
 from the working tree, not from each open pull request's tree, so a page an open pull request adds
 that describes a path changed here is only paired once it lands, and `Coherence` pairs it then.
 

@@ -6548,7 +6548,7 @@ set -euo pipefail
 
 # Only the open pull requests against the canonical repository's `main` are what the report is
 # about, so a call that asks for anything else is refused rather than answered.
-if [[ "$*" != *'pr list --repo fathomise/MailFathom --base main --state open '* ]]; then
+if [[ "$*" != *'pr list --repo fathomise/MailFathom --base main --state open --limit 100 '* ]]; then
   printf 'unexpected gh call: %s\n' "$*" >&2
   exit 1
 fi
@@ -6608,12 +6608,12 @@ related_pull_requests_names_the_open_pull_request_a_pair_comes_from() {
 
   local output_file="$test_directory/related-pull-requests-attributed-output"
   assert_contains '## Related open pull requests' "$output_file"
-  assert_contains '| #7 | `docs/features/widgets.md` | <details><summary>2</summary>' "$output_file"
+  assert_contains '| https://github.com/fathomise/MailFathom/pull/7 | `docs/features/widgets.md` | <details><summary>2</summary>' "$output_file"
   assert_contains '`docs/features/widgets.md` → `backend/src/Application/Emails/MailboxWidget.cs` (describes:)' "$output_file"
   assert_contains '`docs/features/widgets.md` → `backend/src/Application/Emails/MailboxGadget.cs` (describes:)' "$output_file"
-  assert_contains '| #10 |' "$output_file"
-  assert_excludes '#8' "$output_file"
-  assert_excludes '#9' "$output_file"
+  assert_contains '| https://github.com/fathomise/MailFathom/pull/10 |' "$output_file"
+  assert_excludes '/pull/8 ' "$output_file"
+  assert_excludes '/pull/9 ' "$output_file"
 }
 
 # Everything a row prints comes from somebody else's pull request and is pasted into this one's body,
@@ -6624,7 +6624,27 @@ related_pull_requests_writes_another_pull_request_s_paths_as_inert_code() {
      "files": [{"path": "docs/features/a`b|c.md"}]}
   ]' 'docs/features/a`b|c.md'
 
-  assert_contains '| #7 | `docs/features/ab\|c.md` |' "$test_directory/related-pull-requests-hostile-output"
+  assert_contains '| https://github.com/fathomise/MailFathom/pull/7 | `docs/features/ab\|c.md` |' \
+    "$test_directory/related-pull-requests-hostile-output"
+}
+
+# A reply at either ceiling may be missing exactly the pull request or the path that relates, so the
+# report says it read only part of the answer rather than looking complete.
+related_pull_requests_says_when_it_read_only_the_first_hundred_pull_requests() {
+  run_related_pull_requests many-pull-requests "$(jq -cn '[range(100) | {number: (100 + .),
+    headRefName: "agent/other-\(.)", headRepositoryOwner: {login: "fathomise"},
+    files: [{path: "deploy/helm/mailfathom/values.yaml"}]}]')"
+
+  assert_contains 'At least 100 pull requests are open against main and only the first 100 were read' \
+    "$test_directory/related-pull-requests-many-pull-requests-output"
+}
+
+related_pull_requests_says_when_it_read_only_the_first_hundred_files_of_one() {
+  run_related_pull_requests many-files "$(jq -cn '[{number: 7, headRefName: "agent/large",
+    headRepositoryOwner: {login: "fathomise"}, files: [range(100) | {path: "deploy/file-\(.).yaml"}]}]')"
+
+  assert_contains 'Pull request 7 changes at least 100 files and only the first 100 were read' \
+    "$test_directory/related-pull-requests-many-files-output"
 }
 
 related_pull_requests_says_so_when_nothing_open_is_related() {
@@ -11159,6 +11179,8 @@ run_test coherence_passes_shared_code_without_a_prose_link
 run_test coherence_relates_the_same_prose_file_and_an_instructions_scope
 run_test related_pull_requests_names_the_open_pull_request_a_pair_comes_from
 run_test related_pull_requests_writes_another_pull_request_s_paths_as_inert_code
+run_test related_pull_requests_says_when_it_read_only_the_first_hundred_pull_requests
+run_test related_pull_requests_says_when_it_read_only_the_first_hundred_files_of_one
 run_test related_pull_requests_says_so_when_nothing_open_is_related
 run_test group_split_gives_every_changed_file_exactly_one_reader
 run_test group_split_never_exceeds_the_reader_ceiling

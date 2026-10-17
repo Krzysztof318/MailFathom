@@ -90,8 +90,8 @@ That prints every open pull request to `main` touching a path
 [`Coherence`](agent-workflow.md#coherence) would relate to the change, with each
 pair it makes, as a section ready to paste into the pull request body. It reads
 the open pull requests with `gh`, so it needs read access to GitHub and nothing
-more; it reads at most 100 of them and 100 files of each, and says so on stderr
-when a reply reaches either ceiling. Like the obligations report it never gates.
+more; it reads at most 100 of them, its own `--limit`, and `gh` returns at most
+100 files of each, and it says so on stderr when a reply reaches either ceiling. Like the obligations report it never gates.
 
 The fast script restores the solution, builds it whole in Release configuration,
 runs without rebuilding the unit suites the change can have broken, and formats
