@@ -131,7 +131,15 @@ export function readAuthorizationServer(
  */
 export function discoveryAddresses(issuer: string): readonly string[] {
     const origin = originOf(issuer);
-    const path = issuer.slice(origin.length).replace(/\/+$/u, '');
+    let end = issuer.length;
+
+    // A loop rather than a trailing-slash pattern, which backtracks quadratically over a long run of slashes in an
+    // issuer the client does not control.
+    while (end > origin.length && issuer[end - 1] === '/') {
+        end--;
+    }
+
+    const path = issuer.slice(origin.length, end);
 
     return path.length === 0
         ? [`${origin}/.well-known/oauth-authorization-server`, `${origin}/.well-known/openid-configuration`]

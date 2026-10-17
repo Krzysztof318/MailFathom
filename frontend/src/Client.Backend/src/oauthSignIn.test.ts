@@ -77,6 +77,25 @@ describe('discoveryAddresses', () => {
             `${issuer}/realms/mail/.well-known/openid-configuration`,
         ]);
     });
+
+    it('drops the trailing slashes of the issuer path and keeps the ones inside it', () => {
+        expect(discoveryAddresses(`${issuer}/realms//mail//`)).toEqual([
+            `${issuer}/.well-known/oauth-authorization-server/realms//mail`,
+            `${issuer}/.well-known/openid-configuration/realms//mail`,
+            `${issuer}/realms//mail/.well-known/openid-configuration`,
+        ]);
+    });
+
+    // The run a non-slash ends is the input a trailing-slash pattern backtracks over quadratically.
+    it('keeps a long run of slashes that a non-slash ends', () => {
+        const path = `${'/'.repeat(50_000)}x`;
+
+        expect(discoveryAddresses(`${issuer}${path}`)).toEqual([
+            `${issuer}/.well-known/oauth-authorization-server${path}`,
+            `${issuer}/.well-known/openid-configuration${path}`,
+            `${issuer}${path}/.well-known/openid-configuration`,
+        ]);
+    });
 });
 
 describe('readAuthorizationServer', () => {
