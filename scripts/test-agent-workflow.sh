@@ -2547,7 +2547,6 @@ run_fathom_review_settle() {
     export GH_TOKEN='fake-token'
     export REPOSITORY='fathomise/MailFathom'
     export PULL_REQUEST_NUMBER='1'
-    export SETTLE_MINIMUM_SECONDS='2'
     # Three rather than one, because the fake `gh` reports whole seconds. A conversation it answers
     # as `now` is already up to a second old by the time the loop reads its own clock, so a quiet
     # window of one second is decided by which side of a second boundary the two `date` calls fall
@@ -2595,11 +2594,10 @@ fathom_review_collects_at_once_when_nobody_has_commented() {
   assert_seconds_elapsed_below 2 "$started_at"
 }
 
-# The contract this whole step exists for. On #223 the collection closed twelve seconds before the
-# author's reply to the previous pass was written, and the reviewer reported the finding again as
-# unanswered. A conversation that is already quiet still waits the minimum window, because the reply
-# that matters is the one not written yet.
-fathom_review_waits_before_freezing_a_quiet_conversation() {
+# `address-review` answers every thread before it pushes, so a re-review usually finds the replies
+# already written and long quiet. That conversation has nothing left in flight and is collected at
+# once rather than after a fixed minimum.
+fathom_review_collects_a_quiet_conversation_at_once() {
   local output_file="$test_directory/fathom-review-settle-quiet-output"
   local started_at
   started_at="$(date -u +%s)"
@@ -2607,7 +2605,22 @@ fathom_review_waits_before_freezing_a_quiet_conversation() {
   run_fathom_review_settle '2020-01-01T00:00:00Z' "$output_file"
 
   assert_contains 'Settled' "$output_file"
-  assert_seconds_elapsed_at_least 2 "$started_at"
+  assert_seconds_elapsed_below 2 "$started_at"
+}
+
+# The contract this whole step exists for. On #223 the collection closed twelve seconds before the
+# author's reply to the previous pass was written, and the reviewer reported the finding again as
+# unanswered. A comment written a moment ago is waited out until the conversation goes quiet, and
+# collected then rather than at the ceiling.
+fathom_review_waits_for_a_recent_comment_to_go_quiet() {
+  local output_file="$test_directory/fathom-review-settle-recent-output"
+  local started_at
+  started_at="$(date -u +%s)"
+
+  run_fathom_review_settle "$(date -u -d '-1 second' +%Y-%m-%dT%H:%M:%SZ)" "$output_file"
+
+  assert_contains 'Settled' "$output_file"
+  assert_seconds_elapsed_at_least 1 "$started_at"
 }
 
 # The other end of it: somebody typing steadily must not hold the run open, so the wait is bounded
@@ -10710,7 +10723,8 @@ run_test fathom_review_reviews_the_pull_request_a_dispatch_names
 run_test fathom_review_reviews_with_the_default_model_when_a_dispatch_names_an_unknown_one
 run_test fathom_review_refuses_a_dispatch_that_names_no_pull_request
 run_test fathom_review_collects_at_once_when_nobody_has_commented
-run_test fathom_review_waits_before_freezing_a_quiet_conversation
+run_test fathom_review_collects_a_quiet_conversation_at_once
+run_test fathom_review_waits_for_a_recent_comment_to_go_quiet
 run_test fathom_review_stops_waiting_at_the_ceiling
 run_test fathom_review_reads_the_newest_comment_whatever_the_order
 run_test fathom_review_collects_the_labels_of_an_issue_the_change_closes

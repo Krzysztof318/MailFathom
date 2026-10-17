@@ -1702,24 +1702,29 @@ session that reads them.
 
 A step before the collection waits for the pull request's conversation to stop
 moving, and it exists because answering a review is one act that GitHub delivers
-as two. The fix is pushed and the replies are written into the threads a moment
-later, so the event that starts the run arrives *before* the answers it should be
-read with. On #223 the collection closed at `18:31:40` and the two replies
+as two. When the fix is pushed first and the replies are written into the threads
+a moment later, the event that starts the run arrives *before* the answers it
+should be read with. On #223 the collection closed at `18:31:40` and the two replies
 disputing the previous pass were written at `18:31:52` and `18:32:07`; the
 reviewer then spent five minutes on a snapshot that could not contain them and
 reported both findings again, stating that neither thread had received a reply.
 No wording in the prompt recovers an answer that is not in the data, which is why
 this is a step rather than a paragraph.
 
-So the snapshot is frozen only after a minimum window, extended for as long as
-comments keep arriving, and bounded by a ceiling so somebody typing steadily
-cannot hold a run open. A pull request nobody has commented on has nothing to
-settle and waits not at all, which is every first review. The wait costs runner
-time and no subscription usage, because the model has not started. The windows
-are declared in the step's own `env` block, which is also what lets
-`scripts/test-agent-workflow.sh` run the real loop against seconds rather than
-minutes. It covers the three decisions the loop takes: collect at once, wait out
-a quiet conversation, stop at the ceiling.
+So the snapshot is frozen only once the newest comment has been quiet for a
+window, and the wait is bounded by a ceiling so somebody typing steadily cannot
+hold a run open. A pull request nobody has commented on has nothing to settle
+and waits not at all, which is every first review. There is no minimum before
+the quiet window: `address-review` writes and resolves its replies before it
+pushes, so on a re-review the answers are usually already in place and the
+conversation is collected at once. A first reply written only after the step has
+found the conversation quiet is missed, and that review raises the answered
+finding once more. The wait costs runner time and no subscription usage, because
+the model has not started. The windows are declared in the step's own `env`
+block, which is also what lets `scripts/test-agent-workflow.sh` run the real loop
+against seconds rather than minutes. It covers the decisions the loop takes:
+collect at once when nobody has commented or the conversation is already quiet,
+wait out a recent comment, stop at the ceiling.
 
 The collection then records the instant it began, and the prompt states it. That
 makes the snapshot's edge something the reviewer can reason about rather than

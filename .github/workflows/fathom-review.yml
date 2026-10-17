@@ -869,23 +869,26 @@ jobs:
           persist-credentials: false
 
       # A push and the replies that answer the previous pass are one act split across two APIs, and
-      # only the push arrives as an event. `address-review` fixes the code, pushes, and then writes
-      # a reply into each thread, so the answers land in the seconds *after* the event that starts
-      # this run. On #223 the collection below closed at 18:31:40 and the two replies disputing the
+      # only the push arrives as an event. When the push goes first and a reply is written into each
+      # thread afterwards, the answers land in the seconds *after* the event that starts this run.
+      # On #223 the collection below closed at 18:31:40 and the two replies disputing the
       # previous pass's findings were written at 18:31:52 and 18:32:07; the reviewer then spent five
       # minutes on a snapshot that could not contain them and reported both findings again, stating
       # that neither thread had received a reply. No wording in the prompt recovers an answer that
       # is not in the data, so the fix is here rather than there.
       #
-      # The snapshot is therefore not frozen until the conversation has stopped moving: a minimum
-      # window, then however much longer it takes for the newest comment to be quiet, and a ceiling
-      # on the whole wait so somebody typing steadily cannot hold a run open. A pull request nobody
-      # has commented on has nothing to settle and waits not at all, which is every first review.
+      # The snapshot is therefore not frozen until the newest comment has been quiet for a window,
+      # with a ceiling on the whole wait so somebody typing steadily cannot hold a run open. A pull
+      # request nobody has commented on has nothing to settle and waits not at all, which is every
+      # first review.
       #
-      # The minimum only has to reach the *first* reply, because the quiet window carries the rest
-      # of the burst from there. On #223 that reply arrived one second into this step on one pass
-      # and six on the other, so a minute is the measured margin rather than a guess; a run whose
-      # author writes nothing for a minute after pushing is one where nothing was in flight.
+      # There is no minimum before that window. `address-review` writes and resolves its replies
+      # before it pushes, so the answers are in place before the event that starts this run, and a
+      # minimum waited for a reply that was already written: across six re-reviews the newest
+      # comment was 15 to 59 seconds old when this step began and nothing arrived in the minute it
+      # then spent. A conversation still moving when the step reads it is waited out; a first reply
+      # written only after the step found the conversation quiet is not, and that review raises the
+      # answered finding once more — the cost accepted in exchange for the minute.
       #
       # This costs runner time and no subscription usage: the model is not running yet. The windows
       # are `env` values rather than literals in the body so the workflow states them in one place
@@ -897,7 +900,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
           PULL_REQUEST_NUMBER: ${{ needs.decide.outputs.pull_request_number }}
-          SETTLE_MINIMUM_SECONDS: '60'
           SETTLE_QUIET_SECONDS: '45'
           SETTLE_LIMIT_SECONDS: '300'
           SETTLE_POLL_SECONDS: '15'
@@ -961,7 +963,7 @@ jobs:
               break
             fi
 
-            if (( waited >= SETTLE_MINIMUM_SECONDS && quiet_for >= SETTLE_QUIET_SECONDS )); then
+            if (( quiet_for >= SETTLE_QUIET_SECONDS )); then
               printf 'Settled: nobody has written for %ss, after waiting %ss.\n' "$quiet_for" "$waited"
               break
             fi
