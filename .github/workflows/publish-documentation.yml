@@ -131,7 +131,12 @@ jobs:
         with:
           global-json-file: global.json
 
+      # A release tag pins the packages it shipped with and cannot be changed afterwards, so an advisory published
+      # since then would fail its restore under the tag's own `TreatWarningsAsErrors` and take the whole site down with
+      # it. The site ships no binary from a tag, so the audit is answered for `latest` alone, which `CI` audits as well.
       - name: Build the site
+        env:
+          NuGetAudit: ${{ matrix.version == 'latest' }}
         run: bash scripts/build-docs-site.sh "site/docs/${{ matrix.version }}"
 
       - name: Upload ${{ matrix.version }}

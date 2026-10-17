@@ -306,6 +306,12 @@ A pull request that changes `docs/` or the site definition builds `latest` and d
 `backend/src/` does not trigger it: an XML comment docfx dislikes is a warning rather than a failure, so the build would add minutes
 to nearly every pull request the repository sees and catch nothing.
 
+A release tag is built with NuGet audit off, and `latest` with it on. A tag pins the packages it shipped with and can
+never be changed, so an advisory published after the release would otherwise fail that tag's restore under its own
+`TreatWarningsAsErrors` — and one failed version skips the deployment of all of them. The site publishes no binary
+built from a tag, so an advisory against an old pin says nothing about what the site serves; the current tree is
+audited by `latest` here and by `CI` on every pull request.
+
 Pages itself is enabled once, in the repository settings, with **Build and deployment → Source** set to **GitHub
 Actions**. The workflow cannot enable it: the action that would needs a token with administration rights, which is
 exactly the kind of credential this workflow is built not to hold.
