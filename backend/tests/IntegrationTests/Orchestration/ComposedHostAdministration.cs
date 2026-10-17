@@ -27,8 +27,8 @@ namespace MailFathom.IntegrationTests.Orchestration;
 /// </remarks>
 internal static class ComposedHostAdministration
 {
-    /// <summary>The role the seeding migration records as holding the whole mail half, by the identifier it seeds it under.</summary>
-    private const string SeededMailUserRole = "01a11deb-3808-7000-8000-000000000001";
+    /// <summary>The seeded <c>User</c> role, which holds every user-facing permission, by the identifier it is seeded under.</summary>
+    private const string SeededUserRole = "01a11deb-3808-7000-8000-000000000001";
 
     /// <summary>Opens a client aimed at the administrative surface, already signed in as the default administrator.</summary>
     /// <param name="adminAddress">The base address of the composed host's administrative endpoint.</param>
@@ -70,7 +70,7 @@ internal static class ComposedHostAdministration
         return provisioned.RootElement.GetProperty("id").GetGuid();
     }
 
-    /// <summary>Gives one user the seeded mail role over their own mail, which is what a credential of theirs can then hold.</summary>
+    /// <summary>Gives one user the seeded <c>User</c> role over their own mail, which is what a credential of theirs can then hold.</summary>
     /// <param name="client">A client aimed at the administrative surface.</param>
     /// <param name="user">The user, who is both the principal and the scope.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
@@ -79,14 +79,14 @@ internal static class ComposedHostAdministration
     /// nobody assigned a role authenticates and reaches nothing: the tool list is empty and every call is refused.
     /// <c>409</c> is the assignment already standing, which is the answer on a database an earlier run left behind.
     /// </remarks>
-    internal static async Task AssignMailRoleAsync(
+    internal static async Task AssignUserRoleAsync(
         HttpClient client,
         Guid user,
         CancellationToken cancellationToken)
     {
         var assignment = new JsonObject
         {
-            ["roleId"] = SeededMailUserRole,
+            ["roleId"] = SeededUserRole,
             ["principalKind"] = "user",
             ["principalId"] = user.ToString("D"),
             ["scopeKind"] = "user",

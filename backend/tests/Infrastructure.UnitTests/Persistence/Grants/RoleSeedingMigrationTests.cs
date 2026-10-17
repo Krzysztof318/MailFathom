@@ -27,6 +27,8 @@ public sealed class RoleSeedingMigrationTests
 
     private const string OrganizationAdministratorRoleId = "01a11deb-3808-7000-8000-000000000002";
 
+    private const string AdministratorRoleId = "01a11deb-3808-7000-8000-000000000003";
+
     /// <summary>What every seeded role's identifier begins with.</summary>
     private const string SeededRoleIdentifierPrefix = "01a11deb-3808-7000-8000-";
 
@@ -42,9 +44,18 @@ public sealed class RoleSeedingMigrationTests
     /// the user-facing permissions by domain carries every role's list — seeded or written by an operator, alike — to
     /// the names its holders already acted under, so a list gains entries and nobody gains an act. The test below
     /// holds it to treating every role alike.
+    /// <see cref="ReduceSeededRolesToUserAndAdministrator" /> is the second deliberate edit: ADR 0012 decides that a
+    /// database is seeded with <c>User</c>, listing one pattern per user-facing domain, and <c>Administrator</c> alone,
+    /// so it renames and rewrites the role seeded as <c>Mail user</c> and removes <c>Organization administrator</c>. The
+    /// test below holds it to those two rows.
     /// </remarks>
     private static readonly Type[] RoleWritersAfterTheSeedingOne =
-        [typeof(HoldMailGrantsOnUsers), typeof(RewriteAdministratorRoleAsAPattern), typeof(SplitUserFacingPermissionsByDomain)];
+    [
+        typeof(HoldMailGrantsOnUsers),
+        typeof(RewriteAdministratorRoleAsAPattern),
+        typeof(SplitUserFacingPermissionsByDomain),
+        typeof(ReduceSeededRolesToUserAndAdministrator),
+    ];
 
     [Fact]
     public void Migrations_AfterTheSeedingOne_WriteNoRoleAndNoRolesPermissions()
@@ -86,12 +97,9 @@ public sealed class RoleSeedingMigrationTests
         Assert.Contains(seeding.UpOperations, WritesARole);
     }
 
-    /// <summary>
-    /// The rewrite is admitted for one role, so it names neither of the two that stay written out by name: a
-    /// <c>Mail user</c> or an <c>Organization administrator</c> turned into a pattern would widen on every later release.
-    /// </summary>
+    /// <summary>The rewrite is admitted for one role, so it names neither of the other two the seeding migration wrote.</summary>
     [Fact]
-    public void Migrations_TheAdministratorRewrite_NamesNeitherRoleThatStaysWrittenOutByName()
+    public void Migrations_TheAdministratorRewrite_NamesNoOtherSeededRole()
     {
         // Arrange
         using var context = CreateContext();
@@ -107,9 +115,36 @@ public sealed class RoleSeedingMigrationTests
         Assert.Equal(2, statements.Length);
         Assert.All(statements, statement =>
         {
-            Assert.Contains("01a11deb-3808-7000-8000-000000000003", statement.Sql, StringComparison.Ordinal);
+            Assert.Contains(AdministratorRoleId, statement.Sql, StringComparison.Ordinal);
             Assert.DoesNotContain(MailUserRoleId, statement.Sql, StringComparison.Ordinal);
             Assert.DoesNotContain(OrganizationAdministratorRoleId, statement.Sql, StringComparison.Ordinal);
+        });
+    }
+
+    /// <summary>
+    /// The reduction is admitted for the two rows ADR 0012 no longer seeds as they were, so it never names
+    /// <c>Administrator</c>, whose list is decided by the rewrite above alone.
+    /// </summary>
+    [Fact]
+    public void Migrations_TheReductionToUserAndAdministrator_NamesOnlyTheTwoRolesItReduces()
+    {
+        // Arrange
+        using var context = CreateContext();
+        var migrations = context.GetService<IMigrationsAssembly>();
+
+        // Act
+        var reduction = migrations.CreateMigration(
+            typeof(ReduceSeededRolesToUserAndAdministrator).GetTypeInfo(),
+            context.Database.ProviderName!);
+        var statements = reduction.UpOperations.Concat(reduction.DownOperations).OfType<SqlOperation>().ToArray();
+
+        // Assert
+        Assert.Equal(2, statements.Length);
+        Assert.All(statements, statement =>
+        {
+            Assert.Contains(MailUserRoleId, statement.Sql, StringComparison.Ordinal);
+            Assert.Contains(OrganizationAdministratorRoleId, statement.Sql, StringComparison.Ordinal);
+            Assert.DoesNotContain(AdministratorRoleId, statement.Sql, StringComparison.Ordinal);
         });
     }
 

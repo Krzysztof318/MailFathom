@@ -275,7 +275,7 @@ because that is what a data-subject request is answered from, and so is emptying
 ## Writing a grant
 
 **What a user may do is granted to the user, through roles.** The deployment records roles, groups,
-and role assignments, and seeds three roles — `Mail user`, `Organization administrator`, and `Administrator` — when it
+and role assignments, and seeds two roles — `User` and `Administrator` — when it
 is migrated. A user's credential then narrows what the user holds rather than granting it, on the administrative
 endpoint as on the mail surfaces.
 [The stored schema](../architecture/stored-email-schema.md#the-roles-groups-and-assignments-a-grant-is-read-from)
@@ -444,8 +444,8 @@ standing for one or more consecutive segments, at any position and more than onc
 
 A wildcard never stands for no segment, so `mailfathom.mail.*` reaches what is beneath that prefix and never the prefix
 itself. **No pattern names the user-facing half on its own**: that half is every domain but `admin`, and a pattern says
-what a name matches rather than what it does not, so a role meant to carry all of it lists one pattern per domain or
-the names themselves. It never shares a segment either: `mailfathom.mail.c*` is not a pattern, and is refused as the unpublished name
+what a name matches rather than what it does not, so a role meant to carry all of it lists one pattern per domain, as
+the seeded `User` does, or the names themselves. It never shares a segment either: `mailfathom.mail.c*` is not a pattern, and is refused as the unpublished name
 it is.
 
 **The pattern is stored as it was written and resolved on every read**, against the set the build answering publishes.
@@ -487,11 +487,12 @@ document — and nothing is written.
 who holds one.** Where an organization's administrator has to manage somebody, give that person roles of names alone.
 Writing a pattern into a role is the root's already, since defining and editing a role are.
 
-**Of the three seeded roles, `Administrator` is the one that lists a pattern, and it lists `*` alone.** Its holders —
-the default administrator `admin` among them — hold whatever a later release publishes, in both halves, from the moment
-that release runs. `Mail user` and `Organization administrator` list names, so an upgrade adds nothing to either: a
-name a later release publishes reaches their holders once somebody holding the root writes it into the role. A seeded
-role is an ordinary row, so one whose list an operator has changed lists what they wrote, and `mfctl role list` is
+**Both seeded roles list patterns.** `Administrator` lists `*` alone, so its holders — the default administrator
+`admin` among them — hold whatever a later release publishes, in both halves, from the moment that release runs. `User`
+lists one pattern per user-facing domain, so its holders hold whatever a later release publishes in those domains and
+nothing administrative; a domain a later release introduces reaches them once it is written into the role. Both are
+therefore given by the root alone, and a credential for a user holding `User` is placed by the root alone as well. A
+seeded role is an ordinary row, so one whose list an operator has changed lists what they wrote, and `mfctl role list` is
 where a deployment's own are read.
 
 **Nothing but a role's list takes a pattern.** A credential's narrowing, a token's scopes, and a configured scope each

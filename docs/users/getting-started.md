@@ -279,12 +279,12 @@ several says which of them — `mfctl user add` records each further person — 
 are several is refused rather than guessed at.
 
 **What the person may do is a role, and recording them assigns none.** A user no role is assigned to reaches no tool,
-whichever credential they later present, so give the person the seeded `Mail user` role at their own scope, taking
+whichever credential they later present, so give the person the seeded `User` role at their own scope, taking
 the role's identifier from `mfctl role list` and theirs from `mfctl user list`:
 
 ```console
 $ mfctl role list
-$ mfctl assignment add --role <the Mail user role's identifier> --user <their identifier> --scope-user <their identifier>
+$ mfctl assignment add --role <the User role's identifier> --user <their identifier> --scope-user <their identifier>
 ```
 
 [How a caller's grant is computed](../operations/permissions.md#how-a-callers-grant-is-computed) is what that role
@@ -348,7 +348,7 @@ mapped OAuth subject, a client's public key, and [a user's own username and pass
 
 **A credential reaches what its user's roles grant until its provisioning narrows it.** The command above named no
 `--permission`, so the key it minted narrows nothing and may do whatever its user's roles grant — with the seeded
-`Mail user` role, everything an agent is offered here: read the local mailbox copy, ask questions of it, and read,
+`User` role, everything an agent is offered here: read the local mailbox copy, ask questions of it, and read,
 record, amend, and erase the contact books its user reads. A user no role is assigned to holds nothing, whichever
 credential they present. Naming `--permission` once per name keeps less, and `mfctl credential list` reads back what
 each credential names and what that leaves it holding —
@@ -386,7 +386,7 @@ only the setup steps;
 [connecting the chat client you already use](mcp-clients.md) has the steps, the address kind, and the authentication
 shapes for each one by name.
 
-A connected client whose user holds `Mail user`, as [step 6](#6-record-the-mailbox) assigned, should be listed at
+A connected client whose user holds `User`, as [step 6](#6-record-the-mailbox) assigned, should be listed at
 least fourteen tools — `list_accounts`, `list_emails`,
 `get_email_content`, `search_emails`, each advertising itself as read-only, non-destructive, and idempotent;
 `set_mail_flags`, which marks, stars, and labels a message and announces itself as neither read-only nor confined to

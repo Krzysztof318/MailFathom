@@ -1945,7 +1945,7 @@ neither sees no contact tool at all, which is also what a deployment looks like 
 neither is a grant over mail a grant over the book.
 
 Both are on the mail surface, so a credential naming no permission holds them wherever its user's roles grant them, and
-the seeded `Mail user` role lists both.
+the seeded `User` role lists both.
 
 Each contact use case asks for the same permission itself, so an entrypoint arriving another way is refused there too —
 as `54001`, since a use case does not know what a protocol calls an unknown tool.

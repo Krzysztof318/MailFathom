@@ -14,7 +14,7 @@ set -euo pipefail
 # belongs to the record of the user whose mail it is, and a record is written while the deployment runs. So the answers
 # collected here become mailbox.json, which is declared in the record of the user the deployment serves through the
 # administrative endpoint — which is why that endpoint is served rather than optional. A fresh database holds nobody,
-# so where this run started the deployment it records the person as well: one user, the built-in Mail user role at
+# so where this run started the deployment it records the person as well: one user, the built-in User role at
 # their own scope, the mailbox, and the credentials their clients present. Where it started nothing, it prints the
 # commands that do the same.
 #
@@ -834,7 +834,7 @@ report_connection() {
 # any step the deployment refused. The role is part of the sequence rather than a refinement of it: a recorded user
 # holds nothing until one is assigned, so without that line the sign-in works and the client offers no mail.
 report_recording_commands() {
-  printf '\nThen record the person it serves, give them the Mail user role, and add the mailbox it reads\n' >&2
+  printf '\nThen record the person it serves, give them the User role, and add the mailbox it reads\n' >&2
   printf 'for them, skipping whatever is already recorded:\n\n' >&2
   if [[ "$admin_endpoint" == 'password' ]]; then
     printf '  mfctl login --endpoint http://127.0.0.1:%s --mode password\n' "$admin_port" >&2
@@ -842,7 +842,7 @@ report_recording_commands() {
     printf '  mfctl login --endpoint http://127.0.0.1:%s\n' "$admin_port" >&2
   fi
   printf '  mfctl user add --display-name <name>\n' >&2
-  printf '  mfctl role list                      # the identifier of the Mail user role\n' >&2
+  printf '  mfctl role list                      # the identifier of the User role\n' >&2
   printf '  mfctl user list                      # the identifier of the person just recorded\n' >&2
   printf '  mfctl assignment add --role <role> --user <user> --scope-user <user>\n' >&2
   printf '  mfctl account add --from-file %s/mailbox.json\n\n' "$compose_directory" >&2
@@ -884,16 +884,16 @@ record_the_deployment() {
     | read_json_text 'id')"
   [[ -n "$user" ]] || return 1
 
-  # The role is one of the three every database is seeded with, and it is a row an administrator can rename or remove,
+  # The role is one of the two every database is seeded with, and it is a row an administrator can rename or remove,
   # so it is found by the name it is seeded under rather than assumed by the identifier it was seeded with. The match
   # rests on the answer writing each role's `id` immediately before its `name`; a deployment that orders them
   # otherwise fails here by name, which is the step the report then prints.
-  recording_step='reading the Mail user role'
+  recording_step='reading the User role'
   role="$(curl -fsS "${authorization[@]}" "$origin/api/admin/roles" \
-    | grep --only-matching '"id":"[^"]*","name":"Mail user"' | read_json_text 'id')"
+    | grep --only-matching '"id":"[^"]*","name":"User"' | read_json_text 'id')"
   [[ -n "$role" ]] || return 1
 
-  recording_step='assigning the Mail user role'
+  recording_step='assigning the User role'
   post_to_the_deployment '/api/admin/role-assignments' \
     "{ \"roleId\": \"$role\", \"principalKind\": \"user\", \"principalId\": \"$user\", \"scopeKind\": \"user\", \"scopeId\": \"$user\" }" \
     > /dev/null || return 1
@@ -1101,7 +1101,7 @@ printf '\nMailFathom %s started, serving nobody yet.\n' "$version" >&2
 printf 'Recording the person it serves, their role, and the mailbox it reads for them.\n' >&2
 
 if record_the_deployment; then
-  printf 'Recorded %s with the Mail user role and the mailbox %s. Both are served from now on,\n' \
+  printf 'Recorded %s with the User role and the mailbox %s. Both are served from now on,\n' \
     "$sign_in_name" "$email_address" >&2
   printf 'without a restart, and the first synchronization starts on the next run.\n' >&2
 else
