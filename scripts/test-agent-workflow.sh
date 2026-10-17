@@ -8722,6 +8722,17 @@ ci_reuses_a_verdict_only_for_a_tree_a_successful_run_tested() {
   run_reuse_step push '' "$push_bypassed" "$output_file"
   [[ "$(cat "$output_file")" == 'reuse=false' ]] || failures+='a pushed commit no green group carries was reused. '
 
+  # A read that fails is answered by building in full, never by failing `Detect changes`, which would
+  # remove an approved pull request from the queue over a transient error.
+  local failing
+  for failing in /pulls/ /compare/ /check-runs; do
+    FAKE_FAILING="$failing" run_reuse_step merge_group ahead "$draft_then_ready" "$output_file"
+    [[ "$(cat "$output_file")" == 'reuse=false' ]] || failures+="a failed read of ${failing} did not fall back to a full build. "
+  done
+
+  FAKE_FAILING=/check-runs run_reuse_step push '' "$push_with_group" "$output_file"
+  [[ "$(cat "$output_file")" == 'reuse=false' ]] || failures+='a failed read on a push did not fall back to a full build. '
+
   if [[ -n "$failures" ]]; then
     printf '%s\n' "$failures" >&2
     return 1
