@@ -34,7 +34,7 @@
 #
 # Environment:
 #   GH_TOKEN                the workflow token, which reads the pull request
-#   BOARD_TOKEN             a classic token carrying the `project` scope, used for the project calls
+#   BOARD_TOKEN             the `Fathomise projects` App's installation token, used for the project calls
 #                           and nothing else; empty means the board is left alone
 #   REPOSITORY              owner/name of the repository the pull request belongs to
 #   PULL_REQUEST_NUMBER     the pull request whose closing references state the contract
@@ -59,7 +59,7 @@ required_statuses="${3:-}"
 : "${CLOSING_ISSUES_SCRIPT:?CLOSING_ISSUES_SCRIPT must point at collect-closing-issues.sh}"
 
 if [[ -z "${BOARD_TOKEN:-}" ]]; then
-  echo '::notice::BOARD_PROJECT_TOKEN is not set, so no board status was written.'
+  echo '::notice::The board App is not configured, so no board status was written.'
   exit 0
 fi
 
@@ -101,7 +101,7 @@ if ! GH_TOKEN="$BOARD_TOKEN" "$call_github_api" graphql \
           }
         }
       }' > "$field_file"; then
-  echo '::error::The board could not be read. Check that BOARD_PROJECT_TOKEN still carries the project scope.'
+  echo '::error::The board could not be read. Check that the board App is installed on the organization with Projects: Read and write.'
   exit 1
 fi
 

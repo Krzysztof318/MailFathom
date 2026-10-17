@@ -876,9 +876,10 @@ set `Status` and nothing else.
 
 That same limit is why `Queue: Next` is written by a skill rather than by an
 automation. No project workflow can set a custom single-select field, and the
-workflow token reaches no project at all, which leaves an account-wide token as
-the credential a GitHub Actions run would use — so the write stays where a token
-that already exists is already in use, and a pull request opened by neither
+only Actions credential that reaches the board is the `Fathomise projects` App's
+token, which the board jobs mint to write `Status` alone — so the `Queue` write
+stays with the skill that opens the pull request, where the decision behind it is
+made, and a pull request opened by neither
 `finish-change` nor `prepare-release` moves nothing.
 
 Those rules describe an issue an agent opened. A public repository also receives
@@ -1107,8 +1108,9 @@ instead. That is also why a concluded pipeline is traced back
 to its pull request through the head it ran on rather than through
 `workflow_run.pull_requests`, which a run started by `pull_request_target` — the trigger
 `Fathom review` and `Contributor licence` hold — carries empty. What the job does need is
-`BOARD_PROJECT_TOKEN`, the same classic token carrying the `project` scope that
-`Fathom review`'s writes need, and without it the job says so and ends green.
+the `Fathomise projects` App's token, minted in the job exactly as `Fathom review`'s
+board write mints it, and without the App's client id or private key the job
+says so and ends green.
 
 ### The licence a contribution earns
 
@@ -2460,13 +2462,13 @@ flight answers, so neither gets to erase the answer.
 
 The write is a job of its own for the credential. The workflow token is scoped
 to the repository and reaches no project, so writing a field on the board takes
-a classic token with the `project` scope, which
+the `Fathomise projects` App's installation token, which
 [Issue tracking and the roadmap board](issue-tracking.md#status-transitions)
-records along with what that costs. The job checks out only the base commit, runs
-no model, and receives its input as a string, so the account-wide credential
-never shares a runner with the reviewer session — the same separation that keeps
-the App's token in the one step that makes no model call. Where the secret is
-absent the job says so and ends green: this workflow gates nothing, and a missing
+describes along with the two permissions it holds. The job mints it, checks out
+only the base commit, runs no model, and receives its input as a string, so the
+board credential never shares a runner with the reviewer session — the same
+separation that keeps the reviewer App's token in the one step that makes no
+model call. Where the App's client id or private key is absent the job says so and ends green: this workflow gates nothing, and a missing
 credential must not turn a review red. A pull request that closes no issue ends
 the same way, with a notice, because a change opened without a contract is an
 ordinary shape. An issue that is not on the board ends green too, but as a
@@ -2607,16 +2609,22 @@ one and of the step that runs the model. What the contract guards against is the
 failure that is otherwise silent: a leak check comparing a review against the
 token the run never spent matches nothing, passes every review, and is green.
 
-The board write is a third credential, `BOARD_PROJECT_TOKEN`, and it is optional:
-without it the review is published exactly as before and only the `Status` write
-is skipped. It is a **classic** personal access token with the `project` scope and
-no other, created at <https://github.com/settings/tokens> by an account that can
-write to the organization's board, because the workflow token is scoped to the
-repository and reaches no project. Give it an expiry and
-replace it there when it lapses: a token the board refuses fails that job and
-says so, rather than leaving the board quietly behind. Nothing else reads it,
-and it is held by a job that runs no model and checks out nothing from the branch
-under review.
+The board write is a third credential, the `Fathomise projects` GitHub App, and it is
+optional: while the `BOARD_APP_CLIENT_ID` variable or the `BOARD_APP_PRIVATE_KEY`
+secret is absent the review is published exactly as before and only the `Status` write is skipped. The App is
+installed on the organization with access to this repository alone, and holds
+`Projects: Read and write` on the organization and `Issues: Read` on the
+repository and nothing else, because the workflow token is scoped to the
+repository and reaches no project. Its private key is the `BOARD_APP_PRIVATE_KEY`
+secret, and the job exchanges it for an installation token that lasts an hour.
+A stored key the App no longer accepts fails that job and says so,
+rather than leaving the board quietly behind. Two jobs read the key, and neither
+runs a model: this workflow's `announce`, which checks out only the base commit,
+and the board job of `Apply pull request rules`, which on the merge queue's
+`enqueued` and `dequeued` events checks out the pull request's merge commit and
+runs its scripts holding the token — for a pull request from this repository,
+whose author can already change the workflow itself on that event, and never for
+a fork's, whose `pull_request` events carry no secrets.
 
 ## Dependency update pull requests
 
