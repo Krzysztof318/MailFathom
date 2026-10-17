@@ -1289,7 +1289,8 @@ bash scripts/report-related-pull-requests.sh
 It reads every open pull request to `main` and its changed paths in one `gh pr list` call, and runs
 `relate-changes.sh` once, with all of their paths as the landed side and the working tree's change
 against its merge base as the changed side. Each pair is then attributed to the open pull requests
-that touch its landed side, and the branch's own pull request is left out. One call is what keeps the
+that touch its landed side and reported as one row per pull request — its related paths, the paths
+here, and how many pairs they make — and the branch's own pull request is left out. One call is what keeps the
 cost flat however many pull requests are open, since the index behind the relation costs the same for
 two paths as for two thousand. `$finish-change` runs it before opening the pull request and copies the
 section it prints into the body, so a reviewer knows which in-flight changes this one has to agree

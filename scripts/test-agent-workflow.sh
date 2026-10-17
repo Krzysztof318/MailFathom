@@ -6591,7 +6591,7 @@ related_pull_requests_names_the_open_pull_request_a_pair_comes_from() {
 
   local output_file="$test_directory/related-pull-requests-attributed-output"
   assert_contains '## Related open pull requests' "$output_file"
-  assert_contains '| #7 Describe \| widgets | `docs/features/widgets.md` | `backend/src/Application/Emails/MailboxWidget.cs` | describes: |' "$output_file"
+  assert_contains '| #7 Describe \| widgets | `docs/features/widgets.md` | `backend/src/Application/Emails/MailboxWidget.cs` | 1 |' "$output_file"
   assert_excludes '#8' "$output_file"
   assert_excludes '#9' "$output_file"
 }

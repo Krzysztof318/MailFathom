@@ -71,13 +71,19 @@ jq -r '.[].files[]?.path' "$work_directory/others.json" | sort -u > "$work_direc
 bash .github/coherence/relate-changes.sh \
   "$repository_root" "$work_directory/landed" "$work_directory/changed" "$work_directory/pairs.json"
 
+# One row per open pull request rather than per pair: a shared page relates to every path either
+# side changed, so pairs multiply quickly, and what a reader acts on is which pull request to open
+# and which of its files to read there.
 jq -r --slurpfile others "$work_directory/others.json" '
-  .[] as $pair
-  | $others[0][]
-  | select(any(.files[]?; .path == $pair.landed))
-  | [.number, .title, $pair.landed, $pair.changed, $pair.reason]
-  | @tsv
-' "$work_directory/pairs.json" | LC_ALL=C sort -t $'\t' -k1,1n -k3,3 -k4,4 > "$work_directory/rows"
+  def code_list: map("`\(.)`") | join(", ");
+  . as $pairs
+  | $others[0] | sort_by(.number)
+  | map(. as $pull_request
+      | ($pairs | map(select(.landed as $landed | any($pull_request.files[]?; .path == $landed)))) as $related
+      | select($related | length > 0)
+      | "| #\(.number) \(.title | gsub("\\|"; "\\|")) | \($related | map(.landed) | unique | code_list) | \($related | map(.changed) | unique | code_list) | \($related | length) |")
+  | .[]
+' "$work_directory/pairs.json" > "$work_directory/rows"
 
 if [[ ! -s "$work_directory/rows" ]]; then
   printf 'No open pull request to main is related to this change (%s open besides it).\n' "$open_count"
@@ -85,9 +91,7 @@ if [[ ! -s "$work_directory/rows" ]]; then
 fi
 
 printf '## Related open pull requests\n\n'
-printf 'Each row pairs a path an open pull request changes with a path this one changes. Whichever merges second has to agree with the first.\n\n'
-printf '| Pull request | Its path | Path here | Relation |\n'
+printf 'Each row is an open pull request changing paths `Coherence` relates to paths this one changes. Whichever merges second has to agree with the first.\n\n'
+printf '| Pull request | Its related paths | Paths here | Pairs |\n'
 printf '|---|---|---|---|\n'
-while IFS=$'\t' read -r number title landed changed reason; do
-  printf '| #%s %s | `%s` | `%s` | %s |\n' "$number" "${title//|/\\|}" "$landed" "$changed" "$reason"
-done < "$work_directory/rows"
+cat "$work_directory/rows"
