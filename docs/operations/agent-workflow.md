@@ -876,9 +876,10 @@ set `Status` and nothing else.
 
 That same limit is why `Queue: Next` is written by a skill rather than by an
 automation. No project workflow can set a custom single-select field, and the
-workflow token reaches no project at all, which leaves an account-wide token as
-the credential a GitHub Actions run would use — so the write stays where a token
-that already exists is already in use, and a pull request opened by neither
+only Actions credential that reaches the board is the `Fathomise projects` App's
+token, which the board jobs mint to write `Status` alone — so the `Queue` write
+stays with the skill that opens the pull request, where the decision behind it is
+made, and a pull request opened by neither
 `finish-change` nor `prepare-release` moves nothing.
 
 Those rules describe an issue an agent opened. A public repository also receives
