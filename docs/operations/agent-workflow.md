@@ -1172,10 +1172,12 @@ which is what makes the register evidence rather than a file the party it speaks
 edit. [ADR 0015](https://github.com/fathomise/MailFathom/blob/main/docs/decisions/0015-contributor-licence-agreement-and-where-assent-is-recorded.md)
 holds the decision and `CLA.md` the agreement.
 
-On `merge_group` the workflow asks nothing and records nothing. It copies the `license/cla` the
-pull request's head carries onto the merge group's commit under the same App, because the queue
-waits for every required check there and an author's acceptance is a property of the pull request
-rather than of the tree it is combined into.
+On `merge_group` a workflow of its own, `contributor-licence-merge-group.yml`, asks nothing and
+records nothing. It copies the `license/cla` the pull request's head carries onto the merge group's
+commit under the same App, because the queue waits for every required check there and an author's
+acceptance is a property of the pull request rather than of the tree it is combined into. It is a
+separate file because GitHub refuses to start a `merge_group` run from a workflow that also listens
+on `pull_request_target`.
 
 ## The merge queue
 

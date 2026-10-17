@@ -9,7 +9,7 @@ informed:
 
 # Merge through a queue that tests the tree a merge produces, stop a pull request only for a related change that landed, and reuse a verdict wherever the tree is one a run already tested
 
-<!-- describes: .github/workflows/ci.yml, .github/workflows/coherence.yml, .github/workflows/contributor-licence.yml, .github/workflows/protected-paths.yml, .github/workflows/typo-check.yml, .github/coherence/** -->
+<!-- describes: .github/workflows/ci.yml, .github/workflows/coherence.yml, .github/workflows/contributor-licence.yml, .github/workflows/contributor-licence-merge-group.yml, .github/workflows/protected-paths.yml, .github/workflows/typo-check.yml, .github/coherence/** -->
 
 ## Context and Problem Statement
 
