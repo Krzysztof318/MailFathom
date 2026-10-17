@@ -6546,12 +6546,19 @@ set -euo pipefail
 
 : "${FAKE_OPEN_PULL_REQUESTS_FILE:?FAKE_OPEN_PULL_REQUESTS_FILE must name the answer to return}"
 
+# Only the open pull requests against the canonical repository's `main` are what the report is
+# about, so a call that asks for anything else is refused rather than answered.
+if [[ "$*" != *'pr list --repo fathomise/MailFathom --base main --state open '* ]]; then
+  printf 'unexpected gh call: %s\n' "$*" >&2
+  exit 1
+fi
+
 cat "$FAKE_OPEN_PULL_REQUESTS_FILE"
 FAKE_GH
 chmod +x "$related_pull_requests_bin_directory/gh"
 
 run_related_pull_requests() {
-  local name="$1" open_pull_requests="$2"
+  local name="$1" open_pull_requests="$2" extra_path="${3:-}"
   local fixture_root="$test_directory/related-pull-requests-$name"
 
   create_coherence_fixture "$fixture_root"
@@ -6572,6 +6579,11 @@ run_related_pull_requests() {
 
   printf 'internal sealed class MailboxWidget { }\n' \
     > "$fixture_root/backend/src/Application/Emails/MailboxWidget.cs"
+  printf 'internal sealed class MailboxGadget;\n' \
+    > "$fixture_root/backend/src/Application/Emails/MailboxGadget.cs"
+  if [[ -n "$extra_path" ]]; then
+    printf '# Notes\n' > "$fixture_root/$extra_path"
+  fi
   printf '%s' "$open_pull_requests" > "$test_directory/related-pull-requests-$name.json"
 
   (
@@ -6584,21 +6596,41 @@ run_related_pull_requests() {
 
 related_pull_requests_names_the_open_pull_request_a_pair_comes_from() {
   run_related_pull_requests attributed '[
-    {"number": 7, "title": "Describe | widgets", "headRefName": "agent/docs", "files": [{"path": "docs/features/widgets.md"}]},
-    {"number": 8, "title": "Chart values", "headRefName": "agent/chart", "files": [{"path": "deploy/helm/mailfathom/values.yaml"}]},
-    {"number": 9, "title": "This branch", "headRefName": "agent/widgets", "files": [{"path": "docs/features/widgets.md"}]}
+    {"number": 7, "headRefName": "agent/docs", "headRepositoryOwner": {"login": "fathomise"},
+     "files": [{"path": "docs/features/widgets.md"}]},
+    {"number": 8, "headRefName": "agent/chart", "headRepositoryOwner": {"login": "fathomise"},
+     "files": [{"path": "deploy/helm/mailfathom/values.yaml"}]},
+    {"number": 9, "headRefName": "agent/widgets", "headRepositoryOwner": {"login": "FathomIse"},
+     "files": [{"path": "docs/features/widgets.md"}]},
+    {"number": 10, "headRefName": "agent/widgets", "headRepositoryOwner": {"login": "contributor"},
+     "files": [{"path": "docs/features/widgets.md"}]}
   ]'
 
   local output_file="$test_directory/related-pull-requests-attributed-output"
   assert_contains '## Related open pull requests' "$output_file"
-  assert_contains '| #7 Describe \| widgets | `docs/features/widgets.md` | `backend/src/Application/Emails/MailboxWidget.cs` | 1 |' "$output_file"
+  assert_contains '| #7 | `docs/features/widgets.md` | <details><summary>2</summary>' "$output_file"
+  assert_contains '`docs/features/widgets.md` → `backend/src/Application/Emails/MailboxWidget.cs` (describes:)' "$output_file"
+  assert_contains '`docs/features/widgets.md` → `backend/src/Application/Emails/MailboxGadget.cs` (describes:)' "$output_file"
+  assert_contains '| #10 |' "$output_file"
   assert_excludes '#8' "$output_file"
   assert_excludes '#9' "$output_file"
 }
 
+# Everything a row prints comes from somebody else's pull request and is pasted into this one's body,
+# so a path is written as a code span that its own characters cannot close or split.
+related_pull_requests_writes_another_pull_request_s_paths_as_inert_code() {
+  run_related_pull_requests hostile '[
+    {"number": 7, "headRefName": "agent/notes", "headRepositoryOwner": {"login": "fathomise"},
+     "files": [{"path": "docs/features/a`b|c.md"}]}
+  ]' 'docs/features/a`b|c.md'
+
+  assert_contains '| #7 | `docs/features/ab\|c.md` |' "$test_directory/related-pull-requests-hostile-output"
+}
+
 related_pull_requests_says_so_when_nothing_open_is_related() {
   run_related_pull_requests unrelated '[
-    {"number": 8, "title": "Chart values", "headRefName": "agent/chart", "files": [{"path": "deploy/helm/mailfathom/values.yaml"}]}
+    {"number": 8, "headRefName": "agent/chart", "headRepositoryOwner": {"login": "fathomise"},
+     "files": [{"path": "deploy/helm/mailfathom/values.yaml"}]}
   ]'
 
   assert_file_content 'No open pull request to main is related to this change (1 open besides it).' \
@@ -11126,6 +11158,7 @@ run_test coherence_passes_an_unrelated_change
 run_test coherence_passes_shared_code_without_a_prose_link
 run_test coherence_relates_the_same_prose_file_and_an_instructions_scope
 run_test related_pull_requests_names_the_open_pull_request_a_pair_comes_from
+run_test related_pull_requests_writes_another_pull_request_s_paths_as_inert_code
 run_test related_pull_requests_says_so_when_nothing_open_is_related
 run_test group_split_gives_every_changed_file_exactly_one_reader
 run_test group_split_never_exceeds_the_reader_ceiling

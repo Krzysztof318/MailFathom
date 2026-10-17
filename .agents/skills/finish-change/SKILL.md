@@ -54,19 +54,21 @@ Do not proceed while a gate fails.
 
 ## Publish
 
-1. Confirm the staged diff still contains exactly the task files.
-2. Commit with a focused message.
-3. Fetch the base remote and confirm the branch remains safely based on its current `main`. Integrate
+1. Run `scripts/report-related-pull-requests.sh`. It prints one row for every open pull request to
+   `main` that touches a path `Coherence` would relate to this change, with that pull request's
+   related paths and every pair they make — its path, then the path here, and the relation. It gates
+   nothing: read each pull request it names and make this change agree with it, or say in the body
+   why nothing needed to change. An edit made here is part of the change, so it goes back through
+   the Required Gates before step 2. It needs only read access, so it runs in both roles, and it says
+   on stderr when `gh`'s ceiling of 100 open pull requests or 100 files of one cut the reading short.
+2. Confirm the staged diff still contains exactly the task files.
+3. Commit with a focused message.
+4. Fetch the base remote and confirm the branch remains safely based on its current `main`. Integrate
    remote movement without discarding work, then repeat affected gates.
-4. Push the branch. In the owner's checkout that is `origin`; in the fork role it is the fork's own
+5. Push the branch. In the owner's checkout that is `origin`; in the fork role it is the fork's own
    `origin`, and nothing is ever pushed to `fathomise/MailFathom`.
-5. Run `scripts/report-related-pull-requests.sh`. It names every open pull request to `main` that
-   touches a path `Coherence` would relate to this change, and the pair it comes from. It gates
-   nothing: read each pull request it names and make this change agree with it before publishing,
-   or say in the body why nothing needed to change. It needs only read access, so it runs in both
-   roles.
 6. Create a pull request whose body contains `Closes #<issue>` for the issue the change
-   completes, and — when step 5 printed a `## Related open pull requests` section — that section as
+   completes, and — when step 1 printed a `## Related open pull requests` section — that section as
    printed. In the fork role it targets `main` on `fathomise/MailFathom` from the fork's branch.
 7. Confirm the reference is present in the published body. `gh pr edit` fails against this repository
    with a Projects-classic GraphQL error and silently drops the edit, so correct a missing reference

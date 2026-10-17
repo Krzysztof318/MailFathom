@@ -46,7 +46,7 @@ fi
 work_directory="$(mktemp -d)"
 trap 'rm -rf "$work_directory"' EXIT
 
-# Against the working tree rather than `HEAD`, because this runs before the change is committed, and
+# Against the working tree rather than `HEAD`, so an edit not yet committed is part of the change, and
 # from the merge base rather than the base tip, so what `main` gained since is not read as this
 # change's own.
 {
@@ -56,13 +56,26 @@ trap 'rm -rf "$work_directory"' EXIT
 
 current_branch="$(git branch --show-current)"
 
-# ponytail: `gh` reads at most 100 open pull requests and 100 files of each; page through the REST
-# files endpoint if either ceiling is ever reached.
-gh pr list --repo "$CANONICAL_REPOSITORY" --base main --state open --limit 100 \
-  --json number,title,headRefName,files > "$work_directory/open.json"
+# The pull request this branch publishes is identified by the owner of the repository it is pushed
+# to as well as by its branch name, because another fork may use the same name for something
+# related. A detached `HEAD` has no pull request of its own, so nothing is excluded then.
+push_remote="$(git config "branch.$current_branch.pushRemote" || git config remote.pushDefault || git config "branch.$current_branch.remote" || printf 'origin')"
+push_owner="$(git remote get-url "$push_remote" 2> /dev/null | sed -E 's#\.git/?$##; s#/+$##; s#.*[:/]([^/:]+)/[^/]+$#\1#' | tr '[:upper:]' '[:lower:]' || true)"
 
-jq --arg branch "$current_branch" 'map(select(.headRefName != $branch))' \
-  "$work_directory/open.json" > "$work_directory/others.json"
+gh pr list --repo "$CANONICAL_REPOSITORY" --base main --state open --limit 100 \
+  --json number,headRefName,headRepositoryOwner,files > "$work_directory/open.json"
+
+# `gh` reads at most 100 open pull requests and 100 files of each, so a reply at either ceiling may
+# be missing exactly the pull request or the path that relates.
+if (( "$(jq 'length' "$work_directory/open.json")" >= 100 )); then
+  printf 'At least 100 pull requests are open against main and only the first 100 were read, so this report may be incomplete.\n' >&2
+fi
+jq -r '.[] | select((.files // []) | length >= 100) | "#\(.number) changes at least 100 files and only the first 100 were read, so this report may be incomplete."' \
+  "$work_directory/open.json" >&2
+
+jq --arg branch "$current_branch" --arg owner "$push_owner" '
+  map(select($branch == "" or .headRefName != $branch or ((.headRepositoryOwner.login // "") | ascii_downcase) != $owner))
+' "$work_directory/open.json" > "$work_directory/others.json"
 
 open_count="$(jq 'length' "$work_directory/others.json")"
 
@@ -71,17 +84,19 @@ jq -r '.[].files[]?.path' "$work_directory/others.json" | sort -u > "$work_direc
 bash .github/coherence/relate-changes.sh \
   "$repository_root" "$work_directory/landed" "$work_directory/changed" "$work_directory/pairs.json"
 
-# One row per open pull request rather than per pair: a shared page relates to every path either
-# side changed, so pairs multiply quickly, and what a reader acts on is which pull request to open
-# and which of its files to read there.
+# One row per open pull request, its pairs folded beneath it: a shared page relates to every path
+# either side changed, so pairs multiply quickly, and a reader first wants to know which pull request
+# to open. Everything a row prints comes from somebody else's pull request, so it is written as code
+# spans and no title is printed at all — `#<n>` already links to it, and a title would carry closing
+# keywords, mentions, and markup into the body it is pasted into.
 jq -r --slurpfile others "$work_directory/others.json" '
-  def code_list: map("`\(.)`") | join(", ");
+  def code: gsub("`"; "") | gsub("\\|"; "\\|") | "`\(.)`";
   . as $pairs
   | $others[0] | sort_by(.number)
   | map(. as $pull_request
       | ($pairs | map(select(.landed as $landed | any($pull_request.files[]?; .path == $landed)))) as $related
       | select($related | length > 0)
-      | "| #\(.number) \(.title | gsub("\\|"; "\\|")) | \($related | map(.landed) | unique | code_list) | \($related | map(.changed) | unique | code_list) | \($related | length) |")
+      | "| #\(.number) | \($related | map(.landed) | unique | map(code) | join(", ")) | <details><summary>\($related | length)</summary>\($related | map("\(.landed | code) → \(.changed | code) (\(.reason))") | join("<br>"))</details> |")
   | .[]
 ' "$work_directory/pairs.json" > "$work_directory/rows"
 
@@ -91,7 +106,7 @@ if [[ ! -s "$work_directory/rows" ]]; then
 fi
 
 printf '## Related open pull requests\n\n'
-printf 'Each row is an open pull request changing paths `Coherence` relates to paths this one changes. Whichever merges second has to agree with the first.\n\n'
-printf '| Pull request | Its related paths | Paths here | Pairs |\n'
-printf '|---|---|---|---|\n'
+printf 'Each row is an open pull request changing paths `Coherence` relates to paths this one changes, with every pair it makes: its path, then the path here. Whichever merges second has to agree with the first.\n\n'
+printf '| Pull request | Its related paths | Pairs |\n'
+printf '|---|---|---|\n'
 cat "$work_directory/rows"
