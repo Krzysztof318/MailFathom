@@ -1,0 +1,214 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
+# Project repository: https://github.com/fathomise/MailFathom
+
+name: Duplication
+
+# Names a pull request in the merge queue that adds a definition doing the same job as one that
+# landed on `main` while it was being written — a helper, a test double, a type, or a script two pull
+# requests written in parallel each added. `Coherence` relates prose to what it describes and leaves
+# code against code to the build and the tests, which prove the combined tree behaves but never that
+# it does one thing once.
+#
+# It asks a model, so it runs where the answer is final and nowhere else: on the merge group, where
+# what landed is `main` plus the entries ahead in the queue. A pull request's own run could not see
+# the sibling still open beside it. `.github/duplication/list-new-definitions.sh` lists what each
+# side newly defines, and only when both sides define something is the model asked — most queue
+# entries never reach it.
+#
+# It reports and never blocks. It is not a required check, every failure of the model step is an
+# answer of *no verdict*, and a duplicate is a warning annotation and a row in the job summary. Whether
+# it earns a required check is decided from what it reports here, not assumed.
+
+on:
+  merge_group:
+    types:
+      - checks_requested
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  duplication:
+    name: Duplication
+    runs-on: ubuntu-latest
+    # Five minutes for the whole job, the bound a merge-queue check is held to here; an ordinary run
+    # takes two — the checkout seconds, the action's setup about a minute, and the model seconds.
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      # Into a subdirectory, so the model session started from the workspace root finds no
+      # `CLAUDE.md` or `.claude/` of the combined tree on its way up. The history is whole for the
+      # merge base and blobless because only the diffs below read content.
+      - name: Check out the combined tree
+        uses: actions/checkout@v7
+        with:
+          path: tree
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+
+      # A failure here is reported on the step and never fails the job, the same way the model
+      # step's is: this check gates nothing until it is decided that it should.
+      - name: List what each side defines
+        id: candidates
+        continue-on-error: true
+        timeout-minutes: 1
+        shell: bash
+        working-directory: tree
+        env:
+          MERGE_GROUP_HEAD_REF: ${{ github.event.merge_group.head_ref }}
+          CANDIDATES_DIRECTORY: ${{ runner.temp }}/duplication
+          PROMPT_TEMPLATE: ${{ github.workspace }}/tree/.github/duplication/judge-prompt.md
+          SCHEMA_FILE: ${{ github.workspace }}/tree/.github/duplication/verdict-schema.json
+        run: |
+          set -euo pipefail
+
+          mkdir -p "$CANDIDATES_DIRECTORY"
+
+          # The same resolution `Coherence` makes: the group's first parent is what the entry merges
+          # onto, and the pull request's head is fetched by the number the queue branch carries.
+          merge_onto="$(git rev-parse HEAD^1)"
+          pull_request_number="$(sed -nE 's|^refs/heads/gh-readonly-queue/[^/]+/pr-([0-9]+)-[0-9a-f]+$|\1|p' <<< "$MERGE_GROUP_HEAD_REF")"
+          if [[ -z "$pull_request_number" ]]; then
+            echo "::error::The merge group ref ${MERGE_GROUP_HEAD_REF} names no pull request."
+            exit 1
+          fi
+          git fetch --quiet --no-tags --filter=blob:none origin "refs/pull/${pull_request_number}/head"
+          pull_request_head="$(git rev-parse FETCH_HEAD)"
+          merge_base="$(git merge-base "$merge_onto" "$pull_request_head")"
+
+          # What landed is measured from when the work began, not from the merge base. A pull request
+          # rebased onto a sibling that merged first has that sibling in its base, so the sibling's
+          # helper is invisible from there — and nearly every pull request here is current when it
+          # merges. The earliest author date among its own commits survives a rebase, and the `main`
+          # commit just before it is where the parallel window opens.
+          work_began="$(git log --no-merges --format=%at "${merge_base}..${pull_request_head}" | sort -n | head -n 1)"
+          window_start="$(git rev-list -1 --first-parent --before="@${work_began:-0}" "$merge_onto")"
+          window_start="${window_start:-$merge_base}"
+
+          landed="$CANDIDATES_DIRECTORY/landed.tsv"
+          changed="$CANDIDATES_DIRECTORY/changed.tsv"
+          bash .github/duplication/list-new-definitions.sh "$window_start" "$merge_onto" "$landed"
+          bash .github/duplication/list-new-definitions.sh "$merge_base" "$pull_request_head" "$changed"
+
+          if [[ ! -s "$landed" || ! -s "$changed" ]]; then
+            echo "Nothing to compare: $(grep -c . "$landed" || true) definition(s) landed since the work began at ${window_start:0:12}, $(grep -c . "$changed" || true) added by this pull request." >> "$GITHUB_STEP_SUMMARY"
+            echo 'judge=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # The lines each side added in the files that define something, under the `+++` line naming
+          # each file, and nothing it removed: a helper a side deleted is not one it defines. Bounded so
+          # a large change stays a small prompt; a cut side says so, in the prompt and in the summary.
+          added_lines() {
+            local from="$1" to="$2" definitions="$3" limit=60000 paths
+            mapfile -t paths < <(cut -f1 "$definitions" | sort -u)
+            git diff --no-ext-diff --no-renames --no-color --unified=0 "$from" "$to" -- "${paths[@]}" \
+              | awk '/^\+\+\+ / || (/^\+/ && !/^\+\+\+/)' > "$CANDIDATES_DIRECTORY/diff"
+            head -c "$limit" "$CANDIDATES_DIRECTORY/diff"
+            if (( $(wc -c < "$CANDIDATES_DIRECTORY/diff") > limit )); then
+              printf '\n[cut at %s bytes]\n' "$limit"
+              echo "The lines added by one side were cut at ${limit} bytes before the model read them." >> "$GITHUB_STEP_SUMMARY"
+            fi
+          }
+
+          {
+            cat "$PROMPT_TEMPLATE"
+            echo
+            echo '## Definitions that landed while this pull request was written (path, tab, name)'
+            echo '```'
+            cat "$landed"
+            echo '```'
+            echo
+            echo '## Definitions this pull request adds (path, tab, name)'
+            echo '```'
+            cat "$changed"
+            echo '```'
+            echo
+            echo '## Lines that landed, in the files defining something'
+            echo '```diff'
+            added_lines "$window_start" "$merge_onto" "$landed"
+            echo '```'
+            echo
+            echo '## Lines this pull request adds, in the files defining something'
+            echo '```diff'
+            added_lines "$merge_base" "$pull_request_head" "$changed"
+            echo '```'
+          } > "$CANDIDATES_DIRECTORY/prompt.md"
+
+          {
+            echo 'judge=true'
+            echo "schema=$(jq -c . "$SCHEMA_FILE")"
+          } >> "$GITHUB_OUTPUT"
+
+      # `base-action` rather than the action itself: the action refuses every event it cannot parse
+      # into a pull request or an automation, and `merge_group` is one of them. The model runs with
+      # no tool it could reach the runner, the network, or a file with, so the only thing a crafted
+      # diff can do here is talk it into a wrong verdict, which is a warning nobody has to act on.
+      #
+      # The prefilter and the schema above are read from the combined tree, which is the trust a
+      # `merge_group` run already gives that tree's copy of this file: GitHub runs the workflow as
+      # the group's head commit defines it. Both sit under `.github/`, which `Protected paths` refuses
+      # from any author but the owner, so a queued change to either is the owner's — as it would be
+      # to this step.
+      - name: Judge the candidates
+        id: judge
+        if: steps.candidates.outputs.judge == 'true'
+        continue-on-error: true
+        timeout-minutes: 3
+        uses: anthropics/claude-code-action/base-action@v1
+        with:
+          claude_code_oauth_token: ${{ vars.CLAUDE_CODE_PROFILE == 'secondary' && secrets.CLAUDE_CODE_OAUTH_TOKEN_SECONDARY || secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt_file: ${{ runner.temp }}/duplication/prompt.md
+          settings: |
+            {
+              "permissions": {
+                "deny": [
+                  "Bash",
+                  "Edit",
+                  "Write",
+                  "Read",
+                  "Grep",
+                  "Glob",
+                  "WebFetch",
+                  "WebSearch",
+                  "Agent",
+                  "mcp__*"
+                ]
+              }
+            }
+          # The cheapest model at the lowest effort, because the prefilter already narrowed the
+          # question to a few named definitions and the prompt asks only for duplicates that can be
+          # pointed at in both bodies. Raising either is a decision taken from what this check has
+          # reported.
+          claude_args: |
+            --model claude-haiku-5-5
+            --effort low
+            --max-turns 3
+            --setting-sources user
+            --json-schema '${{ steps.candidates.outputs.schema }}'
+
+      - name: Report that the sides could not be resolved
+        if: always() && steps.candidates.outcome == 'failure'
+        shell: bash
+        run: echo 'No verdict: the two sides could not be resolved, so no model was asked; the failed step says why.' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Report the verdict
+        if: always() && steps.candidates.outputs.judge == 'true'
+        shell: bash
+        working-directory: tree
+        env:
+          VERDICT: ${{ steps.judge.outputs.structured_output }}
+          CANDIDATES_DIRECTORY: ${{ runner.temp }}/duplication
+        run: |
+          set -euo pipefail
+          printf '%s' "$VERDICT" > "$CANDIDATES_DIRECTORY/verdict.json"
+          bash .github/duplication/report-verdict.sh \
+            "$CANDIDATES_DIRECTORY/landed.tsv" "$CANDIDATES_DIRECTORY/changed.tsv" \
+            "$CANDIDATES_DIRECTORY/verdict.json" "$GITHUB_STEP_SUMMARY"

@@ -1,6 +1,6 @@
 # Agent workflow
 
-<!-- describes: scripts/**, .agents/skills/**, .github/workflows/**, .github/fathom-review/**, .github/pull-request/**, .github/coherence/**, **/.editorconfig, .gitignore, .worktreeinclude -->
+<!-- describes: scripts/**, .agents/skills/**, .github/workflows/**, .github/fathom-review/**, .github/pull-request/**, .github/coherence/**, .github/duplication/**, **/.editorconfig, .gitignore, .worktreeinclude -->
 
 Codex and Claude Code share one repository-owned workflow. Deterministic Git and
 .NET operations live in scripts, while repository-specific judgment lives in
@@ -1206,6 +1206,9 @@ Each required check answers the group in the way its question allows:
   and the words it changes — so the group is handed the verdict the pull request's head already
   carries rather than a second judgement.
 
+[`Duplication`](#duplication) runs on the group as well and is not one of them: it reports and
+never removes a pull request.
+
 A push to `main` still runs `CI`, but a queue merge reaches `main` as the group's own commit, which
 already carries the `Required CI` the group earned, so `Detect changes` reads it and the run stops
 there instead of building the same tree twice. A merge that bypassed the queue carries none and gets
@@ -1309,6 +1312,73 @@ open pull requests, its own `--limit`, and `gh` returns at most 100 files of eac
 on stderr whenever a reply reaches either ceiling, since a pull request or a path past it is missing from the result. The markers come
 from the working tree, not from each open pull request's tree, so a page an open pull request adds
 that describes a path changed here is only paired once it lands, and `Coherence` pairs it then.
+
+## Duplication
+
+`Duplication` names a pull request in the merge queue that adds a definition doing the same job as
+one that landed on `main` while it was being written: a helper, a test double, a type, or a script
+that two pull requests written in parallel each added. `Coherence` leaves code against code to the build and
+the tests, which prove the combined tree behaves and never that it does one thing once.
+
+It runs on `merge_group` only, because that is where what landed is final — `main` plus the entries
+ahead in the queue — and a sibling pull request still open beside this one is invisible to the
+pull request's own run. The pull request's side is what it changes since its merge base, as
+`Coherence` resolves it. The landed side is not measured from that merge base, because almost every
+pull request here is rebased onto `main` before it merges, and a rebase onto a sibling that merged
+first puts the sibling's helper inside the base where no comparison sees it — replayed over sixty
+merged pull requests, fifty-eight had nothing landed since their merge base at all. It is measured
+instead from the `main` commit just before the earliest author date among the pull request's own
+commits, which a rebase keeps: everything that merged after the work began, up to what the entry
+merges onto.
+
+1. `.github/duplication/list-new-definitions.sh` lists what each side newly defines, from the lines
+   its diff adds: shell functions in scripts and in workflows' `run:` blocks, C# types and methods,
+   TypeScript and JavaScript functions, exports, and arrow-function constants, Rust functions, and
+   every shell script added whole. EF Core migrations, designer files, source-generator output, and
+   rendered golden manifests are left out. When either side defines nothing, the run ends there and
+   no model is asked, which is where most queue entries end: fifty of the last sixty merged pull
+   requests would have.
+2. Otherwise `claude-haiku-5-5` at `--effort low` reads the two lists and the lines each side added
+   in the files defining something, each side cut at 60000 bytes, and answers against
+   `.github/duplication/verdict-schema.json`: `none`, or `duplicate` with both definitions and one
+   sentence on what both do. The prompt, `.github/duplication/judge-prompt.md`, counts as a
+   duplicate a pair that computes the same thing — the same parsing, transformation, lookup, or
+   check — whatever the two are named or however they are written, and nothing else: not a shared
+   name or shape doing different jobs, not two tests of different behaviors, not a wrapper of the
+   other, not a constant or a one-line delegation, and not a pair the model cannot point at in both
+   bodies. The schema has nowhere to put a remark about style or naming.
+
+   That wording is measured rather than assumed. Asked to answer `none` whenever in doubt and to
+   pass over short definitions, Haiku at `low` missed both duplicates it was shown — a three-line
+   version reader and an eight-line list parser, each renamed and restyled — while the wording
+   above found both, passed a reader of a different file, and answered `none` on all ten merged
+   pull requests of the last sixty whose two sides both defined something, the same in two runs.
+   Ten more, chosen across the last three hundred so that four were mostly backend, four mostly
+   client, and two workflow, were answered `none` as well, and reading the pairs that shared a name
+   bore every one of them out. Each answer took five to twenty-four seconds.
+
+   The session denies every tool and loads no settings from the checkout, which sits in a
+   subdirectory so no `CLAUDE.md` of the combined tree is on its path. The prefilter, the prompt, and the schema are read from the combined tree, the same trust
+   a `merge_group` run gives that tree's copy of the workflow itself; all of them are under
+   `.github/`, which [`Protected paths`](local-development.md#pull-request-checks) refuses from any
+   author but the owner.
+3. `.github/duplication/report-verdict.sh` shows a pair only when both of its sides are definitions
+   step 1 listed, copied exactly, and drops and counts any other as one the model invented. Each
+   pair it keeps is a warning annotation and a row in the job summary.
+
+The prefilter is deliberately loose. It decides whether the model is asked, never whether two
+definitions are the same, so a definition it lists that duplicates nothing costs one call answered
+`none`, while one it misses is a duplicate nobody looks at.
+
+**It reports and never blocks.** It is not a required check, so the queue neither waits for it nor
+reads its result, and it ends green on every outcome inside its bounds: a failure to resolve the two
+sides, which leaves its step failed and asks no model, a model step past its three minutes, a spent
+quota, or a model step that answered nothing reads as *no verdict* in the summary. The whole job is bounded at five minutes and takes about two — the
+action's own setup is most of that. It spends the owner's Claude subscription under the same
+`CLAUDE_CODE_PROFILE` selection as [`Fathom review`](#provisioning-the-app), once per queue entry
+whose two sides both define something. Whether it earns a required check is decided from what it
+reports on real queue entries; until then a warning is something to read, and acting on one is a
+follow-up pull request rather than a removal from the queue.
 
 ## Review on the pull request
 

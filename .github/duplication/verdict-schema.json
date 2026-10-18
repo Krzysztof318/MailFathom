@@ -1,0 +1,50 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "verdict",
+    "duplicates"
+  ],
+  "properties": {
+    "verdict": {
+      "type": "string",
+      "enum": [
+        "none",
+        "duplicate"
+      ]
+    },
+    "duplicates": {
+      "type": "array",
+      "maxItems": 10,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "landed_path",
+          "landed_name",
+          "changed_path",
+          "changed_name",
+          "what_both_do"
+        ],
+        "properties": {
+          "landed_path": {
+            "type": "string"
+          },
+          "landed_name": {
+            "type": "string"
+          },
+          "changed_path": {
+            "type": "string"
+          },
+          "changed_name": {
+            "type": "string"
+          },
+          "what_both_do": {
+            "type": "string",
+            "maxLength": 300
+          }
+        }
+      }
+    }
+  }
+}
