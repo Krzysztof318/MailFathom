@@ -1337,8 +1337,12 @@ pull request's own run. The two sides are the ones `Coherence` compares, resolve
    duplicate only two definitions that would be interchangeable at their call sites and whose logic
    is substantial enough to be worth a follow-up change — a constant, a short wrapper, or similar
    test setup is not — and tells the model to answer `none` when in doubt; the schema has nowhere to
-   put a remark about style or naming. The session denies every tool and loads no settings from the checkout, which sits in a
-   subdirectory so no `CLAUDE.md` of the combined tree is on its path.
+   put a remark about style or naming. The session denies every tool and loads no settings from
+   the checkout, which sits in a subdirectory so no `CLAUDE.md` of the combined tree is on its
+   path. The prefilter, the prompt, and the schema are read from the combined tree, the same trust
+   a `merge_group` run gives that tree's copy of the workflow itself; all of them are under
+   `.github/`, which [`Protected paths`](local-development.md#pull-request-checks) refuses from any
+   author but the owner.
 3. `.github/duplication/report-verdict.sh` shows a pair only when both of its sides are definitions
    step 1 listed, copied exactly, and drops and counts any other as one the model invented. Each
    pair it keeps is a warning annotation and a row in the job summary.

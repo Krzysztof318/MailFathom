@@ -94,12 +94,14 @@ jobs:
             exit 0
           fi
 
-          # The lines each side added in the files that define something, bounded so a large change
-          # stays a small prompt. A cut side says so, in the prompt and in the summary.
+          # The lines each side added in the files that define something, under the `+++` line naming
+          # each file, and nothing it removed: a helper a side deleted is not one it defines. Bounded so
+          # a large change stays a small prompt; a cut side says so, in the prompt and in the summary.
           added_lines() {
             local from="$1" to="$2" definitions="$3" limit=60000 paths
             mapfile -t paths < <(cut -f1 "$definitions" | sort -u)
-            git diff --no-ext-diff --no-renames --no-color --unified=0 "$from" "$to" -- "${paths[@]}" > "$CANDIDATES_DIRECTORY/diff"
+            git diff --no-ext-diff --no-renames --no-color --unified=0 "$from" "$to" -- "${paths[@]}" \
+              | awk '/^\+\+\+ / || (/^\+/ && !/^\+\+\+/)' > "$CANDIDATES_DIRECTORY/diff"
             head -c "$limit" "$CANDIDATES_DIRECTORY/diff"
             if (( $(wc -c < "$CANDIDATES_DIRECTORY/diff") > limit )); then
               printf '\n[cut at %s bytes]\n' "$limit"
@@ -140,6 +142,12 @@ jobs:
       # into a pull request or an automation, and `merge_group` is one of them. The model runs with
       # no tool it could reach the runner, the network, or a file with, so the only thing a crafted
       # diff can do here is talk it into a wrong verdict, which is a warning nobody has to act on.
+      #
+      # The prefilter and the schema above are read from the combined tree, which is the trust a
+      # `merge_group` run already gives that tree's copy of this file: GitHub runs the workflow as
+      # the group's head commit defines it. Both sit under `.github/`, which `Protected paths` refuses
+      # from any author but the owner, so a queued change to either is the owner's — as it would be
+      # to this step.
       - name: Judge the candidates
         id: judge
         if: steps.candidates.outputs.judge == 'true'
