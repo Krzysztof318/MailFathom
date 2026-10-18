@@ -13,8 +13,10 @@ each rule on its own merits, and do not try to write a review.
 
 ## Where the change is
 
-- `{{REVIEW_DIRECTORY}}/files.json` — every changed file with its unified diff in `patch`.
-  A file whose `patch` is null is binary or too large, and you skip it.
+- `{{REVIEW_DIRECTORY}}/files.json` — every changed file, its `status`, and its unified
+  diff in `patch`. A file whose `patch` is null is binary or too large, and you skip it.
+- `{{REVIEW_DIRECTORY}}/patches/<path>.diff` — the same diff, one line per line. Read the
+  diff here rather than in `files.json`, whose long lines are cut short when opened.
 - `{{REVIEW_DIRECTORY}}/head/<path>` — the whole file as the branch leaves it, where it
   could be fetched. Open it only when the patch alone cannot answer a rule.
 
@@ -59,10 +61,12 @@ you could not confirm from the patch or the head file is not a hit.
   a tool, or the product.
 - `docs-describe-history` — documentation describes an old name, an old path, a
   migration from a previous shape, or what used to be true, instead of the current shape
-  alone.
+  alone. A decision record under `docs/decisions/` and `CHANGELOG.md` are history by
+  design and are never a hit.
 - `unpinned-dependency` — a dependency, action, image, or tool version floats (a range, a
   moving tag such as `latest`, no version at all) or is pinned outside the stack's
-  central file.
+  central file. A GitHub Action referenced by its major tag (`@v7`) is this repository's
+  convention and is never a hit.
 
 ## What to return
 

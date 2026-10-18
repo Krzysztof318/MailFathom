@@ -2701,3 +2701,291 @@ jobs:
           # Longer than the inputs and the candidates, which are consumed inside the run, because
           # this is read across runs: comparing a week of them is what the file is for.
           retention-days: 30
+
+      # The judge's answer, handed to the shadow pass below and to nothing else. It is model text
+      # derived from an untrusted diff, so it lives exactly as long as the candidates it was judged
+      # from — a day, inside one run — rather than as long as the numbers above.
+      - name: Hand the findings to the shadow pass
+        if: ${{ !cancelled() && steps.review.outputs.structured_output != '' }}
+        shell: bash
+        env:
+          FINDINGS: ${{ steps.review.outputs.structured_output }}
+          SHADOW_DIRECTORY: ${{ runner.temp }}/shadow
+        run: |
+          set -euo pipefail
+          mkdir -p "$SHADOW_DIRECTORY"
+          printf '%s' "$FINDINGS" > "$SHADOW_DIRECTORY/findings.json"
+
+      - name: Publish the findings for the shadow pass
+        if: ${{ !cancelled() && steps.review.outputs.structured_output != '' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: fathom-review-findings
+          path: ${{ runner.temp }}/shadow
+          if-no-files-found: ignore
+          retention-days: 1
+
+  # The shadow pass: an experiment that asks a cheaper model two questions beside the review and
+  # feeds neither answer back into it. `shadow-rules` checks every changed file against a fixed
+  # list of narrow rules while the readers run; `shadow-verdicts` decides, once the judge has
+  # published, whether each published finding and each dropped candidate shows the defect it
+  # describes. Nothing here reaches the readers, the judge, the verdict, the approval, or the
+  # board: what a run leaves is a job summary and an artifact of paths, rule identifiers, and
+  # booleans, which `docs/operations/agent-workflow.md` § *The shadow pass* says how to read.
+  #
+  # The model is `claude-haiku-5-5` at `--effort low`, the cheapest pass Claude Code offers — the
+  # model always thinks, and effort is how much. Both jobs hold the same Claude credential the
+  # readers hold and nothing else, check out the base commit, and run under the readers' deny list.
+  #
+  # Neither job may turn the run red. `Apply pull request rules` reads every check on the head, and
+  # a failed one moves the pull request to `Changes requested` whatever the review said, so the
+  # model step is `continue-on-error` and the report step reads a missing answer as none rather
+  # than failing; `continue-on-error` on the job is the backstop for anything else. The shadow pass
+  # starts after `collect` and the judge waits for neither job, so the review is published exactly
+  # when it was before.
+  shadow-rules:
+    name: Shadow pass — rules
+    needs:
+      - decide
+      - collect
+    if: needs.decide.outputs.review == 'true' && needs.collect.outputs.group_count != '0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the base commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Take the collected change
+        uses: actions/download-artifact@v8
+        with:
+          name: fathom-review-inputs
+          path: ${{ runner.temp }}/review
+
+      - name: Compose the prompt and the answer schema
+        id: shadow_prompt
+        shell: bash
+        env:
+          REPOSITORY: ${{ github.repository }}
+          PULL_REQUEST_NUMBER: ${{ needs.decide.outputs.pull_request_number }}
+          HEAD_SHA: ${{ needs.collect.outputs.head_sha }}
+          REVIEW_DIRECTORY: ${{ runner.temp }}/review
+          TEMPLATE_FILE: ${{ github.workspace }}/.github/fathom-review/shadow-rules-prompt.md
+          SCHEMA_FILE: ${{ github.workspace }}/.github/fathom-review/shadow-rules-schema.json
+        run: |
+          set -euo pipefail
+          bash .github/fathom-review/shadow-pass.sh patches "$REVIEW_DIRECTORY"
+          chmod -R a-w "$REVIEW_DIRECTORY"
+          {
+            echo 'prompt<<FATHOM_SHADOW_PROMPT'
+            sed -e "s|{{REPOSITORY}}|${REPOSITORY}|g" \
+                -e "s|{{PULL_REQUEST_NUMBER}}|${PULL_REQUEST_NUMBER}|g" \
+                -e "s|{{HEAD_SHA}}|${HEAD_SHA}|g" \
+                -e "s|{{REVIEW_DIRECTORY}}|${REVIEW_DIRECTORY}|g" \
+                "$TEMPLATE_FILE"
+            echo 'FATHOM_SHADOW_PROMPT'
+            echo "schema=$(jq -c . "$SCHEMA_FILE")"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Check the change against the rules
+        id: shadow
+        continue-on-error: true
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ vars.CLAUDE_CODE_PROFILE == 'secondary' && secrets.CLAUDE_CODE_OAUTH_TOKEN_SECONDARY || secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ github.token }}
+          classify_inline_comments: 'false'
+          settings: |
+            {
+              "permissions": {
+                "deny": [
+                  "Bash",
+                  "Edit",
+                  "Write",
+                  "WebFetch",
+                  "WebSearch",
+                  "mcp__*",
+                  "Read(//proc/**)",
+                  "Read(//**/.git/**)",
+                  "Read(//**/.claude/**)",
+                  "Read(//**/.ssh/**)",
+                  "Read(//**/.npmrc)",
+                  "Read(//**/.netrc)"
+                ]
+              }
+            }
+          prompt: ${{ steps.shadow_prompt.outputs.prompt }}
+          claude_args: |
+            --model claude-haiku-5-5
+            --effort low
+            --allowedTools "Read,Grep,Glob"
+            --setting-sources user
+            --json-schema '${{ steps.shadow_prompt.outputs.schema }}'
+
+      - name: Report what the rules pass found
+        shell: bash
+        env:
+          ANSWER: ${{ steps.shadow.outputs.structured_output }}
+          REVIEW_DIRECTORY: ${{ runner.temp }}/review
+          OUTPUT_DIRECTORY: ${{ runner.temp }}/shadow
+          EXECUTION_FILE: ${{ runner.temp }}/claude-execution-output.json
+        run: |
+          set -euo pipefail
+          answer_file="$(mktemp)"
+          printf '%s' "${ANSWER:-}" > "$answer_file"
+          if ! jq -e '.hits | type == "array"' "$answer_file" > /dev/null 2>&1; then
+            echo '{"files_checked": [], "hits": []}' > "$answer_file"
+            echo '_The rules pass returned no answer._' >> "$GITHUB_STEP_SUMMARY"
+          fi
+          bash .github/fathom-review/shadow-pass.sh rules "$REVIEW_DIRECTORY" "$answer_file" "$OUTPUT_DIRECTORY" \
+            >> "$GITHUB_STEP_SUMMARY"
+          jq '[.[] | select(.type == "result")] | last | {duration_ms, turns: .num_turns, cost_usd: .total_cost_usd}' \
+            "$EXECUTION_FILE" > "$OUTPUT_DIRECTORY/session.json" 2> /dev/null || echo '{}' > "$OUTPUT_DIRECTORY/session.json"
+
+      - name: Publish what the rules pass found
+        uses: actions/upload-artifact@v7
+        with:
+          name: fathom-review-shadow-rules
+          path: ${{ runner.temp }}/shadow
+          if-no-files-found: ignore
+          retention-days: 30
+
+  shadow-verdicts:
+    name: Shadow pass — verdicts
+    needs:
+      - decide
+      - collect
+      - judge
+    if: ${{ !cancelled() && needs.judge.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the base commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Take the collected change
+        uses: actions/download-artifact@v8
+        with:
+          name: fathom-review-inputs
+          path: ${{ runner.temp }}/review
+
+      - name: Take what the readers produced
+        uses: actions/download-artifact@v8
+        with:
+          pattern: fathom-review-candidates-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/review/candidates
+        continue-on-error: true
+
+      - name: Take what the judge published
+        uses: actions/download-artifact@v8
+        with:
+          name: fathom-review-findings
+          path: ${{ runner.temp }}/findings
+        continue-on-error: true
+
+      - name: Compose the claims, the prompt, and the answer schema
+        id: shadow_prompt
+        shell: bash
+        env:
+          REPOSITORY: ${{ github.repository }}
+          PULL_REQUEST_NUMBER: ${{ needs.decide.outputs.pull_request_number }}
+          HEAD_SHA: ${{ needs.collect.outputs.head_sha }}
+          REVIEW_DIRECTORY: ${{ runner.temp }}/review
+          FINDINGS_FILE: ${{ runner.temp }}/findings/findings.json
+          KEY_FILE: ${{ runner.temp }}/shadow-claims-key.json
+          TEMPLATE_FILE: ${{ github.workspace }}/.github/fathom-review/shadow-verdicts-prompt.md
+          SCHEMA_FILE: ${{ github.workspace }}/.github/fathom-review/shadow-verdicts-schema.json
+        run: |
+          set -euo pipefail
+          bash .github/fathom-review/shadow-pass.sh patches "$REVIEW_DIRECTORY"
+          bash .github/fathom-review/shadow-pass.sh claims "$REVIEW_DIRECTORY" "$FINDINGS_FILE" \
+            "$REVIEW_DIRECTORY/shadow-claims.json" "$KEY_FILE"
+          chmod -R a-w "$REVIEW_DIRECTORY"
+          echo "claims=$(jq length "$KEY_FILE")" >> "$GITHUB_OUTPUT"
+          {
+            echo 'prompt<<FATHOM_SHADOW_PROMPT'
+            sed -e "s|{{REPOSITORY}}|${REPOSITORY}|g" \
+                -e "s|{{PULL_REQUEST_NUMBER}}|${PULL_REQUEST_NUMBER}|g" \
+                -e "s|{{HEAD_SHA}}|${HEAD_SHA}|g" \
+                -e "s|{{REVIEW_DIRECTORY}}|${REVIEW_DIRECTORY}|g" \
+                "$TEMPLATE_FILE"
+            echo 'FATHOM_SHADOW_PROMPT'
+            echo "schema=$(jq -c . "$SCHEMA_FILE")"
+          } >> "$GITHUB_OUTPUT"
+
+      # A review with nothing to judge — no finding published and no candidate dropped — asks the
+      # model nothing.
+      - name: Decide whether each claim holds
+        id: shadow
+        if: steps.shadow_prompt.outputs.claims != '0'
+        continue-on-error: true
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ vars.CLAUDE_CODE_PROFILE == 'secondary' && secrets.CLAUDE_CODE_OAUTH_TOKEN_SECONDARY || secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ github.token }}
+          classify_inline_comments: 'false'
+          settings: |
+            {
+              "permissions": {
+                "deny": [
+                  "Bash",
+                  "Edit",
+                  "Write",
+                  "WebFetch",
+                  "WebSearch",
+                  "mcp__*",
+                  "Read(//proc/**)",
+                  "Read(//**/.git/**)",
+                  "Read(//**/.claude/**)",
+                  "Read(//**/.ssh/**)",
+                  "Read(//**/.npmrc)",
+                  "Read(//**/.netrc)"
+                ]
+              }
+            }
+          prompt: ${{ steps.shadow_prompt.outputs.prompt }}
+          claude_args: |
+            --model claude-haiku-5-5
+            --effort low
+            --allowedTools "Read,Grep,Glob"
+            --setting-sources user
+            --json-schema '${{ steps.shadow_prompt.outputs.schema }}'
+
+      - name: Report what the verdicts pass decided
+        shell: bash
+        env:
+          ANSWER: ${{ steps.shadow.outputs.structured_output }}
+          KEY_FILE: ${{ runner.temp }}/shadow-claims-key.json
+          OUTPUT_DIRECTORY: ${{ runner.temp }}/shadow
+          EXECUTION_FILE: ${{ runner.temp }}/claude-execution-output.json
+        run: |
+          set -euo pipefail
+          answer_file="$(mktemp)"
+          printf '%s' "${ANSWER:-}" > "$answer_file"
+          if ! jq -e '.verdicts | type == "array"' "$answer_file" > /dev/null 2>&1; then
+            echo '{"verdicts": []}' > "$answer_file"
+          fi
+          bash .github/fathom-review/shadow-pass.sh verdicts "$KEY_FILE" "$answer_file" "$OUTPUT_DIRECTORY" \
+            >> "$GITHUB_STEP_SUMMARY"
+          jq '[.[] | select(.type == "result")] | last | {duration_ms, turns: .num_turns, cost_usd: .total_cost_usd}' \
+            "$EXECUTION_FILE" > "$OUTPUT_DIRECTORY/session.json" 2> /dev/null || echo '{}' > "$OUTPUT_DIRECTORY/session.json"
+
+      - name: Publish what the verdicts pass decided
+        uses: actions/upload-artifact@v7
+        with:
+          name: fathom-review-shadow-verdicts
+          path: ${{ runner.temp }}/shadow
+          if-no-files-found: ignore
+          retention-days: 30

@@ -15,7 +15,8 @@ acts on what you return; it is compared afterwards with what happened to each cl
 - `{{REVIEW_DIRECTORY}}/shadow-claims.json` — the claims, each with an `id`, the `path`
   and `line` it concerns (null when it has no line), a `title`, the `impact` it alleges,
   and the `rule` it rests on.
-- `{{REVIEW_DIRECTORY}}/files.json` — every changed file with its unified diff in `patch`.
+- `{{REVIEW_DIRECTORY}}/patches/<path>.diff` — the unified diff of each changed file, one
+  line per line.
 - `{{REVIEW_DIRECTORY}}/head/<path>` — the whole file as the branch leaves it, where it
   could be fetched.
 - The working directory is the repository at the base commit, so a rule a claim cites —
