@@ -2095,7 +2095,7 @@ job of `repository-contracts.yml` and again locally in `scripts/verify-full.sh`,
 | `every_write_scope_is_one_the_policy_records` | A write scope appearing anywhere the list in that contract does not already name |
 | `every_checkout_refuses_to_persist_credentials` | An `actions/checkout` step that leaves the workflow token in `.git/config` for the steps after it |
 | `only_the_recorded_workflows_use_pull_request_target` | A third `pull_request_target` trigger beside the two `fathom-review.yml` and `contributor-licence.yml` hold, and a licence workflow that checks anything out, reaches an action beyond the token mint, or runs a command fetching the contribution directly |
-| `the_reviewer_resolves_one_claude_credential_everywhere` | A step in `fathom-review.yml` reaching a Claude credential without the `CLAUDE_CODE_PROFILE` selector, or a fifth step holding one, either of which leaves a leak check comparing a review against a token no run spent |
+| `the_reviewer_resolves_one_claude_credential_everywhere` | A step in `fathom-review.yml` reaching a Claude credential without the `CLAUDE_CODE_PROFILE` selector, or a seventh step holding one, either of which leaves a leak check comparing a review against a token no run spent |
 
 Every write scope in the repository but two belongs to publishing something: `packages: write` with
 `id-token: write` and `attestations: write` in `nightly.yml`, `publish-container-image.yml`, and

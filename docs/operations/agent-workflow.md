@@ -2124,7 +2124,8 @@ prose from any session. The judge hands its findings over as a
 were judged from.
 
 Neither job can turn the run red. `Apply pull request rules` moves a pull request
-with a failed check to `Changes requested`, so the model step continues on error, a
+with a failed check to `Changes requested`, so the model step continues on error
+and times out inside the job's own limit, a
 missing answer is reported as none, and each job continues on error as a backstop.
 The judge waits for neither, so the review is published when it would have been
 without them.

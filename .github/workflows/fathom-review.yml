@@ -2739,8 +2739,9 @@ jobs:
   #
   # Neither job may turn the run red. `Apply pull request rules` reads every check on the head, and
   # a failed one moves the pull request to `Changes requested` whatever the review said, so the
-  # model step is `continue-on-error` and the report step reads a missing answer as none rather
-  # than failing; `continue-on-error` on the job is the backstop for anything else. The shadow pass
+  # model step is `continue-on-error` with a timeout inside the job's, and the report step reads a
+  # missing answer as none rather than failing; `continue-on-error` on the job is the backstop for
+  # anything else. The shadow pass
   # starts after `collect` and the judge waits for neither job, so the review is published exactly
   # when it was before.
   shadow-rules:
@@ -2794,6 +2795,9 @@ jobs:
 
       - name: Check the change against the rules
         id: shadow
+        # Inside the job's own ten, so a session that never answers ends this step rather than the
+        # job, and the report below still runs.
+        timeout-minutes: 6
         continue-on-error: true
         uses: anthropics/claude-code-action@v1
         with:
@@ -2929,6 +2933,7 @@ jobs:
       # model nothing.
       - name: Decide whether each claim holds
         id: shadow
+        timeout-minutes: 6
         if: steps.shadow_prompt.outputs.claims != '0'
         continue-on-error: true
         uses: anthropics/claude-code-action@v1
