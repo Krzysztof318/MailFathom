@@ -1,0 +1,48 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["files_checked", "hits"],
+  "properties": {
+    "files_checked": {
+      "type": "array",
+      "description": "Every path from files.json whose patch was read, spelled exactly as filename spells it.",
+      "items": { "type": "string" }
+    },
+    "hits": {
+      "type": "array",
+      "description": "One entry per rule a file breaks in the lines its patch adds or changes. Empty when no file breaks any rule.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "rule", "line"],
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "A filename from files.json."
+          },
+          "rule": {
+            "enum": [
+              "license-header",
+              "personal-data-in-logs",
+              "external-io-without-timeout",
+              "unbounded-retry",
+              "insecure-secret-handling",
+              "untrusted-input-unvalidated",
+              "boundary-without-limit",
+              "behavior-without-test",
+              "layer-boundary-violation",
+              "speculative-abstraction",
+              "version-in-comment",
+              "docs-describe-history",
+              "unpinned-dependency"
+            ]
+          },
+          "line": {
+            "anyOf": [{ "type": "integer" }, { "type": "null" }],
+            "description": "The line in the head file where the rule is broken, or null when it has no single line."
+          }
+        }
+      }
+    }
+  }
+}

@@ -2089,6 +2089,47 @@ comparison. It is retained for thirty days, against the one day the collected
 inputs and the candidates keep, because it is read across runs rather than inside
 one.
 
+### The shadow pass
+
+Two jobs run beside every review as an experiment, and nothing they produce reaches
+the readers, the judge, the verdict, the approval, or the board. Both ask
+`claude-haiku-5-5` at `--effort low` — the cheapest pass Claude Code offers, since
+that model always thinks and effort is how much — under the readers' deny list and
+with the same credential.
+
+- **`Shadow pass — rules`** starts as soon as `collect` has finished, beside the
+  readers, and checks every changed file against the fixed list of narrow rules in
+  `.github/fathom-review/shadow-rules-prompt.md`: a missing licensing header,
+  personal data in a log, external I/O without a timeout, an unbounded retry, a
+  secret handled insecurely, untrusted input used unvalidated, a boundary without a
+  limit, a behavior change without a test, a layer boundary crossed, a speculative
+  abstraction, a version number in a comment, documentation describing history, and
+  an unpinned dependency.
+- **`Shadow pass — verdicts`** starts once the judge has published, and decides for
+  every published finding and every reader candidate the judge dropped whether the
+  change shows the defect it describes. The model is not told which of the two a
+  claim is, so the comparison measures whether it would have kept and dropped what
+  the judge did.
+
+`shadow-pass.sh` holds the deterministic half of both. It writes each patch to a
+file of its own, because `files.json` holds a patch as one JSON string and the
+session's `Read` tool cuts a long line short; it builds the claims and keeps their
+source apart from what the model reads; and it reduces each answer to paths, rule
+identifiers, line numbers, and booleans, dropping a path the change does not
+contain. That reduction is what each job publishes — as its job summary and as a
+`fathom-review-shadow-rules` or `fathom-review-shadow-verdicts` artifact retained
+for thirty days, beside the session's duration, turns, and cost — and it carries no
+prose from any session. The judge hands its findings over as a
+`fathom-review-findings` artifact kept for one day, the same as the candidates they
+were judged from.
+
+Neither job can turn the run red. `Apply pull request rules` moves a pull request
+with a failed check to `Changes requested`, so the model step continues on error
+and times out inside the job's own limit, a
+missing answer is reported as none, and each job continues on error as a backstop.
+The judge waits for neither, so the review is published when it would have been
+without them.
+
 ### What a later pass is for
 
 Judging the whole change again on every pass is wrong, and so — once the reading

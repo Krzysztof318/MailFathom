@@ -7042,6 +7042,88 @@ group_split_reads_every_group_when_nothing_bounds_the_pass() {
   assert_json 'true' 'all(.read_this_pass)' "$groups_json"
 }
 
+# The shadow pass's deterministic half. What is asserted is what keeps the experiment honest: the
+# model sees every diff whole, judges a claim without knowing whether the judge kept it, and what is
+# kept of its answer names nothing the change does not contain and reads a skipped claim as
+# unanswered rather than as agreement.
+shadow_pass_script="$source_repository_root/.github/fathom-review/shadow-pass.sh"
+
+write_shadow_fixture() {
+  local review_directory="$1"
+
+  mkdir -p "$review_directory/candidates"
+  jq -n '[{filename: "backend/src/Mail/Sender.cs", patch: "@@ -1,1 +1,2 @@\n line\n+added"},
+          {filename: "docs/features/sending.md", patch: "@@ -1 +1 @@\n-old\n+new"},
+          {filename: "frontend/public/icon.png", patch: null},
+          {filename: "../outside.txt", patch: "@@ -0,0 +1 @@\n+escape"}]' \
+    > "$review_directory/files.json"
+  jq -n '{covered: ["backend/src/Mail/Sender.cs"], notes: "",
+          candidates: [{path: "backend/src/Mail/Sender.cs", line: 11, concern: "kept", rule: "r"},
+                       {path: "backend/src/Mail/Sender.cs", line: 40, concern: "dropped", rule: "r"},
+                       {path: "nowhere.cs", line: 3, concern: "unknown path", rule: "r"}]}' \
+    > "$review_directory/candidates/group-0.json"
+}
+
+shadow_pass_writes_each_patch_as_a_file_of_its_own() {
+  local review_directory="$test_directory/shadow-patches"
+
+  write_shadow_fixture "$review_directory"
+  bash "$shadow_pass_script" patches "$review_directory"
+
+  assert_file_content $'@@ -1,1 +1,2 @@\n line\n+added' "$review_directory/patches/backend/src/Mail/Sender.cs.diff"
+  [[ -f "$review_directory/patches/docs/features/sending.md.diff" ]]
+  [[ ! -e "$review_directory/patches/frontend/public/icon.png.diff" ]]
+  [[ ! -e "$test_directory/outside.txt.diff" && ! -e "$review_directory/outside.txt.diff" ]]
+}
+
+shadow_pass_sets_a_candidate_the_judge_published_apart_from_the_dropped_ones() {
+  local review_directory="$test_directory/shadow-claims"
+
+  write_shadow_fixture "$review_directory"
+  jq -n '{summary: "s", findings: [{severity: "P2", path: "backend/src/Mail/Sender.cs", start_line: 10, line: 12,
+                                    title: "T", impact: "I", correction: "C", rule: "R"}]}' \
+    > "$review_directory/findings.json"
+  bash "$shadow_pass_script" claims "$review_directory" "$review_directory/findings.json" \
+    "$review_directory/claims.json" "$review_directory/key.json"
+
+  assert_json '[["f1","published",12],["d2","dropped",40],["d3","dropped",3]]' \
+    '[.[] | [.id, .source, .line]]' "$review_directory/key.json"
+  assert_json 'null' '.[] | select(.id == "d3") | .path' "$review_directory/key.json"
+  assert_json '[]' '[.[] | keys[] | select(. == "source" or . == "severity")]' "$review_directory/claims.json"
+}
+
+shadow_pass_drops_a_rule_hit_on_a_path_the_change_does_not_contain() {
+  local review_directory="$test_directory/shadow-rules"
+
+  write_shadow_fixture "$review_directory"
+  jq -n '{files_checked: ["backend/src/Mail/Sender.cs", "ghost.cs"],
+          hits: [{path: "backend/src/Mail/Sender.cs", rule: "external-io-without-timeout", line: 2},
+                 {path: "backend/src/Mail/Sender.cs", rule: "external-io-without-timeout", line: 2},
+                 {path: "ghost.cs", rule: "license-header", line: 1}]}' > "$review_directory/answer.json"
+  bash "$shadow_pass_script" rules "$review_directory" "$review_directory/answer.json" "$review_directory/out" \
+    > "$review_directory/summary.md"
+
+  assert_json '{"files_checked":1,"files_changed":4,"hits":[{"path":"backend/src/Mail/Sender.cs","rule":"external-io-without-timeout","line":2}]}' \
+    '.' "$review_directory/out/rules.json"
+  assert_contains 'Checked 1 of 4 changed files and found 1 hits.' "$review_directory/summary.md"
+}
+
+shadow_pass_reads_a_claim_with_no_verdict_as_unanswered() {
+  local review_directory="$test_directory/shadow-verdicts"
+
+  mkdir -p "$review_directory"
+  jq -n '[{id: "f1", source: "published", severity: "P2", path: "a.cs", line: 3},
+          {id: "d1", source: "dropped", severity: null, path: "a.cs", line: 9},
+          {id: "d2", source: "dropped", severity: null, path: null, line: null}]' > "$review_directory/key.json"
+  jq -n '{verdicts: [{id: "f1", holds: true, confidence: "high"}, {id: "d1", holds: false, confidence: "low"},
+                     {id: "zz", holds: true, confidence: "high"}]}' > "$review_directory/answer.json"
+  bash "$shadow_pass_script" verdicts "$review_directory/key.json" "$review_directory/answer.json" \
+    "$review_directory/out" > "$review_directory/summary.md"
+
+  assert_json '[["f1",true],["d1",false],["d2",null]]' '[.[] | [.id, .holds]]' "$review_directory/out/verdicts.json"
+  assert_contains '| dropped | 2 | 0 | 1 | 1 |' "$review_directory/summary.md"
+}
+
 # The prompts are templates the workflow substitutes into, and a placeholder nobody substitutes
 # reaches the model as literal text — a reader told to open `{{GROUP_FILES}}`. Both composing steps
 # refuse that at runtime; this refuses it at the point somebody adds a placeholder to a prompt and
@@ -7051,7 +7133,9 @@ fathom_review_substitutes_every_placeholder_its_prompts_carry() {
   local prompt_file placeholder
 
   for prompt_file in "$source_repository_root/.github/fathom-review/reader-prompt.md" \
-                     "$source_repository_root/.github/fathom-review/reviewer-prompt.md"; do
+                     "$source_repository_root/.github/fathom-review/reviewer-prompt.md" \
+                     "$source_repository_root/.github/fathom-review/shadow-rules-prompt.md" \
+                     "$source_repository_root/.github/fathom-review/shadow-verdicts-prompt.md"; do
     while IFS= read -r placeholder; do
       # The rubrics and the file list are inserted whole rather than substituted into a line, so the
       # workflow names them in `awk` rather than in the `sed` script beside it. Either spelling is
@@ -9369,10 +9453,10 @@ the_reviewer_listens_for_the_dispatch_it_sends() {
   fi
 }
 
-# The reviewer's subscription credential is named in five places: the workflow-level `env` that
-# carries the secret's *name* into the annotation reporting a missing one, the two action inputs
-# that spend it — a reader's and the judge's — and the two leak checks that refuse to publish
-# findings containing it. Declaring the secret once would also hand it to every step that has no
+# The reviewer's subscription credential is named in seven places: the workflow-level `env` that
+# carries the secret's *name* into the annotation reporting a missing one, the four action inputs
+# that spend it — a reader's, the judge's, and the two shadow passes' — and the two leak checks
+# that refuse to publish findings containing it. Declaring the secret once would also hand it to every step that has no
 # business holding it, so the five spellings are separate by design and this is what keeps them
 # agreeing.
 #
@@ -9390,12 +9474,14 @@ the_reviewer_resolves_one_claude_credential_everywhere() {
 
   selecting_reads="$(grep -cF "$value_expression" "$reviewer_workflow" || true)"
 
-  # Four: the reader action's input, the judge action's input, and the two leak checks that refuse
-  # to print or publish anything matching the credential the run actually spent. The readers made it
-  # four — a session per group is a second holder of the same secret — and the number is asserted
-  # rather than left open because a fifth would be a step nobody argued holding it.
-  if [[ "$selecting_reads" != '4' ]]; then
-    printf 'fathom-review.yml resolves the Claude credential through the profile in %s place(s), expected 4: both action inputs and both leak checks\n' \
+  # Six: the reader action's input, the judge action's input, the two shadow passes' inputs, and
+  # the two leak checks that refuse to print or publish anything matching the credential the run
+  # actually spent. The readers made it four — a session per group is a second holder of the same
+  # secret — and the shadow pass six, each of its sessions publishing nothing but paths, rule
+  # identifiers, and booleans. The number is asserted rather than left open because a seventh would
+  # be a step nobody argued holding it.
+  if [[ "$selecting_reads" != '6' ]]; then
+    printf 'fathom-review.yml resolves the Claude credential through the profile in %s place(s), expected 6: four action inputs and both leak checks\n' \
       "$selecting_reads" >&2
     return 1
   fi
@@ -11327,6 +11413,10 @@ run_test group_split_keeps_a_small_change_whole
 run_test group_split_accepts_a_change_it_was_given_no_files_for
 run_test group_split_reads_only_the_groups_that_moved
 run_test group_split_reads_every_group_when_nothing_bounds_the_pass
+run_test shadow_pass_writes_each_patch_as_a_file_of_its_own
+run_test shadow_pass_sets_a_candidate_the_judge_published_apart_from_the_dropped_ones
+run_test shadow_pass_drops_a_rule_hit_on_a_path_the_change_does_not_contain
+run_test shadow_pass_reads_a_claim_with_no_verdict_as_unanswered
 run_test fathom_review_composes_a_reader_prompt_naming_only_its_group
 run_test fathom_review_refuses_a_reader_group_that_holds_no_files
 run_test fathom_review_substitutes_every_placeholder_its_prompts_carry

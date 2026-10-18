@@ -1,0 +1,29 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["verdicts"],
+  "properties": {
+    "verdicts": {
+      "type": "array",
+      "description": "One entry for every claim in shadow-claims.json.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "holds", "confidence"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The id of a claim in shadow-claims.json."
+          },
+          "holds": {
+            "type": "boolean",
+            "description": "Whether the change shows the defect the claim describes."
+          },
+          "confidence": {
+            "enum": ["low", "medium", "high"]
+          }
+        }
+      }
+    }
+  }
+}
