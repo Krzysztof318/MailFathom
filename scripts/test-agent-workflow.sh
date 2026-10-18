@@ -6677,6 +6677,8 @@ duplication_lists_what_each_kind_of_file_newly_defines() {
   mkdir -p "$fixture_root/scripts" "$fixture_root/backend/src/Migrations" "$fixture_root/frontend/src" \
     "$fixture_root/.github/workflows" "$fixture_root/src-tauri"
   git -C "$fixture_root" init --quiet
+  git -C "$fixture_root" config user.email agent-workflow@example.invalid
+  git -C "$fixture_root" config user.name 'Agent Workflow Tests'
   printf 'existing() {\n  :\n}\n' > "$fixture_root/scripts/existing.sh"
   git -C "$fixture_root" add .
   git -C "$fixture_root" commit --quiet -m base
