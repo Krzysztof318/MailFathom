@@ -5,7 +5,7 @@
 name: Duplication
 
 # Names a pull request in the merge queue that adds a definition doing the same job as one that
-# landed under it since its merge base — a helper, a test double, a type, or a script two pull
+# landed on `main` while it was being written — a helper, a test double, a type, or a script two pull
 # requests written in parallel each added. `Coherence` relates prose to what it describes and leaves
 # code against code to the build and the tests, which prove the combined tree behaves but never that
 # it does one thing once.
@@ -83,13 +83,22 @@ jobs:
           pull_request_head="$(git rev-parse FETCH_HEAD)"
           merge_base="$(git merge-base "$merge_onto" "$pull_request_head")"
 
+          # What landed is measured from when the work began, not from the merge base. A pull request
+          # rebased onto a sibling that merged first has that sibling in its base, so the sibling's
+          # helper is invisible from there — and nearly every pull request here is current when it
+          # merges. The earliest author date among its own commits survives a rebase, and the `main`
+          # commit just before it is where the parallel window opens.
+          work_began="$(git log --no-merges --format=%at "${merge_base}..${pull_request_head}" | sort -n | head -n 1)"
+          window_start="$(git rev-list -1 --first-parent --before="@${work_began:-0}" "$merge_onto")"
+          window_start="${window_start:-$merge_base}"
+
           landed="$CANDIDATES_DIRECTORY/landed.tsv"
           changed="$CANDIDATES_DIRECTORY/changed.tsv"
-          bash .github/duplication/list-new-definitions.sh "$merge_base" "$merge_onto" "$landed"
+          bash .github/duplication/list-new-definitions.sh "$window_start" "$merge_onto" "$landed"
           bash .github/duplication/list-new-definitions.sh "$merge_base" "$pull_request_head" "$changed"
 
           if [[ ! -s "$landed" || ! -s "$changed" ]]; then
-            echo "Nothing to compare: $(grep -c . "$landed" || true) definition(s) landed since ${merge_base:0:12}, $(grep -c . "$changed" || true) added by this pull request." >> "$GITHUB_STEP_SUMMARY"
+            echo "Nothing to compare: $(grep -c . "$landed" || true) definition(s) landed since the work began at ${window_start:0:12}, $(grep -c . "$changed" || true) added by this pull request." >> "$GITHUB_STEP_SUMMARY"
             echo 'judge=false' >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -112,7 +121,7 @@ jobs:
           {
             cat "$PROMPT_TEMPLATE"
             echo
-            echo '## Definitions that landed under this pull request (path, tab, name)'
+            echo '## Definitions that landed while this pull request was written (path, tab, name)'
             echo '```'
             cat "$landed"
             echo '```'
@@ -124,7 +133,7 @@ jobs:
             echo
             echo '## Lines that landed, in the files defining something'
             echo '```diff'
-            added_lines "$merge_base" "$merge_onto" "$landed"
+            added_lines "$window_start" "$merge_onto" "$landed"
             echo '```'
             echo
             echo '## Lines this pull request adds, in the files defining something'
@@ -183,6 +192,11 @@ jobs:
             --max-turns 3
             --setting-sources user
             --json-schema '${{ steps.candidates.outputs.schema }}'
+
+      - name: Report that the sides could not be resolved
+        if: always() && steps.candidates.outcome == 'failure'
+        shell: bash
+        run: echo 'No verdict: the two sides could not be resolved, so no model was asked; the failed step says why.' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Report the verdict
         if: always() && steps.candidates.outputs.judge == 'true'

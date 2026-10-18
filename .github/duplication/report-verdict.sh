@@ -58,12 +58,12 @@ while IFS=$'\t' read -r is_listed changed_path changed_name landed_path landed_n
 done <<< "$pairs"
 
 if (( reported == 0 )); then
-  echo 'No duplicate: nothing this pull request adds does the job of a definition that landed under it.' >> "$summary_file"
+  echo 'No duplicate: nothing this pull request adds does the job of a definition that landed while it was written.' >> "$summary_file"
 else
   {
-    echo '### Definitions this pull request adds that duplicate one that landed under it'
+    echo '### Definitions this pull request adds that duplicate one that landed while it was written'
     echo
-    echo '| Added by this pull request | Landed under it | What both do |'
+    echo '| Added by this pull request | Landed while it was written | What both do |'
     echo '|---|---|---|'
     printf '%s' "$rows"
   } >> "$summary_file"
