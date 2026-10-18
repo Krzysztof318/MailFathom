@@ -184,8 +184,9 @@ jobs:
               }
             }
           # The cheapest model at the lowest effort, because the prefilter already narrowed the
-          # question to a few named definitions and the prompt tells it to answer `none` when in
-          # doubt. Raising either is a decision taken from what this check has reported.
+          # question to a few named definitions and the prompt asks only for duplicates that can be
+          # pointed at in both bodies. Raising either is a decision taken from what this check has
+          # reported.
           claude_args: |
             --model claude-haiku-5-5
             --effort low

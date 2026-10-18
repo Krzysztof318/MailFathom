@@ -1353,7 +1353,9 @@ merges onto.
    version reader and an eight-line list parser, each renamed and restyled — while the wording
    above found both, passed a reader of a different file, and answered `none` on all ten merged
    pull requests of the last sixty whose two sides both defined something, the same in two runs.
-   Each answer took five to twelve seconds.
+   Ten more, chosen across the last three hundred so that four were mostly backend, four mostly
+   client, and two workflow, were answered `none` as well, and reading the pairs that shared a name
+   bore every one of them out. Each answer took five to twenty-four seconds.
 
    The session denies every tool and loads no settings from the checkout, which sits in a
    subdirectory so no `CLAUDE.md` of the combined tree is on its path. The prefilter, the prompt, and the schema are read from the combined tree, the same trust
